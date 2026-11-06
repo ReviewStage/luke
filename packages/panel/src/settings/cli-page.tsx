@@ -1,6 +1,5 @@
 import { ACCOUNT_STATUS, signedInAccountId } from "@repo/credentials/snapshot";
 import { CLI_COMMAND, CLI_LINK_FOLDER } from "@repo/features/cli-release";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { MCP_ACCESS_TOKEN_MINUTES, type McpClient } from "@repo/features/mcp-client-wire";
 import { FIRST_PARTY_OAUTH_CLIENT_ID } from "@repo/features/oauth-client-ids";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -33,13 +32,13 @@ import {
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { askActResult, useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
-import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
-import { useBusyPress } from "./busy-press.js";
+import { mcpClientsQuery, mcpClientsRetryMutation } from "../live-reads.js";
+import { appStateQuery, selectAccount, selectCapability } from "../use-app-state.js";
 
 /**
  * cli-page.tsx -- Settings › CLI, the page named for our command: the `vespin` command's install, to copy and, in the desktop app, run here as VS Code installs `code`, and its sign-in, with Sign out everywhere once it holds one.
@@ -115,20 +114,18 @@ function InstalledLine({ version, onPath }: { version: string; onPath: boolean }
 
 /** Install: the npm install to copy, and, where the client runs it, Install and how it went. */
 function InstallSection({ installs }: { installs: boolean }): React.JSX.Element {
-  const { act } = useAct();
+  const cliInstall = useMutation(actMutation(ACT_KIND.CLI_INSTALL));
+  // Note that the last answer stays drawn while a new install is out, so it is held here rather than read off the mutation, which forgets it as one starts.
   const [answer, setAnswer] = useState<CliInstallAnswer | undefined>(undefined);
-  const install = useBusyPress(() =>
-    askActResult(
-      act(ACT_KIND.CLI_INSTALL).then((answered) => {
-        setAnswer(answered);
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
+  const install = {
+    busy: cliInstall.isPending,
+    onPress: () =>
+      cliInstall.mutate(undefined, {
+        onSuccess: setAnswer,
+        onError: (refused) =>
+          setAnswer({ outcome: CLI_INSTALL_OUTCOME.FAILED, reason: refused.message }),
       }),
-    ).then((result) => {
-      if (result.status === ACTION_RESULT_STATUS.REJECTED) {
-        setAnswer({ outcome: CLI_INSTALL_OUTCOME.FAILED, reason: result.reason });
-      }
-    }),
-  );
+  };
   const installed = answer?.outcome === CLI_INSTALL_OUTCOME.INSTALLED ? answer : undefined;
   const failed = answer?.outcome === CLI_INSTALL_OUTCOME.FAILED ? answer.reason : undefined;
   return (
@@ -206,7 +203,9 @@ function SignedInRow({
   grant: McpClient;
   onSignedOut: () => void;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendMcpClientsRevoke } = useMutation(
+    actMutation(ACT_KIND.MCP_CLIENTS_REVOKE),
+  );
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   const refused: ActionResult = {
     status: ACTION_RESULT_STATUS.REJECTED,
@@ -214,7 +213,7 @@ function SignedInRow({
   };
   const signOut = (): Promise<ActionResult> => {
     setRejection(undefined);
-    return act(ACT_KIND.MCP_CLIENTS_REVOKE, { clientId: grant.clientId }).then(
+    return sendMcpClientsRevoke({ clientId: grant.clientId }).then(
       (answer): ActionResult => {
         if ("failure" in answer) {
           setRejection(refused.reason);
@@ -290,19 +289,26 @@ function cliGrant(clients: readonly McpClient[]): McpClient | undefined {
 
 /** Settings › CLI, for the account signed in: Install, then Sign in as the command's grant stands. */
 export function CliPage(): React.JSX.Element {
-  const installs = useCapability(HOST_CAPABILITY.CLI_INSTALL);
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const installs =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.CLI_INSTALL) }).data ===
+    true;
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const accountId = signedInAccountId(account);
-  const { rows, status, retry } = useHostRead(LIVE_READ.MCP_CLIENTS, accountId);
+  const read = useQuery(mcpClientsQuery(accountId));
+  const retry = useMutation(mcpClientsRetryMutation());
+  const rows = read.data;
   // The grant signed out while the page shows, by when it was allowed, which stands signed out until the read drops it or a new sign-in replaces it.
   const [signedOutAt, setSignedOutAt] = useState<number | null | undefined>(undefined);
   if (rows === undefined) {
-    return status === HOST_READ_STATUS.FAILED ? (
+    return read.isError ? (
       <>
         <InstallSection installs={installs} />
         <SettingsSection title={SECTION_TITLE.SIGN_IN} anchor={SETTINGS_SEARCH_ROW.CLI_SIGN_IN}>
           <SettingsLine>
-            <ErrorState failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)} onRetry={retry}>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)}
+              onRetry={() => retry.mutate()}
+            >
               {PAGE_LINE.READ_FAILED}
             </ErrorState>
           </SettingsLine>

@@ -139,7 +139,7 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Teammate invitations\n",
+      descriptionSnapshot: "# Teammate invitations\n",
       prompt: null,
       repository: null,
       runtime,

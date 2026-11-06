@@ -74,6 +74,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
+  titleAnthropicApiKey: undefined,
 };
 
 /** What the routes counted, across the file; a case reads its own account's. */
@@ -194,7 +195,7 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invitations\n",
+      descriptionSnapshot: "# Invitations\n",
       prompt: null,
       repository: null,
       ...(deviceId === null ? {} : { machine: AGENT_MACHINE.DEVICE, deviceId }),
@@ -346,7 +347,7 @@ it.layer(SERVICES)("a local agent's Mac", (it) => {
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",
         effort: "high",
-        planSnapshot: "# Invitations\n",
+        descriptionSnapshot: "# Invitations\n",
         prompt: null,
         repository: null,
         machine: AGENT_MACHINE.DEVICE,

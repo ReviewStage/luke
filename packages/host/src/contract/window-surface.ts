@@ -7,7 +7,7 @@
  */
 
 import { type FeedbackSubmission, feedbackSubmission } from "@repo/features/feedback";
-import { PLAN_MARKDOWN_MAX_CHARS } from "@repo/features/plan-markdown";
+import { DESCRIPTION_MARKDOWN_MAX_CHARS } from "@repo/features/description-markdown";
 import {
   LID_STATE,
   MICROPHONE_STATUS,
@@ -138,7 +138,7 @@ export const windowSurfaceActsContract = {
     .input(
       exactInput(
         EffectSchema.Struct({
-          words: textUpTo(Math.max(PLAN_MARKDOWN_MAX_CHARS, FILE_TEXT_MAX_CHARS)),
+          words: textUpTo(Math.max(DESCRIPTION_MARKDOWN_MAX_CHARS, FILE_TEXT_MAX_CHARS)),
         }),
       ),
     )

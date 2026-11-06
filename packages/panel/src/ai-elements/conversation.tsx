@@ -227,6 +227,7 @@ export function ConversationRows({
       bringIn: (key, then) => now()?.bringIn(key, then) ?? false,
       rowElement: (key) => now()?.rowElement(key),
       drawnKeys: () => now()?.drawnKeys() ?? [],
+      keys: () => now()?.keys() ?? [],
       scrollToEnd: () => now()?.scrollToEnd(),
     };
   }, []);

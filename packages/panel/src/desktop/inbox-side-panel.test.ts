@@ -326,12 +326,16 @@ async function settle(): Promise<void> {
 
 /** Presses the chip of the item's words that says the name given. */
 async function pressChip(container: HTMLElement, name: string): Promise<void> {
-  const chip = [
-    ...container.querySelectorAll<HTMLButtonElement>(
-      "[data-inbox-message-text] [data-mention-ref]",
-    ),
-  ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name));
-  assert.ok(chip, `no chip says ${name}`);
+  // Note that the item's words stand once the account's inbox read reaches its query.
+  const chip = await vi.waitFor(
+    () =>
+      [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          "[data-inbox-message-text] [data-mention-ref]",
+        ),
+      ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name)) ??
+      assert.fail(`no chip says ${name}`),
+  );
   act(() => chip.click());
   await settle();
 }
@@ -459,7 +463,7 @@ test("an agent's tab beside the Inbox hangs the agent's card, as its tab in the 
   assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "Batch the invitations");
 });
 
-test("an agent beside the Inbox has the agent's menu from its tab's ⋯ and its right-click, whose Open in task, as ⌘O while the panel holds the keys, opens it in its task", async () => {
+test("an agent beside the Inbox has the agent's menu on its tab's right-click, whose Open in task, as ⌘O while the panel holds the keys, opens it in its task", async () => {
   const { container, left } = await inbox();
   await pressChip(container, "Batch the invitations");
   const aside = container.querySelector<HTMLElement>('aside[aria-label="Panel"]');
@@ -471,17 +475,12 @@ test("an agent beside the Inbox has the agent's menu from its tab's ⋯ and its 
     const items = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')];
     return { menu, items, words: items.map((item) => item.textContent ?? "") };
   };
-  const closeMenu = (menu: HTMLElement) =>
-    act(() => {
-      menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    });
 
-  const more = aside.querySelector<HTMLButtonElement>(
-    'button[aria-label="Batch the invitations actions"]',
+  assert.equal(
+    aside.querySelector('button[aria-label="Batch the invitations actions"]'),
+    null,
+    "the panel's bar draws no ⋯",
   );
-  assert.ok(more, "the agent's tab puts a ⋯ in the panel's bar");
-  act(() => more.click());
-  const fromMore = offered();
   const agentMenu = [
     "Copy link",
     "Copy transcript",
@@ -491,11 +490,6 @@ test("an agent beside the Inbox has the agent's menu from its tab's ⋯ and its 
     "Archive",
     "Permanently delete",
   ];
-  assert.deepEqual(
-    fromMore.words.map((words) => agentMenu.find((item) => words.startsWith(item))),
-    agentMenu,
-  );
-  closeMenu(fromMore.menu);
 
   const tab = aside.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
   assert.ok(tab);
@@ -531,10 +525,14 @@ test("a link to a page of the item's task, pressed in a transcript beside the In
   assert.match(panelTabs(container)?.[0] ?? "", /^▸ Batch the invitations/);
 
   // Note that the chip is the transcript's, drawn in the panel, not the item's words.
-  const chip = [
-    ...container.querySelectorAll<HTMLElement>('aside[aria-label="Panel"] [data-mention-ref]'),
-  ].find((each) => each.textContent?.includes("Invite funnel"));
-  assert.ok(chip, "the transcript names the page");
+  // Note that the transcript is drawn once its page reaches its query.
+  const chip = await vi.waitFor(
+    () =>
+      [
+        ...container.querySelectorAll<HTMLElement>('aside[aria-label="Panel"] [data-mention-ref]'),
+      ].find((each) => each.textContent?.includes("Invite funnel")) ??
+      assert.fail("the transcript names the page"),
+  );
   act(() => chip.click());
   await settle();
 

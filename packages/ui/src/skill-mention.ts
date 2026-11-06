@@ -8,7 +8,7 @@
  * slash typed inside a word (`a/b`), a path, or code (between backticks or
  * inside a fenced block) opens nothing. A chosen skill stands in the message
  * as its own word, `/name`, which the composer's editor holds as a chip
- * (the desktop's `plan-editor/composer-editor.ts`) and a sent message draws
+ * (the desktop's `description-editor/composer-editor.ts`) and a sent message draws
  * as one (its `tasks/skill-chip.tsx`). Nothing here draws, and nothing here is the panel's
  * alone: the editor bundle reads the same words.
  */

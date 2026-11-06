@@ -9,7 +9,7 @@ import { afterEach, beforeAll, test, vi } from "vitest";
 import { presenceStanding, useDevicePresence } from "./device-presence.js";
 import { fakeActPort } from "./testing/app-bridge.js";
 import { handBeats } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, writeHandedAppState } from "./testing/copy-feedback.js";
 
 /**
  * device-presence.test.ts -- the shared presence judges each device by how long ago its beat was on this machine's clock, and says it cannot check, not offline, where its read failed.
@@ -45,6 +45,7 @@ function Standings({ ids }: { ids: readonly string[] }): React.JSX.Element {
 
 /** Draws the devices `ids` name under one registry and lets the read land. */
 async function draw(ids: readonly string[]): Promise<HTMLElement> {
+  await writeHandedAppState();
   const registry = AtomRegistry.make();
   registries.push(registry);
   const container = document.createElement("div");
@@ -52,9 +53,10 @@ async function draw(ids: readonly string[]): Promise<HTMLElement> {
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(onRegistry(registry, createElement(Standings, { ids }))));
-  await act(async () => {
-    for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
-  });
+  // Note that the read lands once it reaches the beats' query, until when every device reads checking.
+  await vi.waitFor(() =>
+    assert.equal(container.textContent?.includes(DEVICE_STANDING.CHECKING), false),
+  );
   return container;
 }
 

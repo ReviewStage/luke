@@ -20,8 +20,8 @@
 
 import { createHash } from "node:crypto";
 import type { StoredTask } from "@repo/database/models/task-store";
-import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
-import type { PlanRevisionLine } from "@repo/features/task-wire";
+import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
+import type { DescriptionRevisionLine } from "@repo/features/task-wire";
 import { Schema } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 
@@ -33,7 +33,7 @@ const TURN_MESSAGE_LEAD = {
 
 /**
  * What a session has handed its agent in its turns' messages, as content
- * addresses: the task, by the parts of it no save of the plan changes
+ * addresses: the task, by the parts of it no save of the description changes
  * (`taskKey`), and whether its last turn was spoken. Kept on the
  * conversation's row (`native_handed`, which `runner-sessions.ts` reads and
  * writes around each message). Nothing yet for a session whose turns handed
@@ -58,25 +58,25 @@ function contentKey(text: string): string {
 }
 
 /**
- * The address of what a turn hands of the task beyond its plan, as the
+ * The address of what a turn hands of the task beyond its description, as the
  * model reads it: its name, brief, and open comment threads
  * (`openThreadsText`), so a change the model would not see, a resolved
  * thread's own fields, hands the task again no sooner. Note that the saved
- * document and the agents' notes are left out, because every save of the plan
+ * document and the agents' notes are left out, because every save of the description
  * changes them, the agent's own among them; whether someone
- * else saved is read from the plan's revisions (`savedByAnotherSince`). A key
- * handed with Plans off is its own, so Plans turned on hands the task, its
- * plan among it, on the next turn.
+ * else saved is read from the description's revisions (`savedByAnotherSince`). A key
+ * handed with Descriptions off is its own, so Descriptions turned on hands the task, its
+ * description among it, on the next turn.
  */
 export function taskKey(
   stored: StoredTask,
-  comments: readonly PlanCommentThread[],
-  plansOn = true,
+  comments: readonly DescriptionCommentThread[],
+  descriptionsOn = true,
 ): string {
   const { name } = stored.task;
   const handed = [name, stored.brief ?? null, openThreadsText(comments)];
-  // Note that a key with Plans on reads as it did before Plans was gated, so no session hands its task again for it.
-  return contentKey(JSON.stringify(plansOn ? handed : [...handed, { plansOn }]));
+  // Note that a key with Descriptions on reads as it did before Descriptions was gated, so no session hands its task again for it.
+  return contentKey(JSON.stringify(descriptionsOn ? handed : [...handed, { descriptionsOn }]));
 }
 
 /** The line a turn opens with after a spoken one, whose call's words still stand in the history. */
@@ -93,7 +93,7 @@ export function turnKindWords(handed: TurnHanded): string | undefined {
 }
 
 /**
- * Whether a revision of the plan someone other than the agent wrote was
+ * Whether a revision of the description someone other than the agent wrote was
  * saved after the instant given, the start of the agent's previous turn:
  * a member's, the app's, or another agent's. Note that each revision is read,
  * not who last wrote each section, because the agent writing over a
@@ -104,7 +104,7 @@ export function turnKindWords(handed: TurnHanded): string | undefined {
  * a page of them were saved during it.
  */
 export function savedByAnotherSince(
-  revisions: readonly PlanRevisionLine[],
+  revisions: readonly DescriptionRevisionLine[],
   since: number,
   agentId: string,
 ): boolean {

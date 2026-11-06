@@ -5,8 +5,6 @@ import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { Task, TaskSummary } from "@repo/features/task-wire";
 import { shellsAsked } from "@repo/features/terminal-store";
-import { SANDBOX_STATE } from "@repo/features/terminal-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type { StripTab } from "@repo/ui/tab-strip-model";
@@ -14,14 +12,13 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { runAppCommand } from "../app-commands.js";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { DesktopTasks } from "../desktop/desktop-tasks.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
@@ -34,8 +31,7 @@ import { NO_LOOKS } from "./use-task-looks.js";
  * as the new-terminal rules have them: which agent's Terminal tab the side
  * panel is asked to show, whether a new shell is asked of its sandbox, and
  * the picker where the rules leave the agent to the developer. The task is
- * drawn by the real window over a staged control; main answers how each
- * sandbox stands.
+ * drawn by the real window over a staged control.
  */
 
 const TASK: Task = {
@@ -79,16 +75,8 @@ const roots: Root[] = [];
 beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
   installScrollIntoView();
-  // Main answers how each agent's sandbox stands: the working agent's runs, the other's is stopped.
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.TERMINAL_LIST]: ({ agentId }) =>
-      Promise.resolve(
-        agentId === WORKING.id
-          ? { sandbox: SANDBOX_STATE.RUNNING, terminals: [] }
-          : { sandbox: SANDBOX_STATE.STOPPED, terminals: [] },
-      ),
-  });
+  fakeActPort({});
   handCapabilities(DESKTOP_CAPABILITIES);
 });
 
@@ -113,6 +101,8 @@ async function mount(input: {
   lastTerminal?: string;
   /** A Start pressed, answering why it was refused, where it was. */
   started?: () => Failure | undefined;
+  /** Whether the platform runs terminals, so ⌘J stands, or no longer does, once the document reaches the window's queries. */
+  terminals?: boolean;
 }) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -163,8 +153,10 @@ async function mount(input: {
       ),
     ),
   );
-  // The document arrives a few microtasks after the window first draws.
+  // The document arrives a few microtasks after the window first draws, and its capabilities reach the task's page one notify tick later.
   await settle();
+  const terminals = input.terminals ?? true;
+  await vi.waitFor(() => assert.equal(appCommandOffered(APP_COMMAND.SHOW_TERMINAL), terminals));
   return {
     /** Every tab the side panel was asked to show, in order. */
     shown,
@@ -179,16 +171,13 @@ async function mount(input: {
   };
 }
 
-/** The picker, while it stands: what its field asks, and its rows' names, details, whether their glyph wears the working mark, and which is chosen. */
+/** The offer to start an agent, while it stands: its rows' names, and which is chosen. */
 function picker() {
   const dialog = document.querySelector('[role="dialog"]');
   if (dialog === null) return undefined;
   return {
-    question: dialog.querySelector("input")?.getAttribute("placeholder"),
     rows: [...dialog.querySelectorAll('[role="option"]')].map((row) => ({
       name: row.querySelector(".ui-combobox-option-label")?.textContent,
-      detail: row.querySelector(".ui-combobox-option-detail")?.textContent,
-      working: row.querySelector('[role="img"][aria-label="Working"]') !== null,
       chosen: row.getAttribute("aria-selected") === "true",
     })),
     choose: async (name: string) => {
@@ -202,7 +191,7 @@ function picker() {
   };
 }
 
-test("on a plan with one agent, ⌘J shows its Terminal tab and New terminal asks its sandbox for a new shell there", async () => {
+test("on a plan with one agent, ⌘J shows its Terminal tab and New terminal asks for a new shell there", async () => {
   const task = await mount({ agents: [WORKING] });
   await task.run(APP_COMMAND.SHOW_TERMINAL);
   assert.deepEqual(task.shown, [{ terminal: WORKING.id }]);
@@ -224,33 +213,16 @@ test("from an agent's own tab, both mean that agent, whatever else is on the pla
   assert.deepEqual(task.shown, [{ terminal: DONE.id }, { terminal: DONE.id }]);
 });
 
-test("with several agents, ⌘J shows the terminal used last, and New terminal asks with that one chosen and said", async () => {
+test("with several agents, both mean the terminal used last, and New terminal asks for a new shell there", async () => {
   const task = await mount({ agents: [WORKING, DONE], lastTerminal: DONE.id });
   await task.run(APP_COMMAND.SHOW_TERMINAL);
   assert.deepEqual(task.shown, [{ terminal: DONE.id }]);
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  const asked = picker();
-  assert.equal(asked?.question, "New terminal in which agent’s sandbox?");
-  assert.deepEqual(asked?.rows, [
-    { name: "Invite flow", detail: "0 shells", working: true, chosen: false },
-    { name: "Expiry job", detail: "Sandbox stopped · last used", working: false, chosen: true },
-  ]);
-  await asked?.choose("Invite flow");
-  assert.deepEqual(task.shown.at(-1), { terminal: WORKING.id });
-  assert.equal(task.asked(WORKING.id), 1);
+  assert.deepEqual(task.shown.at(-1), { terminal: DONE.id });
+  assert.equal(task.asked(DONE.id), 1);
   assert.equal(picker(), undefined);
 });
-
-test("with several agents and no terminal used yet, ⌘J asks, and the agent picked has its terminal shown, no shell added", async () => {
-  const task = await mount({ agents: [WORKING, DONE] });
-  await task.run(APP_COMMAND.SHOW_TERMINAL);
-  assert.deepEqual(task.shown, []);
-  await picker()?.choose("Expiry job");
-  assert.deepEqual(task.shown, [{ terminal: DONE.id }]);
-  assert.equal(task.asked(DONE.id), 0);
-});
-
-test("with no agent on the plan, the picker offers to start one", async () => {
+test("with no agent on the plan, both offer to start one", async () => {
   let started = 0;
   const task = await mount({
     agents: [],
@@ -260,9 +232,7 @@ test("with no agent on the plan, the picker offers to start one", async () => {
     },
   });
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  assert.deepEqual(picker()?.rows, [
-    { name: "Start an agent", detail: undefined, working: false, chosen: true },
-  ]);
+  assert.deepEqual(picker()?.rows, [{ name: "Start an agent", chosen: true }]);
   await picker()?.choose("Start an agent");
   assert.equal(started, 1);
   assert.deepEqual(task.shown, []);
@@ -282,7 +252,7 @@ test("a Start the picker pressed that the service refused says why on the toast,
   assert.ok(said.includes("Choose a repository"), "and offers the remedy");
 });
 
-test("the panel's + lists each agent's terminal under Terminal, says how it stands, and a pick adds a shell to that agent's sandbox", async () => {
+test("the panel's + lists each agent's terminal under Terminal, and a pick adds a shell to that agent's sandbox", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
     side: SIDE_PANEL_TAB.COMMENTS,
@@ -383,7 +353,7 @@ async function mountOn(
   input: Parameters<typeof mount>[0],
 ): ReturnType<typeof mount> {
   handCapabilities(capabilities);
-  return mount(input);
+  return mount({ ...input, terminals: capabilities.includes(HOST_CAPABILITY.TERMINALS) });
 }
 
 test("on a platform that runs no terminals, neither ⌘J nor New terminal stands, the panel's + offers no Terminal, and an agent's tab offers no Show terminal", async () => {
@@ -424,7 +394,7 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
   );
 });
 
-test("while the plan's agents are still being read, the picker says so and offers to start none", async () => {
+test("while the plan's agents are still being read, the offer says so and starts none", async () => {
   const task = await mount({ agents: undefined });
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, []);
@@ -433,26 +403,4 @@ test("while the plan's agents are still being read, the picker says so and offer
     "Reading the task’s agents",
   );
   assert.deepEqual(task.shown, []);
-});
-
-const FAILED = agent("ae3c8c6f-5f40-4fad-8d88-8b6e9c4f5d43", "Retry job", AGENT_STATUS.FAILED);
-
-test("the picker marks a failed agent's row as its tab is marked, and no other", async () => {
-  const task = await mount({ agents: [WORKING, FAILED] });
-  await task.run(APP_COMMAND.NEW_TERMINAL);
-  const marked = [...document.querySelectorAll('[role="dialog"] [role="option"]')].map(
-    (row) => row.querySelector('[role="img"][aria-label="Failed"]') !== null,
-  );
-  assert.deepEqual(marked, [false, true]);
-});
-
-test("a row at rest hangs its agent's card beside it, naming the agent", async () => {
-  const task = await mount({ agents: [WORKING, DONE] });
-  await task.run(APP_COMMAND.NEW_TERMINAL);
-  const row = [...document.querySelectorAll('[role="dialog"] [role="option"]')].at(-1);
-  assert.ok(row, "a row");
-  restOn(row);
-  await settle();
-  const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
-  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Expiry job");
 });

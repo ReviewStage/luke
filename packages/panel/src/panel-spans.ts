@@ -65,8 +65,8 @@ export const PANEL_SPAN_ATTRIBUTE = {
   HELD_BYTES: "transcript.held_bytes",
   /** Whether the transcript already stood on app state as its tab held it, 1, or was read from the service first, 0. */
   CACHE_HIT: "transcript.cache_hit",
-  /** The size of the plan the task opened on, in characters. */
-  PLAN_CHARS: "task.plan_chars",
+  /** The size of the description the task opened on, in characters. */
+  DESCRIPTION_CHARS: "task.description_chars",
   /** How many tasks, of every workspace, the sidebar's first list read answered. */
   TASK_COUNT: "window.task_count",
   /** How many items the Inbox's list held as the span ended. */

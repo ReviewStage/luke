@@ -112,6 +112,7 @@ test("a Terminal row in the side panel's \"+\" wears its agent's failed mark, an
     pagePlace: { taskId: "plan-1" },
     shownAgent: undefined,
     onOpenAgent: ignore,
+    people: new Map(),
   };
   const options = await opened(
     panelEntries({

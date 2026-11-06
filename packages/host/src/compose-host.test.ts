@@ -176,6 +176,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MICROPHONE,
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.LOCAL_TERMINALS,
         HOST_CAPABILITY.PORT_FORWARDS,
       ]);
       // The desktop answers every client capability too: its Zoom, login item and Keyboard shortcuts page stand on DESKTOP_APP.
@@ -185,6 +186,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.LOCAL_TERMINALS,
         HOST_CAPABILITY.PORT_FORWARDS,
         HOST_CAPABILITY.CLI_INSTALL,
         HOST_CAPABILITY.DESKTOP_APP,

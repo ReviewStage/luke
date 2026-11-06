@@ -17,10 +17,12 @@ import { useTaskRenameOffer } from "../tasks/task-menu-items.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
+import { taskRenameMutation } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { openTaskMenu, taskName } from "../testing/task-menu.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { TASK_PANE, taskPaneOf } from "./task-pane-switcher.js";
@@ -155,10 +157,10 @@ function mount(
                 activeTaskId: TASK.id,
                 region: { kind: DOCUMENT_REGION.READY, task: TASK },
                 pages: paged ? [PAGE] : undefined,
-                onRenameTask: (taskId, name) => {
+                renameTask: taskRenameMutation(({ taskId, name }) => {
                   told.push(`rename ${taskId} ${name}`);
                   return Promise.resolve(true);
-                },
+                }, undefined),
                 repositoryMenu:
                   repositoryAsk === undefined
                     ? undefined
@@ -257,12 +259,12 @@ function mount(
   };
 }
 
-test("on a phone Overview is headed by the way out of the task and one ⋯ of the task's own actions, naming the task in its plan's heading alone", () => {
+test("on a phone Overview is headed by the way out of the task and one ⋯ of the task's own actions, naming the task in its description's heading alone", () => {
   const page = mount(SHELL_ROOM.NARROW);
   assert.deepEqual(page.head(), { buttons: ["Inbox", "Task actions"], title: undefined });
   const menu = page.menu();
   assert.ok(menu.includes("Rename") && menu.includes("Permanently delete"), "the task's own");
-  assert.equal(page.labeled("Title actions"), false, "the plan's title draws no second ⋯");
+  assert.equal(page.labeled("Title actions"), false, "the description's title draws no second ⋯");
   assert.equal(page.labeled(`${TASK.name} actions`), false, "the column draws no ⋯ of Overview's");
 
   page.back();
@@ -323,7 +325,7 @@ test("on a phone a tab of the panel is pushed over the column, titled by the tab
   assert.deepEqual(page.told, ["toggle"]);
 });
 
-test("on a phone ⌘K's Change repository shows Overview from under the panel, and opens the repository's menu under the plan's path only once the plan is in sight", async () => {
+test("on a phone ⌘K's Change repository shows Overview from under the panel, and opens the repository's menu under the plan's path only once the description is in sight", async () => {
   const page = mount(SHELL_ROOM.NARROW, true);
   page.draw(true, SIDE_PANEL_TAB.COMMENTS, 1);
   await act(async () => undefined);
@@ -350,22 +352,22 @@ test("on a phone the ⋯'s Rename edits the task's name in the row's title", asy
   assert.deepEqual(page.told, [`rename ${TASK.id} Invite teammates`]);
 });
 
-test("on a phone, which has no ⌘F to press, Overview's ⋯ Find opens the find bar over the plan with the caret in its field", () => {
+test("on a phone, which has no ⌘F to press, Overview's ⋯ Find opens the find bar over the description with the caret in its field", () => {
   const page = mount(SHELL_ROOM.NARROW);
   page.choose("Find");
   const field = page.container.querySelector<HTMLInputElement>(
     '.find-bar input[aria-label="Find"]',
   );
-  assert.ok(field, "the plan's find bar stands");
+  assert.ok(field, "the description's find bar stands");
   assert.equal(document.activeElement, field);
 });
 
-test("a wide window keeps the panel's strip and the column's toolbar beside an agent, the task's ⋯ the topbar's, and draws no row of a phone's", () => {
+test("a wide window keeps the panel's strip and the column's toolbar beside an agent, the task's name in the topbar, and draws no row of a phone's", () => {
   const page = mount(SHELL_ROOM.WIDE, true, SIDE_PANEL_TAB.COMMENTS, false, true);
   assert.equal(page.container.querySelector(".task-head"), null);
   assert.ok(page.container.querySelector(".side-panel-tabs"), "the panel keeps its strip");
-  assert.ok(page.labeled(`${TASK.name} actions`), "the topbar keeps the task's ⋯");
-  assert.equal(page.labeled("Task actions"), false, "the column's toolbar draws none");
+  assert.equal(taskName(page.container).textContent, TASK.name, "the topbar names the task");
+  assert.equal(page.labeled("Task actions"), false, "no bar draws a ⋯");
 });
 
 test("on a phone a task still read, or one that cannot be, is headed by its way back alone, as the task's own head will lead", () => {
@@ -420,11 +422,7 @@ test("on a phone a tab draws no bar of its own, and the task's header's ⋯ offe
 
 /** Chooses Rename from Overview's ⋯ in a wide window's column. */
 function chooseOverviewRename(container: HTMLElement): void {
-  const more = container.querySelector<HTMLButtonElement>(
-    '.task-topbar button[aria-label$=" actions"]',
-  );
-  assert.ok(more, "the topbar holds the task's ⋯");
-  act(() => more.click());
+  openTaskMenu(container);
   const rename = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].find(
     (each) => itemWords(each) === "Rename",
   );
@@ -432,24 +430,24 @@ function chooseOverviewRename(container: HTMLElement): void {
   act(() => rename.click());
 }
 
-/** The plan's own title, which a wide window renames the task in. */
-function planTitle(container: HTMLElement): HTMLElement | null {
+/** The description's own title, which a wide window renames the task in. */
+function descriptionTitle(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="textbox"][aria-label="Task name"]');
 }
 
-test("on a wide window the topbar's ⋯ › Rename puts the caret in the plan's own title, and draws no phone's field", () => {
+test("on a wide window the topbar's ⋯ › Rename puts the caret in the description's own title, and draws no phone's field", () => {
   const page = mount(SHELL_ROOM.WIDE);
   chooseOverviewRename(page.container);
 
-  assert.ok(planTitle(page.container), "the plan's title is drawn");
+  assert.ok(descriptionTitle(page.container), "the description's title is drawn");
   assert.ok(
-    document.activeElement === planTitle(page.container),
-    "the caret is in the plan's title",
+    document.activeElement === descriptionTitle(page.container),
+    "the caret is in the description's title",
   );
   assert.equal(page.container.querySelector('input[aria-label="Task name"]'), null);
 });
 
-test("on a wide window whose column shows an agent, the rename ⌘K asks shows Overview and puts the caret in the plan's title once it stands", () => {
+test("on a wide window whose column shows an agent, the rename ⌘K asks shows Overview and puts the caret in the description's title once it stands", () => {
   const page = mount(SHELL_ROOM.WIDE, false, undefined, false, true);
   page.renameFromPalette();
   assert.deepEqual(page.told, [`column "${MAIN_TAB.OVERVIEW}"`]);
@@ -457,8 +455,8 @@ test("on a wide window whose column shows an agent, the rename ⌘K asks shows O
   page.draw(false, undefined, undefined, false);
 
   assert.ok(
-    document.activeElement === planTitle(page.container),
-    "the caret is in the plan's title",
+    document.activeElement === descriptionTitle(page.container),
+    "the caret is in the description's title",
   );
 });
 
@@ -475,18 +473,18 @@ function RefusingTask(): React.JSX.Element {
       activeTaskId: TASK.id,
       region: { kind: DOCUMENT_REGION.READY, task },
       onDraftName: (_taskId, name) => setDraft(name),
-      onRenameTask: () => Promise.resolve(false),
+      renameTask: taskRenameMutation(() => Promise.resolve(false), undefined),
     }),
   });
 }
 
-test("on a wide window a refused rename keeps the name typed in the plan's title, with the refusal beside it", async () => {
+test("on a wide window a refused rename keeps the name typed in the description's title, with the refusal beside it", async () => {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(onRegistry(AtomRegistry.make(), createElement(RefusingTask))));
-  const title = planTitle(container);
-  assert.ok(title, "the plan's title is drawn");
+  const title = descriptionTitle(container);
+  assert.ok(title, "the description's title is drawn");
 
   act(() => {
     title.focus();
@@ -495,6 +493,6 @@ test("on a wide window a refused rename keeps the name typed in the plan's title
   });
   await act(async () => title.blur());
 
-  assert.equal(planTitle(container)?.textContent, "Invite teammates");
+  assert.equal(descriptionTitle(container)?.textContent, "Invite teammates");
   assert.match(container.textContent ?? "", /The task could not be renamed\. Try again\./u);
 });

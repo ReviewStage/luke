@@ -78,7 +78,7 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@repo/features/repository-reach-wire";
-import { type PlanEditor, TASK_MODE, type TaskMode } from "@repo/features/task-wire";
+import { type DescriptionEditor, TASK_MODE, type TaskMode } from "@repo/features/task-wire";
 import { dayAndTimeText } from "@repo/features/time-format";
 import {
   ROW_PART,
@@ -208,7 +208,7 @@ export function agentPayerLine(
  * mend the reader's own key.
  */
 export function teammateStarter(
-  startedBy: PlanEditor | undefined,
+  startedBy: DescriptionEditor | undefined,
   readerId: string | undefined,
 ): string | undefined {
   return teammateRef(startedBy, readerId)?.name;
@@ -216,9 +216,9 @@ export function teammateStarter(
 
 /** The teammate who started an agent, as the wire names them, for a card to draw; none where `teammateStarter` names nobody. */
 export function teammateRef(
-  startedBy: PlanEditor | undefined,
+  startedBy: DescriptionEditor | undefined,
   readerId: string | undefined,
-): PlanEditor | undefined {
+): DescriptionEditor | undefined {
   if (startedBy === undefined || readerId === undefined || startedBy.userId === readerId) {
     return undefined;
   }
@@ -232,7 +232,7 @@ export function teammateRef(
  * own as it always has, for the reason `teammateStarter` gives.
  */
 export function macOwnerOf(
-  startedBy: PlanEditor | undefined,
+  startedBy: DescriptionEditor | undefined,
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
   former?: readonly FormerMember[] | undefined,
@@ -834,8 +834,6 @@ export function addRepositoryFailureWords(refused: RefusedCall): string {
   }
   if (refused.failure !== AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED) return NOT_ADDED;
   switch (refused.extraRepositoryRefusal) {
-    case EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF:
-      return "Turn on Several repositories in Settings › Experimental to add a repository to an agent.";
     case EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY:
       return "This agent works in no repository of its own. Start an agent in that repository instead.";
     case EXTRA_REPOSITORY_REFUSAL.DEVICE:
@@ -865,8 +863,6 @@ function extraRepositoryRefusalWords(
 ): string {
   const named = repository ?? "One of the other repositories";
   switch (refusal) {
-    case EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF:
-      return "Turn on Several repositories in Settings › Experimental to start an agent in more than one repository.";
     case EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY:
       return "Choose the agent's repository before adding others.";
     case EXTRA_REPOSITORY_REFUSAL.DEVICE:

@@ -2,7 +2,6 @@ import { REPLAY_STEP_KIND, type Replay, type ReplayStep } from "@repo/features/a
 import type { AgentPullRequest, AgentSummary, AgentTodos } from "@repo/features/agent-wire";
 import { AGENT_SENDER } from "@repo/features/agent-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   BUTTON_VARIANT,
   Button,
@@ -25,14 +24,15 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@repo/ui/actor-m
 import { ICON_SIZE } from "@repo/ui/icons";
 import { pullRequestLabelOf, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref.js";
 import { Message, MessageContent, RECEIVED_MESSAGE_CLASS } from "../ai-elements/message.js";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import { useFindOpen } from "../find-in-tab.js";
+import { pullRequestPublishedQuery } from "../live-reads.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { useHostRead } from "../use-host-read.js";
 import { lineSender, providerOf } from "./agent-model.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { CopyMessageAction } from "./copy-message.js";
@@ -61,7 +61,7 @@ import { useOpenPlace } from "./use-open-link.js";
 /**
  * replay-card.tsx -- the card an agent started from another opens on after its brief: "Continued from" or "Forked from" the source agent, folded over the steps of the source's work it was handed.
  *
- * The card stands as the plan's card does, at a sent message's measure over
+ * The card stands as the description's card does, at a sent message's measure over
  * the line naming who started the agent and when, as any line sent to the
  * agent is named: a teammate by their face and name, the reader's own by
  * the time alone, and its Copy, which copies the replay as it was handed. Its summary row names the source by the chip its tab
@@ -399,7 +399,7 @@ function ReplaySteps({
   );
 }
 
-/** The foot: the branch and pull request the source published, where known, held by the host while the card's body is drawn (`LIVE_READ.PULL_REQUEST_PUBLISHED`); nothing, rule and all, where neither is. */
+/** The foot: the branch and pull request the source published, where known, held by the host while the card's body is drawn (`pullRequestPublishedQuery`); nothing, rule and all, where neither is. */
 function ReplayFoot({
   agentId,
   place,
@@ -407,7 +407,7 @@ function ReplayFoot({
   agentId: string;
   place: ReplayPlace;
 }): React.JSX.Element | null {
-  const held = useHostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, { agentId }).rows;
+  const held = useQuery(pullRequestPublishedQuery({ agentId })).data;
   const published = held === undefined || "failure" in held ? undefined : held;
   const doors = useMentionDoors();
   // Note that the task list's pull request stands first, since it moves without a read.

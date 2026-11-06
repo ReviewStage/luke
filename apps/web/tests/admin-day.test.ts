@@ -51,7 +51,7 @@ const ADA_ACTIVE: AdminDayActiveAccount = {
   admin: true,
   counts: {
     tasksCreated: 3,
-    planRevisions: 14,
+    descriptionRevisions: 14,
     agentsStarted: 9,
     inboxAnswered: 2,
     automationRuns: 1,
@@ -66,7 +66,7 @@ const LIN_ACTIVE: AdminDayActiveAccount = {
   admin: false,
   counts: {
     tasksCreated: 1,
-    planRevisions: 0,
+    descriptionRevisions: 0,
     agentsStarted: 2,
     inboxAnswered: 0,
     automationRuns: 0,
@@ -83,7 +83,12 @@ function detail(overrides: Partial<AdminDayDetail> = {}): AdminDayDetail {
     day: DAY,
     limit: 2,
     activity: {
-      features: { agentsStarted: 12, planRevisions: 15, inboxAnswered: 2, automationRuns: 1 },
+      features: {
+        agentsStarted: 12,
+        descriptionRevisions: 15,
+        inboxAnswered: 2,
+        automationRuns: 1,
+      },
       activeDevelopers: 4,
       accounts: [ADA_ACTIVE, LIN_ACTIVE],
     },

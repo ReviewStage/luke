@@ -47,7 +47,7 @@ const ACTIONS_YEAR: AdminActionDay[] = Array.from({ length: 371 }, (_, index) =>
   return {
     day,
     tasksCreated: streak || day === "2026-01-07" ? 1 : 0,
-    planRevisions: 0,
+    descriptionRevisions: 0,
     agentsStarted: streak ? 1 : 0,
   };
 });
@@ -72,7 +72,7 @@ function detail(overrides: Partial<AdminUserDetail["account"]> = {}): AdminUserD
       daily: ACTIONS_YEAR.slice(-30),
       calendarDaily: ACTIONS_YEAR.map((day) => ({
         day: day.day,
-        count: day.tasksCreated + day.planRevisions + day.agentsStarted,
+        count: day.tasksCreated + day.descriptionRevisions + day.agentsStarted,
       })),
       actionsTrend: { days: 7, recent: 14, prior: 4 },
       activeDaysWindow: 9,
@@ -208,6 +208,7 @@ let root: Root | undefined;
 /** jsdom's stand-in for the browser's ResizeObserver, which it lacks; the page is never resized. */
 class StillResizeObserver {
   observe(): void {}
+  unobserve(): void {}
   disconnect(): void {}
 }
 

@@ -277,7 +277,7 @@ export const agentTable = pgTable(
       .notNull()
       .default(CONTEXT_WINDOW.LONG),
     /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead, or started blank. */
-    planSnapshot: text("plan_snapshot"),
+    descriptionSnapshot: text("description_snapshot"),
     /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan, or started blank. */
     prompt: text("prompt"),
     /** The GitHub repository the agent works in, as `owner/name`, the one it starts in; null for an agent with none. Any others are its `agent_repository` rows. */

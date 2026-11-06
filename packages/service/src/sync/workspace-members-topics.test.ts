@@ -197,7 +197,7 @@ it.effect(
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/api",
-          planSnapshot: "# Invites\n",
+          descriptionSnapshot: "# Invites\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });

@@ -74,7 +74,7 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invitations\n",
+      descriptionSnapshot: "# Invitations\n",
       prompt: null,
       repository,
       machine: AGENT_MACHINE.DEVICE,
@@ -129,6 +129,7 @@ export const LOCAL_AGENT_ENVIRONMENT = Layer.succeed(HostedEnvironment, {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
+  titleAnthropicApiKey: undefined,
 });
 
 /** The developer's message as the store hands it to the agent's sessions. */

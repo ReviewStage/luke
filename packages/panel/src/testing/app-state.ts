@@ -40,7 +40,7 @@ import {
   type AppInboxItems,
   type AppIntegrationTools,
   type AppPages,
-  type AppPlanComments,
+  type AppDescriptionComments,
   type AppProviderKeyList,
   type AppPullRequestParts,
   type AppRepositoryLists,
@@ -61,7 +61,7 @@ import {
   NO_HOLDER_INBOXES,
   NO_KEYS_HELD,
   NO_PAGES,
-  NO_PLAN_COMMENTS,
+  NO_DESCRIPTION_COMMENTS,
   NO_TRANSCRIPTS,
   OWN_PULL_REQUEST,
   OWN_TRANSCRIPT,
@@ -89,8 +89,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createElement, useContext } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { vi } from "vitest";
+import type { IntegrationServer } from "../live-reads.js";
 import { APP_SLICE } from "../use-app-state.js";
-import type { IntegrationServer } from "../use-host-read.js";
 import {
   fakeActPort,
   fakeActPortCalls,
@@ -99,6 +99,7 @@ import {
   heldUntilClosed,
   quietHold,
 } from "./app-bridge.js";
+import { holdAppStateForFile, writeAppState } from "./copy-feedback.js";
 
 /** What the desktop offers: every capability there is. */
 export const DESKTOP_CAPABILITIES: readonly HostCapability[] = Object.values(HOST_CAPABILITY);
@@ -172,9 +173,9 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
-    [LIVE_READ.PLAN_COMMENTS]: NO_PLAN_COMMENTS,
+    [LIVE_READ.DESCRIPTION_COMMENTS]: NO_DESCRIPTION_COMMENTS,
     [LIVE_READ.HISTORY]: NO_KEYS_HELD,
-    [LIVE_READ.PLAN_DOCUMENT]: NO_KEYS_HELD,
+    [LIVE_READ.DESCRIPTION_DOCUMENT]: NO_KEYS_HELD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -246,6 +247,8 @@ export async function readExperiments(
   registry: AtomRegistry.AtomRegistry = defaultRegistry(),
 ): Promise<void> {
   handState(experiments);
+  // Note that every test's Query client of this file starts on the same document, so a reader through Query draws it at once too.
+  holdAppStateForFile(stateWith(experiments, {}));
   const release = registry.mount(APP_SLICE.SETTINGS);
   // Note that the read lands a task after it is asked for, since the renderer's runtime runs it.
   await vi.waitFor(
@@ -269,7 +272,10 @@ export function registryWith(
   experiments: ExperimentChoices,
   initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]> = [],
 ): AtomRegistry.AtomRegistry {
-  const { settings } = snapshotWith(experiments);
+  const snapshot = snapshotWith(experiments);
+  const { settings } = snapshot;
+  // Note that the test's Query client is handed the same document, so a reader through Query draws it at once too.
+  writeAppState(snapshot);
   return AtomRegistry.make({
     initialValues: [[APP_SLICE.SETTINGS, settings], ...initialValues],
   });
@@ -329,7 +335,7 @@ export interface HostReadsHanded {
   readonly deliverChapters: (next: AppChapters) => void;
   readonly deliverBrowserTabs: (next: AppBrowserTabs) => void;
   readonly deliverAutomations: (next: Partial<AppAutomationReads>) => void;
-  readonly deliverComments: (next: AppPlanComments) => void;
+  readonly deliverComments: (next: AppDescriptionComments) => void;
   readonly deliverTools: (next: AppIntegrationTools) => void;
   readonly deliverParts: (next: Partial<AppPullRequestParts>) => void;
   /** The signed-in account's keys, held under its id. */
@@ -451,7 +457,7 @@ export function handHostReads(first: {
     deliverChapters: (next) => deliver({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: next }),
     deliverBrowserTabs: (next) => deliver({ [LIVE_READ.BROWSER_TABS]: next }),
     deliverAutomations: (next) => deliver(next),
-    deliverComments: (next) => deliver({ [LIVE_READ.PLAN_COMMENTS]: next }),
+    deliverComments: (next) => deliver({ [LIVE_READ.DESCRIPTION_COMMENTS]: next }),
     deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
     deliverParts: (next) => deliver(next),
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),

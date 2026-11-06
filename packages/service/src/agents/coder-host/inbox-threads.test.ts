@@ -78,7 +78,7 @@ const openAgentIn = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "acme/relay",
-    planSnapshot: "# Preview deploys\n",
+    descriptionSnapshot: "# Preview deploys\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
@@ -100,7 +100,7 @@ const openTasklessAgent = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "acme/relay",
-    planSnapshot: null,
+    descriptionSnapshot: null,
     prompt: "Check the preview.",
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });

@@ -2,7 +2,8 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
@@ -12,21 +13,24 @@ import { PROFILE } from "@repo/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useEffect, useState } from "react";
+import { act, createElement, type ReactElement, useEffect, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
-import { followSettingsLink, useSettingsPlace } from "../settings-link.js";
+import { useSettingsRoute } from "../settings-link.js";
+// Note that Settings is loaded as the window loads it, on first use (`panel-router.tsx`'s lazy routes),
+// so its module is read here first and its load settles within the test's own ticks.
+import "./settings-route.lazy.js";
 import { useStageRoom } from "../stage-room.js";
 import {
+  type DescriptionHistorySource,
   type HistorySpot,
-  type PlanHistorySource,
-  usePlanHistory,
-} from "../tasks/use-plan-history.js";
+  useDescriptionHistory,
+} from "../tasks/use-description-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
@@ -35,8 +39,8 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
-import { HOST_READ_STATUS } from "../use-host-read.js";
 // Note that Settings is loaded as the shell loads it, on first use, so the
 // module is read here first and its load settles within the test's own ticks.
 import "./desktop-settings.js";
@@ -45,7 +49,7 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
 
 /**
  * narrow-screens.test.ts -- on a stage as narrow as a phone's, Settings and a
- * plan's version history each show their list or the item chosen
+ * description's version history each show their list or the item chosen
  * in it, one at a time and the whole width: each opens on its list, a row
  * pressed stands its item alone under a way back to the list, and a link to
  * an item opens on it with the same way back. The focus goes with each swap:
@@ -57,7 +61,7 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
  */
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
 /** A signed-in account's Settings, its page and its presses given by the window. */
 const SETTINGS: SettingsPanelProps = {
@@ -68,7 +72,6 @@ const SETTINGS: SettingsPanelProps = {
     provider: "github",
   },
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: accepted,
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {
@@ -109,30 +112,26 @@ const UNDER_SPLIT = 800;
 /** The screens that take the whole window, and so are as wide as the stage they fill. */
 const WHOLE_WINDOW_SCREENS = ["app-stage", "desktop-settings", "desktop-version-history"];
 
-/** A revision of the plan by the notetaker. */
+/** A revision of the description by the notetaker. */
 function line(seq: number) {
   return {
     seq,
-    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
+    lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
     startedAt: 10 * seq,
     changes: 2,
   };
 }
 
-/** The plan's history as main holds it for the version history: two revisions, each the plan as it stands. */
+/** The description's history as main holds it for the version history: two revisions, each the description as it stands. */
 const HELD_HISTORY = {
   rows: { revisions: [line(3), line(2)] },
-  status: HOST_READ_STATUS.READY,
-  retry: () => Promise.resolve(),
+  failed: false,
+  onRetry: () => undefined,
 };
 
-/** Each version as the service answers it, the plan as it stands. */
-const HISTORY: PlanHistorySource = {
+/** The history's older pages and its restore, as the service answers them. */
+const HISTORY: DescriptionHistorySource = {
   readPage: () => Promise.resolve({ revisions: [] }),
-  readRevision: (_taskId, seq) =>
-    Promise.resolve({
-      revision: { seq, document: DOCUMENT_TASK.document, previous: DOCUMENT_TASK.document },
-    }),
   restore: () => Promise.resolve(false),
 };
 
@@ -158,6 +157,13 @@ beforeEach(() => {
     }),
   });
   fakeAppBridge({});
+  // Each version reads as the service answers it, the plan as it stands.
+  fakeActPort({
+    [ACT_KIND.TASKS_REVISION]: ({ seq }) =>
+      Promise.resolve({
+        revision: { seq, document: DOCUMENT_TASK.document, previous: DOCUMENT_TASK.document },
+      }),
+  });
   sheets = layContainersAt({});
 });
 
@@ -168,6 +174,14 @@ afterEach(() => {
   vi.restoreAllMocks();
   document.body.innerHTML = "";
 });
+
+/** The router the shell this test draws stands under, read before each test (`shell-router.ts`). */
+const routed = shellRouterEachTest();
+
+/** `shell` drawn under the test's router, standing where `standing` says, else where its props say. */
+function underRouter(shell: ReactElement, standing?: string): ReactElement {
+  return routed().under(shell, standing);
+}
 
 /** The shell on the stage, as the panel's root draws it: the stage measured, its room, and the real sidebar. */
 function Shell({
@@ -197,6 +211,7 @@ function Shell({
       steps: { back: [], forward: [] },
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
+      onLeaveRouted: ignore,
       away: undefined,
       onLeave: ignore,
     },
@@ -208,34 +223,30 @@ function Shell({
   return createElement("div", { ref: stage.ref, className: "app-stage" }, shell);
 }
 
-/** Settings as the window holds it, opened plainly or by the link given, as the window's root opens it. */
+/** Settings as the window holds it, by the router (`settings-link.ts`), opened plainly or by the link given, as the window's root opens it. */
 function SettingsWindow({ link }: { link: SettingsLink | undefined }): React.JSX.Element {
-  const place = useSettingsPlace();
-  const [tab, setTab] = useState<PanelTab>(PANEL_TAB.TASKS);
-  const { onEnter, onChoose } = place;
+  const place = useSettingsRoute({ workspaces: [], listedId: undefined, narrow: false });
+  const opened = useRef(false);
   useEffect(() => {
-    // The root's tab switch enters Settings on its list, as `App`'s does.
-    const changeTab = (next: PanelTab) => {
-      setTab(next);
-      onEnter();
-    };
-    if (link === undefined) changeTab(PANEL_TAB.SETTINGS);
-    else followSettingsLink(link, { changeTab, changeView: onChoose, chooseWorkspace: ignore });
-  }, [link, onEnter, onChoose]);
+    if (opened.current) return;
+    opened.current = true;
+    // Entering Settings stands it on its list, as `App`'s tab switch does.
+    place.open(link ?? { page: SETTINGS_VIEW.ACCOUNT, listed: true });
+  }, [link, place]);
   return createElement(Shell, {
-    tab,
+    tab: place.standing ? PANEL_TAB.SETTINGS : PANEL_TAB.TASKS,
     tasks: tasksControl(),
-    settings: { ...SETTINGS, view: place.view, onViewChange: place.onChoose },
-    settingsStep: place,
+    settings: { ...SETTINGS, view: place.view, onViewChange: (view) => place.open({ page: view }) },
+    settingsStep: { listed: place.listed, onList: place.list },
   });
 }
 
 /** The version history the last window drew, which the window's history moves as it goes back and forth. */
-let standingVersions: ReturnType<typeof usePlanHistory> | undefined;
+let standingVersions: ReturnType<typeof useDescriptionHistory> | undefined;
 
-/** The plan's version history over the window, opened on the plan as it stands or where `returnTo` says. */
+/** The description's version history over the window, opened on the description as it stands or where `returnTo` says. */
 function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): React.JSX.Element {
-  const versions = usePlanHistory({
+  const versions = useDescriptionHistory({
     source: HISTORY,
     taskId: DOCUMENT_TASK.id,
     history: HELD_HISTORY,
@@ -269,7 +280,7 @@ async function mount(width: number, window: React.JSX.Element): Promise<HTMLElem
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), window)));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(window))));
   await settle();
   return container;
 }
@@ -312,10 +323,11 @@ function buttonSaying(within: HTMLElement, words: string): HTMLButtonElement | u
   );
 }
 
-/** Presses the button in `within` that says `words`. */
-function press(within: HTMLElement, words: string): void {
+/** Presses the button in `within` that says `words`, and lets where it leads stand, the router's places among them. */
+async function press(within: HTMLElement, words: string): Promise<void> {
   const button = buttonSaying(within, words) ?? assert.fail(`a button says ${words}`);
   act(() => button.click());
+  await settle();
 }
 
 const SETTINGS_COLUMNS = {
@@ -332,14 +344,14 @@ test("Settings on a narrow stage opens on its page list, a page chosen stands al
     "the list is the shell's one column",
   );
 
-  press(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  await press(the(page, SETTINGS_COLUMNS.list), "Appearance");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["page"]);
   assert.equal(the(page, SETTINGS_COLUMNS.page).getAttribute("aria-label"), "Appearance");
 
-  press(the(page, SETTINGS_COLUMNS.page), "Settings");
+  await press(the(page, SETTINGS_COLUMNS.page), "Settings");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 
-  press(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  await press(the(page, SETTINGS_COLUMNS.list), "Appearance");
   resizeStage(WIDE);
   assert.deepEqual(
     onScreen(page, SETTINGS_COLUMNS),
@@ -356,7 +368,7 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
     delete document.documentElement.dataset.uiProfile;
   });
   const page = await mount(PHONE, createElement(SettingsWindow, { link: undefined }));
-  press(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  await press(the(page, SETTINGS_COLUMNS.list), "Appearance");
   const item = the(page, SETTINGS_COLUMNS.page);
   const bar = the(item, 'header[data-look="phone"]');
   assert.equal(bar.querySelector("h1")?.textContent, "Appearance", "the bar names the page");
@@ -381,16 +393,16 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
 
 test("Settings on a stage wide enough for panes, but under the split's line by its own width, shows its list, then a page chosen alone under a way back, and splits again once wide", async () => {
   const page = await mount(UNDER_SPLIT, createElement(SettingsWindow, { link: undefined }));
-  assert.equal(the(page, ".desktop-shell").dataset["room"], "wide", "the stage is no phone's");
+  assert.equal(the(page, ".desktop-shell").dataset.room, "wide", "the stage is no phone's");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 
-  press(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  await press(the(page, SETTINGS_COLUMNS.list), "Appearance");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["page"]);
 
-  press(the(page, SETTINGS_COLUMNS.page), "Settings");
+  await press(the(page, SETTINGS_COLUMNS.page), "Settings");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 
-  press(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  await press(the(page, SETTINGS_COLUMNS.list), "Appearance");
   resizeStage(WIDE);
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list", "page"]);
   assert.equal(buttonSaying(the(page, SETTINGS_COLUMNS.page), "Settings"), undefined);
@@ -418,7 +430,7 @@ test("a link to a Settings page on a narrow stage opens on that page, with the w
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["page"]);
   assert.equal(the(page, SETTINGS_COLUMNS.page).getAttribute("aria-label"), "Appearance");
 
-  press(the(page, SETTINGS_COLUMNS.page), "Settings");
+  await press(the(page, SETTINGS_COLUMNS.page), "Settings");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 });
 
@@ -446,7 +458,7 @@ test("Find on a narrow Settings lands in the search shown: a page with none show
     PHONE,
     createElement(SettingsWindow, { link: { page: SETTINGS_VIEW.INTEGRATIONS } }),
   );
-  press(the(integrations, SETTINGS_COLUMNS.page), "Settings");
+  await press(the(integrations, SETTINGS_COLUMNS.page), "Settings");
   act(() => {
     runAppCommand(APP_COMMAND.FIND);
   });
@@ -478,7 +490,7 @@ test("a version history on a narrow stage opens on its versions, a version chose
   await settle();
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["version"]);
 
-  press(the(page, HISTORY_COLUMNS.version), "Versions");
+  await press(the(page, HISTORY_COLUMNS.version), "Versions");
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
 
   resizeStage(WIDE);
@@ -494,7 +506,7 @@ test("a version history under the split's line by its own width, on a stage wide
   await settle();
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["version"]);
 
-  press(the(page, HISTORY_COLUMNS.version), "Versions");
+  await press(the(page, HISTORY_COLUMNS.version), "Versions");
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
 
   resizeStage(WIDE);
@@ -508,7 +520,7 @@ test("a link to a version on a narrow stage opens on that version, with the way 
   );
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["version"]);
 
-  press(the(page, HISTORY_COLUMNS.version), "Versions");
+  await press(the(page, HISTORY_COLUMNS.version), "Versions");
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
 });
 
@@ -530,12 +542,13 @@ test("a version history gone back to on its list in a narrow room opens on its l
 });
 
 /** Focuses the button in `within` that says `words`, as a press of a key or a tap does, and presses it. */
-function pressFocused(within: HTMLElement, words: string): void {
+async function pressFocused(within: HTMLElement, words: string): Promise<void> {
   const button = buttonSaying(within, words) ?? assert.fail(`a button says ${words}`);
   act(() => {
     button.focus();
     button.click();
   });
+  await settle();
 }
 
 /** The words the focused element says, and the column it stands in, by the names given the columns. */
@@ -547,18 +560,18 @@ function focusIn(page: HTMLElement, columns: Readonly<Record<string, string>>): 
 
 test("a page chosen on a narrow Settings takes the focus to its way back, and Back hands it to the page's row", async () => {
   const page = await mount(PHONE, createElement(SettingsWindow, { link: undefined }));
-  pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  await pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");
   assert.equal(focusIn(page, SETTINGS_COLUMNS), "page");
   assert.equal(document.activeElement?.textContent?.trim(), "Settings", "the way back to the list");
 
-  pressFocused(the(page, SETTINGS_COLUMNS.page), "Settings");
+  await pressFocused(the(page, SETTINGS_COLUMNS.page), "Settings");
   assert.equal(focusIn(page, SETTINGS_COLUMNS), "list");
   assert.equal(document.activeElement?.textContent?.trim(), "Appearance", "the row chosen");
 });
 
 test("a page chosen on a wide Settings leaves the focus on its row", async () => {
   const page = await mount(WIDE, createElement(SettingsWindow, { link: undefined }));
-  pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  await pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");
   assert.equal(focusIn(page, SETTINGS_COLUMNS), "list");
   assert.equal(document.activeElement?.textContent?.trim(), "Appearance");
 });
@@ -574,13 +587,13 @@ test("a version chosen on a narrow stage takes the focus to its way back, and Ba
   assert.equal(focusIn(page, HISTORY_COLUMNS), "version");
   assert.equal(document.activeElement?.textContent?.trim(), "Versions", "the way back to the list");
 
-  pressFocused(the(page, HISTORY_COLUMNS.version), "Versions");
+  await pressFocused(the(page, HISTORY_COLUMNS.version), "Versions");
   assert.equal(document.activeElement, versionRow(page, 1), "the row chosen");
 });
 
 test("a wide Settings turned narrow hands the focus from the hidden page list to the page's way back", async () => {
   const page = await mount(WIDE, createElement(SettingsWindow, { link: undefined }));
-  pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  await pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");
   resizeStage(PHONE);
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["page"]);
   assert.equal(document.activeElement?.textContent?.trim(), "Settings", "the way back to the list");

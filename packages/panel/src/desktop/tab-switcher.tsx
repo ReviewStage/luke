@@ -54,6 +54,7 @@ import {
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
+  isLocalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -61,11 +62,12 @@ import {
   TAB_WORDS,
 } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { overlayHoldsKeyboard, useAppCommand, useOverlayHold } from "../app-commands.js";
 import { liveStepTitle, memberName, NAMED_STEP, stepTitle } from "../history-titles.js";
@@ -73,12 +75,13 @@ import { MemberDirectory, useMemberDirectory, usePerson } from "../member-direct
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { ROUTED_PLACE } from "../route-gates.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability } from "../use-app-state.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { type HeldLook, heldLook, LOOK_STRIP } from "./switcher-looks.js";
 import {
   forgotten,
@@ -172,6 +175,7 @@ function tabWordLook(tab: SidePanelTab | MainTab, task: TaskSummary | undefined)
   if (isFileTab(tab)) return tabLook({ kind: TAB_KIND.FILE, path: tab.file });
   if (isChangesTab(tab)) return tabLook({ kind: TAB_KIND.CHANGES });
   if (isTerminalTab(tab)) return tabLook({ kind: TAB_KIND.TERMINAL, agent: undefined });
+  if (isLocalTab(tab)) return tabLook({ kind: TAB_KIND.LOCAL, agent: undefined });
   if (isCloudBrowserTab(tab)) {
     return tabLook({ kind: TAB_KIND.BROWSER, title: undefined });
   }
@@ -310,7 +314,7 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
   const { mainTabs, sidePanel, personView } = tasks;
   const column = mainTabs.tab;
   return shownStop({
-    over: tab === PANEL_TAB.SETTINGS || tasks.history.open,
+    over: tab === PANEL_TAB.SETTINGS || tasks.adminView.open || tasks.history.open,
     inbox: tasks.inboxView.open,
     agentId: tasks.agentView.agentId,
     person:
@@ -367,9 +371,12 @@ export function TabSwitcher({
   onTabChange: (tab: PanelTab) => void;
   tasks: TasksControl;
 }): React.JSX.Element | null {
-  const desktop = useCapability(HOST_CAPABILITY.DESKTOP_APP);
+  const desktop =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.DESKTOP_APP) }).data ===
+    true;
   const answers = available && desktop;
-  const { act } = useAct();
+  // Note that a still is the window's own action, sent on its mutation; nothing the service holds.
+  const { mutateAsync: sendCapture } = useMutation(actMutation(ACT_KIND.WINDOW_CAPTURE));
   const [state, setState] = useState<SwitcherState>(SWITCHER_LET_GO);
   // Counts the stills kept, so one landing while the cards show is drawn at once.
   const [, setStillsKept] = useState(0);
@@ -422,7 +429,7 @@ export function TabSwitcher({
   const takeStill = (stop: Stop) => {
     const area = areaOf(WORK_AREA);
     if (area === undefined) return;
-    act(ACT_KIND.WINDOW_CAPTURE, area).then(
+    sendCapture(area).then(
       (src) => {
         if (src !== null) keep(stop, src);
       },
@@ -445,7 +452,7 @@ export function TabSwitcher({
 
   // The window's stops follow where it stands, each render, and what Back's list calls the stop standing.
   const now = standingOf(tab, tasks);
-  const title = stepTitle(tab, tasks);
+  const title = stepTitle(tab === PANEL_TAB.SETTINGS ? ROUTED_PLACE.SETTINGS : undefined, tasks);
   useEffect(() => {
     const before = shown.current;
     shown.current = now;
@@ -475,9 +482,10 @@ export function TabSwitcher({
 
   // Goes to a stop through the window's own doors, as any move there would, all of it past one ask of the leave guard, so a leave canceled moves nothing, the stops' order included.
   const go = (stop: Stop) => {
-    const { tasks: control, tab: shownTab, onTabChange: changeTab } = doors.current;
+    const { tasks: control, onTabChange: changeTab } = doors.current;
     control.leaveGuard.guard(() => {
-      if (shownTab !== PANEL_TAB.TASKS) changeTab(PANEL_TAB.TASKS);
+      // A routed place standing, Settings or Admin, is left for the stop.
+      changeTab(PANEL_TAB.TASKS);
       switch (stop.kind) {
         case STOP_KIND.TASK:
           showTask(control, stop);

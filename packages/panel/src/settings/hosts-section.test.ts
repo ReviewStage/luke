@@ -11,7 +11,7 @@ import type { AppStateDelivery, AppStateSnapshot, AppThisMacHost } from "@repo/h
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import {
   type FakeActPort,
   fakeActPort,
@@ -58,6 +58,8 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
   });
+  // Note that the account the list is read under reaches the page on Query's timing, which no count of ticks keeps up with.
+  await vi.waitFor(() => assert.equal(pageText().includes("Reading your hosts"), false));
 }
 
 /**
@@ -158,12 +160,14 @@ test("a host that joins while the page stands is said to be connected, and reads
   const lay = holdHosts(() => [...hosts]);
   drawHosts();
   await settle();
+  // Note that the page stands on the account's first list, read once it reaches the hosts' query, before a host joins.
+  await vi.waitFor(() => assert.ok(pageText().includes(`curl -fsSL ${SCRIPT} | sh`)));
 
   hosts.push({ id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "hel-02" });
   act(lay);
   await settle();
 
-  assert.ok(pageText().includes("hel-02 is connected."), pageText());
+  await vi.waitFor(() => assert.ok(pageText().includes("hel-02 is connected."), pageText()));
   assert.ok(pageText().includes("hel-02Setting up… · Linux server"), pageText());
 });
 
@@ -270,8 +274,8 @@ test("This Mac stands first on the row of the machine it is, its switch on, with
     (row) => row.textContent?.includes("This Mac") ?? false,
   );
   assert.equal(
-    thisMacRow?.querySelector('button[aria-haspopup="menu"]') ?? null,
-    null,
+    (thisMacRow?.querySelector('button[aria-haspopup="menu"]') ?? null) === null,
+    true,
     "This Mac's row offers no Remove",
   );
 });
@@ -369,6 +373,8 @@ test("This Mac's switch turns it on at once, and off only once the question is a
   await machinesWithThisMac([], { machineId: MACHINE_ID, enrolled: true }, [], {
     [ACT_KIND.HOSTS_THIS_MAC_SET]: answered,
   });
+  // Note that one client holds both worlds, so the switch is pressed once this world's record has replaced the last one's.
+  await vi.waitFor(() => assert.equal(thisMacSwitch().getAttribute("aria-checked"), "true"));
   await act(async () => thisMacSwitch().click());
   await settle();
   assert.deepEqual(sent, [{ on: true }], "nothing is turned off before it is asked");

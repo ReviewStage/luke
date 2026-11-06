@@ -5,7 +5,7 @@
  *
  * It names what the table names and the members' accounts beside it, the
  * same faces every dashboard table draws, so a maintainer can walk from a
- * workspace to the people in it and back; never a task's title, a plan's
+ * workspace to the people in it and back; never a task's title, a description's
  * text, or anything a member wrote.
  */
 

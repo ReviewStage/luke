@@ -27,7 +27,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { FAKE_ANSWER, type FakeActAnswer, fakeActs, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers, handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, listedAgent, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
@@ -226,6 +226,7 @@ async function drawnFor(
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   const drawn = [...container.querySelectorAll(".is-user, .is-received")];
   assert.equal(drawn.length, messages.length);
   return drawn;
@@ -342,6 +343,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   const card = document.querySelector(".ui-tooltip-card")?.textContent ?? "";
   act(() => {
     sender.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -374,7 +376,7 @@ test("a teammate's message names them over its bubble, with when and its Copy on
   fakeAppBridge({});
 });
 
-test("an agent started blank draws its first line as a line, no plan's card and no task under its starter's name, a line spoken on a call naming no one and a teammate's typed line naming them", async () => {
+test("an agent started blank draws its first line as a line, no description's card and no task under its starter's name, a line spoken on a call naming no one and a teammate's typed line naming them", async () => {
   const blank: AgentSummary = { ...AGENT, brief: AGENT_BRIEF.BLANK };
   const spoken: AgentTranscriptMessage = {
     ...line("spoken", "What did you change?"),
@@ -382,9 +384,9 @@ test("an agent started blank draws its first line as a line, no plan's card and 
   };
   const typed = line("typed", "Keep the old copy.", { ...DEAN, kind: MEMBER });
 
-  // Every line is drawn as a line of the developer's, the first among them, and none as the plan's card.
+  // Every line is drawn as a line of the developer's, the first among them, and none as the description's card.
   assert.deepEqual(await sendersFor(CHARLES.userId, blank, [spoken, typed]), [
     ["typed", ACTOR_KIND.PERSON, "Dean Stratakos"],
   ]);
-  assert.equal(document.querySelector("[data-origin-plan]"), null);
+  assert.equal(document.querySelector("[data-origin-description]"), null);
 });

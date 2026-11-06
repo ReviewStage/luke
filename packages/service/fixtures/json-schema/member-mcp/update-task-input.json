@@ -11,7 +11,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 200,
-      "description": "Its new name, as the sidebar shows it, which its plan's heading follows."
+      "description": "Its new name, as the sidebar shows it, which its description's heading follows."
     },
     "repository": {
       "anyOf": [

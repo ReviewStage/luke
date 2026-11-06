@@ -1,7 +1,7 @@
 import { CHECK_SUMMARY } from "@repo/features/agent-wire";
 import type { KnownNames } from "@repo/features/place-chip-model";
 import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@repo/features/thing-kind";
-import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
+import { workspaceOfSlug } from "@repo/features/workspace-wire";
 import { ProviderMark } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, APP_ACTOR } from "@repo/ui/actor-model";
 import {
@@ -12,13 +12,13 @@ import {
   MessageSquareIcon,
   ShieldUserIcon,
 } from "@repo/ui/icons";
-import * as Atom from "effect/reactivity/Atom";
+import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { usePerson } from "../member-directory.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectWorkspaces } from "../use-app-state.js";
 import { providerOf } from "./agent-model.js";
 import { WorkspaceDirectory } from "./chip-cards.js";
 import { fileName } from "./file-ref-model.js";
@@ -74,12 +74,6 @@ type ThingMark<T> = (thing: T, at: ThingMarkAt) => ReactNode;
 
 /** The marks, one entry per kind. */
 type ThingMarks = { readonly [K in ThingKind]: ThingMark<ThingOf<K>> };
-
-/** The workspaces of the document, which tells a workspace's mark only as they move. */
-const workspacesAtom: Atom.Atom<readonly Workspace[] | undefined> = Atom.withEquality(
-  Atom.map(APP_SLICE.TASKS, (planning) => planning?.workspaces),
-  (held, next) => held === next,
-);
 
 /** A plan's glyph, wearing its status where the window holds the task, as its row does. */
 function PlanMark({ taskId }: { taskId: string }): React.JSX.Element {
@@ -151,7 +145,7 @@ function PersonMark({
   name: string;
   workspace: string;
 }): React.JSX.Element {
-  const listed = useAppSlice(workspacesAtom);
+  const listed = useQuery({ ...appStateQuery, select: selectWorkspaces }).data;
   const named = listed === undefined ? undefined : workspaceOfSlug(listed, workspace);
   const face = <PersonFace userId={userId} name={name} />;
   return named === undefined ? (
@@ -184,7 +178,7 @@ function AutomationTile({
 
 /** A workspace's tile as its rows draw it; its letter by its slug where the window holds it not. */
 function WorkspaceMark({ slug }: { slug: string }): React.JSX.Element {
-  const workspaces = useAppSlice(workspacesAtom);
+  const workspaces = useQuery({ ...appStateQuery, select: selectWorkspaces }).data;
   const listed = workspaces === undefined ? undefined : workspaceOfSlug(workspaces, slug);
   return <WorkspaceTile workspace={listed ?? { id: slug, name: slug }} size={TILE_SIZE.INLINE} />;
 }

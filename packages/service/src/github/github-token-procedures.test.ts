@@ -61,6 +61,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
+  titleAnthropicApiKey: undefined,
 };
 
 /** What the fake GitHub answers `GET /user` with, per token; a token it does not know is refused. */

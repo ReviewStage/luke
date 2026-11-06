@@ -1,13 +1,13 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
 import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { useAgentDefault, useOfferedModels } from "../account-choices.js";
-import { useAct } from "../act.js";
+import { pressMutation } from "../act-mutations.js";
+import { modelsRetryMutation } from "../live-reads.js";
 import { useWorkspaceAgents, type WorkspaceAgents } from "../tasks/use-workspace-agents.js";
 import { workspaceAgentSearchQueryOptions } from "../tasks/workspace-agent-search.js";
-import { HOST_READ_STATUS } from "../use-host-read.js";
 
 /**
  * use-run-choices.ts -- what an automation's "Runs land in" row chooses from: the models a new agent may run on, the account's default it runs on until one is chosen, and the workspace's agents on the repository a run may go to.
@@ -54,16 +54,14 @@ export function useRunChoices(input: {
   readonly repository: string | null;
   readonly wantsAgents: boolean;
 }): RunChoices {
-  const { press } = useAct();
+  const { mutate: refreshTasks } = useMutation(pressMutation(ACT_KIND.TASKS_REFRESH));
   const { workspaceId, repository, wantsAgents } = input;
   const offered = useOfferedModels();
   const drawnDefault = useAgentDefault();
   const agents = useWorkspaceAgents(wantsAgents ? workspaceId : undefined, repository);
   const [words, setWords] = useState("");
-  const retryModels = offered.retry;
-  const readModels = useCallback(() => {
-    void retryModels();
-  }, [retryModels]);
+  const { mutate: retryModels } = useMutation(modelsRetryMutation());
+  const readModels = useCallback(() => retryModels(), [retryModels]);
   // Once a word is typed the service finds the agents it names, however many the repository holds.
   const asked = words.trim();
   const searching = wantsAgents && workspaceId !== undefined && asked !== "";
@@ -84,15 +82,15 @@ export function useRunChoices(input: {
   const listFailed = agents !== undefined && "failed" in agents;
   const retryAgents = useCallback(() => {
     // Note that the newest are the task list's, so where it failed the list's own Try again reads it.
-    if (listFailed) press(ACT_KIND.TASKS_REFRESH);
+    if (listFailed) refreshTasks();
     if (searching) void searchAgain();
-  }, [press, listFailed, searching, searchAgain]);
+  }, [refreshTasks, listFailed, searching, searchAgain]);
   return {
-    models: offered.rows?.models,
-    modelsFailed: offered.status === HOST_READ_STATUS.FAILED,
+    models: offered.data?.models,
+    modelsFailed: offered.isError,
     readModels,
     defaultChoice: drawnDefault.choice,
-    defaultFailed: drawnDefault.status === HOST_READ_STATUS.FAILED,
+    defaultFailed: drawnDefault.failed,
     agents,
     found,
     searchFailed,

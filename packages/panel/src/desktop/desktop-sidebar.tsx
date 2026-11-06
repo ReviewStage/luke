@@ -26,13 +26,11 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   Fill,
-  GAP,
   GROUP_HEADING,
   GroupHeader,
   HoldPress,
   IconButton,
   joinRefs,
-  LAYOUT_ELEMENT,
   ListMotion,
   MoreButton,
   motionKey,
@@ -52,6 +50,8 @@ import {
   RepositoryPicture,
   ResizeEdge,
   type ResizeEdgeHandle,
+  reachedKey,
+  rovingItemIn,
   SCROLL_FADE,
   ScrollArea,
   SearchIcon,
@@ -62,7 +62,6 @@ import {
   Skeleton,
   SkeletonRegion,
   STATUS_TONE,
-  Stack,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -114,6 +113,8 @@ import {
   workspaceSections,
 } from "@repo/ui/task-sections-model";
 import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { useVirtualRuns, VIRTUAL_ROW_KEY_ATTRIBUTE } from "@repo/ui/virtual-rows";
+import { useQuery } from "@tanstack/react-query";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
@@ -121,6 +122,7 @@ import { useConnected } from "../connection.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { unreadShown } from "../failure-report.js";
+import { useFindOpen } from "../find-in-tab.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import {
   type HistoryPage,
@@ -149,7 +151,7 @@ import {
 } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useAdminAccess } from "../use-app-state.js";
+import { appStateQuery, selectAdminAccess } from "../use-app-state.js";
 import { IDLE_TIMEOUT_MS, useWhenIdle } from "../use-when-idle.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
@@ -157,9 +159,16 @@ import { useFailedRunsMark } from "./failed-runs.js";
 import { withoutFinishedRuns, withoutFinishedRunTasks } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
-import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
+import {
+  childTasksFold,
+  listedSlot,
+  movedBeside,
+  nestsOf,
+  storedSlot,
+  useNestedRows,
+} from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
-import { ADMIN_PLACE, TASKS_ROUTE } from "./pages-on-demand.js";
+import { TASKS_ROUTE } from "./pages-on-demand.js";
 import { PhoneAccount } from "./phone-account.js";
 import { PhoneHead } from "./phone-head.js";
 import { useInboxWaiting } from "./places-waiting.js";
@@ -171,6 +180,7 @@ import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-f
 import { SidebarFoot } from "./sidebar-foot.js";
 import { SidebarInboxRow } from "./sidebar-inbox-row.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
+import { SidebarRun, type SidebarRunsPlace } from "./sidebar-run.js";
 import {
   type DrawnSection,
   moveToSectionEntry,
@@ -194,7 +204,7 @@ import { type RowFaces, SidebarTask } from "./task-actions.js";
 import { useTaskListView } from "./task-list-view.js";
 import { ChosenTasksContext, useTasksSelection } from "./tasks-selection.js";
 import { useWorkspaceRuns } from "./use-automation-runs.js";
-import { useRowDrag } from "./use-row-drag.js";
+import { useRunRowDrag } from "./use-row-drag.js";
 import { WorkspaceSwitcher } from "./workspace-switcher.js";
 
 /**
@@ -230,9 +240,6 @@ export function useSidebarEdge(
   });
 }
 
-/** The display a browser tab answers, as against an installed web app's own window, which draws no Back of its own. */
-const BROWSER_DISPLAY = "(display-mode: browser)";
-
 /**
  * Back and forward, at the right of the left column's title-bar row, level
  * with the traffic lights, the way Cursor and Codex keep them: in the
@@ -240,10 +247,9 @@ const BROWSER_DISPLAY = "(display-mode: browser)";
  * it when it folds, after the column's drag strip so they claim their
  * presses back from the window frame. A way with nothing along it is dimmed
  * rather than gone, so neither button moves. The chords are the shell's to
- * offer, since they answer while the column is folded too. A phone's
- * browser tab draws none, since its own Back and Forward walk the same
- * history (`navigation-history.ts`) and the drawer's head is short of room;
- * a phone's installed web app keeps them, having no browser around it.
+ * offer, since they answer while the column is folded too. A phone draws
+ * none: its places bar and each page's own Back are how it moves, and the
+ * drawer's head is short of room.
  */
 export function HistoryButtons({
   history,
@@ -252,7 +258,7 @@ export function HistoryButtons({
   history: NavigationHistory;
   room: ShellRoom;
 }): React.JSX.Element | null {
-  if (room === SHELL_ROOM.NARROW && window.matchMedia(BROWSER_DISPLAY).matches) return null;
+  if (room === SHELL_ROOM.NARROW) return null;
   return (
     <div className="title-bar-controls" data-edge="column">
       <HistoryButton
@@ -414,6 +420,8 @@ interface RowContext {
   readonly opened: (taskId: string) => boolean;
   /** Opens a task's child tasks under its row where they stand folded, and folds them where they stand open. */
   readonly onFoldTask: (taskId: string) => void;
+  /** Where the column's runs of rows stand (`SidebarRun`). */
+  readonly runs: SidebarRunsPlace;
 }
 
 /** The rows a list draws, child tasks nested under their parents and passed by under a fold, the open row still standing (`drawnTaskRows`). */
@@ -467,29 +475,27 @@ function TaskRows({
   // Note that the rows keep the view's order, so a row is dragged only out of them, into a section or Pinned.
   const { dropOut } = context;
   const nested = useNestedRows(rows, context.opened, context.currentRow);
-  const drag = useRowDrag(undefined, {
+  const drawn = useLeaving(nested, ({ row }) => taskRowKey(row));
+  const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
+  const drag = useRunRowDrag(undefined, {
     onDropOut:
       dropOut === undefined
         ? undefined
         : (from, zone, at) => {
-            const held = nested[from];
+            const held = drawn[from]?.value;
             if (held !== undefined) dropOut(held.row, zone, at);
           },
     onCarried: context.onCarried,
   });
-  const drawn = useLeaving(nested, ({ row }) => taskRowKey(row));
   const nests = nestsOf(drawn.map(({ value }) => value));
   return (
-    <Stack
-      as={LAYOUT_ELEMENT.UL}
-      gap={GAP.ROW}
-      className="sidebar-tasks"
-      moves
-      onPointerDown={drag}
-    >
-      {drawn.map(({ value: held }, at) => {
+    <SidebarRun place={context.runs} keys={keys} onPointerDown={drag}>
+      {(index, place) => {
+        const entry = drawn[index];
+        if (entry === undefined) return null;
+        const held = entry.value;
         const { row } = held;
-        const nest = nests[at];
+        const nest = nests[index];
         return row.kind === TASK_ROW.TASK ? (
           <SidebarTask
             key={row.task.id}
@@ -504,6 +510,7 @@ function TaskRows({
             faces={faces}
             depth={held.depth}
             nest={nest}
+            place={place}
             fold={childTasksFold(held, context.onFoldTask)}
             childCount={context.childCount(row.task.id)}
             onOpen={() => context.onOpen(row.task.id)}
@@ -519,6 +526,7 @@ function TaskRows({
             repository={repository?.(row)}
             face={faces.creator && faces.assignee}
             nest={nest}
+            place={place}
             shown={context.tasks.shown && context.inSight}
             onOpen={() => context.onOpenAgent(row.agent.id)}
             onPin={pinOf(context.tasks, row.agent)}
@@ -526,8 +534,8 @@ function TaskRows({
             onDeleted={context.onDeletedAgent(row.agent.id)}
           />
         );
-      })}
-    </Stack>
+      }}
+    </SidebarRun>
   );
 }
 
@@ -646,7 +654,7 @@ function pinnedRows(
       return agent === undefined ? [] : [{ kind: TASK_ROW.AGENT, agent, pin, place }];
     }
     const task = tasks.listed.tasks.find((each) => each.id === pin.task);
-    return task === undefined || pin.tab === SIDE_PANEL_TAB.PLAN
+    return task === undefined || pin.tab === SIDE_PANEL_TAB.DESCRIPTION
       ? []
       : [{ kind: TASK_ROW.TASK, task, pin, place }];
   });
@@ -815,52 +823,65 @@ function PinnedRows({
   const movePin = movable
     ? (from: number, to: number) => movePinned(rows, from, to, context.tasks)
     : undefined;
+  const drawn = useLeaving(listed, pinnedDrawnKey);
+  const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
+  // Note that a row is heard by its place among the rows drawn, child tasks and rows on their way out among them, and found among those listed by its key, as the slot it is carried to is (`listedSlot`).
+  const listedAt = new Map(listed.map((each, at) => [pinnedDrawnKey(each), at]));
+  const fromListed = (from: number) => {
+    const key = drawn[from]?.key;
+    return key === undefined ? undefined : listedAt.get(key);
+  };
   // Note that a drag counts the rows drawn, child tasks among them, so a pin lands beside the pin it was let go among.
   const depths = listed.map(depthOf);
   const move =
     movePin === undefined
       ? undefined
       : (from: number, to: number) => {
-          const beside = movedBeside(depths, from, to);
-          const moved = listed[from]?.pin;
+          const at = fromListed(from);
+          const beside =
+            at === undefined ? undefined : movedBeside(depths, at, listedSlot(drawn, from, to));
+          const moved = at === undefined ? undefined : listed[at]?.pin;
           const by = beside === undefined ? undefined : listed[beside]?.pin;
           if (moved !== undefined && by !== undefined) {
             movePin(rows.indexOf(moved), rows.indexOf(by));
           }
         };
-  const drag = useRowDrag(move, {
+  const drag = useRunRowDrag(move, {
     onDropOut:
       onDropOut === undefined
         ? undefined
         : (from, zone, at) => {
-            const row = listed[from]?.pin;
+            const row = drawn[from]?.value.pin;
             if (row !== undefined) onDropOut(row, zone, at);
           },
   });
-  const keys = useRowMoveKeys(move);
+  const moveKeys = useRowMoveKeys(move);
   // Note that a row on its way out has no place among the rows a drag or a menu moves.
-  const listedAt = new Map(rows.map((row, at) => [pinnedRowKey(row), at]));
+  const pinPlaces = new Map(rows.map((row, at) => [pinnedRowKey(row), at]));
   const placeOf = (key: string) => {
-    const at = listedAt.get(key);
+    const at = pinPlaces.get(key);
     return movePin === undefined || at === undefined
       ? undefined
       : { at, count: rows.length, onMove: movePin };
   };
-  const drawn = useLeaving(listed, pinnedDrawnKey);
   const nests = nestsOf(drawn.map(({ value }) => depthOf(value)));
   return (
     // An open Pinned keeps an order a row carried in lands at a place in; a folded one draws only some of its rows, so a drop lands on top.
-    <Stack
-      as={LAYOUT_ELEMENT.UL}
-      gap={GAP.ROW}
-      className="sidebar-tasks"
-      data-row-drop-rows={onDropOut !== undefined && movable ? "" : undefined}
-      moves
+    <SidebarRun
+      place={context.runs}
+      keys={keys}
+      drops={onDropOut !== undefined && movable}
       onPointerDown={drag}
-      {...keys}
+      block={moveKeys}
     >
-      {drawn.map(({ key, value: { pin: row, held } }, at) => {
-        const nest = nests[at];
+      {(index, place) => {
+        const entry = drawn[index];
+        if (entry === undefined) return null;
+        const {
+          key,
+          value: { pin: row, held },
+        } = entry;
+        const nest = nests[index];
         if (row === undefined) {
           const child = held.row;
           return child.kind === TASK_ROW.TASK ? (
@@ -874,6 +895,7 @@ function PinnedRows({
               now={context.now}
               depth={held.depth}
               nest={nest}
+              place={place}
               fold={childTasksFold(held, context.onFoldTask)}
               childCount={context.childCount(child.task.id)}
               onOpen={() => context.onOpen(child.task.id)}
@@ -889,6 +911,7 @@ function PinnedRows({
                 pin={pin}
                 on={{ agent }}
                 nest={nest}
+                place={place}
                 current={context.markedPin(pin)}
                 inSight={context.inSight}
                 onOpen={() => onOpenTab(pin)}
@@ -909,6 +932,7 @@ function PinnedRows({
                 now={context.now}
                 at={agent.activityAt}
                 nest={nest}
+                place={place}
                 shown={context.tasks.shown && context.inSight}
                 onOpen={() => context.onOpenAgent(agent.id)}
                 onPin={pinOf(context.tasks, agent)}
@@ -930,6 +954,7 @@ function PinnedRows({
                 unread={context.unread(task)}
                 now={context.now}
                 nest={nest}
+                place={place}
                 fold={held === undefined ? undefined : childTasksFold(held, context.onFoldTask)}
                 childCount={context.childCount(task.id)}
                 onOpen={() => context.onOpen(task.id)}
@@ -940,6 +965,7 @@ function PinnedRows({
                 pin={pin}
                 on={{ task }}
                 nest={nest}
+                place={place}
                 current={context.marked(task.id, pin)}
                 inSight={context.inSight}
                 onOpen={() => onOpenTab(pin)}
@@ -949,8 +975,8 @@ function PinnedRows({
             )}
           </RowPlaced>
         );
-      })}
-    </Stack>
+      }}
+    </SidebarRun>
   );
 }
 
@@ -1559,18 +1585,20 @@ function SidebarAutomationsRow({
 function SidebarAdminRow({
   current,
   onOpen,
+  onPreload,
 }: {
   current: boolean;
   onOpen: () => void;
+  onPreload: () => void;
 }): React.JSX.Element | null {
-  const admin = useAdminAccess();
+  const admin = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
   if (!admin) return null;
   return (
     <NavItem
       icon={<ShieldUserIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
       // The pointer on the row is the way to the place, so its chunk, charts and all, is read now rather than at the press.
-      onPointerEnter={ADMIN_PLACE.prefetch}
+      onPointerEnter={onPreload}
       onClick={onOpen}
     >
       Admin
@@ -1784,14 +1812,41 @@ function SidebarColumn({
   const overlay = useFloatingSidebar(sidebar);
   useFirstUsableSpan(tasks);
   const body = useRef<HTMLDivElement>(null);
-  // The column's rows, the app's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by.
-  const roving = useRovingKeys<HTMLDivElement>();
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const runs = useVirtualRuns();
+  // Note that the runs draw only the rows near the view, and every row while a find bar stands open over the column.
+  const finding = useFindOpen();
+  const runsPlace = useMemo(
+    (): SidebarRunsPlace => ({ scroller, body, finding, holdRun: runs.hold }),
+    [finding, runs.hold],
+  );
+  // The column's rows, the app's, the pins', and every group's tasks and agents, are one Tab stop that ↑↓ walk, a folded group's passed by;
+  // a key reaching past the rows drawn goes on to the row it reaches across the runs, in the order they stand, brought in where it is not drawn.
+  const roving = useRovingKeys<HTMLDivElement>({
+    reach: (from, to) => {
+      const box = body.current;
+      if (box === null) return false;
+      const inHand = from
+        ?.closest(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}]`)
+        ?.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE);
+      const key = reachedKey(runs.keys(), inHand ?? undefined, to);
+      if (key === undefined) return false;
+      const row = box.querySelector(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}="${CSS.escape(key)}"]`);
+      const press = row === null ? undefined : rovingItemIn(row);
+      if (press !== undefined) {
+        press.focus();
+        return true;
+      }
+      return runs.bringIn(key, (drawn) => rovingItemIn(drawn)?.focus());
+    },
+  });
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
   // The window's Inbox, an agent's page, the Automations page, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
-  const inInbox = onTasks && tasks.inboxView.open;
-  const inAutomations = onTasks && tasks.automationsView.open;
-  const inBoard = onTasks && tasks.boardView.open;
-  const inAdmin = onTasks && tasks.adminView.open;
+  // Note that Admin stands over the window's state, which stays as it was under it, so no place of that state is shown then.
+  const inAdmin = tasks.adminView.open;
+  const inInbox = onTasks && !inAdmin && tasks.inboxView.open;
+  const inAutomations = onTasks && !inAdmin && tasks.automationsView.open;
+  const inBoard = onTasks && !inAdmin && tasks.boardView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   // The workspace's runs, followed while the sidebar stands, as the Runs tab follows them, for the row to count the ones still at work.
@@ -1818,39 +1873,38 @@ function SidebarColumn({
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing; a task's row goes back to work
   // on it, on the agent waiting on the developer where one does (`onResume`).
+  // A press for a place of the window's state leaves a routed place standing for it, Settings or Admin (`panel-router.tsx`).
+  const leaveRouted = () => onTabChange(PANEL_TAB.TASKS);
   const openTask = (taskId: string) => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    leaveRouted();
     tasks.onResume(taskId);
   };
   const showTasks = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    leaveRouted();
   };
   const newTask = () => {
     showTasks();
     tasks.onNewTask();
   };
   const openPinnedTab = (pin: SidebarPin) => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    leaveRouted();
     tasks.onOpenPinnedTab(pin);
   };
   const openInbox = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    leaveRouted();
     tasks.inboxView.onOpen();
   };
   const openBoard = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    leaveRouted();
     tasks.boardView.onOpen();
   };
   const openAutomations = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    leaveRouted();
     tasks.automationsView.onOpen();
   };
-  const openAdmin = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.adminView.onOpen();
-  };
+  const openAdmin = () => tasks.adminView.onOpen();
   const goHome = () => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    leaveRouted();
     tasks.onGoHome();
   };
   // Home is the place shown while no task is open and nothing stands in its
@@ -1858,7 +1912,7 @@ function SidebarColumn({
   // for the words shown there.
   const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME;
   const newTaskIn = (repository: string) => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    leaveRouted();
     tasks.onNewTaskIn(repository);
   };
   const folds = useFoldedGroups(sidebar.staged);
@@ -1880,11 +1934,11 @@ function SidebarColumn({
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (taskId: string) => onTasks && !standingIn && taskId === tasks.activeTaskId;
   // An agent with no plan stands on its own page, which is the place shown while it stands.
-  const agentShown = onTasks ? tasks.agentView.agentId : undefined;
+  const agentShown = onTasks && !inAdmin ? tasks.agentView.agentId : undefined;
   const currentRow = (row: TaskRow) =>
     row.kind === TASK_ROW.TASK ? current(row.task.id) : row.agent.id === agentShown;
   const openAgent = (agentId: string) => {
-    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    leaveRouted();
     tasks.agentView.onOpen(agentId);
   };
   // The list is the chosen workspace's; the unread marks above read every task.
@@ -2023,6 +2077,7 @@ function SidebarColumn({
     childCount: (taskId) => childCounts.get(taskId),
     opened: folds.taskOpened,
     onFoldTask: folds.toggleTask,
+    runs: runsPlace,
   };
   // A pinned tab is on show where its holder is open and its column shows it:
   // an agent's in the task's own column, any other in the side panel. The
@@ -2143,6 +2198,8 @@ function SidebarColumn({
     ...sectionsDrawn,
     ...drawnTasks(homedTasks, folds, currentRow),
   ];
+  // The tasks' rows chosen together, in the order drawn, those the runs leave undrawn among them, as one run, so ⇧-click chooses across the lists.
+  const chooseOrder = drawn.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : []));
   // Moving up and down the list as it reads: down from the home page, where
   // no row is open, is the first row. The ends go no further.
   const at = drawn.findIndex((row) =>
@@ -2209,7 +2266,11 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
         />
-        <SidebarAdminRow current={inAdmin} onOpen={chosen(openAdmin)} />
+        <SidebarAdminRow
+          current={inAdmin}
+          onOpen={chosen(openAdmin)}
+          onPreload={tasks.adminView.onPreload}
+        />
       </SidebarPlaces>
       <SidebarRule />
     </>
@@ -2268,12 +2329,14 @@ function SidebarColumn({
           iPad's or a short window's column they left the tasks a strip. */}
       <ReplayUnmask>
         <Fill className="sidebar-section -m-ring-reach">
-          <ScrollArea fade={SCROLL_FADE.BOTH}>
+          <ScrollArea ref={scroller} fade={SCROLL_FADE.BOTH}>
             <ListMotion root={body}>
               <ChosenTasksContext.Provider value={selection.chosenOf}>
                 <SelectionRegion
                   id={selection.regionId}
                   selection={{ selected: selection.selected, onChange: selection.onChange }}
+                  order={[chooseOrder]}
+                  bringIn={runs.bringIn}
                 >
                   <div
                     {...roving}
@@ -2317,7 +2380,7 @@ function SidebarColumn({
                         folded: folds.sectionFolded,
                         onToggle: folds.toggleSection,
                         opened: folds.taskOpened,
-                        row: (held, nest) => {
+                        row: (held, nest, place) => {
                           const { row } = held;
                           return row.kind === TASK_ROW.TASK ? (
                             <SidebarTask
@@ -2331,6 +2394,7 @@ function SidebarColumn({
                               faces={context.faces}
                               depth={held.depth}
                               nest={nest}
+                              place={place}
                               fold={childTasksFold(held, folds.toggleTask)}
                               childCount={context.childCount(row.task.id)}
                               onOpen={() => context.onOpen(row.task.id)}
@@ -2345,6 +2409,7 @@ function SidebarColumn({
                               at={taskRowTime(row)}
                               face={context.faces.creator && context.faces.assignee}
                               nest={nest}
+                              place={place}
                               shown={tasks.shown && overlay.inSight}
                               onOpen={() => context.onOpenAgent(row.agent.id)}
                               onPin={pinOf(tasks, row.agent)}
@@ -2354,6 +2419,7 @@ function SidebarColumn({
                           );
                         },
                         onDropRow: dropRow,
+                        runs: runsPlace,
                         onOpenBoard: chosen(openBoard),
                         onCarried: setCarrying,
                       }}

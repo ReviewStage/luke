@@ -1,4 +1,5 @@
 import {
+  terminalAgentParamsSchema,
   terminalAttachParamsSchema,
   terminalShellParamsSchema,
 } from "@repo/features/terminal-acts";
@@ -28,12 +29,18 @@ const macShellOpenParamsSchema = EffectSchema.Struct({
   ),
 });
 
+/** The agent's mirror, by the absolute path of its folder. */
+const macShellMirrorSchema = EffectSchema.Struct({ folder: EffectSchema.String });
+
 /** The shell opened, by the id an attach and a close name it by. */
 const macShellOpenedSchema = EffectSchema.Struct({
   terminalId: terminalShellParamsSchema.fields.terminalId,
 });
 
 export const macShellActsContract = {
+  [MAC_SHELL_ACT_KIND.MAC_SHELL_MIRROR]: actProcedure("Could not mirror this agent’s files.")
+    .input(exactInput(terminalAgentParamsSchema))
+    .output(macShellMirrorSchema),
   [MAC_SHELL_ACT_KIND.MAC_SHELL_OPEN]: actProcedure("Could not open a shell in that folder.")
     .input(exactInput(macShellOpenParamsSchema))
     .output(macShellOpenedSchema),

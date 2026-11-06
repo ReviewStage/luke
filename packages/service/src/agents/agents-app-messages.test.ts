@@ -17,7 +17,7 @@ import { MENTIONED_HEADING } from "@repo/database/models/attached-file-parts";
 import { createAutomation } from "@repo/database/models/automation-store";
 import { readConversationPicture } from "@repo/database/models/conversation-pictures";
 import { sentLineStands } from "@repo/database/models/message-reads";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { readTask } from "@repo/database/models/task-store";
 import { agentPin } from "@repo/database/schemas";
 import { agentTable } from "@repo/database/schemas/agent";
@@ -1596,7 +1596,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message mentioning a section of the agent's plan hands eve the section as it stands beside the words, and the line reads as the words alone",
+    "a message mentioning a section of the agent's description hands eve the section as it stands beside the words, and the line reads as the words alone",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -1609,7 +1609,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           { type: "text", text: words },
           {
             type: "text",
-            text: `${MENTIONED_HEADING}\n\nThe plan's section "Goal":\n\n## Goal\n\nInvite a teammate by email.`,
+            text: `${MENTIONED_HEADING}\n\nThe description's section "Goal":\n\n## Goal\n\nInvite a teammate by email.`,
           },
         ]);
         assert.deepEqual((yield* transcript()).lines, [SNAPSHOT, words]);

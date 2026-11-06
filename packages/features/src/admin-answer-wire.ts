@@ -559,7 +559,7 @@ export interface AdminWorkspaceRow {
 export interface AdminWorkspaceSummary {
   /** Workspaces with two or more members that are nobody's personal one. */
   shared: number;
-  /** Shared workspaces with a task or agent started, or a plan revised, inside the week. */
+  /** Shared workspaces with a task or agent started, or a description revised, inside the week. */
   sharedActiveWeek: number;
   invitations: {
     accepted: number;

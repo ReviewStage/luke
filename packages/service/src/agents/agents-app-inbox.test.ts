@@ -13,7 +13,7 @@ import {
 } from "@repo/database/models/automation-store";
 import { readMessageByClientId } from "@repo/database/models/message-reads";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { savePlanText, updateTask } from "@repo/database/models/task-store";
+import { saveDescriptionText, updateTask } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { inboxItem } from "@repo/database/schemas/inbox";
 import { conversations } from "@repo/database/schemas/storage";
@@ -263,7 +263,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           name: "Billing export",
           repository: RELAY_FULL_NAME,
         });
-        yield* savePlanText(owner, second.id, SAVED);
+        yield* saveDescriptionText(owner, second.id, SAVED);
         const secondAgent = (yield* startedAgent(owner, second.id, ask)).agent;
         const onSecond = (value: ThreadPost) =>
           postInboxThread({ userId: owner, taskId: second.id, agentId: secondAgent.id }, value);
@@ -1037,7 +1037,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "a thread started with no subject is titled by the agent-title model over its message on the sender's own key, after the answer, its key, its place, and its read state kept; one with a subject, and one whose sender has no key, keep the title they were started under",
+    "a thread started with no subject is titled by the agent-title model over its message on Vespin's own key, after the answer, its key, its place, and its read state kept; one with a subject, and one started while the deployment holds no title key, keep the title they were started under",
     () =>
       Effect.gen(function* () {
         const asked: string[] = [];
@@ -1055,12 +1055,10 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             };
           },
         });
-        const keyed = new Set<string>();
-        const titleModel: InboxTitleModelOf = (userId) =>
-          Effect.succeed(keyed.has(userId) ? model : undefined);
+        let held = true;
+        const titleModel: InboxTitleModelOf = () => Effect.succeed(held ? model : undefined);
         const eve = fakeEve();
         const { owner, agent, target, ask, read } = yield* openInbox(eve, titleModel);
-        keyed.add(owner);
         yield* turnEnded(target);
         const start = (body: WireBoundaryInput) =>
           Effect.map(ask(request(ACCOUNT_INBOX, owner, { method: "POST", body })), (answered) =>
@@ -1076,7 +1074,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           text,
           clientKey: randomUUID(),
         });
-        keyed.delete(owner);
+        held = false;
         const keyless = yield* start({
           agentId: agent.id,
           text: "Ship it tonight.",
@@ -1092,7 +1090,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         );
         assert.equal(items.get(titled.item.id)?.title, subject);
         assert.equal(items.get(keyless.item.id)?.title, "Ship it tonight.");
-        assert.equal(asked.length, 1, "only the untitled thread with a key asks the model");
+        assert.equal(
+          asked.length,
+          1,
+          "only the untitled thread started while the key is held asks the model",
+        );
         assert.ok(asked[0]?.includes("annual plan"), "the model is asked over the message");
       }),
   );

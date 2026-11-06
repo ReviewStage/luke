@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, type Task } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import {
   ACCOUNT_ACT_KIND,
@@ -25,16 +25,16 @@ import { UPDATE_STATUS } from "@repo/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useState } from "react";
+import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { HISTORY_READ } from "../tasks/use-description-history.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
-import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
@@ -47,16 +47,17 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
+import { SHELL_AT, shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 /** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
   account: {
@@ -66,7 +67,6 @@ const SETTINGS: SettingsPanelProps = {
     provider: "github",
   },
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: accepted,
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {
@@ -117,6 +117,14 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** The router the shell this test draws stands under, read before each test (`shell-router.ts`). */
+const routed = shellRouterEachTest();
+
+/** `shell` drawn under the test's router, standing where `standing` says, else where its props say. */
+function underRouter(shell: ReactElement, standing?: string): ReactElement {
+  return routed().under(shell, standing);
+}
+
 /** The shell's props over `plans`, every other door ignored, the sidebar folded unless patched. */
 function shellProps(
   tasks: TasksControl,
@@ -141,6 +149,7 @@ function shellProps(
       steps: { back: [], forward: [] },
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
+      onLeaveRouted: ignore,
       away: undefined,
       onLeave: ignore,
     },
@@ -199,7 +208,13 @@ function mount(
     });
     return createElement(DesktopShell, shellProps(tasks, tab, onTabChange, sidebarPatch));
   }
-  act(() => root?.render(onRegistry(registry, createElement(Shell))));
+  const at =
+    tab === PANEL_TAB.SETTINGS
+      ? SHELL_AT.SETTINGS
+      : overrides.adminView?.open === true
+        ? SHELL_AT.ADMIN
+        : undefined;
+  act(() => root?.render(onRegistry(registry, underRouter(createElement(Shell), at))));
   return container;
 }
 
@@ -212,9 +227,13 @@ function titleBarButtons(page: HTMLElement): string[] {
   );
 }
 
-test("while Settings is still loading its frame stands, a page of placeholder sections under the one bar Settings stands under beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", () => {
+test("while Settings is still loading its frame stands, a page of placeholder sections under the one bar Settings stands under beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", async () => {
   const tabs: PanelTab[] = [];
   const page = mount(false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  // The router goes to Settings, whose frame stands while its chunk is read.
+  await act(async () => {
+    await Promise.resolve();
+  });
   const placeholder = page.querySelector('section[aria-label="Settings"] [role="status"]');
   const bars = page.querySelectorAll(
     'section[aria-label="Settings"] :is(.desktop-drag-strip, .ui-toolbar)',
@@ -238,67 +257,71 @@ test("while Settings is still loading its frame stands, a page of placeholder se
 });
 
 /** The shell on the tasks with its tab chosen from outside, so a test can open Settings and leave it. */
-function mountSwitching(): (tab: PanelTab) => void {
+async function mountSwitching(): Promise<(tab: PanelTab) => Promise<void>> {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   const registry = AtomRegistry.make();
-  const draw = (tab: PanelTab) =>
+  const draw = async (tab: PanelTab) => {
     act(() =>
       root?.render(
         onRegistry(
           registry,
-          createElement(
-            DesktopShell,
-            shellProps(tasksControl({ page: TASKS_PAGE.HOME }), tab, ignore, {}),
+          underRouter(
+            createElement(
+              DesktopShell,
+              shellProps(tasksControl({ page: TASKS_PAGE.DOCUMENT }), tab, ignore, {}),
+            ),
           ),
         ),
       ),
     );
-  draw(PANEL_TAB.TASKS);
+    // The router goes where the tab stands, Settings or the places, and draws it once its chunk is read.
+    await act(() => routed().settled());
+  };
+  await draw(PANEL_TAB.TASKS);
   return draw;
 }
 
-test("leaving Settings gives the keyboard back to the control that held it as Settings opened", () => {
+test("leaving Settings gives the keyboard back to the control that held it as Settings opened", async () => {
   handState({});
-  const draw = mountSwitching();
+  const draw = await mountSwitching();
   const opener = document.querySelector<HTMLElement>(
     '.title-bar-controls button[aria-label="New task"]',
   );
   assert.ok(opener, "the title bar's New task stands");
   opener.focus();
 
-  draw(PANEL_TAB.SETTINGS);
-  assert.equal(
-    document.activeElement,
-    document.body,
-    "Settings draws over the window, the keyboard nowhere",
+  await draw(PANEL_TAB.SETTINGS);
+  assert.ok(
+    document.activeElement !== opener,
+    "Settings draws over the window, the keyboard off the control that opened it",
   );
-  draw(PANEL_TAB.TASKS);
+  await draw(PANEL_TAB.TASKS);
 
   const back = document.activeElement;
   assert.equal(back?.getAttribute("aria-label"), "New task");
   assert.ok(back?.isConnected);
 });
 
-test("leaving Settings where the control that held the keyboard is gone leaves it with the window, and raises nothing", () => {
+test("leaving Settings where the control that held the keyboard is gone leaves it with the window, and raises nothing", async () => {
   handState({});
-  const draw = mountSwitching();
+  const draw = await mountSwitching();
   const opener = document.createElement("button");
   opener.setAttribute("aria-label", "Gone by then");
   document.body.append(opener);
   opener.focus();
 
-  draw(PANEL_TAB.SETTINGS);
+  await draw(PANEL_TAB.SETTINGS);
   opener.remove();
 
-  assert.doesNotThrow(() => draw(PANEL_TAB.TASKS));
-  assert.equal(document.activeElement, document.body);
+  await assert.doesNotReject(() => draw(PANEL_TAB.TASKS));
+  assert.ok(document.activeElement === document.body, "the keyboard is with the window");
 });
 
-test("leaving Settings hands the keyboard to no control of a name several share, as a row's Pin is, rather than to the wrong row's", () => {
+test("leaving Settings hands the keyboard to no control of a name several share, as a row's Pin is, rather than to the wrong row's", async () => {
   handState({});
-  const draw = mountSwitching();
+  const draw = await mountSwitching();
   const pin = () => {
     const button = document.createElement("button");
     button.setAttribute("aria-label", "Pin");
@@ -308,18 +331,18 @@ test("leaving Settings hands the keyboard to no control of a name several share,
   document.body.append(first, second);
   second.focus();
 
-  draw(PANEL_TAB.SETTINGS);
+  await draw(PANEL_TAB.SETTINGS);
   first.remove();
   second.remove();
   document.body.append(pin(), pin());
-  draw(PANEL_TAB.TASKS);
+  await draw(PANEL_TAB.TASKS);
 
-  assert.equal(document.activeElement, document.body);
+  assert.ok(document.activeElement === document.body, "the keyboard is with the window");
 });
 
-test("leaving Settings does not hand the keyboard to the one control left of a name several shared as Settings opened", () => {
+test("leaving Settings does not hand the keyboard to the one control left of a name several shared as Settings opened", async () => {
   handState({});
-  const draw = mountSwitching();
+  const draw = await mountSwitching();
   const pin = () => {
     const button = document.createElement("button");
     button.setAttribute("aria-label", "Pin");
@@ -329,13 +352,13 @@ test("leaving Settings does not hand the keyboard to the one control left of a n
   document.body.append(first, second);
   second.focus();
 
-  draw(PANEL_TAB.SETTINGS);
+  await draw(PANEL_TAB.SETTINGS);
   first.remove();
   second.remove();
   document.body.append(pin());
-  draw(PANEL_TAB.TASKS);
+  await draw(PANEL_TAB.TASKS);
 
-  assert.equal(document.activeElement, document.body);
+  assert.ok(document.activeElement === document.body, "the keyboard is with the window");
 });
 
 /**
@@ -344,7 +367,7 @@ test("leaving Settings does not hand the keyboard to the one control left of a n
  * the Inbox, drawn once and not waited on, so a page still loading stands
  * its frame; every way out and back to a list written down.
  */
-function mountLoadingNarrow(
+function drawLoadingNarrow(
   tab: PanelTab,
   overrides: Partial<TasksControl>,
   listed: boolean,
@@ -358,28 +381,45 @@ function mountLoadingNarrow(
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopShell, {
-          ...props,
-          room: SHELL_ROOM.NARROW,
-          settingsStep: { listed, onList: () => went.push("list") },
-          history: {
-            ...props.history,
-            canGoBack: true,
-            onBack: () => went.push("back"),
-            steps: {
-              back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
-              forward: [],
+        underRouter(
+          createElement(DesktopShell, {
+            ...props,
+            room: SHELL_ROOM.NARROW,
+            settingsStep: { listed, onList: () => went.push("list") },
+            history: {
+              ...props.history,
+              canGoBack: true,
+              onBack: () => went.push("back"),
+              steps: {
+                back: [
+                  { at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } },
+                ],
+                forward: [],
+              },
             },
-          },
-        }),
+          }),
+        ),
       ),
     ),
   );
   return { page: container, went };
 }
 
-test("on a phone, while Settings is still loading, its list and its page stand headed as they will be: the way out or back, and the title centered", () => {
-  const list = mountLoadingNarrow(PANEL_TAB.SETTINGS, {}, true);
+async function mountLoadingNarrow(
+  tab: PanelTab,
+  overrides: Partial<TasksControl>,
+  listed: boolean,
+): Promise<{ page: HTMLElement; went: string[] }> {
+  const drawn = drawLoadingNarrow(tab, overrides, listed);
+  // The router goes to the place, whose frame stands while its chunk is read.
+  await act(async () => {
+    await Promise.resolve();
+  });
+  return drawn;
+}
+
+test("on a phone, while Settings is still loading, its list and its page stand headed as they will be: the way out or back, and the title centered", async () => {
+  const list = await mountLoadingNarrow(PANEL_TAB.SETTINGS, {}, true);
   assert.deepEqual(readPhoneHead(list.page, "settings-pages"), {
     start: ["Back"],
     title: "Settings",
@@ -389,16 +429,16 @@ test("on a phone, while Settings is still loading, its list and its page stand h
   assert.deepEqual(list.went, ["back"]);
   act(() => root?.unmount());
 
-  const page = mountLoadingNarrow(PANEL_TAB.SETTINGS, {}, false);
+  const page = await mountLoadingNarrow(PANEL_TAB.SETTINGS, {}, false);
   assert.deepEqual(readPhoneHead(page.page, "settings-page").start, ["Settings"]);
   pressInPhoneHead(page.page, "settings-page", "Settings");
   assert.deepEqual(page.went, ["list"]);
 });
 
-test("on a phone, while the account's access is read, Admin stands headed as it will be, its name centered over the bar of its sections", () => {
+test("on a phone, while the account's access is read, Admin stands headed as it will be, its name centered over the bar of its sections", async () => {
   handState({}, { access: { admin: false, pending: true } });
   const adminView = { ...tasksControl().adminView, open: true };
-  const { page } = mountLoadingNarrow(PANEL_TAB.TASKS, { adminView }, true);
+  const { page } = await mountLoadingNarrow(PANEL_TAB.TASKS, { adminView }, true);
   assert.equal(readPhoneHead(page, "admin").title, "Admin");
   assert.ok(page.querySelector('[role="radiogroup"][aria-label="Admin sections"]'));
 });
@@ -538,8 +578,8 @@ test("a plan opened with its Inbox tab shown rather than its plan is read at onc
         sidePanel: {
           ...tasksControl().sidePanel,
           open: true,
-          tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-          strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+          tabs: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
+          strip: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
           tab: SIDE_PANEL_TAB.INBOX,
         },
       },
@@ -588,7 +628,7 @@ function mountListing(listed: readonly Task[]): (open: Task | undefined) => void
           : { kind: DOCUMENT_REGION.READY, task: open },
     });
     const props = shellProps(tasks, PANEL_TAB.TASKS, ignore, { collapsed: false });
-    act(() => root?.render(onRegistry(registry, createElement(DesktopShell, props))));
+    act(() => root?.render(onRegistry(registry, underRouter(createElement(DesktopShell, props)))));
   };
 }
 
@@ -663,6 +703,8 @@ async function settle(): Promise<void> {
 
 test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, and not in a browser, where it is none", async () => {
   handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP));
+  // Note that a command is asked once, so the document it is offered by is in the client from the first frame.
+  await writeHandedAppState();
   mount(false);
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), false);
@@ -670,9 +712,13 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   document.body.innerHTML = "";
 
   handCapabilities(DESKTOP_CAPABILITIES);
-  mount(false);
+  await writeHandedAppState();
+  const tabs: PanelTab[] = [];
+  mount(false, {}, PANEL_TAB.TASKS, (tab) => tabs.push(tab));
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
+  // Note that choosing the page is what opens Settings on it, so no tab change makes a second step before it.
+  assert.deepEqual(tabs, []);
 });
 
 test("a press on the Automations row in a floating sidebar puts the sidebar away, as every row's does", async () => {
@@ -709,10 +755,12 @@ async function mountNarrow(
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopShell, {
-          ...shellProps(tasks, PANEL_TAB.TASKS, ignore, sidebarPatch),
-          room,
-        }),
+        underRouter(
+          createElement(DesktopShell, {
+            ...shellProps(tasks, PANEL_TAB.TASKS, ignore, sidebarPatch),
+            room,
+          }),
+        ),
       ),
     ),
   );
@@ -953,7 +1001,11 @@ test("while the Automations pages are still loading their frame stands the list 
   const wait = loading.querySelector("[role=status]");
   assert.equal(wait?.textContent, "Reading your automations…", "the list stands as quiet rows");
   assert.ok((wait?.querySelectorAll(".ui-skeleton").length ?? 0) > 0);
-  assert.equal(loading.querySelector("[role=switch]"), null, "their chunk has not loaded yet");
+  assert.equal(
+    loading.querySelector("[role=switch]") === null,
+    true,
+    "their chunk has not loaded yet",
+  );
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS), "Automations' way out is offered");
   });
@@ -968,7 +1020,11 @@ test("while a version history's chunk is still loading, its Back row and Escape 
   const page = mount(false, { history });
   const versions = page.querySelector<HTMLElement>("nav[aria-label=Versions]");
   assert.ok(versions, "the versions' column stands");
-  assert.equal(versions.querySelector("[role=listbox], ul"), null, "its chunk has not loaded yet");
+  assert.equal(
+    versions.querySelector("[role=listbox], ul") === null,
+    true,
+    "its chunk has not loaded yet",
+  );
   const back = [...versions.querySelectorAll("button")].find(
     (button) => button.textContent?.trim().startsWith("Back") === true,
   );
@@ -981,11 +1037,7 @@ test("while a version history's chunk is still loading, its Back row and Escape 
   act(() => root?.unmount());
 
   // Note that the chunk is still on its way, so the phone's frame is drawn in the same turn.
-  const phone = mountLoadingNarrow(
-    PANEL_TAB.TASKS,
-    { history: { ...history, listed: true } },
-    true,
-  );
+  const phone = drawLoadingNarrow(PANEL_TAB.TASKS, { history: { ...history, listed: true } }, true);
   assert.deepEqual(readPhoneHead(phone.page, "version-log"), {
     start: ["Back"],
     title: "Version history",
@@ -1030,7 +1082,7 @@ const PLACE = {
   AUTOMATIONS: "the Automations page",
   SIDE_PANEL_FULL_SCREEN: "a side panel filling the window",
   SETTINGS: "Settings",
-  VERSION_HISTORY: "a plan's version history",
+  VERSION_HISTORY: "a description's version history",
 } as const;
 
 type Place = (typeof PLACE)[keyof typeof PLACE];
@@ -1106,6 +1158,7 @@ function PlacedShell({
       steps: { back: [], forward: [] },
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
+      onLeaveRouted: ignore,
       away: undefined,
       onLeave: ignore,
     },
@@ -1177,7 +1230,17 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   const registry = AtomRegistry.make();
   const toggled: Partial<Record<Place, boolean>> = {};
   for (const place of PLACES) {
-    act(() => root?.render(onRegistry(registry, createElement(PlacedShell, { place }))));
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          underRouter(
+            createElement(PlacedShell, { place }),
+            place === PLACE.SETTINGS ? SHELL_AT.SETTINGS : undefined,
+          ),
+        ),
+      ),
+    );
     await settle();
     toggled[place] = [...container.querySelectorAll("button")].some((button) =>
       ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
@@ -1213,7 +1276,7 @@ test("the side panel's toggle stands for the Inbox's chosen item", async () => {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(PlacedShell, { place: PLACE.INBOX, patch: chosen }),
+        underRouter(createElement(PlacedShell, { place: PLACE.INBOX, patch: chosen })),
       ),
     ),
   );
@@ -1233,7 +1296,17 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     const container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
-    act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PlacedShell, { place }))));
+    act(() =>
+      root?.render(
+        onRegistry(
+          AtomRegistry.make(),
+          underRouter(
+            createElement(PlacedShell, { place }),
+            place === PLACE.SETTINGS ? SHELL_AT.SETTINGS : undefined,
+          ),
+        ),
+      ),
+    );
     await settle();
     act(() => {
       runAppCommand(APP_COMMAND.FIND);
@@ -1257,7 +1330,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
   });
 });
 
-test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {
+test("a plan's chip in a description's version history hangs the plan's card, as the description's own words do", () => {
   const body = `## Rollout\n\nAs in [@the plan](https://vespin.dev/acme/plan/${DOCUMENT_TASK.id}).\n`;
   const control = tasksControl();
   const page = mount(false, {
@@ -1270,7 +1343,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: false },
+          lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 0, duringCall: false },
           startedAt: 0,
           changes: 1,
         },
@@ -1292,6 +1365,8 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   let opened = 0;
   const adminView = { ...tasksControl().adminView, onOpen: () => (opened += 1) };
   handState({}, { access: { admin: false } });
+  // Note that a command is asked once, so the document it is offered by is in the client from the first frame.
+  await writeHandedAppState();
   mount(false, { adminView });
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), false);
@@ -1299,26 +1374,46 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   document.body.innerHTML = "";
 
   handState({}, { access: { admin: true } });
+  await writeHandedAppState();
   mount(false, { adminView });
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), true);
   assert.equal(opened, 1);
 });
 
-test("Admin stands in the plan's place beside the sidebar, its row marked, with no way back of its own", async () => {
+test("Admin stands in the plan's place beside the sidebar, its row marked and no row of the place under it, the Inbox under it kept but hidden, with no way back of its own, and the Inbox's row leaves it", async () => {
   handState({}, { access: { admin: true } });
-  const page = mount(false, { adminView: { ...tasksControl().adminView, open: true } });
+  const tabs: PanelTab[] = [];
+  // Note that the Inbox stands under Admin, as the window's state holds it while Admin stands over it.
+  const page = mount(
+    true,
+    { adminView: { ...tasksControl().adminView, open: true } },
+    PANEL_TAB.TASKS,
+    (tab) => tabs.push(tab),
+  );
   await settle();
   assert.ok(page.querySelector("aside.desktop-sidebar"), "the sidebar stays");
-  assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page");
+  // Note that the account's access lands through the app-state query, so its row is read once drawn.
+  await vi.waitFor(() =>
+    assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page"),
+  );
+  assert.equal(placeRow(page, "Inbox")?.getAttribute("aria-current") ?? null, null);
   const main = page.querySelector(".desktop-main") ?? assert.fail("the work column");
   assert.ok(main.querySelector("section[aria-label=Admin]"), "Admin stands in the plan's place");
-  assert.deepEqual(
+  assert.equal(
     [...main.querySelectorAll("button")].filter((button) =>
       /^Back\b/u.test(button.getAttribute("aria-label") ?? button.textContent ?? ""),
-    ),
-    [],
+    ).length,
+    0,
   );
+  const inboxSearch = page.querySelector<HTMLElement>(
+    '.inbox-tasks input[aria-label="Search inbox"]',
+  );
+  assert.ok(inboxSearch, "the Inbox under Admin stays drawn, kept");
+  assert.equal(shownToReader(inboxSearch), false, "and hidden from a reader");
+
+  act(() => placeRow(page, "Inbox")?.click());
+  assert.deepEqual(tabs, [PANEL_TAB.TASKS], "the Inbox's row leaves Admin for the Inbox");
 });
 
 /** The offline status in the title bar beside the traffic lights, if one stands. */
@@ -1330,14 +1425,14 @@ test("with the sidebar folded, the Mac offline says so in the title bar beside N
   handState({}, { network: { online: false, reachable: true } });
   const offline = mount(false);
   await settle();
-  assert.ok(titleBarOffline(offline), "the title bar says the Mac is offline");
+  await vi.waitFor(() => assert.equal(titleBarOffline(offline) !== null, true));
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   handState({}, { network: { online: true, reachable: true } });
   const online = mount(false);
   await settle();
-  assert.equal(titleBarOffline(online), null);
+  await vi.waitFor(() => assert.equal(titleBarOffline(online) === null, true));
 });
 
 /** What a strip right under a phone's header says, if one stands there. */
@@ -1350,7 +1445,9 @@ test("on a phone, the service not answering says so in a strip under the page's 
   const inboxView = { ...tasksControl().inboxView, open: true };
   handState({}, { network: { online: true, reachable: false } });
   const unreached = await mountNarrow({ inboxView });
-  assert.equal(stripUnderPhoneHead(unreached), "The service isn't answering.");
+  await vi.waitFor(() =>
+    assert.equal(stripUnderPhoneHead(unreached), "The service isn't answering."),
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1360,7 +1457,7 @@ test("on a phone, the service not answering says so in a strip under the page's 
     answering.querySelector('header.ui-toolbar[data-look="phone"]'),
     "a phone's header stands",
   );
-  assert.equal(stripUnderPhoneHead(answering), undefined);
+  await vi.waitFor(() => assert.equal(stripUnderPhoneHead(answering), undefined));
 });
 
 test("the sign-in, which needs the network, says over it when the Mac is offline", async () => {
@@ -1373,18 +1470,20 @@ test("the sign-in, which needs the network, says over it when the Mac is offline
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopShell, {
-          ...props,
-          gates: { ...props.gates, accountRequired: true },
-          settings: { ...SETTINGS, account: { status: ACCOUNT_STATUS.SIGNED_OUT } },
-        }),
+        underRouter(
+          createElement(DesktopShell, {
+            ...props,
+            gates: { ...props.gates, accountRequired: true },
+            settings: { ...SETTINGS, account: { status: ACCOUNT_STATUS.SIGNED_OUT } },
+          }),
+        ),
       ),
     ),
   );
   await settle();
 
   assert.ok(container.querySelector(".desktop-onboarding"), "the sign-in stands");
-  assert.equal(titleBarOffline(container)?.textContent, "Offline");
+  await vi.waitFor(() => assert.equal(titleBarOffline(container)?.textContent, "Offline"));
 });
 
 test("on a phone an open task leads its own row with the way back the window's history names, in the sidebar toggle's place, and a wide window keeps the toggle", async () => {
@@ -1401,11 +1500,13 @@ test("on a phone an open task leads its own row with the way back the window's h
       root?.render(
         onRegistry(
           AtomRegistry.make(),
-          createElement(DesktopShell, {
-            ...props,
-            history: { ...props.history, away, onLeave: () => left.push("left") },
-            room,
-          }),
+          underRouter(
+            createElement(DesktopShell, {
+              ...props,
+              history: { ...props.history, away, onLeave: () => left.push("left") },
+              room,
+            }),
+          ),
         ),
       ),
     );
@@ -1418,7 +1519,7 @@ test("on a phone an open task leads its own row with the way back the window's h
   const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);
   await settle();
   assert.equal(back(fromInbox).textContent, "Inbox");
-  assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls"), null);
+  assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls") === null, true);
   act(() => back(fromInbox).click());
   assert.deepEqual(left, ["left"]);
   act(() => root?.unmount());
@@ -1432,7 +1533,7 @@ test("on a phone an open task leads its own row with the way back the window's h
 
   const wide = render({ title: { label: "Inbox" } }, SHELL_ROOM.WIDE);
   await settle();
-  assert.equal(wide.querySelector(".task-head"), null);
+  assert.equal(wide.querySelector(".task-head") === null, true);
   assert.ok(
     wide.querySelector(".desktop-shell > .title-bar-controls"),
     "the sidebar's toggle stands",
@@ -1451,15 +1552,17 @@ test("on a phone an open task, which draws no sidebar toggle, still answers the 
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopShell, {
-          ...shellProps(tasks, PANEL_TAB.TASKS, ignore, { onToggle: () => (toggled += 1) }),
-          room: SHELL_ROOM.NARROW,
-        }),
+        underRouter(
+          createElement(DesktopShell, {
+            ...shellProps(tasks, PANEL_TAB.TASKS, ignore, { onToggle: () => (toggled += 1) }),
+            room: SHELL_ROOM.NARROW,
+          }),
+        ),
       ),
     ),
   );
   await settle();
-  assert.equal(container.querySelector(".desktop-shell > .title-bar-controls"), null);
+  assert.equal(container.querySelector(".desktop-shell > .title-bar-controls") === null, true);
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDEBAR));
   assert.equal(toggled, 1);
 });
@@ -1517,7 +1620,7 @@ test("on a phone no page draws the title bar's controls over its own head, an ag
     agentView: { ...tasksControl().agentView, agentId: "agent-1" },
     sidePanel,
   });
-  assert.equal(agentPage.querySelector(".desktop-shell > .title-bar-controls"), null);
+  assert.equal(agentPage.querySelector(".desktop-shell > .title-bar-controls") === null, true);
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL));
   assert.equal(toggled, 1, "the panel's chord answers on the agent's page");
   act(() => root?.unmount());
@@ -1527,8 +1630,8 @@ test("on a phone no page draws the title bar's controls over its own head, an ag
     automationsView: { ...tasksControl().automationsView, open: true },
   });
   assert.equal(
-    automations.querySelector(".desktop-shell > .title-bar-controls"),
-    null,
+    automations.querySelector(".desktop-shell > .title-bar-controls") === null,
+    true,
     "nor over the Automations list",
   );
   act(() => root?.unmount());
@@ -1541,6 +1644,55 @@ test("on a phone no page draws the title bar's controls over its own head, an ag
   );
   assert.ok(wide.querySelector(".desktop-shell > .title-bar-controls"), "a wide window keeps them");
   assert.ok(wide.querySelector('.title-bar-controls[data-edge="end"]'), "and the panel's toggle");
+});
+
+test("a find on the Tasks page stands as it was after a visit to Admin over it", async () => {
+  handState({}, { access: { admin: true } });
+  // The Tasks page is a chunk of its own, read the first time it is drawn.
+  await import("./tasks-page.js");
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  let setAdmin: (open: boolean) => void = ignore;
+  function Shell() {
+    const [admin, setAdminOpen] = useState(false);
+    setAdmin = setAdminOpen;
+    const tasks = tasksControl({
+      page: TASKS_PAGE.HOME,
+      workspaces: [ACME],
+      workspace: ACME,
+      boardView: { ...tasksControl().boardView, open: true },
+      adminView: { ...tasksControl().adminView, open: admin },
+    });
+    return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
+  }
+  act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(createElement(Shell)))));
+  await settle();
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.FIND), "⌘F is offered on the Tasks page");
+  });
+  const field = () =>
+    container.querySelector<HTMLInputElement>('[role="search"][aria-label="Find"] input');
+  const input = field();
+  assert.ok(input, "the find bar stands");
+  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "auth");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  act(() => {
+    setAdmin(true);
+    routed().go(SHELL_AT.ADMIN);
+  });
+  await act(() => routed().settled());
+  assert.ok(container.querySelector("section[aria-label=Admin]"), "Admin stands over the page");
+  act(() => {
+    setAdmin(false);
+    routed().go(SHELL_AT.PLACES);
+  });
+  await act(() => routed().settled());
+
+  assert.equal(field()?.value, "auth", "the find stands as it was");
 });
 
 /** Whether a reader is shown `element`: nothing over it hides it, as a box drawn with `display: none` is hidden from the screen and the accessibility tree alike. */
@@ -1568,7 +1720,7 @@ test("the Inbox and the Tasks page left stay drawn, hidden from a reader, and co
     });
     return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
   }
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Shell))));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(createElement(Shell)))));
   const search = () =>
     container.querySelector<HTMLInputElement>('.inbox-tasks input[aria-label="Search inbox"]');
   const input = search();

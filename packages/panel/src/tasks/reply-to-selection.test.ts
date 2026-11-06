@@ -25,7 +25,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentComposer } from "./agent-composer.js";
@@ -103,6 +103,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** An agent's tab cut to what a reply crosses: one of the agent's messages, one of the developer's, and the box, under the window's keymap. */
@@ -125,7 +126,7 @@ function Tab({ sender }: { sender: MessageSender }): ReactNode {
     { ref: tab },
     createElement(AgentMessage, {
       message: TURN,
-      plan: false,
+      description: false,
       lead: AGENT_LEAD,
       moving: false,
       delegation: { models: [] },

@@ -98,7 +98,6 @@ export function MicrophoneSection({
         page={SCHEMA_SETTINGS_PAGE.THIS_MAC}
         section={SETTING_SECTION.MICROPHONE}
         view={view}
-        writes={writes}
       />
     </SettingsSection>
   );

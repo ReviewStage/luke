@@ -72,7 +72,7 @@ export const FILE_TREE_WIDTH = {
 
 /**
  * How wide a page's comments pane may be dragged, in CSS pixels, and where
- * it starts: a comment card and the list's insets, as the plan's margin
+ * it starts: a comment card and the list's insets, as the description's margin
  * holds one, and never so wide that the page beside it loses its reading
  * width's worth of room.
  */

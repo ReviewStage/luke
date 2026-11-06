@@ -207,6 +207,22 @@ test("arriving on a task is one screen, the tabs that arrive with it taking it i
   assert.deepEqual(told, { shown: [], places: ["inbox"] });
 });
 
+test("a place under Admin is no screen standing, so ⌃Tab from Admin does not pass over it to the screen before", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(NOTES, told));
+  press();
+  await window.draw(onTask(NOTES, told, { inboxView: inboxOpen() }));
+  press();
+  const underAdmin = onTask(NOTES, told, { inboxView: inboxOpen() });
+  await window.draw({ ...underAdmin, adminView: { ...underAdmin.adminView, open: true } });
+
+  tab();
+  letGo();
+  assert.deepEqual(told.shown, [], "the task before the Inbox is not gone to");
+});
+
 test("a screen picked restores both its panes, the task opened once", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
@@ -437,10 +453,12 @@ test("the screen left is taken as a still of the work area for its card, drawn a
   tab();
   tab();
   assert.equal(cards()[0]?.querySelector("img"), null, "no still yet, so the glyph stands");
-  await act(async () => {
-    answer(STILL);
-    for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
-  });
+  // Note that the mutation sends the capture a moment after the cards show, so the test answers it once it is sent.
+  await vi.waitFor(() => assert.equal(taken.length, 1));
+  act(() => answer(STILL));
+  await vi.waitFor(() =>
+    assert.equal(cards()[0]?.querySelector("img")?.getAttribute("src") === STILL, true),
+  );
 
   assert.deepEqual(taken, [{ x: 240, y: 0, width: 1040, height: 800 }]);
   const preview = cards()[0]?.querySelector(".ui-tab-card-preview");

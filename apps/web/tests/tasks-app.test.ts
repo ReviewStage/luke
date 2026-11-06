@@ -3,28 +3,31 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
-import { writePage } from "@repo/database/models/plan-pages";
-import { PLAN_REVISION } from "@repo/database/models/plan-revisions";
+import { DESCRIPTION_REVISION } from "@repo/database/models/description-revisions";
+import { writePage } from "@repo/database/models/task-pages";
 import { createTask, readTask } from "@repo/database/models/task-store";
 import { personalWorkspaceOf } from "@repo/database/models/workspace-store";
 import { user } from "@repo/database/schemas/auth";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import {
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   openWorkspace,
 } from "@repo/database/testing";
+import {
+  DESCRIPTION_EDIT_REFUSAL,
+  descriptionEditAnswerSchema,
+} from "@repo/features/description-edit";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
-import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@repo/features/plan-edit";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@repo/features/repository-reach-wire";
 import {
-  PLAN_ACTOR,
-  planRevisionAnswerSchema,
-  planRevisionsAnswerSchema,
+  DESCRIPTION_ACTOR,
+  descriptionRevisionAnswerSchema,
+  descriptionRevisionsAnswerSchema,
   TASK_BOUNDS,
   TASK_FILE_REFUSAL,
   TASK_MODE,
@@ -49,10 +52,15 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@repo/service/http/http";
 import { hostedFetch } from "@repo/service/orpc/handler";
 import { modelCatalogOf } from "@repo/service/providers/model-catalog";
 import type { WebServices } from "@repo/service/runtime";
-import { PLAN_SAVE_STATUS, saveNotes } from "@repo/service/tasks/plan-notes";
+import { DESCRIPTION_SAVE_STATUS, saveNotes } from "@repo/service/tasks/description-notes";
 import { taskFilesProcedures } from "@repo/service/tasks/task-files-procedures";
 import { tasksApp } from "@repo/service/tasks/tasks-app";
 import { tasksProcedures } from "@repo/service/tasks/tasks-procedures";
+import {
+  INVITATIONS_TEXT,
+  makeDocumentTask,
+  makeSavedDocumentTask,
+} from "@repo/service/testing/description-documents";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -65,11 +73,6 @@ import {
   type SentToGitHub,
 } from "@repo/service/testing/github-app-fake";
 import { integrationConnectOver } from "@repo/service/testing/integration-connect";
-import {
-  INVITATIONS_TEXT,
-  makeDocumentTask,
-  makeSavedDocumentTask,
-} from "@repo/service/testing/plan-documents";
 import { keepAwakeDetached } from "@repo/service/testing/session-sandboxes-fake";
 import { added } from "@repo/service/testing/task-contents";
 import { EXPERIMENT } from "@repo/settings";
@@ -117,10 +120,10 @@ const TREE = (taskId: string) => `${ONE_TASK(taskId)}/tree`;
 /** A window of a file the File tab asks for. */
 const README_WINDOW = { path: "README.md", first: "1", last: "10" } as const;
 const PAGES = (taskId: string) => `${ONE_TASK(taskId)}/pages`;
-const REVISIONS = (taskId: string) => `${ONE_TASK(taskId)}/revisions`;
+const REVISIONS = (taskId: string) => `${ONE_TASK(taskId)}/description/revisions`;
 const REVISION = (taskId: string, seq: number) => `${REVISIONS(taskId)}/${seq}`;
 const RESTORE = (taskId: string, seq: number) => `${REVISION(taskId, seq)}/restore`;
-const EDIT = (taskId: string) => `${ONE_TASK(taskId)}/edit`;
+const EDIT = (taskId: string) => `${ONE_TASK(taskId)}/description`;
 const PAGE = (taskId: string, pageId: string, version: string) =>
   `${PAGES(taskId)}/${pageId}/versions/${version}`;
 
@@ -385,7 +388,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         added("Context", "Only admins can invite."),
         added("Open questions", "- Who can withdraw an invite?"),
       ]);
-      assert.equal(saved.status, PLAN_SAVE_STATUS.SAVED);
+      assert.equal(saved.status, DESCRIPTION_SAVE_STATUS.SAVED);
 
       const listed = yield* ask(request(TASKS, owner));
       const opened = yield* ask(request(ONE_TASK(taskId), owner));
@@ -399,7 +402,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
       );
       assert.deepEqual(
         readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, opened).plan.document,
-        saved.status === PLAN_SAVE_STATUS.SAVED ? saved.document : undefined,
+        saved.status === DESCRIPTION_SAVE_STATUS.SAVED ? saved.document : undefined,
       );
     }),
   );
@@ -772,7 +775,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const now = yield* DateTime.nowAsDate;
         // A revision a later build wrote, by a kind of writer this build has no name for.
         yield* Database.use((db) =>
-          db.insert(planRevision).values({
+          db.insert(descriptionRevision).values({
             taskId,
             seq: 1_000,
             actor: sql`'a-later-writer'`,
@@ -1212,18 +1215,18 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   /**
-   * The owner's plan written twice, far enough apart to be two revisions:
+   * The owner's description written twice, far enough apart to be two revisions:
    * the context first, then the goal.
    */
   const twoRevisions = (userId: string, taskId: string) =>
     Effect.gen(function* () {
       yield* saveNotes({ userId, taskId: taskId }, [added("Context", "Only admins can invite.")]);
-      yield* TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1));
+      yield* TestClock.adjust(Duration.millis(DESCRIPTION_REVISION.JOIN_WITHIN_MS + 1));
       yield* saveNotes({ userId, taskId: taskId }, [added("Goal", "Members invite by email.")]);
     });
 
   it.effect(
-    "another account reads no history of the plan, no revision of it, and restores none",
+    "another account reads no history of the description, no revision of it, and restores none",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask } = yield* openAccounts();
@@ -1243,7 +1246,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           notFound,
         );
         const page = readAnswer(
-          planRevisionsAnswerSchema,
+          descriptionRevisionsAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(REVISIONS(taskId), owner)),
         );
@@ -1365,7 +1368,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "the developer's edit of a plan saves their text as a revision of theirs, naming them on the sections it moved alone",
+    "the developer's edit of a description saves their text as a revision of theirs, naming them on the sections it moved alone",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -1376,7 +1379,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const value = INVITATIONS_TEXT.replace("Only an admin", "Only an owner");
 
         const answered = readAnswer(
-          planEditAnswerSchema,
+          descriptionEditAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(
             request(EDIT(taskId), owner, {
@@ -1386,12 +1389,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ),
         );
         const page = readAnswer(
-          planRevisionsAnswerSchema,
+          descriptionRevisionsAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(REVISIONS(taskId), owner)),
         );
         const { revision } = readAnswer(
-          planRevisionAnswerSchema,
+          descriptionRevisionAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(REVISION(taskId, 2), owner)),
         );
@@ -1402,17 +1405,17 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(task.document, { body: value, assumptions: [] });
         // A host waits on the transaction the edit answers before it lets a delivery of the plan land.
         assert.match(answered.txid ?? "", /^\d+$/u);
-        assert.equal(task.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
+        assert.equal(task.lastEdit?.actor, DESCRIPTION_ACTOR.DEVELOPER);
         const by = task.lastEdit?.by ?? assert.fail("the edit names no member");
         assert.equal(by.userId, owner);
         assert.deepEqual(task.sectionEdits, [
-          { section: "Context", actor: PLAN_ACTOR.DEVELOPER, by, at, duringCall: false },
+          { section: "Context", actor: DESCRIPTION_ACTOR.DEVELOPER, by, at, duringCall: false },
         ]);
         assert.deepEqual(
           page.revisions.map(({ seq, lastEdit, changes }) => [seq, lastEdit.actor, changes]),
           [
-            [2, PLAN_ACTOR.DEVELOPER, 1],
-            [1, PLAN_ACTOR.EARLIER, 0],
+            [2, DESCRIPTION_ACTOR.DEVELOPER, 1],
+            [1, DESCRIPTION_ACTOR.EARLIER, 0],
           ],
         );
         assert.deepEqual(revision.document, { body: value, assumptions: [] });
@@ -1445,7 +1448,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           INVITATIONS_TEXT.replace("Only an admin", `Only an admin${padding}`),
         );
         const merged = readAnswer(
-          planEditAnswerSchema,
+          descriptionEditAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* edit(taskId, INVITATIONS_TEXT.replace("Only an admin", "Only an owner")),
         );
@@ -1463,7 +1466,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         });
         assert.deepEqual(oversized, {
           status: HOSTED_HTTP_STATUS.OK,
-          body: { refused: PLAN_EDIT_REFUSAL.TOO_LONG },
+          body: { refused: DESCRIPTION_EDIT_REFUSAL.TOO_LONG },
         });
       }),
   );
@@ -1486,12 +1489,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const edit = (as: string, base: string, value: string) =>
           Effect.map(
             ask(request(EDIT(taskId), as, { method: "POST", body: { document: { base, value } } })),
-            (answered) => readAnswer(planEditAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+            (answered) => readAnswer(descriptionEditAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
           );
 
         const theirs = INVITATIONS_TEXT.replace("Only an admin", "Only an owner");
         yield* edit(other, INVITATIONS_TEXT, theirs);
-        // The owner's own later save of another section is the plan's newest revision.
+        // The owner's own later save of another section is the description's newest revision.
         const goal = theirs.replace("invite a teammate", "invite a teammate or a guest");
         yield* edit(owner, theirs, goal);
         const conflicted = yield* edit(
@@ -1502,7 +1505,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
 
         assert.ok("conflict" in conflicted);
         assert.equal(conflicted.conflict.current, goal);
-        assert.equal(conflicted.conflict.by?.actor, PLAN_ACTOR.DEVELOPER);
+        assert.equal(conflicted.conflict.by?.actor, DESCRIPTION_ACTOR.DEVELOPER);
         assert.deepEqual(conflicted.conflict.by?.by, { userId: other, name: "Charles Pan" });
       }),
   );

@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@repo/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@repo/features/feedback";
-import type { AccountLink, ReadLink } from "@repo/features/link-grammar";
+import { type AccountLink, LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import type { ModelProvider } from "@repo/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
@@ -11,6 +11,7 @@ import {
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
+  type AppStateSnapshot,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import {
@@ -18,26 +19,25 @@ import {
   EXPERIMENT,
   type Experiment,
   type HostCapability,
+  NO_EXPERIMENTS,
 } from "@repo/settings";
 import {
   agentKeyLink,
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsLink,
+  type SettingsView,
 } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { cssCustomProperties, RetryOffered } from "@repo/ui";
 import { isComposingKey } from "@repo/ui/composing-key";
 import { useLinkOpener } from "@repo/ui/held-link";
 import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
-import { forgetPictures } from "@repo/ui/picture-cache";
-import { useStateWithRef } from "@repo/ui/use-state-with-ref";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "./act.js";
 import { actMutation } from "./act-mutations.js";
+import { useAdminRoute } from "./admin/admin-route.js";
+import { adminViewOfLink } from "./admin/routing.js";
 import { appBridge } from "./app-bridge.js";
 import {
   runAppCommand,
@@ -64,37 +64,50 @@ import { useLastSignIn } from "./last-sign-in.js";
 import { LinkMenu } from "./link-menu.js";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
 import { MacCommandAskDialog } from "./mac-command-ask.js";
-import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
+import {
+  throughHistory,
+  useHistoryMouseButtons,
+  useRoutedStanding,
+  useWindowHistory,
+} from "./navigation-history.js";
 import { useOfflineRefusedToast } from "./offline-refused-toast.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
 import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
+import { forgetPictures } from "./picture-query.js";
+import { forgetAccountReads } from "./query-keys.js";
+import { ROUTED_PLACE } from "./route-gates.js";
 import { useOpenHostConnect } from "./settings/host-connect-dialog.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
-import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
+import { type SettingsRoute, useSettingsRoute } from "./settings-link.js";
+import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
+import { useDescriptionWordsUnsaved } from "./tasks/use-description-editing.js";
 import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
-import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { ToastHost } from "./toast.js";
 import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
 import { useUpdatedToast } from "./update-toast.js";
 import {
-  APP_SETTINGS_VIEW,
-  APP_SLICE,
-  experimentOnNow,
-  SETTINGS_HELD,
-  useAdminAccess,
-  useAdminAccessPending,
-  useAppSlice,
-  useExperimentChoices,
+  appStateQuery,
+  selectAccount,
+  selectAdminAccess,
+  selectAdminAccessPending,
+  selectAppSettingsView,
+  selectExperiment,
+  selectExperimentChoices,
+  selectInbox,
+  selectRun,
+  selectSessionReplay,
+  selectSettingsHeld,
+  selectTasks,
 } from "./use-app-state.js";
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
@@ -125,22 +138,16 @@ const NO_CAPABILITIES: readonly HostCapability[] = [];
 const IDLE_RUN = { fixtureMode: false, profile: RUN_PROFILE.IDLE } as const;
 
 /** Whether this is a fixture run, which the window waits on its synthetic tasks for. */
-const FIXTURE_MODE: Atom.Atom<boolean> = Atom.map(
-  APP_SLICE.RUN,
-  (run) => run?.fixtureMode === true,
-);
+const selectFixtureMode = (state: AppStateSnapshot): boolean => state.run.fixtureMode === true;
 
 /** The agents main says ended unseen. */
-const UNSEEN_AGENTS: Atom.Atom<readonly string[]> = Atom.map(
-  APP_SLICE.AGENTS,
-  (agents) => agents?.unseen ?? NO_UNSEEN_AGENTS,
-);
+const selectUnseenAgents = (state: AppStateSnapshot): readonly string[] => state.agents.unseen;
 
 /** Whether this window stands in full screen. */
-const FULL_SCREEN = Atom.map(APP_SLICE.WINDOW, (facts) => facts?.fullScreen);
+const selectFullScreen = (state: AppStateSnapshot): boolean => state.window.fullScreen;
 
 /** The stored zoom, which the zoom keys step from. */
-const ZOOM = Atom.map(APP_SETTINGS_VIEW, (settings) => settings?.zoom);
+const selectZoom = (state: AppStateSnapshot) => selectAppSettingsView(state)?.zoom;
 
 /** Tells the shell the ask standing while a page holds unsaved work, or nothing once none does. */
 const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
@@ -214,9 +221,9 @@ function ExpiredServerToasts(): null {
  * writes, never see the tasks arrive after the rest.
  */
 export function App(): React.JSX.Element {
-  const fixtureMode = useAppSlice(FIXTURE_MODE);
+  const fixtureMode = useQuery({ ...appStateQuery, select: selectFixtureMode }).data === true;
   const landed = useTasksFixtureLanded(fixtureMode);
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
   // Note that the account's key is read above the window, because every message box's Dictate reads it.
@@ -226,11 +233,8 @@ export function App(): React.JSX.Element {
 }
 
 function AppWindow(): React.JSX.Element {
-  // Note that `act`, `press`, and `tell` stay for the tasks' own acts (`useTasksTab`) and the reads below, which the task-surface and read leaves move.
-  const { act, press, tell } = useAct();
   const { mutateAsync: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
   const { mutateAsync: sendSignOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
-  const { mutateAsync: sendDeleteAccount } = useMutation(actMutation(ACT_KIND.ACCOUNT_DELETE));
   const { mutateAsync: requestMicrophoneAccess } = useMutation(
     actMutation(ACT_KIND.MICROPHONE_REQUEST),
   );
@@ -238,31 +242,33 @@ function AppWindow(): React.JSX.Element {
   // for a slice it draws from and for no other: a setting that moves draws
   // Settings and ⌘K, which read their own (`app-settings.ts`), and leaves the
   // window, and the tasks it holds, as they were.
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
-  const run = useAppSlice(APP_SLICE.RUN);
-  const planning = useAppSlice(APP_SLICE.TASKS);
-  const inbox = useAppSlice(APP_SLICE.INBOX);
-  const unseenAgents = useAppSlice(UNSEEN_AGENTS);
-  const settingsHeld = useAppSlice(SETTINGS_HELD);
-  // A picture is read as the account signed in, so the window lets go of every one it read once that account changes, and of every write it would undo, which is its presser's own.
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
+  const run = useQuery({ ...appStateQuery, select: selectRun }).data;
+  const planning = useQuery({ ...appStateQuery, select: selectTasks }).data;
+  const inbox = useQuery({ ...appStateQuery, select: selectInbox }).data;
+  const unseenAgents =
+    useQuery({ ...appStateQuery, select: selectUnseenAgents }).data ?? NO_UNSEEN_AGENTS;
+  const settingsHeld = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
+  // A picture, and each read keyed by no account, is read as the account signed in, so the window lets go of every one it read once that account changes, and of every write it would undo, which is its presser's own.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
+  const queryClient = useQueryClient();
   useEffect(() => {
-    forgetPictures();
+    void forgetPictures(queryClient);
+    void forgetAccountReads(queryClient);
     forgetUndo();
-  }, [accountKey]);
+  }, [queryClient, accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
-  // A fixture run's profile may open the window on a page of Settings at launch (`tasks-fixture.ts`).
-  const [launched] = useState(() => {
-    const place = loadedTasksFixture()?.fixturePlace(run ?? IDLE_RUN);
-    return place !== undefined && "settings" in place ? place.settings : undefined;
-  });
-  const [tab, setTab] = useStateWithRef<PanelTab>(
-    launched === undefined ? PANEL_TAB.TASKS : PANEL_TAB.SETTINGS,
-  );
-  const settingsPlace = useSettingsPlace(launched?.page);
-  const { onEnter: enterSettings, onChoose: chooseSettingsView } = settingsPlace;
+  // A fixture run's profile may open the window on a page of Settings, or on Admin, at launch (`tasks-fixture.ts`).
+  const [launched] = useState(() => loadedTasksFixture()?.fixturePlace(run ?? IDLE_RUN));
+  // Settings and Admin are the router's places (`panel-router.tsx`), read from where it stands and moved by navigation;
+  // Settings is the tab the window stands on while it stands, the Tasks tab otherwise.
+  const settingsRoute = useRef<SettingsRoute | undefined>(undefined);
+  const routedHere = useRoutedStanding();
+  const tab = routedHere?.place === ROUTED_PLACE.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.TASKS;
+  // Leaves the routed place standing for the place the window's state says, once the history is read below.
+  const leaveRouted = useRef<() => void>(() => undefined);
   /** The note being written to the people who make the app, while its dialog stands. */
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
   /** The experiment that note is about, where an experiment's row opened it. */
@@ -275,57 +281,61 @@ function AppWindow(): React.JSX.Element {
   // The editor and markdown-parser prefetches start once the renderer is idle, not beside the first interactions; so does session replay, below.
   usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  // The shell hears the ask too, and whether a plan holds words not saved, which no page's ask
+  // The shell hears the ask too, and whether a description holds words not saved, which no page's ask
   // covers, so its own ways out of the page and the app ask first.
   const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
-  const planWordsUnsaved = usePlanWordsUnsaved();
+  const descriptionWordsUnsaved = useDescriptionWordsUnsaved();
   useEffect(() => {
-    appPlatform().unsavedPlanWords?.(planWordsUnsaved);
-  }, [planWordsUnsaved]);
+    appPlatform().unsavedDescriptionWords?.(descriptionWordsUnsaved);
+  }, [descriptionWordsUnsaved]);
   const { guard: guardLeave } = leaveGuard;
+  // Opens Settings at the place a link names (`settings-link.ts`), counted as the tab changed where it was not standing.
+  const goSettings = useCallback((link: SettingsLink) => {
+    const route = settingsRoute.current;
+    if (route === undefined) return;
+    if (!route.standing) {
+      appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
+        panel_tab: PANEL_TAB.SETTINGS,
+      });
+    }
+    route.open(link);
+  }, []);
+  const routedStanding = routedHere !== undefined;
+  // Arriving at Settings is arriving at its page list and its first page, Profile; the Tasks tab is the place the window's
+  // state says, which a routed place standing is left for. Note that `PanelTab` and the counted tab are the same union:
+  // both are `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
   const changeTab = useCallback(
-    (next: PanelTab) =>
-      guardLeave((tab: PanelTab) => {
-        setTab(tab);
-        // Arriving at the tab is arriving at its page list and its first page, Profile: a page
-        // left open behind a tab switch would greet the next visit with a
-        // corner of the settings rather than the settings. A flow that needs
-        // another page sets it right after this reset.
-        enterSettings();
-        // `PanelTab` and the counted tab are the same union: both are
-        // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
+    (next: PanelTab) => {
+      if (next === PANEL_TAB.SETTINGS) {
+        guardLeave(() => goSettings({ page: SETTINGS_VIEW.ACCOUNT, listed: true }))();
+        return;
+      }
+      if (!routedStanding) return;
+      guardLeave(() => {
+        leaveRouted.current();
         appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
-          panel_tab: tab,
+          panel_tab: PANEL_TAB.TASKS,
         });
-      })(next),
-    [guardLeave, enterSettings, setTab],
-  );
-  // Where a link's workspace is handed, read through a ref, because the
-  // workspace Settings shows is held beside the Tasks tab, built after the opener.
-  const linkWorkspace = useRef<(workspaceId: string) => void>(() => undefined);
-  const settingsLinkDoors = useMemo(
-    () => ({
-      changeTab,
-      changeView: chooseSettingsView,
-      chooseWorkspace: (workspaceId: string) => linkWorkspace.current(workspaceId),
-    }),
-    [changeTab, chooseSettingsView],
+      })();
+    },
+    [guardLeave, goSettings, routedStanding],
   );
   /**
    * Opens Settings at the place a link names: the workspace it names, which
    * the Workspace page shows while Settings stays open; its page; and its
    * section, which is looked for once drawn and given up on by itself.
    */
-  // Note that the link asks once, as a whole, so its page, workspace, and section all wait on the ask with its tab.
+  // Note that the link asks once, as a whole, so its page, workspace, and section all wait on the ask.
   const openSettings = useCallback(
-    (link: SettingsLink) => guardLeave(() => followSettingsLink(link, settingsLinkDoors))(),
-    [guardLeave, settingsLinkDoors],
+    (link: SettingsLink) => guardLeave(() => goSettings(link))(),
+    [guardLeave, goSettings],
   );
   // A pairing's link opens Settings › Hosts with its code, for the page to ask over itself; while
   // Bring your own host is off, which stands nowhere then, it lands on that experiment's row alone.
   const openHostConnect = useOpenHostConnect();
   const openAccountLink = useSteadyDoor(({ place }: AccountLink) => {
-    if (!experimentOnNow(EXPERIMENT.BRING_YOUR_OWN_HOST)) {
+    const state = queryClient.getQueryData(appStateQuery.queryKey);
+    if (state === undefined || !selectExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST)(state)) {
       openSettings({
         page: SETTINGS_VIEW.EXPERIMENTAL,
         section: SETTINGS_SECTION.BRING_YOUR_OWN_HOST,
@@ -335,7 +345,7 @@ function AppWindow(): React.JSX.Element {
     // Note that the code is handed only once the leave is let go, so a page kept for a draft is not asked over later.
     guardLeave(() => {
       openHostConnect(place.code);
-      followSettingsLink({ page: SETTINGS_VIEW.HOSTS }, settingsLinkDoors);
+      goSettings({ page: SETTINGS_VIEW.HOSTS });
     })();
   });
 
@@ -369,36 +379,28 @@ function AppWindow(): React.JSX.Element {
   useAppCommand(APP_COMMAND.REDO, undo.redoes ? () => void redoLast() : undefined);
 
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
-  useWindowZoom(useAppSlice(ZOOM), (zoom) =>
+  useWindowZoom(useQuery({ ...appStateQuery, select: selectZoom }).data, (zoom) =>
     updateSetting({ field: APP_SETTING_SCHEMA.zoom.field, value: zoom }),
   );
   // In full screen the sidebar's toggle stands where the hidden traffic lights were.
-  useWindowFullScreen(useAppSlice(FULL_SCREEN));
+  useWindowFullScreen(useQuery({ ...appStateQuery, select: selectFullScreen }).data);
 
   const signOut = useCallback(async () => {
     await sendSignOut();
   }, [sendSignOut]);
-  // The delete happens at the service before anything local moves,
-  // so a failure resolves to why and the account is still standing.
-  const deleteAccount = useCallback(async (): Promise<ActionResult> => {
-    try {
-      await sendDeleteAccount();
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-    } catch {
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: "The account could not be deleted. Try again.",
-      };
-    }
-  }, [sendDeleteAccount]);
 
   // The room the stage's width gives, on the desktop the window's: whether
   // the panel stands as one pane (`shell-room.ts`), and whether the sidebar
   // folds. Only crossing a line draws the shell again, never a pixel's drag.
   const stage = useStageRoom();
   const room = stage.room;
+  // The workspace the sidebar lists, by its address's slug, which Admin opens under; read as it is pressed, since the tasks are built below.
+  const listedSlug = useRef<string | undefined>(undefined);
+  const adminView = useAdminRoute({
+    listedSlug: () => listedSlug.current,
+    onClose: () => leaveRouted.current(),
+  });
   const tasks = useTasksTab({
-    acts: { act, press, tell },
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
@@ -416,7 +418,9 @@ function AppWindow(): React.JSX.Element {
     onOpenApiKeys: openApiKeys,
     leaveGuard,
     room,
+    adminView,
   });
+  listedSlug.current = tasks.workspaces.find((each) => each.id === tasks.workspace?.id)?.slug;
   // An account leaving, signed out, deleted, or switched, takes the window's place with it, so the
   // next account lands on Home rather than on the Settings page the last one left from. Note that
   // the leave passes the guard, because the unsaved work it would ask about was the account's that left.
@@ -428,41 +432,58 @@ function AppWindow(): React.JSX.Element {
     placeOwner.current = accountKey;
     if (owner === undefined || owner === accountKey) return;
     passLeave(() => {
-      setTab(PANEL_TAB.TASKS);
-      enterSettings();
+      leaveRouted.current();
       onGoHome();
     });
-  }, [accountKey, passLeave, setTab, enterSettings, onGoHome]);
+  }, [accountKey, passLeave, onGoHome]);
   // Session replay starts once the renderer is idle, filed under the workspace the sidebar lists.
-  useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY), tasks.workspace?.id);
-  // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
-  const settingsWorkspace = useSettingsWorkspace({
-    listedId: tasks.workspace?.id,
+  useSessionReplay(
+    run,
+    useQuery({ ...appStateQuery, select: selectSessionReplay }).data,
+    tasks.workspace?.id,
+  );
+  // Settings as the router stands it: its page, its list, and the workspace its address names, else the sidebar's.
+  const settingsPlace = useSettingsRoute({
     workspaces: tasks.workspaces,
-    settingsShown: tab === PANEL_TAB.SETTINGS,
-    launched: launched?.workspaceId,
+    listedId: tasks.workspace?.id,
+    narrow: room === SHELL_ROOM.NARROW,
   });
-  linkWorkspace.current = settingsWorkspace.link;
+  settingsRoute.current = settingsPlace;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
-  const experiments = useExperimentChoices();
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   const shownView = shownSettingsView(
     settingsPlace.view,
     run?.capabilities ?? NO_CAPABILITIES,
     experiments,
   );
+  // A page chosen from outside Settings, as ⌘K chooses one, asks first while a page holds unsaved work, as entering Settings does; one turned within Settings asks nothing.
+  const chooseSettingsView = useSteadyDoor((view: SettingsView) => {
+    if (settingsPlace.standing) goSettings({ page: view });
+    else guardLeave(() => goSettings({ page: view }))();
+  });
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
     tasks,
-    tab === PANEL_TAB.SETTINGS
+    settingsPlace.standing
       ? {
           view: shownView,
-          workspace: tasks.workspaces.find((each) => each.id === settingsWorkspace.shownId),
+          workspace: tasks.workspaces.find((each) => each.id === settingsPlace.workspaceId),
           listed: settingsPlace.listed,
         }
       : undefined,
     !accountGated,
     room,
+    adminView.open ? adminView.view : undefined,
   );
+  // A fixture run's profile opens the window on its place once, as a link to it would.
+  const launchedOnce = useRef(false);
+  useEffect(() => {
+    if (launchedOnce.current || launched === undefined) return;
+    launchedOnce.current = true;
+    if ("settings" in launched) goSettings(launched.settings);
+    else if ("admin" in launched) adminView.onOpen();
+  }, [launched, goSettings, adminView]);
   // An app link, handed by the system or pressed in the window, opens where its place stands (`@repo/ui/link-route`).
   // A pull request a listed task's agent, or a listed agent on no task, opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = tasks.tasks;
@@ -470,17 +491,22 @@ function AppWindow(): React.JSX.Element {
   // An Admin link opens while the account's access is still being read, the
   // place waiting on it, and never for an account that is no admin
   // (`link-route.ts`).
-  const adminOn = useAdminAccess();
-  const adminPending = useAdminAccessPending();
-  // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open plan among them, holds while the window is drawn again.
+  const adminOn = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
+  const adminPending =
+    useQuery({ ...appStateQuery, select: selectAdminAccessPending }).data ?? true;
+  // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open description among them, holds while the window is drawn again.
   const openAppLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
       adminOn: adminOn || adminPending,
     });
     if (route.kind === LINK_ROUTE.NOT_PERMITTED) return;
+    const { place } = link;
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
+    } else if (place.kind === LINK_PLACE.ADMIN) {
+      // Admin is the router's place, which its link opens as a navigation from wherever the window stands.
+      guardLeave(() => adminView.onOpen(adminViewOfLink(place)))();
     } else {
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
@@ -504,17 +530,15 @@ function AppWindow(): React.JSX.Element {
   // knows where it stands.
   const history = useWindowHistory({
     known: run !== undefined && !accountGated,
-    link: copyLink.standing,
-    title: stepTitle(tab, tasks),
-    tab,
-    onTabChange: changeTab,
-    settingsView: shownView,
-    onSettingsViewChange: chooseSettingsView,
-    settingsListed: settingsPlace.listed,
-    onSettingsList: settingsPlace.onList,
+    link: copyLink.placed,
+    title: stepTitle(routedHere?.place, tasks),
+    routed: routedHere,
+    settingsList: settingsPlace.listAddress,
+    onSettingsList: settingsPlace.list,
     room,
     tasks,
   });
+  leaveRouted.current = history.onLeaveRouted;
   // The narrow screens' ways back to their lists go through the history, so the two never disagree.
   const shellTasks = useSteadyDoors(
     useMemo(() => throughHistory(tasks, history.lists), [tasks, history.lists]),
@@ -559,7 +583,7 @@ function AppWindow(): React.JSX.Element {
         return;
       }
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, an agent's or a person's page, the Automations page, or the Board, back to wherever it was
+      // time: Settings, a description's version history, an agent's or a person's page, the Automations page, or the Board, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // task, then an open task back to the page it was opened from. A menu and the
       // settings search answer their own Escapes and keep them — the search
@@ -610,7 +634,7 @@ function AppWindow(): React.JSX.Element {
   const workspace = useMemo(
     () => ({
       workspaces: tasks.workspaces,
-      workspaceId: settingsWorkspace.shownId,
+      workspaceId: settingsPlace.workspaceId,
       // A leave closes Settings onto the Tasks tab, whose Home the tab turns to.
       onLeft: leftWorkspace,
       // Note that the workspaces are followed apart from the tasks, so a task list that read says nothing of them.
@@ -619,7 +643,7 @@ function AppWindow(): React.JSX.Element {
     }),
     [
       tasks.workspaces,
-      settingsWorkspace.shownId,
+      settingsPlace.workspaceId,
       leftWorkspace,
       tasks.workspacesFailed,
       tasks.onRetryWorkspaces,
@@ -631,11 +655,10 @@ function AppWindow(): React.JSX.Element {
       view: shownView,
       onViewChange: chooseSettingsView,
       onSignOut: signOut,
-      onDeleteAccount: deleteAccount,
       onRequestMicrophone: requestMicrophone,
       workspace,
     }),
-    [shownView, chooseSettingsView, signOut, deleteAccount, requestMicrophone, workspace],
+    [shownView, chooseSettingsView, signOut, requestMicrophone, workspace],
   );
 
   // A remedy under a refused start or message mends the task's repository through the Tasks tab's doors.
@@ -777,13 +800,6 @@ function AppWindow(): React.JSX.Element {
                             tasks={tasks}
                             links={copyLink}
                             doors={settingsDoors}
-                            readFiles={(taskId) =>
-                              act(ACT_KIND.TASKS_TREE, {
-                                planId: taskId,
-                                path: "",
-                                recursive: true,
-                              })
-                            }
                           />
                           {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in; in the stage's room, which names a phone's places as it stands them. */}
                           <ShellRoomContext.Provider value={room}>

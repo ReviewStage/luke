@@ -160,22 +160,22 @@ it moves every task standing into its starter's first workspace, and
 statement joins into its own where clause. A task is read and written by
 every member of its workspace, whichever of them started it:
 `taskReachableBy` and `reachableTask` gate every task statement in
-`task-store.ts`, `plan-pages.ts`, and `plan-revisions.ts`, on the caller's
+`task-store.ts`, `task-pages.ts`, and `description-revisions.ts`, on the caller's
 membership of the task's workspace rather than on the task's starter.
 
-A description's pictures are its own rows, `plan_attachment`, with their bytes in a
+A description's pictures are its own rows, `description_attachment`, with their bytes in a
 `bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@repo/features/picture-wire`),
 or to `MAX_VIDEO_BYTES` for a WebM an agent recorded
-(`packages/database/src/models/plan-attachments.ts`), gated by the same
+(`packages/database/src/models/description-attachments.ts`), gated by the same
 `taskReachableBy`. `POST /api/plans/<id>/attachments { picture }` keeps one, a
 `data:` URL of a PNG, JPEG, WebP, or WebM whose bytes sniff as its label, on a task
-that is not archived and whose description holds fewer than `MAX_PER_PLAN`, and, for a WebM,
-fewer than `MAX_VIDEOS_PER_PLAN` videos, answering `{ id }`
+that is not archived and whose description holds fewer than `MAX_PER_DESCRIPTION`, and, for a WebM,
+fewer than `MAX_VIDEOS_PER_DESCRIPTION` videos, answering `{ id }`
 or `{ refused: "too-many" }` or `{ refused: "too-many-videos" }`; `GET /api/plans/<id>/attachments/<picture>`
 serves the bytes under their sniffed type, `nosniff` and `private, no-store`,
 to a member alone, anyone else reading `not-found`. The description's text names a
-picture by its address (`@repo/features/plan-attachment-link`), which
-`savePlanText` reads to stamp the picture `saved_at`, and the scheduled sweep
+picture by its address (`@repo/features/description-attachment-link`), which
+`saveDescriptionText` reads to stamp the picture `saved_at`, and the scheduled sweep
 deletes, a day on, a picture no save stamped.
 
 An agent's conversation keeps the member who started it as its
@@ -924,7 +924,8 @@ port's), the Browser tab's live view, and the live reads' socket
 functions, each exporting the `http.Server` Vercel upgrades into, so enable the
 WebSockets feature on the Vercel team and make sure Fluid compute is on for
 the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
-keys. A native agent's runner reports to the deployment's own origin, its
+keys, and `TITLE_ANTHROPIC_API_KEY`, Vespin's own Anthropic API key, generates
+every title; without it each is cut from its opening's first words. A native agent's runner reports to the deployment's own origin, its
 production domain in production and its own host otherwise, unless
 `APP_DEPLOYMENT_ORIGIN` names another (`packages/service/src/deployment-origin.ts`).
 No separate service is deployed.

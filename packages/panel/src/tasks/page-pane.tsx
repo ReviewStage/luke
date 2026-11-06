@@ -17,7 +17,10 @@ import {
   pagePickAnswerSchema,
 } from "@repo/features/page-pick";
 import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
-import { PLAN_COMMENT_SCOPE, type PlanCommentThread } from "@repo/features/plan-comment-wire";
+import {
+  DESCRIPTION_COMMENT_SCOPE,
+  type DescriptionCommentThread,
+} from "@repo/features/description-comment-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeLines, TasksPageSourceAnswer } from "@repo/features/tasks-view";
 import { readingWords } from "@repo/features/words";
@@ -47,7 +50,8 @@ import {
   MessageSquarePlusIcon,
   RotateCwIcon,
 } from "@repo/ui/icons";
-import type { PlanCommentsControl } from "@repo/ui/plan-comments";
+import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
+import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
 import {
   type ReactNode,
@@ -59,7 +63,7 @@ import {
   useState,
 } from "react";
 import { appPlatform } from "../app-platform.js";
-import { type PlanCommentPlace, useDraftWriter } from "../composer-drafts.js";
+import { type DescriptionCommentPlace, useDraftWriter } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useLinkWorkspace } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
@@ -91,7 +95,8 @@ import {
   pageDraftPlace,
   threadsByElement,
   withQuote,
-} from "./plan-comments.js";
+} from "./description-comments.js";
+import { pageSourceQueryOptions, pageSourcesKey } from "./repository-reads.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
@@ -147,8 +152,8 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * the frame it drew, only while it asked, and only while the window holds a
  * press of the developer's, as it takes a link. The bar's last toggle, the
  * side panel's own glyph as a File tab's tree has it, opens the page's
- * comments pane on its right, listed as the plan's comments list lists the
- * plan's (`PageComments`); it slides in and out as the tree does, is
+ * comments pane on its right, listed as the description's comments list lists the
+ * description's (`PageComments`); it slides in and out as the tree does, is
  * dragged wider or narrower by its left edge, one width for every page,
  * and shut by a drag past its least width. The bar's comment controls stand
  * at its end, Comment then that toggle, as the tree's toggle ends a File
@@ -178,8 +183,7 @@ type SourceRead =
   | { readonly kind: typeof SOURCE_READ.READY; readonly lines: CodeLines }
   | { readonly kind: typeof SOURCE_READ.FAILED };
 
-/** Reads one version's source: the answer, or a rejection where main refused the act. */
-export type ReadPageSource = (version: number) => Promise<TasksPageSourceAnswer>;
+const SOURCE_READING: SourceRead = { kind: SOURCE_READ.READING };
 
 /** The find chord each key the frame hands on is. */
 const CHORD_OF_KEY = {
@@ -503,43 +507,11 @@ function VersionStep({
   );
 }
 
-/**
- * The sources the tab has read, by version: each read the first time the
- * source of its version is shown, and held until Reload forgets them all.
- * A read that failed is held as one, so it is asked again only on Retry.
- * Note that only the latest read of a version lands, because one asked
- * before a Reload or a Retry may answer after it.
- */
-function usePageSources(readSource: ReadPageSource) {
-  const [held, setHeld] = useState<ReadonlyMap<number, SourceRead>>(new Map());
-  const latest = useRef(readSource);
-  latest.current = readSource;
-  const asks = useRef({ count: 0, latest: new Map<number, number>() });
-  const ask = useCallback((version: number) => {
-    asks.current.count += 1;
-    const asked = asks.current.count;
-    asks.current.latest.set(version, asked);
-    const land = (read: SourceRead) => {
-      if (asks.current.latest.get(version) === asked) {
-        setHeld((was) => new Map(was).set(version, read));
-      }
-    };
-    land({ kind: SOURCE_READ.READING });
-    latest.current(version).then(
-      (answer) =>
-        land(
-          "lines" in answer
-            ? { kind: SOURCE_READ.READY, lines: answer.lines }
-            : { kind: SOURCE_READ.FAILED },
-        ),
-      () => land({ kind: SOURCE_READ.FAILED }),
-    );
-  }, []);
-  const forget = useCallback(() => {
-    asks.current.latest.clear();
-    setHeld(new Map());
-  }, []);
-  return { held, ask, forget };
+/** Where the read of the version's source stands, a failed read being read again shown as reading. */
+function sourceRead(source: UseQueryResult<TasksPageSourceAnswer>): SourceRead {
+  if (source.isPending || (source.isFetching && !source.isSuccess)) return SOURCE_READING;
+  if (source.isError || !("lines" in source.data)) return { kind: SOURCE_READ.FAILED };
+  return { kind: SOURCE_READ.READY, lines: source.data.lines };
 }
 
 /** The name a page's source is colored under: an HTML document's. */
@@ -640,7 +612,7 @@ function versionStepAction(
  * kept where it holds words or files of the writer's own, and dropped where
  * it holds only the quotes it was started from, so the next starts afresh.
  */
-function useCommenting(place: PlanCommentPlace | undefined) {
+function useCommenting(place: DescriptionCommentPlace | undefined) {
   const drafts = useDraftWriter();
   const [column, setColumn] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -701,11 +673,11 @@ function pageReserve(row: HTMLElement): number {
 
 /** The elements holding open threads, each once, in the order their threads were started, with the words the first quotes where it was started on words selected; then those holding only comments held in the reader's review. */
 function threadMarks(
-  threads: readonly PlanCommentThread[],
+  threads: readonly DescriptionCommentThread[],
   held: readonly HeldComment[],
 ): readonly PageMark[] {
   const posted = [...threadsByElement(threads)].map(([path, [first]]) =>
-    first?.scope === PLAN_COMMENT_SCOPE.WORDS ? { path, words: first.quote } : { path },
+    first?.scope === DESCRIPTION_COMMENT_SCOPE.WORDS ? { path, words: first.quote } : { path },
   );
   const marked = new Set(posted.map((mark) => mark.path));
   const heldMarks = held.flatMap((comment) => {
@@ -729,20 +701,18 @@ function threadMarks(
 export function PagePane({
   place,
   page,
-  readSource,
   findActive,
   comments,
 }: {
   /** The plan the page stands on, or the agent on no task that showed it. */
   place: PagePlace;
   page: PageLine;
-  readSource: ReadPageSource;
   /** Whether the panel holds the window's keys, so the tab's find answers ⌘F. */
   findActive: boolean;
   /** The page's comment threads and who writes them; none for a page with no comments, one an agent on no task showed. */
   comments?:
     | {
-        readonly control: PlanCommentsControl;
+        readonly control: DescriptionCommentsControl;
         readonly doors: Parameters<typeof PageComments>[0]["doors"];
       }
     | undefined;
@@ -772,16 +742,16 @@ export function PagePane({
     onPressed: commenting.dismiss,
   });
   const copyWithToast = useCopyToast();
-  const sources = usePageSources(readSource);
+  const queryClient = useQueryClient();
   const version = chosen === undefined ? page.version : Math.min(chosen, page.version);
   const step = (to: number) => setChosen(to === page.version ? undefined : to);
   const showingSource = view === PAGE_VIEW.SOURCE;
-  const source = sources.held.get(version);
-  const { ask } = sources;
   // The source of the version shown is read the first time it is asked for.
-  useEffect(() => {
-    if (showingSource && source === undefined) ask(version);
-  }, [showingSource, source, version, ask]);
+  const sourceQuery = useQuery({
+    ...pageSourceQueryOptions(place, page.id, version),
+    enabled: showingSource,
+  });
+  const source = showingSource || sourceQuery.isSuccess ? sourceRead(sourceQuery) : undefined;
   const toggleLabel = showingSource ? "View page" : "View source";
   const toggleView = () => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE);
   const commentsLabel = commenting.column ? "Hide comments" : "Show comments";
@@ -822,7 +792,7 @@ export function PagePane({
         ];
   const reload = () => {
     setReloads((was) => was + 1);
-    sources.forget();
+    void queryClient.resetQueries({ queryKey: pageSourcesKey(place, page.id) });
   };
   const copySource = copySourceAction(source, copyWithToast);
   const reloadAction: MenuAction = {
@@ -971,8 +941,8 @@ export function PagePane({
             <PageSource
               title={page.title}
               version={`${page.id}@${version}`}
-              read={source ?? { kind: SOURCE_READ.READING }}
-              onRetry={() => ask(version)}
+              read={source ?? SOURCE_READING}
+              onRetry={() => void sourceQuery.refetch()}
             />
           ) : (
             <PageFrame

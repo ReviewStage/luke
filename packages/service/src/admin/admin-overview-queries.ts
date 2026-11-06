@@ -1,5 +1,5 @@
 /**
- * admin-overview-queries.ts -- the Overview's reads of tasks, plan revisions,
+ * admin-overview-queries.ts -- the Overview's reads of tasks, description revisions,
  * coding agents, pull requests, the inbox, and automations.
  *
  * Every read counts rows or reads a timestamp, a status, or an id; none names
@@ -20,7 +20,7 @@ import { automationRun } from "@repo/database/schemas/automation";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { inboxItem } from "@repo/database/schemas/inbox";
 import { integrationConnection } from "@repo/database/schemas/integration";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { task } from "@repo/database/schemas/task";
 import {
   DAILY_COUNT,
@@ -35,7 +35,7 @@ import { AGENT_KIND, AGENT_SOURCE, PULL_REQUEST_STATE } from "@repo/features/age
 import { AUTOMATION_RUN_STATUS } from "@repo/features/automation-wire";
 import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import { INTEGRATION_STATUS } from "@repo/features/integration-wire";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import {
   and,
   asc,
@@ -199,16 +199,19 @@ export function dailyCountRows(since: Date, until?: Date) {
       ),
     queryBuilder
       .select({
-        tag: tag(DAILY_COUNT.PLAN_REVISIONS),
-        userId: userIdOf(planRevision.userId),
-        at: atOf(planRevision.at),
+        tag: tag(DAILY_COUNT.DESCRIPTION_REVISIONS),
+        userId: userIdOf(descriptionRevision.userId),
+        at: atOf(descriptionRevision.at),
       })
-      .from(planRevision)
+      .from(descriptionRevision)
       .where(
         and(
-          inArray(planRevision.actor, [PLAN_ACTOR.DEVELOPER, PLAN_ACTOR.NOTETAKER]),
-          isNotNull(planRevision.userId),
-          within(planRevision.at, since, until),
+          inArray(descriptionRevision.actor, [
+            DESCRIPTION_ACTOR.DEVELOPER,
+            DESCRIPTION_ACTOR.NOTETAKER,
+          ]),
+          isNotNull(descriptionRevision.userId),
+          within(descriptionRevision.at, since, until),
         ),
       ),
     queryBuilder
@@ -254,13 +257,13 @@ function reachRows(since: Date) {
       .from(task)
       .where(gte(task.createdAt, since)),
     queryBuilder
-      .select({ tag: tag(REACH_FEATURE.TASKS), userId: userIdOf(planRevision.userId) })
-      .from(planRevision)
+      .select({ tag: tag(REACH_FEATURE.TASKS), userId: userIdOf(descriptionRevision.userId) })
+      .from(descriptionRevision)
       .where(
         and(
-          eq(planRevision.actor, PLAN_ACTOR.DEVELOPER),
-          isNotNull(planRevision.userId),
-          gte(planRevision.at, since),
+          eq(descriptionRevision.actor, DESCRIPTION_ACTOR.DEVELOPER),
+          isNotNull(descriptionRevision.userId),
+          gte(descriptionRevision.at, since),
         ),
       ),
     queryBuilder

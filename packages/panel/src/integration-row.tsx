@@ -61,8 +61,10 @@ import { GLYPH, PlusIcon, RefreshCwIcon } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useId, useRef, useState } from "react";
-import { type ActHandle, useAct } from "./act.js";
+import type { ActResult, ActVariables } from "./act.js";
+import { actMutation } from "./act-mutations.js";
 import { confirmFailure, refusedShown } from "./failure-report.js";
 import { type GitHubConnectControl, useGitHubConnection } from "./github-connect.js";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "./integration-grant.js";
@@ -429,7 +431,9 @@ function RowToolsPanel({
  * provider's first leaves the page with its row as the answer lands.
  */
 function disconnectAccount(
-  act: ActHandle["act"],
+  disconnectIntegration: (
+    variables: ActVariables<typeof ACT_KIND.INTEGRATIONS_DISCONNECT>,
+  ) => Promise<ActResult<typeof ACT_KIND.INTEGRATIONS_DISCONNECT>>,
   github: GitHubConnectControl,
   row: ServerRow,
 ): Promise<ActionResult> {
@@ -439,7 +443,7 @@ function disconnectAccount(
     reason: `${name} could not be disconnected. Try again.`,
   };
   if (grantedBySignIn(provider)) return github.disconnect().then(() => ACCEPTED);
-  return act(ACT_KIND.INTEGRATIONS_DISCONNECT, {
+  return disconnectIntegration({
     provider,
     ...(connection === provider ? undefined : { connection }),
   }).then(
@@ -469,7 +473,12 @@ export function IntegrationRow({
   onRetryTools: () => void;
 }): React.JSX.Element {
   const panelId = useId();
-  const { act } = useAct();
+  const { mutateAsync: sendIntegrationsRename } = useMutation(
+    actMutation(ACT_KIND.INTEGRATIONS_RENAME),
+  );
+  const { mutateAsync: disconnectIntegration } = useMutation(
+    actMutation(ACT_KIND.INTEGRATIONS_DISCONNECT),
+  );
   const tokens = tools?.tokens ?? NO_TOKENS;
   const { provider, connection, name, account, accountName } = row;
   const { cancelSignIn } = statuses;
@@ -525,7 +534,7 @@ export function IntegrationRow({
     if (label === undefined || label === account?.label) return;
     setRejection(undefined);
     const refused = () => setRejection(`${name} could not be renamed. Try again.`);
-    void act(ACT_KIND.INTEGRATIONS_RENAME, { provider, connection, label }).then((answer) => {
+    void sendIntegrationsRename({ provider, connection, label }).then((answer) => {
       if ("failure" in answer) refused();
     }, refused);
   };
@@ -533,7 +542,7 @@ export function IntegrationRow({
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog(
     { subject: connected, surfaceOpen: true },
-    () => disconnectAccount(act, github, row),
+    () => disconnectAccount(disconnectIntegration, github, row),
     confirmFailure(FAILURE_SURFACE.INTEGRATION_DISCONNECT),
   );
 

@@ -1,4 +1,3 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -50,7 +49,7 @@ import {
   useConfirmDialog,
   useLeaving,
   useMenu,
-  useSettingsPageScroll,
+  usePageScroll,
   VisuallyHidden,
 } from "@repo/ui";
 import { ACTOR_KIND, type Actor, actorName, personActor } from "@repo/ui/actor-model";
@@ -65,16 +64,17 @@ import {
   type VirtualRowsHandle,
 } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useId, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import { memoriesQuery, memoriesRetryMutation } from "../live-reads.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
  * memory-page.tsx -- Settings › Memory: the facts and conventions the workspace's coding agents kept, found by search and by whose they are, and forgotten one at a time or several at once.
@@ -601,7 +601,7 @@ function MemoryList({
     setKept(new Set());
   };
   const keepers = keepersOf(searched);
-  const { scroller, sections } = useSettingsPageScroll();
+  const { scroller, shiftedBy } = usePageScroll();
   const run = useRef<VirtualRowsHandle>(null);
   const keys = useMemo(() => listed.map((each) => each.memory.id), [listed]);
   const order = useMemo(() => [keys], [keys]);
@@ -638,7 +638,7 @@ function MemoryList({
           >
             <VirtualRows
               scroller={scroller}
-              shiftedBy={sections}
+              shiftedBy={shiftedBy}
               keys={keys}
               estimate={MEMORY_ESTIMATE_PX}
               gap={MEMORY_GAP_PX}
@@ -702,10 +702,11 @@ export function MemorySection({
   /** Asks for the workspaces again. */
   onRetryWorkspaces: (() => void) | undefined;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendMemoriesForget } = useMutation(actMutation(ACT_KIND.MEMORIES_FORGET));
   const workspaceId = workspace?.id;
   // The memories as the host holds them, followed live while the page shows them, so a memory an agent keeps meanwhile draws as it lands.
-  const memories = useHostRead(LIVE_READ.MEMORIES, signedIn ? workspaceId : undefined);
+  const memories = useQuery(memoriesQuery(signedIn ? workspaceId : undefined));
+  const retryMemories = useMutation(memoriesRetryMutation());
   /** The forget out now, by the workspace it was asked in, which locks every Forget there until it answers. */
   const [forgetting, setForgetting] = useState<
     { readonly workspaceId: string; readonly id: string } | undefined
@@ -722,7 +723,7 @@ export function MemorySection({
       }
       const out = { workspaceId, id };
       setForgetting(out);
-      return act(ACT_KIND.MEMORIES_FORGET, { workspaceId, id })
+      return sendMemoriesForget({ workspaceId, id })
         .catch(() => undefined)
         .then((answer): ActionResult => {
           setForgetting((current) => (current === out ? undefined : current));
@@ -731,7 +732,7 @@ export function MemorySection({
             : { status: ACTION_RESULT_STATUS.ACCEPTED };
         });
     },
-    [act, workspaceId],
+    [sendMemoriesForget, workspaceId],
   );
 
   // Note that several are forgotten one after another, each sent once the one before answered, and the first refusal stops the rest.
@@ -765,21 +766,21 @@ export function MemorySection({
   }
   return (
     <div className={NO_CAPTURE}>
-      {memories.rows !== undefined ? (
+      {memories.data !== undefined ? (
         // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
         <MemberDirectory workspace={workspace} readerId={readerId}>
           <MemoryList
             readerId={readerId}
-            memories={memories.rows}
+            memories={memories.data}
             forgetting={forgetting?.workspaceId === workspace.id}
             onForget={forgetAll}
           />
         </MemberDirectory>
-      ) : memories.status === HOST_READ_STATUS.FAILED ? (
+      ) : memories.isError ? (
         <SettingsLine>
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.MEMORIES_READ, { workspaceId: workspace.id })}
-            onRetry={memories.retry}
+            onRetry={() => retryMemories.mutate({ workspaceId: workspace.id })}
           >
             {PAGE_LINE.FAILED}
           </ErrorState>

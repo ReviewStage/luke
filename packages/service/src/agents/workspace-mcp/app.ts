@@ -37,7 +37,7 @@
  */
 
 import { readAgentOfConversation } from "@repo/database/models/agent-store";
-import { WORKSPACE_MCP_SERVER } from "@repo/features/agent-tools";
+import { RENAMED_TOOL, WORKSPACE_MCP_SERVER } from "@repo/features/agent-tools";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { integrationConnectionOf } from "@repo/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@repo/features/mac-command-wire";
@@ -75,7 +75,7 @@ import type { AgentBrowser } from "../browser/agent-browser.js";
 import { CODER_TOOL, type OfferedBeside } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { memoryOnFor } from "../memory-tools.js";
-import { plansOnFor } from "../plans-on.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { workspaceMcpCallKey } from "./call-key.js";
 import { workspaceMcpDoorSeams } from "./door-seams.js";
@@ -234,6 +234,24 @@ function toolResult(tool: WorkspaceMcpTool, result: WorkspaceMcpToolResult): Mcp
 }
 
 /**
+ * A call to a tool since renamed, answered as the tool's own refusal that
+ * names the tool in its place rather than as an unknown tool, because an
+ * agent whose session listed its tools before the rename still calls it by
+ * the old name.
+ */
+function renamedToolResult(name: string, renamed: string): McpToolCallResult {
+  return {
+    content: [
+      {
+        type: "text",
+        text: `\`${name}\` was renamed \`${renamed}\`, and nothing was done: call \`${renamed}\` with the same input.`,
+      },
+    ],
+    isError: true,
+  };
+}
+
+/**
  * What each listed tool declares to Claude Code: the most of its result it
  * takes whole, the pinned CLI's (2.1.304) own ceiling, where past 50,000
  * characters it would save the result to a file and hand the model a path
@@ -257,7 +275,7 @@ const ALWAYS_LOADED_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.READ_THREADS,
   CODER_TOOL.WITHDRAW_ASK,
   CODER_TOOL.OPEN_PULL_REQUEST,
-  CODER_TOOL.EDIT_PLAN,
+  CODER_TOOL.EDIT_DESCRIPTION,
   CODER_TOOL.UPDATE_TASK,
   CODER_TOOL.READ_TASK,
   CODER_TOOL.SHOW_IMAGE,
@@ -273,8 +291,8 @@ const ALWAYS_LOADED_META = { ...TOOL_META, "anthropic/alwaysLoad": true } as con
 /** What an agent whose row is gone is offered by: no repository, on our own machine. */
 const NO_AGENT_OFFERED: WorkspaceMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
 
-/** What beside its row an agent whose row is gone is offered by: no Memory, and no Plans. */
-const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, plansOn: false };
+/** What beside its row an agent whose row is gone is offered by: no Memory, and no Task descriptions. */
+const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, descriptionsOn: false };
 
 /** The tool result where the door failed rather than refused. */
 const DOOR_FAILED_RESULT: McpToolCallResult = {
@@ -325,6 +343,9 @@ function callWorkspaceTool(
     return Effect.succeed(rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, "Invalid tools/call params"));
   }
   const { name } = call.success;
+  const renamed = RENAMED_TOOL.get(name);
+  if (renamed !== undefined)
+    return Effect.succeed(Result.succeed(renamedToolResult(name, renamed)));
   const tool = WORKSPACE_MCP_TOOLS.get(name);
   if (tool === undefined) {
     return Effect.succeed(rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, `Unknown tool: ${name}`));
@@ -352,7 +373,7 @@ function callWorkspaceTool(
 
 /**
  * The tools listed to the admitted agent: those eve offers it, by its
- * repository, where it runs, and its starter's Memory and Plans (`offeredWorkspaceMcpTool`); those eve offers
+ * repository, where it runs, and its starter's Memory and Task descriptions (`offeredWorkspaceMcpTool`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.
  */
@@ -366,7 +387,7 @@ function listWorkspaceTools(
         Option.isSome(found)
           ? Effect.all({
               memoryOn: memoryOnFor(found.value.userId),
-              plansOn: plansOnFor(found.value.userId, found.value.kind),
+              descriptionsOn: descriptionsOnFor(found.value.userId, found.value.kind),
             })
           : Effect.succeed(NO_AGENT_BESIDE),
         (beside) =>

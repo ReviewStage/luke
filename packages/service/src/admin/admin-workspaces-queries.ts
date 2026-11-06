@@ -6,7 +6,7 @@
  * search are each one condition over its row, and each per-workspace count
  * is a correlated subquery on an index the workspace's own reads already use
  * (`member_organizationId_idx`, `task_organization_created`,
- * `coding_agent_org_created`). Nothing here selects a task's name, a plan's
+ * `coding_agent_org_created`). Nothing here selects a task's name, a description's
  * text, a prompt, or a title: only names of workspaces and accounts,
  * statuses, logins, and counts.
  */
@@ -22,7 +22,7 @@ import { agentTable } from "@repo/database/schemas/agent";
 import { invitation, member, organization, user } from "@repo/database/schemas/auth";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { task } from "@repo/database/schemas/task";
 import {
   ADMIN_METRICS_SCOPE,
@@ -111,9 +111,9 @@ function agentsSince(since: Date): SQL<number> {
   return sql<number>`(select count(*)::int from ${agentTable} where ${and(eq(agentTable.organizationId, organization.id), gte(agentTable.createdAt, since))})`;
 }
 
-/** Revisions written on the workspace's plans since the instant, by a member, the app, or an agent alike. */
+/** Revisions written on the workspace's descriptions since the instant, by a member, the app, or an agent alike. */
 function revisionsSince(since: Date): SQL<number> {
-  return sql<number>`(select count(*)::int from ${planRevision} inner join ${task} on ${task.id} = ${planRevision.taskId} where ${and(eq(task.organizationId, organization.id), gte(planRevision.at, since))})`;
+  return sql<number>`(select count(*)::int from ${descriptionRevision} inner join ${task} on ${task.id} = ${descriptionRevision.taskId} where ${and(eq(task.organizationId, organization.id), gte(descriptionRevision.at, since))})`;
 }
 
 /**
@@ -125,7 +125,7 @@ function prsMergedSince(sinceMs: number): SQL<number> {
   return sql<number>`(select count(distinct ${agentTable.published} ->> 'url')::int from ${agentTable} where ${eq(agentTable.organizationId, organization.id)} and (${agentTable.published} ->> 'mergedAt')::numeric >= ${sinceMs})`;
 }
 
-/** Whether the workspace saw a task, an agent, or a plan revision since the instant. */
+/** Whether the workspace saw a task, an agent, or a description revision since the instant. */
 function activeSince(since: Date): SQL<boolean> {
   return sql<boolean>`(${tasksSince(since)} > 0 or ${agentsSince(since)} > 0 or ${revisionsSince(since)} > 0)`;
 }
@@ -183,7 +183,7 @@ const WorkspaceRowSchema = Schema.Struct({
 const ActivityWindowSchema = Schema.Struct({ since: Schema.Date, sinceMs: Schema.Number });
 
 /**
- * The listed workspaces, busiest week first: tasks, agents, and plan
+ * The listed workspaces, busiest week first: tasks, agents, and description
  * revisions summed, so a workspace that only planned this week still ranks
  * above one that did nothing; merged pull requests break the ties, then the
  * youngest workspace, then the id, so equal rows keep one order across

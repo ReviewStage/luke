@@ -64,6 +64,7 @@ import {
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { isWireString } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -87,7 +88,7 @@ import { PhoneHead, phoneFindGroups } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -325,7 +326,7 @@ const DRAFT_HEAD = {
 
 /** The reader as the window draws them: as the workspace's members list them, else as their account signs in, else by their id alone. */
 function useReader(readerId: string | undefined): Actor {
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const { members } = useMemberDirectory();
   const member = members?.find((each) => each.userId === readerId);
   if (member !== undefined) return memberActor(member, readerId);
@@ -883,7 +884,7 @@ function threadRows(
 const RESOLVED_IT = "resolved this without an answer";
 
 /**
- * A line of what happened to the thread, drawn as a plan comment's
+ * A line of what happened to the thread, drawn as a description comment's
  * "resolved this" is: whoever did it, their face on the gutter's line, their
  * name, what they did, and when; a close's note under it, as a member's
  * message draws its words and files, and a withdrawal's why, in the muted
@@ -1320,7 +1321,7 @@ function QuestionClose({
 }
 
 /**
- * The thread's subject, as a plan or a pull request leads with one: the
+ * The thread's subject, as a description or a pull request leads with one: the
  * item's title alone, the thread under it, its words quoted into a reply
  * as the thread's are.
  */
@@ -1671,11 +1672,7 @@ export function InboxPane({
     }),
     [listedAgents, archived, models, me, pullRequests, item.agentId, onOpenAgent],
   );
-  const { images: pictures, onImage, onRetryImage } = control;
-  const images: InboxImageReads = useMemo(
-    () => ({ images: pictures, onImage, onRetryImage }),
-    [pictures, onImage, onRetryImage],
-  );
+  const { images } = control;
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;

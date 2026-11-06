@@ -1,5 +1,11 @@
 import { githubAvatarAt, githubAvatarUrl } from "@repo/features/account-picture";
-import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@repo/features/agent-view";
+import {
+  AGENT_CALL_FAILURE,
+  type AgentCallFailure,
+  type AgentPullRequestReadParams,
+  PULL_REQUEST_PART,
+  type PullRequestPart,
+} from "@repo/features/agent-view";
 import {
   type AgentOverviewChecks,
   type AgentOverviewConversation,
@@ -31,7 +37,6 @@ import {
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
 } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { formatCount } from "@repo/features/number-format";
 import type { FailureSurface } from "@repo/features/shown-failure";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -121,13 +126,14 @@ import {
   XIcon,
 } from "@repo/ui/icons";
 import { landedMark } from "@repo/ui/landed";
-import { PICTURE_STATE, usePicture } from "@repo/ui/picture-cache";
+import { PICTURE_STATE, usePicture } from "@repo/ui/picture-read";
 import {
   VIRTUAL_ROWS_ANCHOR,
   type VirtualRowPlace,
   VirtualRows,
   type VirtualRowsHandle,
 } from "@repo/ui/virtual-rows";
+import { type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
 import {
   type ComponentProps,
   createContext,
@@ -159,11 +165,18 @@ import {
 import { failureShown, pictureUnread } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { lazyRoute } from "../lazy-route.js";
+import {
+  pullRequestChecksQuery,
+  pullRequestConversationQuery,
+  pullRequestPartRetryMutation,
+  pullRequestPublishedQuery,
+  pullRequestQuery,
+} from "../live-reads.js";
+import { pictureQuery } from "../picture-query.js";
 import { scrollerOf } from "../scroll-within.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext, usePhoneRoom } from "../stage-room.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { HOST_READ_STATUS, type HostRead, useHostRead } from "../use-host-read.js";
 import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import {
   AgentChangesTab,
@@ -270,7 +283,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, its chapters, and its files.
  *
  * The overview is three parts the host holds while the tab shows
- * (`LIVE_READ.PULL_REQUEST` and its siblings), each read from GitHub by the
+ * (`pullRequestQuery` and its siblings in `live-reads.ts`), each read from GitHub by the
  * service on the App's token for the agent's repository rather than anyone's
  * own, so nothing here reads on a clock: the host asks each as the tab is
  * shown, as a window comes forward, and on Retry or Refresh, and all of them
@@ -462,15 +475,28 @@ interface PartRead<A> {
  * and out while the host's first ask is, or a Try again or Refresh the tab
  * made, until it lands.
  */
-function usePartRead<Answer>(held: HostRead<Answer>) {
+function usePartRead<Answer>(
+  held: UseQueryResult<Answer>,
+  part: PullRequestPart,
+  asked: AgentPullRequestReadParams | undefined,
+) {
   const [asking, setAsking] = useState(0);
-  const { retry } = held;
+  const { mutateAsync: retry } = useMutation(pullRequestPartRetryMutation());
+  const agentId = asked?.agentId;
+  const number = asked?.number;
   const ask = useCallback(() => {
+    if (agentId === undefined) return Promise.resolve();
     setAsking((count) => count + 1);
-    return retry().finally(() => setAsking((count) => count - 1));
-  }, [retry]);
-  const answer = held.rows ?? (held.status === HOST_READ_STATUS.FAILED ? UNANSWERED : undefined);
-  return { answer, out: asking > 0 || held.status === HOST_READ_STATUS.LOADING, ask };
+    // Note that a Try again the port refuses settles as one that landed, since the read's own failure is what the tab draws.
+    return retry(number === undefined ? { part, agentId } : { part, agentId, number })
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .finally(() => setAsking((count) => count - 1));
+  }, [retry, part, agentId, number]);
+  const answer = held.data ?? (held.isError ? UNANSWERED : undefined);
+  return { answer, out: asking > 0 || held.isPending, ask };
 }
 
 /** Where one read stands. Note that a failure gives way to the wait as soon as it is asked again, while a part drawn stands until its answer lands. */
@@ -756,7 +782,7 @@ function ProxiedCheckAvatar({
   name: string;
   src: string;
 }): React.JSX.Element {
-  const state = usePicture(agentId, src, useGitHubImageRead(), pictureUnread);
+  const state = usePicture(pictureQuery(agentId, src, useGitHubImageRead()), pictureUnread);
   return (
     <CheckSquare name={name} src={state.kind === PICTURE_STATE.READY ? state.url : undefined} />
   );
@@ -2794,7 +2820,7 @@ function ConversationView({
   );
 }
 
-/** One of the overview's reads, as `useAgentRead` holds it, and whether it has been asked yet. */
+/** One of the overview's reads, as `useChangesReads` holds the changes, and whether it has been asked yet. */
 function askedYet(read: { readonly answer: unknown; readonly out: boolean }): boolean {
   return read.answer !== undefined || read.out;
 }
@@ -3278,10 +3304,26 @@ function PullRequestTabBody({
   });
   // The header's parts are held while the tab is shown, the conversation among them for where its reviewers stand, the checks for the deployments its Preview opens, and what the agent published, which names a tab and its pin by the pull request's title.
   const asked = shown ? pullRequestAsked(agentId, number) : undefined;
-  const pullRequestRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST, asked));
-  const conversationRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST_CONVERSATION, asked));
-  const checksRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST_CHECKS, asked));
-  const publishedRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, asked));
+  const pullRequestRead = usePartRead(
+    useQuery(pullRequestQuery(asked)),
+    PULL_REQUEST_PART.PULL_REQUEST,
+    asked,
+  );
+  const conversationRead = usePartRead(
+    useQuery(pullRequestConversationQuery(asked)),
+    PULL_REQUEST_PART.CONVERSATION,
+    asked,
+  );
+  const checksRead = usePartRead(
+    useQuery(pullRequestChecksQuery(asked)),
+    PULL_REQUEST_PART.CHECKS,
+    asked,
+  );
+  const publishedRead = usePartRead(
+    useQuery(pullRequestPublishedQuery(asked)),
+    PULL_REQUEST_PART.PUBLISHED,
+    asked,
+  );
   const ask = {
     pullRequest: pullRequestRead.ask,
     checks: checksRead.ask,

@@ -27,6 +27,7 @@ import {
 } from "react";
 import { joinRefs } from "../../join-refs.js";
 import { motionRows } from "../list-motion/list-motion.js";
+import { type RovingReach, reachedKey, rovingItemIn } from "../roving-keys/roving-keys.js";
 
 /**
  * virtual-rows.tsx -- a long run of rows in a scroller of the caller's, drawing only those near the view, anchored to its last.
@@ -119,6 +120,8 @@ export interface VirtualRowsHandle {
   readonly rowElement: (key: string) => HTMLElement | undefined;
   /** The keys of the rows drawn now, in order. */
   readonly drawnKeys: () => readonly string[];
+  /** Every row's key, in order, those left undrawn among them. */
+  readonly keys: () => readonly string[];
   /** Scrolls to the end of the scroller (`scrollToEnd()`). */
   readonly scrollToEnd: () => void;
 }
@@ -129,6 +132,8 @@ export interface VirtualRuns {
   readonly hold: (run: RefObject<VirtualRowsHandle | null>) => () => void;
   /** Brings in the row with `key` as its run's `bringIn` does, whichever run lists it; false where none does. */
   readonly bringIn: (key: string, then?: (row: HTMLElement) => void) => boolean;
+  /** Every row's key of every run, those left undrawn among them, the runs in the order they stand in the document. */
+  readonly keys: () => readonly string[];
 }
 
 /** A row brought in and waiting to be drawn, and what is handed it then. */
@@ -178,8 +183,8 @@ export interface VirtualRowPlace {
  * which a scroller in a tab kept but not shown measures: the rows drawn
  * there stay drawn, so showing the tab again draws nothing anew.
  */
-function sizeWhileShown(
-  instance: Virtualizer<HTMLElement, HTMLElement>,
+export function sizeWhileShown<Item extends Element>(
+  instance: Virtualizer<HTMLElement, Item>,
   hear: (rect: Rect) => void,
 ): (() => void) | undefined {
   return observeElementRect(instance, (rect) => {
@@ -253,6 +258,33 @@ function rowHolding(block: HTMLElement | null, target: EventTarget): Element | u
   return at ?? undefined;
 }
 
+/**
+ * What a list of one run hands its walk (`useRovingKeys`' `reach`): a key
+ * goes on to the row of the run it reaches, wherever it stands, its item
+ * (`rovingItemIn`) taking the focus, the row brought in where it is not
+ * drawn.
+ */
+export function reachInRun(
+  run: RefObject<VirtualRowsHandle | null>,
+): (from: HTMLElement | undefined, to: RovingReach) => boolean {
+  return (from, to) => {
+    const handle = run.current;
+    if (handle === null) return false;
+    const inHand = from
+      ?.closest(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}]`)
+      ?.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE);
+    const key = reachedKey(handle.keys(), inHand ?? undefined, to);
+    if (key === undefined) return false;
+    const drawn = handle.rowElement(key);
+    const item = drawn === undefined ? undefined : rovingItemIn(drawn);
+    if (item !== undefined) {
+      item.focus();
+      return true;
+    }
+    return handle.bringIn(key, (row) => rovingItemIn(row)?.focus());
+  };
+}
+
 /** A list's runs (`VirtualRuns`), held from its first draw to its last. */
 export function useVirtualRuns(): VirtualRuns {
   const [runs] = useState((): VirtualRuns => {
@@ -265,6 +297,21 @@ export function useVirtualRuns(): VirtualRuns {
         };
       },
       bringIn: (key, then) => [...held].some((run) => run.current?.bringIn(key, then) === true),
+      keys: () => {
+        // Note that a run is placed by its first row drawn, since every run holding a row draws one.
+        const placed = [...held].flatMap((run) => {
+          const handle = run.current;
+          const first = handle?.drawnKeys()[0];
+          const row = first === undefined ? undefined : handle?.rowElement(first);
+          return handle === null || handle === undefined || row === undefined
+            ? []
+            : [{ handle, row }];
+        });
+        placed.sort((a, b) =>
+          a.row.compareDocumentPosition(b.row) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+        );
+        return placed.flatMap(({ handle }) => handle.keys());
+      },
     };
   });
   return runs;
@@ -451,6 +498,7 @@ export function VirtualRows({
           const key = row.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE);
           return key === null ? [] : [key];
         }),
+      keys: () => latestKeys.current,
       scrollToEnd: () => virtualizer.scrollToEnd(),
     }),
     [virtualizer, rowElement],

@@ -29,13 +29,13 @@ import {
 } from "../panel-spans.js";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import {
   type TranscriptsTelling,
   tellingTranscripts,
   transcriptTold,
 } from "../testing/tasks-control.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
   type AgentTranscriptControl,
   type TranscriptOlderReader,
@@ -103,6 +103,7 @@ function newestOf(ids: readonly string[], before?: string): AgentTranscriptPage 
 /** Lets what was laid reach the window and be drawn. */
 async function settle(): Promise<void> {
   for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  await settleQueries();
 }
 
 /**
@@ -118,7 +119,7 @@ function drawn(older?: TranscriptOlderReader) {
     return null;
   }
   function Window(props: { shown: boolean }) {
-    return useAppState() === undefined ? null : createElement(Probe, props);
+    return useAppSlice(APP_SLICE.RUN) === undefined ? null : createElement(Probe, props);
   }
   const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
@@ -397,6 +398,7 @@ test("older pages are asked for one at a time, each out until the host lays it b
   assert.equal(seen()?.hasOlder, true);
   act(() => seen()?.loadOlder());
   act(() => seen()?.loadOlder());
+  await act(settle);
   assert.deepEqual(asked, [{ ...AGENT, before: "3" }]);
   assert.equal(seen()?.loadingOlder, true);
 
@@ -410,6 +412,7 @@ test("older pages are asked for one at a time, each out until the host lays it b
   assert.equal(seen()?.loadingOlder, false);
 
   act(() => seen()?.loadOlder());
+  await act(settle);
   assert.deepEqual(asked.at(-1), { ...AGENT, before: "1" });
   await hand({ landed: false });
   assert.equal(seen()?.loadingOlder, false, "a page the host did not lay is out no longer");
@@ -423,11 +426,13 @@ test("an older read that failed leaves what is held and may be asked again, its 
   await draw(true);
   await push(AGENT, newestOf(["m-3"], "3"));
   act(() => seen()?.loadOlder());
+  await act(settle);
   await hand({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   assert.equal(seen()?.olderFailed, true);
   assert.deepEqual(ids(seen()), ["m-3"]);
   assert.equal(seen()?.hasOlder, true);
   act(() => seen()?.loadOlder());
+  await act(settle);
   assert.equal(asked.length, 2);
   await hand({ failure: AGENT_CALL_FAILURE.UNANSWERED });
 

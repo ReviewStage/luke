@@ -1,20 +1,20 @@
-import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { searchAnchorProps } from "@repo/settings/settings-anchors";
-import { SettingsRow, type SettingsRowDensity, STATUS_TONE, Switch } from "@repo/ui";
+import { SettingsRow, type SettingsRowDensity, Switch } from "@repo/ui";
 import { ReplayWords } from "@repo/ui/session-replay-marks";
-import { useOptimisticSettingWrite } from "@repo/ui/use-setting-write";
-import type { ActionResult } from "@repo/wire";
-import { showToast, TOAST_HOLD } from "../toast.js";
+import { useEffect } from "react";
 import { SettingMarks } from "./marks.js";
+import type { RowChange } from "./row-write.js";
 
 /**
  * A settings switch: `@repo/ui`'s `SettingsRow` holding its `Switch`, the
  * row's name, optional why, and the thumb. The visible name is the switch's
  * own name and the why is its description, so a reader hears the words a
- * sighted hand clicks. The switch flips at once, from a local value, and the
- * write lives here, so two switches can be in flight at once; a write the
- * store refuses puts the switch back and says why in a FAILED toast, and the
- * switch never rests disabled for a write (Dean, 2026-10-23).
+ * sighted hand clicks. A switch that writes takes its caller's write
+ * (`row-write.ts`) and flips at once, drawing the value its newest write
+ * asks for, until the stored value agrees; a write the store refuses puts
+ * the switch back, its caller saying why in a FAILED toast (`refusalToast`),
+ * and the switch never rests disabled for a write (Dean, 2026-10-23). A
+ * switch that only changes a draft takes a plain change.
  */
 export function SwitchRow({
   label,
@@ -25,8 +25,9 @@ export function SwitchRow({
   changed,
   disabled,
   density,
+  write,
   onChange,
-}: {
+}: RowChange<boolean> & {
   label: string;
   /** Whether its name is the app's own words, which a screen recording shows as they read; masked where none is named. */
   labelReplayUnmasked?: boolean | undefined;
@@ -41,22 +42,18 @@ export function SwitchRow({
   disabled?: boolean;
   /** How the row stands; in a settings card where none is named. */
   density?: SettingsRowDensity | undefined;
-  /** The write, or nothing to wait on where the switch only changes a draft. */
-  // biome-ignore lint/suspicious/noConfusingVoidType: a draft's switch cannot be refused, so its change answers void
-  onChange: (enabled: boolean) => void | Promise<ActionResult>;
 }): React.JSX.Element {
-  const { value, saves, run } = useOptimisticSettingWrite(checked, onChange, (words, cause) =>
-    showToast({
-      words,
-      tone: STATUS_TONE.DANGER,
-      hold: TOAST_HOLD.FAILED,
-      failure: { surface: FAILURE_SURFACE.SETTING_WRITE, cause },
-    }),
-  );
+  const ahead = write?.ahead;
+  const agreed = write !== undefined && !write.busy && ahead?.value === checked;
+  // Note that a landed write is let go of once the stored value agrees, so the switch then follows the store again, other windows' changes included.
+  useEffect(() => {
+    if (agreed) write.settle();
+  }, [agreed, write]);
+  const run = write === undefined ? onChange : write.run;
   return (
     <SettingsRow
       label={<ReplayWords unmasked={labelReplayUnmasked}>{label}</ReplayWords>}
-      adornment={<SettingMarks changed={changed} saves={saves} />}
+      adornment={<SettingMarks changed={changed} saves={write?.savedAt ?? 0} />}
       description={detail}
       density={density}
       labelsControl
@@ -65,7 +62,7 @@ export function SwitchRow({
         <Switch
           id={control.controlId}
           {...(anchor === undefined ? undefined : searchAnchorProps(anchor))}
-          checked={value}
+          checked={ahead === undefined ? checked : ahead.value}
           label={label}
           describedBy={control["aria-describedby"]}
           aria-invalid={control["aria-invalid"]}

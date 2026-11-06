@@ -19,6 +19,7 @@ import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
+import { useChangesPeople } from "../tasks/changes-people.js";
 import { awaitsNod, NEEDS_YOU, threadsWaitingWords } from "../tasks/inbox-model.js";
 import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
@@ -32,7 +33,7 @@ import { agentEntries } from "./main-tabs.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 
 /**
- * plan-agents.tsx -- the open task's agents at the head of its plan, as a group: one dense row each, its tab's glyph and name, where it runs, its failure where it failed, and its pull request.
+ * plan-agents.tsx -- the open task's agents at the head of its description, as a group: one dense row each, its tab's glyph and name, where it runs, its failure where it failed, and its pull request.
  *
  * The agents stand under a group head, Agents and how many, which folds
  * them, folded where the page asks, the same shape every group of
@@ -131,10 +132,8 @@ function PlanAgentRow({
   const { row, endMark, card } = entry;
   const agentId = row.id;
   const chosen = tab !== undefined && sameTab({ agent: agentId }, tab);
-  const people =
-    pullRequest === undefined
-      ? undefined
-      : peopleOf(agents.changesPeople.get(agentId), pullRequest);
+  const changesPeople = useChangesPeople(pullRequest === undefined ? undefined : agentId);
+  const people = pullRequest === undefined ? undefined : peopleOf(changesPeople, pullRequest);
   return (
     <RowHintOptions card={card}>
       <ListRow
@@ -193,7 +192,7 @@ function PlanAgentRow({
 }
 
 /**
- * The task's agents at the head of its plan, under their group's head,
+ * The task's agents at the head of its description, under their group's head,
  * those waiting on the developer first, then those at work, then the
  * newest, and what `starts` offers after them; nothing for a task with
  * neither. A row's press is handed to `onOpenAgent` by its agent's id, and

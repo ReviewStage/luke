@@ -25,7 +25,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { menuItem } from "../testing/desktop-inbox.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -59,7 +59,7 @@ const AGENT_SUMMARY: AgentSummary = {
   createdAt: 1_000,
   status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: AGENT_BRIEF.PLAN,
+  brief: AGENT_BRIEF.DESCRIPTION,
 };
 
 const MESSAGES: readonly AgentTranscriptMessage[] = [
@@ -109,6 +109,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /**

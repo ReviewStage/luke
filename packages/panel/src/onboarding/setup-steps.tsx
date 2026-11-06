@@ -1,20 +1,9 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_SETTING_SCHEMA } from "@repo/settings";
-import {
-  AuthPage,
-  AuthStepFoot,
-  ChoiceList,
-  type ChoiceOption,
-  ProductMark,
-  SETTINGS_ROW_STATE,
-  SettingsRowStateLine,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-} from "@repo/ui";
-import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { useMutation } from "@tanstack/react-query";
+import { AuthPage, AuthStepFoot, ChoiceList, type ChoiceOption, ProductMark } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
 import { actMutation } from "../act-mutations.js";
@@ -22,7 +11,7 @@ import { welcomed } from "../desktop/desktop-welcome.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { GITHUB_PURPOSE, GitHubSetup } from "./setup-github.js";
 import {
@@ -44,7 +33,8 @@ import { TOOLS_PURPOSE, ToolRows } from "./setup-tools.js";
  * An account invited into a team's workspace starts on Connect an agent
  * alone. An agent is required: its step goes on only once Claude or Codex
  * is connected. A team's workspace is required too, once With my team is
- * chosen, since Back leads to Just me for anyone who changed their mind.
+ * chosen, since Back leads to Just me for anyone who changed their mind;
+ * once made, its step coming back holds it to change rather than make again.
  * GitHub may be skipped, and the tools need nothing done. Finish
  * lets the app in and keeps, on the
  * account (`APP_SETTING_SCHEMA.setupFinished`), that it finished setup, so it
@@ -103,7 +93,7 @@ export function useSetupGate(
 ): SetupGate {
   const [places] = useKept(SETUP_PLACE, {});
   const [finishedOnDevice] = useKept(SETUP_FINISHED, []);
-  const settings = useAppSlice(APP_SETTINGS_VIEW);
+  const settings = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data;
   const finishedOnAccount = settings?.setupFinished === true;
   // Note that this device's own record stands beside the account's, because the account's arrives only once its preferences are read, and a device clears them at every sign-out.
   const finished =
@@ -167,8 +157,6 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   const start = invitedOf(tasks) === true ? INVITED_START : SETUP_START;
   const place = places[accountId] ?? start;
   const { audience, team } = place;
-  const [creating, setCreating] = useState(false);
-  const [refused, setRefused] = useState<readonly string[]>([]);
   const move = (change: Partial<SetupPlace>) =>
     changePlaces((kept) => ({
       ...kept,
@@ -222,14 +210,16 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
       }),
   };
   const teamForm = useTeamForm({
+    made:
+      team === undefined
+        ? undefined
+        : { id: team, name: tasks.newTask.workspaces.find((one) => one.id === team)?.name },
     onCreated: (made) => {
-      setCreating(true);
       move({ team: made });
       tasks.onChooseWorkspace(made);
     },
+    // Note that the step stays where something was refused, so each refusal is read beside its address.
     onDone: (failed) => {
-      setCreating(false);
-      setRefused(failed);
       if (failed.length === 0) setAt(at + 1);
     },
   });
@@ -254,46 +244,33 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     );
   }
   if (step === SETUP_STEP.TEAM) {
-    const forming = team === undefined || creating;
-    // Note that Create is the step's way on until the workspace is made, and Continue after it.
+    // Note that the press makes the workspace until it stands, then saves what was changed in it, or goes on.
     return (
       <AuthPage
         mark={<ProductMark />}
         exit={exit}
-        title="Create a team workspace"
+        title={team === undefined ? "Create a team workspace" : "Your team workspace"}
+        description={
+          team === undefined
+            ? "Your team shares tasks, agents, and the repositories you connect next."
+            : "Change its name or photo, or invite more of your team."
+        }
         foot={
-          forming ? (
-            <AuthStepFoot
-              at={at + 1}
-              total={steps.length}
-              onBack={back}
-              next={{
-                label: "Create",
-                onPress: teamForm.create,
-                disabled: !teamForm.ready,
-                busy: teamForm.busy,
-                busyLabel: "Creating",
-              }}
-            />
-          ) : (
-            foot(true)
-          )
+          <AuthStepFoot
+            at={at + 1}
+            total={steps.length}
+            onBack={teamForm.busy ? undefined : back}
+            next={{
+              label: teamForm.label,
+              onPress: teamForm.create,
+              disabled: !teamForm.ready,
+              busy: teamForm.busy,
+              busyLabel: teamForm.busyLabel,
+            }}
+          />
         }
       >
-        {forming ? (
-          <TeamForm form={teamForm} disabled={teamForm.busy} />
-        ) : (
-          <>
-            <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-              Workspace created
-            </SettingsRowStateLine>
-            {refused.map((words) => (
-              <Text key={words} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                <ReplayMask>{words}</ReplayMask>
-              </Text>
-            ))}
-          </>
-        )}
+        <TeamForm form={teamForm} disabled={teamForm.busy} />
       </AuthPage>
     );
   }

@@ -20,7 +20,12 @@ import {
   type InboxItem,
 } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@repo/features/task-wire";
+import {
+  DESCRIPTION_ACTOR,
+  TASK_TREE_ENTRY,
+  type Task,
+  type TaskSummary,
+} from "@repo/features/task-wire";
 import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -57,7 +62,7 @@ import {
   type InboxChoice,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   DESKTOP_CAPABILITIES,
@@ -75,6 +80,7 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { openTaskMenu } from "../testing/task-menu.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -153,11 +159,15 @@ function openPalette(
       capabilities,
       onViewChange: (view) => sent.views.push(view),
     },
-    readFiles,
     page,
   });
+  // The repository's files are read whole through the act port, by the plan they stand on.
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.TASKS_TREE]: (payload) => readFiles("planId" in payload ? payload.planId : ""),
+  });
   act(() =>
-    root.render(withQueryClient(registry === undefined ? palette : onRegistry(registry, palette))),
+    root.render(registry === undefined ? withQueryClient(palette) : onRegistry(registry, palette)),
   );
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
@@ -203,7 +213,6 @@ function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
                 capabilities: DESKTOP_CAPABILITIES,
                 onViewChange: () => undefined,
               },
-              readFiles: () => Promise.reject(new Error("no repository is open")),
             }),
           ),
         ),
@@ -223,7 +232,7 @@ function markRows(): string[] {
   );
 }
 
-test("⌘K marks the task on screen unread, and offers no mark for a task Settings or the Inbox covers", () => {
+test("⌘K marks the task on screen unread, and offers no mark for a task Settings or the Inbox covers", async () => {
   const draw = paletteOverTask();
   draw(undefined);
   assert.deepEqual(markRows(), []);
@@ -241,8 +250,9 @@ test("⌘K marks the task on screen unread, and offers no mark for a task Settin
   draw(DOCUMENT_TASK);
   assert.deepEqual(markRows(), ["Mark as unread"]);
   press("Mark as unread");
-  // Note that the plan on screen is looked at as it opens, so the mark by hand is the newest asked.
-  assert.equal(marks.at(-1), `unread:${DOCUMENT_TASK.id}`);
+  // Note that the plan on screen is looked at as it opens, so the mark by hand is the newest asked,
+  // which reaches the act port a few steps after the press, as its mutation sends it.
+  await vi.waitFor(() => assert.equal(marks.at(-1), `unread:${DOCUMENT_TASK.id}`));
 });
 
 /** Whether the palette stands where a reader meets it: its card drawn, and hidden by nothing around it. */
@@ -437,7 +447,8 @@ test("a Return pressed before the rows are ranked for the words typed chooses th
   await act(() => Promise.resolve());
 
   assert.deepEqual(before, { tabs: [], views: [] }, "nothing chosen from the earlier rows");
-  assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
+  // Note that choosing the page is what opens Settings on it (`settings-link.ts`).
+  assert.deepEqual(sent, { tabs: [], views: [SETTINGS_VIEW.INTEGRATIONS] });
 });
 
 test("a Return held for its words is let go once other words are typed before they are ranked, choosing nothing", async () => {
@@ -471,7 +482,8 @@ test("choosing a page opens Settings on that page", () => {
 
   press("Integrations");
 
-  assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
+  // Note that choosing the page is what opens Settings on it (`settings-link.ts`).
+  assert.deepEqual(sent, { tabs: [], views: [SETTINGS_VIEW.INTEGRATIONS] });
   assert.equal(paletteShown(), false, "the palette closed");
 });
 
@@ -931,7 +943,6 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
         capabilities: DESKTOP_CAPABILITIES,
         onViewChange: () => undefined,
       },
-      readFiles: () => Promise.reject(new Error("no repository is open")),
     });
     act(() =>
       root.render(
@@ -952,10 +963,15 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       each.textContent?.includes("Invoice export"),
     );
     assert.ok(row, "the agent is listed");
-    restOn(row);
-    const words = document.querySelector(
-      ".ui-tooltip-card .ui-hover-card-row [data-actor-ref]",
-    )?.textContent;
+    // Note that the card names the automation once the workspace's automations reach their query, each rest drawing it afresh.
+    const words = await vi.waitFor(() => {
+      restOn(row);
+      const named = document.querySelector(
+        ".ui-tooltip-card .ui-hover-card-row [data-actor-ref]",
+      )?.textContent;
+      assert.ok(named, "the card names who started the agent");
+      return named;
+    });
     act(() => root.unmount());
     document.body.innerHTML = "";
     return words;
@@ -1161,7 +1177,8 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
   const pulls = rows().filter((row) => row.startsWith("#42"));
   chooseFilter("Files");
   type("accept");
-  await act(async () => undefined);
+  // Note that the files land through a query, so they are looked for once the palette no longer reads them.
+  await vi.waitFor(() => assert.notEqual(emptyLine(), "Reading the repository's files"));
   if (rows().includes("accept.ts")) press("accept.ts");
   return { opened, pulls };
 }
@@ -1218,8 +1235,7 @@ test("a file found wears its type's look, hangs the file's card, and opens throu
     }),
   );
   chooseFilter("Files");
-  await act(async () => undefined);
-  assert.deepEqual(rows(), ["accept.ts · src/invites"]);
+  await vi.waitFor(() => assert.deepEqual(rows(), ["accept.ts · src/invites"]));
 
   const row = document.querySelector<HTMLElement>('[role="option"]');
   assert.equal(
@@ -1604,8 +1620,8 @@ test("a task Vespin or a coding agent made says who in its detail and is found b
     tasksControl({
       me: dean.userId,
       tasks: [
-        task("Invite emails", { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" }),
-        task("Audit log export", { actor: PLAN_ACTOR.NOTETAKER }),
+        task("Invite emails", { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" }),
+        task("Audit log export", { actor: DESCRIPTION_ACTOR.NOTETAKER }),
         task("Rate limits"),
       ],
     }),
@@ -1687,12 +1703,12 @@ function itemChord(label: string): string | null {
   return item.querySelector(".ui-shortcut")?.textContent ?? null;
 }
 
-test("a task's command wears the same chord in ⌘K as in the open task's Plan tab ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none", () => {
+test("a task's command wears the same chord in ⌘K as in the open task's Plan tab ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none", async () => {
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   });
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
@@ -1707,6 +1723,8 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
       ),
     ),
   );
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
   openPalette(tasks, undefined, undefined, DESKTOP_CAPABILITIES, PANEL_TAB.TASKS, registry);
   type("permanently delete");
   const deleteKeys = rowChord("Permanently delete");
@@ -1718,10 +1736,8 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
   });
 
-  // The task's menu is its Plan tab's, in the side panel's bar; Mark done is the plan's status chip's there, and a row's.
-  const more = host.querySelector<HTMLButtonElement>('.task-topbar button[aria-label$=" actions"]');
-  assert.ok(more, "the topbar's ⋯ is drawn");
-  act(() => more.click());
+  // The task's menu is its name's right-click in the topbar; Mark done is the details' status chip's there, and a row's.
+  openTaskMenu(host);
   assert.equal(deleteKeys, "⌘⌫");
   assert.equal(itemChord("Permanently delete"), deleteKeys);
   assert.equal(doneKeys, null);
@@ -2078,7 +2094,8 @@ test("People lists the listed workspace's members as every people menu does, the
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Charles Pan");
   act(() => row.click());
   assert.deepEqual(opened, ["user-charles"]);
-  assert.deepEqual(sent.tabs, []);
+  // A routed place standing, Settings or Admin, is left for the page.
+  assert.deepEqual(sent.tabs, [PANEL_TAB.TASKS]);
 });
 
 /** What the list says where no row stands: its notice, or "No results match". */
@@ -2152,7 +2169,7 @@ test("under All, a query nothing else matches says the repository's files are st
       },
     }),
   );
-  assert.deepEqual(rows(), ["zqx.ts · src"]);
+  await vi.waitFor(() => assert.deepEqual(rows(), ["zqx.ts · src"]));
 
   type("nothing-at-all");
   assert.equal(emptyLine(), "No results match", "once every source answered, it says so");
@@ -2192,17 +2209,17 @@ test("Files says a failed read with a Retry that reads the repository's files ag
   await settle();
   chooseFilter("Files");
   await settle();
+  await vi.waitFor(() => assert.equal(failures.length, 1));
   await act(async () => failures[0]?.(new Error("the host went away")));
-  await settle();
-  assert.match(emptyLine() ?? "", /The files could not be read\./u);
+  await vi.waitFor(() => assert.match(emptyLine() ?? "", /The files could not be read\./u));
 
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === "Retry",
   );
   assert.ok(retry, "Retry is offered");
   act(() => retry.click());
-  await settle();
-  assert.equal(emptyLine(), "Reading the repository's files");
+  await vi.waitFor(() => assert.equal(emptyLine(), "Reading the repository's files"));
+  await vi.waitFor(() => assert.equal(answers.length, 2));
   await act(async () =>
     answers[1]?.({
       folder: {
@@ -2214,8 +2231,7 @@ test("Files says a failed read with a Retry that reads the repository's files ag
       },
     }),
   );
-  await settle();
-  assert.deepEqual(rows(), ["relay.ts · src"]);
+  await vi.waitFor(() => assert.deepEqual(rows(), ["relay.ts · src"]));
 });
 
 test("People says the members are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
@@ -2248,8 +2264,12 @@ test("People says the members are being read until they answer, and a refused re
 
   await act(async () => reads.deliverMembers({ [ACME.id]: { failed: true } }));
   await settle();
-  const alert = document.querySelector("[cmdk-list] [role=alert]");
-  assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
+  await vi.waitFor(() =>
+    assert.match(
+      document.querySelector("[cmdk-list] [role=alert]")?.textContent ?? "",
+      /The workspace's members could not be read\./u,
+    ),
+  );
   assert.doesNotMatch(document.body.textContent ?? "", /No results match/u);
 
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -2258,10 +2278,10 @@ test("People says the members are being read until they answer, and a refused re
   assert.ok(retry, "Retry is offered");
   act(() => retry.click());
   await settle();
-  assert.equal(emptyLine(), "Reading the workspace's members");
+  await vi.waitFor(() => assert.equal(emptyLine(), "Reading the workspace's members"));
   await act(async () => reads.deliverMembers({ [ACME.id]: { rows: { members: [member] } } }));
   await settle();
-  assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
+  await vi.waitFor(() => assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]));
 });
 
 test("Tasks says the account's tasks are being read before the list first answers", () => {
@@ -2386,7 +2406,7 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
   assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
 });
 
-test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark while no agent's page stands", () => {
+test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark while no agent's page stands", async () => {
   const agent = {
     id: "agent-8",
     planId: null,
@@ -2428,7 +2448,7 @@ test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark
   assert.deepEqual(draw(undefined), []);
   assert.deepEqual(draw(agent.id), ["Mark as unread"]);
   press("Mark as unread");
-  assert.deepEqual(marks, [`unread:${agent.id}`]);
+  await vi.waitFor(() => assert.deepEqual(marks, [`unread:${agent.id}`]));
 });
 
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */
@@ -2462,7 +2482,6 @@ function PinnableTask(): React.JSX.Element {
         capabilities: DESKTOP_CAPABILITIES,
         onViewChange: () => undefined,
       },
-      readFiles: () => Promise.reject(new Error("no repository is open")),
     }),
   );
 }
@@ -2535,7 +2554,6 @@ async function paletteUnderState(tasks: TasksControl): Promise<void> {
             capabilities: DESKTOP_CAPABILITIES,
             onViewChange: () => undefined,
           },
-          readFiles: () => Promise.reject(new Error("no repository is open")),
         }),
       ),
     ),
@@ -2626,7 +2644,7 @@ test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages t
   assert.ok(listed.includes(`Review notes · ${DOCUMENT_TASK.name}`), "the Inbox's page is listed");
 });
 
-test("with a task on screen, ⌘K offers its Version history, Cancel task, and Change repository, each running on it what its ⋯ item runs", () => {
+test("with a task on screen, ⌘K offers its Version history, Cancel task, and Change repository, each running on it what its ⋯ item runs", async () => {
   const task = { ...DOCUMENT_TASK, repository: "acme/relay" };
   const ran: string[] = [];
   const base = tasksControl();
@@ -2638,6 +2656,7 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, and C
     onSettleTasks: (taskIds, status) => ran.push(`settle:${taskIds.join()}:${status}`),
     onChangeRepository: (taskId) => ran.push(`repository:${taskId}`),
   });
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   act(() =>
@@ -2662,12 +2681,13 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, and C
               capabilities: DESKTOP_CAPABILITIES,
               onViewChange: () => undefined,
             },
-            readFiles: () => Promise.reject(new Error("no repository is open")),
           }),
         ),
       ),
     ),
   );
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
   for (const command of ["Version history", "Cancel task", "Change repository"]) {
     act(() => {
       assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
@@ -2694,9 +2714,9 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
       open: true,
       fullScreen: room === SHELL_ROOM.NARROW,
       fullScreenOnly: room === SHELL_ROOM.NARROW,
-      tabs: [SIDE_PANEL_TAB.PLAN],
-      strip: [SIDE_PANEL_TAB.PLAN],
-      tab: SIDE_PANEL_TAB.PLAN,
+      tabs: [SIDE_PANEL_TAB.DESCRIPTION],
+      strip: [SIDE_PANEL_TAB.DESCRIPTION],
+      tab: SIDE_PANEL_TAB.DESCRIPTION,
     },
   });
   const host = document.body.appendChild(document.createElement("div"));
@@ -2731,7 +2751,6 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
               capabilities: DESKTOP_CAPABILITIES,
               onViewChange: () => undefined,
             },
-            readFiles: () => Promise.reject(new Error("no repository is open")),
           }),
         ),
       ),
@@ -2745,12 +2764,12 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
   return host;
 }
 
-test("on a wide window ⌘K's Rename task puts the caret in the plan's own title", () => {
+test("on a wide window ⌘K's Rename task puts the caret in the description's own title", () => {
   const host = paletteBesideTask(SHELL_ROOM.WIDE);
 
   const title = host.querySelector('[role="textbox"][aria-label="Task name"]');
-  assert.ok(title, "the plan's title is drawn");
-  assert.ok(document.activeElement === title, "the caret is in the plan's title");
+  assert.ok(title, "the description's title is drawn");
+  assert.ok(document.activeElement === title, "the caret is in the description's title");
 });
 
 test("on a phone ⌘K's Rename task opens the task's name in the head's field", () => {
@@ -2987,10 +3006,12 @@ test("the Inbox searched lists what needs you first, each item beside its task",
   chooseFilter("Inbox");
   await settle();
 
-  assert.deepEqual(rows(), [
-    "Which webhook secret should rotate? · Billing usage alerts",
-    "Use acme.dev for previews? · Billing usage alerts",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), [
+      "Which webhook secret should rotate? · Billing usage alerts",
+      "Use acme.dev for previews? · Billing usage alerts",
+    ]),
+  );
 });
 
 test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its Inbox row and its time at its end, and its card hung beside it", async () => {
@@ -2998,6 +3019,9 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
   chooseFilter("Inbox");
   await settle();
 
+  await vi.waitFor(() =>
+    assert.ok(document.querySelector('[role="option"]'), "the item that needs you is listed"),
+  );
   const [needs, answered] = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
   assert.ok(needs, "the item that needs you is listed");
   assert.ok(needs.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
@@ -3024,9 +3048,11 @@ test("an Inbox item is found under All by words its thread says, which its row s
   type("signing");
   await settle();
 
-  assert.deepEqual(rows(), [
-    "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), [
+      "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
+    ]),
+  );
 });
 
 test("choosing an Inbox item opens it in the Inbox, as a notification's would", async () => {
@@ -3034,6 +3060,9 @@ test("choosing an Inbox item opens it in the Inbox, as a notification's would", 
   chooseFilter("Inbox");
   await settle();
 
+  await vi.waitFor(() =>
+    assert.ok(rows().includes("Use acme.dev for previews? · Billing usage alerts")),
+  );
   press("Use acme.dev for previews? · Billing usage alerts");
 
   assert.deepEqual(opened, [
@@ -3047,7 +3076,9 @@ test("an Inbox that could not be read says so, rather than that nothing matches"
   chooseFilter("Inbox");
   await settle();
 
-  assert.equal(emptyLine()?.startsWith("Your inbox could not be read."), true);
+  await vi.waitFor(() =>
+    assert.equal(emptyLine()?.startsWith("Your inbox could not be read."), true),
+  );
 });
 
 test("a query its title half answers says the thread's words that answer the rest, never the title again", async () => {
@@ -3057,9 +3088,11 @@ test("a query its title half answers says the thread's words that answer the res
   type("rotate stripe");
   await settle();
 
-  assert.deepEqual(rows(), [
-    "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), [
+      "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
+    ]),
+  );
 });
 
 test("an Inbox item is found by a form's field and the value it was answered with", async () => {
@@ -3102,7 +3135,9 @@ test("an Inbox item is found by a form's field and the value it was answered wit
 
   type("587");
   await settle();
-  assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · 587"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · 587"]),
+  );
   type("smtp");
   assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · SMTP port"]);
 });
@@ -3118,7 +3153,9 @@ test("while main says a task's inbox changed later than the feed holds it, a que
   const fresh = { ...ROTATE, updatedAt: 12_000 };
   act(() => deliver({ items: [PREVIEWS, fresh] }));
   await settle();
-  assert.deepEqual(rows(), ["Which webhook secret should rotate? · Billing usage alerts"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), ["Which webhook secret should rotate? · Billing usage alerts"]),
+  );
 });
 
 test("an Inbox that could not be read says so in the Inbox's own group, beside the rows other groups matched, and its Retry reads it again", async () => {
@@ -3131,8 +3168,11 @@ test("an Inbox that could not be read says so in the Inbox's own group, beside t
     rows().includes("Billing usage alerts · relay"),
     "the task the Tasks group matched is listed",
   );
-  const notice = document.querySelector("[cmdk-list] [role=alert]");
-  assert.equal(notice?.textContent?.startsWith("Your inbox could not be read."), true);
+  const notice = await vi.waitFor(() => {
+    const alert = document.querySelector("[cmdk-list] [role=alert]");
+    assert.equal(alert?.textContent?.startsWith("Your inbox could not be read."), true);
+    return alert;
+  });
   const group = notice?.closest("[cmdk-group]");
   assert.equal(group?.querySelector("[cmdk-group-heading]")?.textContent, "Inbox");
   assert.ok(
@@ -3173,11 +3213,14 @@ test("a key pressed in the search field is timed under ⌘K's own keystroke span
   );
 });
 
-test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", () => {
+test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", async () => {
   const places = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(places);
   act(() => places.render(withQueryClient(createElement(OffersPlaces))));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   paletteOverTask()(DOCUMENT_TASK);
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });
@@ -3241,14 +3284,15 @@ test("with files open and nothing typed, Files lists them first, in the strip's 
     }),
   );
   chooseFilter("Files");
-  await act(async () => undefined);
 
-  assert.deepEqual(rows(), [
-    "remove.ts · src/members",
-    "invite.ts · src/members",
-    "README.md",
-    "package.json",
-    "index.ts · src",
-    "accept.ts · src/invites",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), [
+      "remove.ts · src/members",
+      "invite.ts · src/members",
+      "README.md",
+      "package.json",
+      "index.ts · src",
+      "accept.ts · src/invites",
+    ]),
+  );
 });

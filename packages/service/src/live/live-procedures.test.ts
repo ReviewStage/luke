@@ -5,6 +5,7 @@ import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { createAgent } from "@repo/database/models/agent-store";
+import { startDescriptionCommentThread } from "@repo/database/models/description-comments";
 import { enrollOwnDevice, removeHost } from "@repo/database/models/host-store";
 import {
   type InstalledSkillOwner,
@@ -16,14 +17,13 @@ import {
 } from "@repo/database/models/integration-installation-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { rememberMemory } from "@repo/database/models/memory-store";
-import { startPlanCommentThread } from "@repo/database/models/plan-comments";
-import { writePage } from "@repo/database/models/plan-pages";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
 import {
   linkSlackInstallation,
   writeSlackChannelRepository,
   writeSlackDefaultRepository,
 } from "@repo/database/models/slack-installation-store";
+import { writePage } from "@repo/database/models/task-pages";
 import { createTaskCommitted, deleteTask } from "@repo/database/models/task-store";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
@@ -49,6 +49,8 @@ import { AGENT_CURSOR_START } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { taskCommentsLiveAnswerSchema } from "@repo/features/description-comment-live";
+import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import {
   hostsLiveAnswerSchema,
@@ -96,8 +98,6 @@ import {
   workspaceMemoriesLiveRowsSchema,
 } from "@repo/features/memory-live";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
-import { taskCommentsLiveAnswerSchema } from "@repo/features/plan-comment-live";
-import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
 import {
   pullRequestChaptersLiveAnswerSchema,
   pullRequestChaptersOfLive,
@@ -429,7 +429,7 @@ const askTask = (options: {
   readonly forUser?: string;
   readonly taskId?: string;
   readonly path?: string;
-  /** The page of the task a comments read names; the plan's own threads where left out. */
+  /** The page of the task a comments read names; the description's own threads where left out. */
   readonly page?: string;
   readonly poll?: boolean;
   /** The digest the reader last saw, which holds the poll until the rows move past it. */
@@ -558,7 +558,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -624,7 +624,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
         assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
         const answer = Schema.decodeUnknownSync(taskHistoryLiveAnswerSchema)(own.body);
         assert.equal(answer.url, LIVE_POLL_URL);
-        assert.deepEqual(answer.queries.revisions.rows, [], "the plan is not saved yet");
+        assert.deepEqual(answer.queries.revisions.rows, [], "the description is not saved yet");
         assert.deepEqual(
           yield* askTask({
             bearer: eli,
@@ -648,7 +648,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
         const started = yield* createAgent(dana, {
           taskId: null,
           organizationId: workspaceId,
-          planSnapshot: null,
+          descriptionSnapshot: null,
           prompt: "Triage the inbox.",
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -683,7 +683,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
   );
 
   it.effect(
-    "a task's comments, its plan's own or one page's, are answered polled for an account that reaches the task, and not found for one that does not",
+    "a task's comments, its description's own or one page's, are answered polled for an account that reaches the task, and not found for one that does not",
     () =>
       Effect.gen(function* () {
         const dana = yield* openUser;
@@ -697,8 +697,8 @@ it.layer(getTestDB())("a task's live reads", (it) => {
             { kind: PAGE_SHOWER.APP },
           ),
         );
-        yield* startPlanCommentThread(
-          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: dana },
+        yield* startDescriptionCommentThread(
+          { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: dana },
           started.id,
           {
             clientKey: randomUUID(),
@@ -716,8 +716,12 @@ it.layer(getTestDB())("a task's live reads", (it) => {
         const onPage = yield* askTask({ bearer: dana, taskId: started.id, path, page: shown.id });
         assert.equal(onPage.status, HOSTED_HTTP_STATUS.OK);
         assert.equal(threadsOf(onPage.body)?.length, 1);
-        const onPlan = yield* askTask({ bearer: dana, taskId: started.id, path });
-        assert.deepEqual(threadsOf(onPlan.body), [], "the page's thread is not the plan's");
+        const onDescription = yield* askTask({ bearer: dana, taskId: started.id, path });
+        assert.deepEqual(
+          threadsOf(onDescription.body),
+          [],
+          "the page's thread is not the description's",
+        );
         assert.deepEqual(
           yield* askTask({ bearer: eli, taskId: started.id, path, page: shown.id }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
@@ -884,7 +888,7 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1010,7 +1014,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1076,7 +1080,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1246,7 +1250,7 @@ it.layer(getTestDB())("a plan's and an agent's inbox live reads", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1742,6 +1746,7 @@ const CHAPTERS_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
+  titleAnthropicApiKey: undefined,
 };
 
 /** The procedures answering an agent's pull request's chapters as `bearer`, over the store and GitHub. */
@@ -1841,7 +1846,7 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: RELAY_FULL_NAME,
-          planSnapshot: "# Invitations\n",
+          descriptionSnapshot: "# Invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });

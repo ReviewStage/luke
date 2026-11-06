@@ -10,10 +10,10 @@ import { DICTATION_BOUNDS } from "./dictation-wire.js";
  * because half a path is a word nobody says.
  */
 
-/** A path the plan spells: two segments or more, as `apps/web/server` or `src/index.ts`. */
+/** A path the description spells: two segments or more, as `apps/web/server` or `src/index.ts`. */
 const PATH_PATTERN = /[\w.@-]+(?:\/[\w.@-]+)+/gu;
 
-/** A file the plan names on its own, as `vercel.json` or `use-dictation.ts`. */
+/** A file the description names on its own, as `vercel.json` or `use-dictation.ts`. */
 const FILE_PATTERN =
   /\b[\w-]+\.(?:[cm]?[jt]sx?|json|md|css|html|ya?ml|toml|sql|sh|swift|py|go|rs)\b/gu;
 

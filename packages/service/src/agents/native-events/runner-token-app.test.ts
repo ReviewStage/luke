@@ -82,6 +82,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
+  titleAnthropicApiKey: undefined,
 };
 
 /** OpenAI's token endpoint, in Codex's JSON: each renewal rotates the refresh token and answers the next access token, good for an hour. */
@@ -160,7 +161,7 @@ const agentOn = (
       model,
       effort: "high",
       repository: "acme/relay",
-      planSnapshot: "# Teammate invitations\n",
+      descriptionSnapshot: "# Teammate invitations\n",
       prompt: null,
       runtime,
       payer,
@@ -463,7 +464,7 @@ const agentOnDevice = (
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: `${RELAY.owner}/${RELAY.name}`,
-      planSnapshot: "# Teammate invitations\n",
+      descriptionSnapshot: "# Teammate invitations\n",
       prompt: null,
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,

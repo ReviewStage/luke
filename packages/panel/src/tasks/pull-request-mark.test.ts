@@ -12,6 +12,7 @@ import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { PublishedRow } from "./agent-published.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { PullRequestCard } from "./pull-request-card.js";
@@ -88,7 +89,10 @@ function places(drawn: AgentPullRequest): ReadonlyMap<string, ReactElement> {
 
 /** The words the pull request's mark says as a place draws it. */
 function markOf(place: ReactElement): string | null | undefined {
-  const page = new DOMParser().parseFromString(renderToStaticMarkup(place), "text/html");
+  const page = new DOMParser().parseFromString(
+    renderToStaticMarkup(withQueryClient(place)),
+    "text/html",
+  );
   const mark = page.querySelector("[data-pull-request-mark]");
   if (mark === null) return undefined;
   return mark.getAttribute("aria-label");
