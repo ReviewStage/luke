@@ -99,8 +99,6 @@ export const MESSAGE_AGENT_REFUSAL = {
   RETIRED:
     "Not sent: that agent's session has ended for good, so nothing reaches it; only a new agent goes on from its work, " +
     `which ${AGENT_TOOL.START_AGENT} starts with that agent's id as its from.`,
-  IMAGE_PREPARING:
-    "Not sent: that agent's sandbox image is still being prepared; the same message in a minute or two is taken.",
   PLAN_SIGNED_OUT:
     "Not sent: the plan that pays for that agent is signed out, so it cannot run until its starter signs in again in Settings.",
   PLAN_UNREACHABLE:
@@ -119,7 +117,6 @@ const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, MESSAGE_AGENT_REFUSAL.NOT_REACHABLE],
   [HOSTED_API_ERROR.AGENT_NOT_READY, MESSAGE_AGENT_REFUSAL.NOT_READY],
   [HOSTED_API_ERROR.AGENT_RETIRED, MESSAGE_AGENT_REFUSAL.RETIRED],
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, MESSAGE_AGENT_REFUSAL.IMAGE_PREPARING],
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, MESSAGE_AGENT_REFUSAL.PLAN_SIGNED_OUT],
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, MESSAGE_AGENT_REFUSAL.PLAN_UNREACHABLE],
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, MESSAGE_AGENT_REFUSAL.PLAN_LIMIT_REACHED],

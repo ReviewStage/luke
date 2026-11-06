@@ -1,7 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { causeKind } from "@repo/runtime/effect";
 import { Cause, Clock, Data, Effect, type Redacted } from "effect";
-import type { TemplateSweepOutcome } from "../agents/native-sandbox-template.js";
 import type { RepositorySnapshotSweepOutcome } from "../agents/repository-snapshot.js";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
@@ -60,8 +59,6 @@ interface MaintenanceSweeps {
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
   /** Polls the token agents' open pull requests due a poll, a sweep's worth, telling each agent what changed. */
   sweepTokenPullRequests: (now: number) => SweepRead<TokenPullRequestSweepOutcome>;
-  /** Moves the native agents' image template on, building it where it is missing, and deletes older images' templates. */
-  sweepImageTemplates: (now: number) => SweepRead<TemplateSweepOutcome>;
   /** Deletes the workspaces' repository snapshots past their age, or left unbuilt past their grace. */
   sweepRepositorySnapshots: (now: number) => SweepRead<RepositorySnapshotSweepOutcome>;
   /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
@@ -112,7 +109,6 @@ interface MaintenanceSweepAnswer {
   /** Pictures pasted into plans that no save named, deleted. */
   purgedPictures: Swept<number>;
   tokenPullRequests: Swept<TokenPullRequestSweepOutcome>;
-  imageTemplates: Swept<TemplateSweepOutcome>;
   repositorySnapshots: Swept<RepositorySnapshotSweepOutcome>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
   agentQueues: Swept<number>;
@@ -177,7 +173,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
       "sweepTokenPullRequests",
       sweeps.sweepTokenPullRequests(now),
     ),
-    imageTemplates: yield* isolated("sweepImageTemplates", sweeps.sweepImageTemplates(now)),
     repositorySnapshots: yield* isolated(
       "sweepRepositorySnapshots",
       sweeps.sweepRepositorySnapshots(now),

@@ -4,15 +4,14 @@
  * A repository names the command that serves its app in a `.vespin.json`
  * at its root, `{ "run": "pnpm dev" }`, read from the agent's checkout each
  * time forwarding is turned on; a repository without one has no run
- * command. The command runs in the checkout with every capability dropped
- * (`../sandbox-capabilities.ts`), as a Terminal's shell does, and the text
- * reaches its shell only as a positional argument. What it prints goes to a
+ * command. The command runs in the checkout as the sandbox's default user,
+ * as a Terminal's shell does, and the text reaches its shell only as a
+ * positional argument. What it prints goes to a
  * log in the workspace's state folder, beside the checkout.
  */
 
 import { Option, Schema } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
-import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { SANDBOX_STATE_FOLDER } from "../sandbox-state-folder.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
@@ -36,19 +35,11 @@ export function runCommandOf(run: CommandRun): string | undefined {
   return Option.getOrUndefined(Option.map(config, (read) => read.run));
 }
 
-/** Runs the command in the checkout without capabilities, its output to the run log. */
+/** Runs the command in the checkout, its output to the run log. */
 export function startRunCommand(command: string): CommandAsk {
   return {
-    command: WITHOUT_CAPABILITIES.COMMAND,
-    args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "sh",
-      "-c",
-      'exec sh -c "$1" >"$2" 2>&1',
-      "sh",
-      command,
-      RUN_LOG,
-    ],
+    command: "sh",
+    args: ["-c", 'exec sh -c "$1" >"$2" 2>&1', "sh", command, RUN_LOG],
     cwd: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   };
 }

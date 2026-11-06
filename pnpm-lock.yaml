@@ -1319,9 +1319,6 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      '@repo/service':
-        specifier: workspace:*
-        version: link:../../packages/service
       '@repo/wire':
         specifier: workspace:*
         version: link:../../packages/wire

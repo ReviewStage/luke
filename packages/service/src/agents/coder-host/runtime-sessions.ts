@@ -45,7 +45,6 @@ import {
   localAgentRefused,
   planLimitReached,
 } from "../../http/http-effect.js";
-import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
@@ -134,15 +133,6 @@ const UNREAD = {
   outcome: EVE_SEND_OUTCOME.FAILED,
   status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
 } as const;
-
-/** A harness's failure while its image is still being prepared, named as such, so its caller retries rather than fails the agent. */
-function preparingNamed<Outcome extends { readonly outcome: string }>(answered: Outcome): Outcome {
-  return answered.outcome === EVE_SEND_OUTCOME.FAILED &&
-    "status" in answered &&
-    answered.status === IMAGE_PREPARING_STATUS
-    ? { ...answered, runtimeRefusal: RUNTIME_REFUSAL.IMAGE_PREPARING }
-    : answered;
-}
 
 /** What a cancel of a session no harness minted answers: it ended for good, so no turn of it is under way. */
 const NO_TURN = { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
@@ -243,7 +233,7 @@ function routed<Turn extends EveHostTurn>(
         if (opened.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
           yield* claimed(route.starter, message, opened.sessionId);
         }
-        return preparingNamed(opened);
+        return opened;
       }),
 
     send: (sessionId, message) =>
@@ -254,7 +244,7 @@ function routed<Turn extends EveHostTurn>(
         if ("ended" in route) return ENDED;
         const reached = harness(route.runtime, route.starter);
         if (Option.isNone(reached)) return NOT_HERE;
-        return preparingNamed(yield* (yield* reached.value).send(sessionId, message));
+        return yield* (yield* reached.value).send(sessionId, message);
       }),
 
     cancel: (sessionId, turnId) => {
@@ -415,9 +405,6 @@ export function failedCallRefusal(failed: {
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.ENDED) return HOSTED_REFUSAL.AGENT_RETIRED;
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.NOT_HERE)
     return HOSTED_REFUSAL.NATIVE_AGENT_NOT_HERE;
-  if (failed.runtimeRefusal === RUNTIME_REFUSAL.IMAGE_PREPARING) {
-    return HOSTED_REFUSAL.AGENT_IMAGE_PREPARING;
-  }
   if (failed.runtimeRefusal === RUNTIME_REFUSAL.DEVICE_REMOVED)
     return HOSTED_REFUSAL.DEVICE_REMOVED;
   // Note that an away device refuses a message as it refuses a Start, so the words are the same.
