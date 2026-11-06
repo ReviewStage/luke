@@ -601,7 +601,7 @@ export interface TasksComposer extends Composer {
   queueable: readonly AnyWrite[];
   /** The task list as each drawing of it stands, each agent's status and every pull request it names, from the caller's listening until its scope closes, which the Pull request tabs' parts are asked again on (`pull-request-parts.ts`). */
   pullRequestListings: Effect.Effect<Stream.Stream<PullRequestListing>, never, Scope.Scope>;
-  /** Every workspace's repositories the windows hold asked again, as the member's own token saved or removed moves them. */
+  /** Every workspace's repositories the windows hold asked again, as the member's own token saved or removed moves them, answering once each has landed. */
   repositoriesMoved: Effect.Effect<void>;
 }
 
@@ -4120,7 +4120,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       anyWrite(sidebarWritten.sectionsWritten),
     ],
     pullRequestListings: Effect.map(PubSub.subscribe(listings), Stream.fromSubscription),
-    repositoriesMoved: repositoryLists.wake(() => true),
+    repositoriesMoved: repositoryLists.reread(() => true),
     reset: Effect.gen(function* () {
       // Note that the session's token repository writes are let go first, so none still out lays its answer while the rest of the reset runs.
       yield* tokenRepositoryWritten.letGo;
