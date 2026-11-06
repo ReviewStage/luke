@@ -72,6 +72,7 @@ function threadsStatement(userId: string, subject: TaskCommentsSubject) {
   return liveRowsStatement(
     TASK_COMMENTS_READ.parts.threads,
     {
+      ordered: false,
       columns: {
         id: descriptionCommentThread.id,
         scope: descriptionCommentThread.scope,
@@ -105,6 +106,7 @@ function entriesStatement(userId: string, subject: TaskCommentsSubject) {
   return liveRowsStatement(
     TASK_COMMENTS_READ.parts.entries,
     {
+      ordered: false,
       columns: {
         id: descriptionComment.id,
         threadId: descriptionComment.threadId,
@@ -140,6 +142,7 @@ function filesStatement(userId: string, subject: TaskCommentsSubject) {
   return liveRowsStatement(
     TASK_COMMENTS_READ.parts.files,
     {
+      ordered: false,
       columns: {
         attachmentId: attachment.id,
         // Note that a file kept on no comment is joined out, so the comment it stands on is never null here, as `findFiles` reads it.

@@ -84,6 +84,7 @@ function newestPages(newest: ReturnType<typeof taskPagesNewest>) {
   return liveRowsStatement(
     TASK_PAGES_READ.parts.pages,
     {
+      ordered: false,
       columns: {
         id: newest.pageId,
         title: newest.title,

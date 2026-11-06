@@ -51,6 +51,7 @@ export const agentOriginRead = bindLiveRead(AGENT_ORIGIN_READ, {
     origin: liveRowsStatement(
       AGENT_ORIGIN_READ.parts.origin,
       {
+        ordered: false,
         columns: {
           origin: sql<
             typeof AGENT_ORIGIN_READ.parts.origin.row.Encoded.origin

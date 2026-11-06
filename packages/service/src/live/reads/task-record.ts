@@ -49,7 +49,7 @@ function memberOfTask(userId: string) {
 function descriptionStatement(userId: string, taskId: string) {
   return liveRowsStatement(
     TASK_RECORD_READ.parts.description,
-    { columns: { taskId: task.id }, instants: { savedAt: task.updatedAt } },
+    { ordered: false, columns: { taskId: task.id }, instants: { savedAt: task.updatedAt } },
     (selection) =>
       queryBuilder
         .select(selection)
@@ -64,6 +64,7 @@ function pagesStatement(userId: string, taskId: string) {
   return liveRowsStatement(
     TASK_RECORD_READ.parts.pages,
     {
+      ordered: false,
       columns: {
         pageId: taskPageVersion.pageId,
         version: sql<number>`max(${taskPageVersion.version})`,
@@ -84,7 +85,7 @@ function pagesStatement(userId: string, taskId: string) {
 function noRowsStatement() {
   return liveRowsStatement(
     TASK_RECORD_READ.parts.calls,
-    { columns: { id: task.id } },
+    { ordered: false, columns: { id: task.id } },
     (selection) => queryBuilder.select(selection).from(task).where(sql`false`),
   );
 }

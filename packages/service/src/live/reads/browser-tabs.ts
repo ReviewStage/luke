@@ -46,6 +46,7 @@ function tabsStatement(userId: string, ofAgent: SQL) {
   return liveRowsStatement(
     TASK_BROWSER_TABS_READ.parts.tabs,
     {
+      ordered: false,
       columns: {
         id: agentBrowserTab.id,
         agentId: agentTable.id,

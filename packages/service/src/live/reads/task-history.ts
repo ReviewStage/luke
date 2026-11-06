@@ -55,6 +55,7 @@ function revisionsStatement(userId: string, taskId: string) {
   return liveRowsStatement(
     TASK_HISTORY_READ.parts.revisions,
     {
+      ordered: false,
       columns: {
         seq: descriptionRevision.seq,
         actor: descriptionRevision.actor,
