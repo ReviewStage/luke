@@ -10,19 +10,20 @@
  */
 
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { type ExperimentChoices, NO_EXPERIMENTS } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
+import { useQuery } from "@tanstack/react-query";
 import type { RegisteredRouter, RouteIds } from "@tanstack/react-router";
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { useKeptChoice } from "./desktop/chosen-workspace.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import {
-  APP_SLICE,
   appStateNow,
-  SETTINGS_HELD,
+  appStateQuery,
+  selectSettingsHeld,
   useAdminAccess,
   useAdminAccessPending,
-  useAppSlice,
   useExperimentChoices,
 } from "./use-app-state.js";
 
@@ -64,39 +65,24 @@ function stepOf(workspace: GateWorkspace | undefined): string | undefined {
   return workspace === undefined ? undefined : (workspace.slug ?? workspace.id);
 }
 
-/** Whether two lists of slugs are the same slugs in the same order. */
-function sameSlugs(one: readonly string[] = [], other: readonly string[] = []): boolean {
-  return one.length === other.length && one.every((slug, at) => slug === other[at]);
-}
-
-/** Whether two readings of the reader's workspaces name the same workspaces by the same steps. */
-function sameWorkspaces(one: readonly GateWorkspace[], other: readonly GateWorkspace[]): boolean {
-  return (
-    one.length === other.length &&
-    one.every(
-      (each, at) =>
-        each.id === other[at]?.id &&
-        each.slug === other[at]?.slug &&
-        sameSlugs(each.formerSlugs, other[at]?.formerSlugs),
-    )
-  );
+/** The reader's workspaces as main's document holds them. */
+function selectWorkspaces(state: AppStateSnapshot): readonly GateWorkspace[] {
+  return state.tasks?.workspaces ?? NO_WORKSPACES;
 }
 
 /**
  * The window's access as it draws, for the router's context and the
- * window's Back and Forward alike. Note that the workspaces are held while
- * a read names the same ones, because the task list carrying them is read
- * again as any task moves, and each new access asks the routes standing again.
+ * window's Back and Forward alike. Note that the workspaces stand as the
+ * same object while a read names the same ones, by Query's structural
+ * sharing, because the task list carrying them is read again as any task
+ * moves, and each new access asks the routes standing again.
  */
 export function useRouteAccess(): RouteAccess {
   const admin = useAdminAccess();
   const adminPending = useAdminAccessPending();
   const experiments = useExperimentChoices();
-  const experimentsRead = useAppSlice(SETTINGS_HELD);
-  const read = useAppSlice(APP_SLICE.TASKS)?.workspaces ?? NO_WORKSPACES;
-  const held = useRef(read);
-  if (!sameWorkspaces(held.current, read)) held.current = read;
-  const workspaces = held.current;
+  const experimentsRead = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
+  const workspaces = useQuery({ ...appStateQuery, select: selectWorkspaces }).data ?? NO_WORKSPACES;
   const listed = stepOf(useKeptChoice(workspaces));
   return useMemo(
     (): RouteAccess => ({

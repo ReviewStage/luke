@@ -1,9 +1,9 @@
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { ViewingAsBanner } from "@repo/ui";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLayoutEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { appStateQuery, selectAccount } from "./use-app-state.js";
 
 /**
  * viewing-as.tsx -- the Viewing as strip across the top of the window while a maintainer is signed in as the member, over every place of it.
@@ -21,7 +21,7 @@ const HEIGHT_PROPERTY = "--viewing-as-height";
 
 /** The strip, while a maintainer is signed in as the member; nothing otherwise. */
 export function ViewingAs(): React.JSX.Element | null {
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const stop = appPlatform().stopImpersonating;
   if (account?.status !== ACCOUNT_STATUS.SIGNED_IN || account.impersonated !== true) return null;
   const memberId = account.id;

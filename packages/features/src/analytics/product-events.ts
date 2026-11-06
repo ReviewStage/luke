@@ -271,6 +271,7 @@ export const PRODUCT_EXPERIMENT = {
   PILOT: "pilot",
   SKILLS: "skills",
   BRING_YOUR_OWN_HOST: "bring-your-own-host",
+  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   SEVERAL_REPOSITORIES: "several-repositories",
   DESCRIPTIONS: "descriptions",
   /** Renamed to Task descriptions, so no build sends it now; kept because a web tab served before the rename still may, and one unread value refuses the batch. */

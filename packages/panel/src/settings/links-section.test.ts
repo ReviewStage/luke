@@ -48,7 +48,6 @@ function settingsOn(account: AccountSnapshot): SettingsPanelProps {
   return {
     account,
     onSignOut: () => Promise.resolve(),
-    onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     view: SETTINGS_VIEW.ACCOUNT,
     onViewChange: ignore,
     microphone: {

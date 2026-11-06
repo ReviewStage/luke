@@ -6,15 +6,15 @@ import {
 import { queryBuilder } from "@repo/database/core/query";
 import { taskSeenBy } from "@repo/database/models/workspace-store";
 import { member } from "@repo/database/schemas/auth";
-import { planPageVersion } from "@repo/database/schemas/plan-page";
+import { taskPageVersion } from "@repo/database/schemas/task-page";
 import { task } from "@repo/database/schemas/task";
 import { and, eq, max, sql } from "drizzle-orm";
 import { Option } from "effect";
 
 /**
- * task-record-live.ts -- where an open task's plan, pages, calls, and the code its agents showed stand, written for Neon Realtime, so the desktop reads each again the moment its rows move.
+ * task-record-live.ts -- where an open task's description, pages, calls, and the code its agents showed stand, written for Neon Realtime, so the desktop reads each again the moment its rows move.
  *
- * Four parts, each a mark and none of the words it marks: the plan's text
+ * Four parts, each a mark and none of the words it marks: the description's text
  * (`plan`), one row marked by its last save, which only a save of the text
  * moves, whoever wrote it; the pages agents
  * showed (`pages`), one row a page at its newest version; the task's
@@ -28,7 +28,7 @@ import { Option } from "effect";
 
 /** The statements an open task's record is followed by, one a part. */
 export interface TaskRecordLiveStatements {
-  readonly plan: LiveStatement;
+  readonly description: LiveStatement;
   readonly pages: LiveStatement;
   readonly calls: LiveStatement;
   readonly code: LiveStatement;
@@ -40,11 +40,11 @@ function memberOfTask(userId: string) {
 }
 
 /**
- * The plan marked by its last save, as the open document reads it
+ * The description marked by its last save, as the open document reads it
  * (`Task.updatedAt`): a rename, a status, or a pin is no save, so none of
  * them moves it, and a save by anyone does.
  */
-function planStatement(userId: string, taskId: string) {
+function descriptionStatement(userId: string, taskId: string) {
   return queryBuilder
     .select(liveSelection({ taskId: task.id }, { savedAt: task.updatedAt }))
     .from(task)
@@ -56,14 +56,14 @@ function planStatement(userId: string, taskId: string) {
 function pagesStatement(userId: string, taskId: string) {
   return queryBuilder
     .select({
-      ...liveSelection({ pageId: planPageVersion.pageId }),
-      version: max(planPageVersion.version).as("version"),
+      ...liveSelection({ pageId: taskPageVersion.pageId }),
+      version: max(taskPageVersion.version).as("version"),
     })
-    .from(planPageVersion)
-    .innerJoin(task, eq(task.id, planPageVersion.taskId))
+    .from(taskPageVersion)
+    .innerJoin(task, eq(task.id, taskPageVersion.taskId))
     .innerJoin(member, memberOfTask(userId))
-    .where(and(eq(planPageVersion.taskId, taskId), taskSeenBy(userId)))
-    .groupBy(planPageVersion.pageId);
+    .where(and(eq(taskPageVersion.taskId, taskId), taskSeenBy(userId)))
+    .groupBy(taskPageVersion.pageId);
 }
 
 /**
@@ -95,7 +95,7 @@ export function taskRecordLiveStatements(
   taskId: string,
 ): Option.Option<TaskRecordLiveStatements> {
   return Option.all({
-    plan: liveStatementOf(planStatement(userId, taskId)),
+    description: liveStatementOf(descriptionStatement(userId, taskId)),
     pages: liveStatementOf(pagesStatement(userId, taskId)),
     calls: liveStatementOf(callsStatement()),
     code: liveStatementOf(codeStatement()),

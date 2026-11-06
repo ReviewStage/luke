@@ -1,11 +1,12 @@
 import type { AgentQueue } from "@repo/features/agent-queue-wire";
 import {
-  AGENT_CALL_FAILURE,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
   type AgentTranscriptKey,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptOlderParams,
+  agentTranscriptOlderParamsSchema,
+  TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
 import {
   AGENT_LAUNCH,
@@ -20,13 +21,14 @@ import {
   type AgentUsage,
 } from "@repo/features/agent-wire";
 import type { DeviceLaunchStep, DeviceLaunchUnstarted } from "@repo/features/device-agent-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { AppTranscript } from "@repo/host/app-state";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type AppTranscript, OWN_TRANSCRIPT } from "@repo/host/app-state";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Schema } from "effect";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { askAct } from "../act.js";
+import { transcriptQuery, transcriptRetryMutation } from "../live-reads.js";
 import { jsonBytes, PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
-import { useHeldRows, useHostRead } from "../use-host-read.js";
 import { type AgentRun, agentStillWriting } from "./agent-model.js";
 
 /**
@@ -62,6 +64,18 @@ export type TranscriptOlderReader = (
 /** The window's own older read, through the act door. */
 const windowTranscriptOlder: TranscriptOlderReader = (params) =>
   askAct(ACT_KIND.AGENTS_TRANSCRIPT_OLDER, params);
+
+/** Whether a mutation's variables are an older read's, as the mutation cache holds them unknown. */
+const isOlderParams = Schema.is(agentTranscriptOlderParamsSchema);
+
+/** The key of a transcript's older reads: the act, then the agent and the worker's call or the agent's own. */
+function olderKeyOf(transcript: AgentTranscriptKey) {
+  return [
+    ACT_KIND.AGENTS_TRANSCRIPT_OLDER,
+    transcript.agentId,
+    transcript.callId ?? OWN_TRANSCRIPT,
+  ];
+}
 
 /** Whether two keys name the same transcript. */
 function sameTranscript(one: AgentTranscriptKey, other: AgentTranscriptKey): boolean {
@@ -125,13 +139,6 @@ export interface AgentTranscriptControl {
 /** No messages, for a transcript not read yet. */
 const NO_MESSAGES: readonly AgentTranscriptMessage[] = [];
 
-/** The tab's older read: the transcript it was asked for, the `before` one is out for, and the `before` the last one that did not answer was asked at. */
-interface OlderRead {
-  readonly transcript: AgentTranscriptKey;
-  readonly out: string | undefined;
-  readonly failedAt: string | undefined;
-}
-
 /**
  * One hold, as it is timed: when it was taken, the pages the transcript had
  * been read for then, whether rows already stood, and which of its two
@@ -186,21 +193,18 @@ export function useAgentTranscript(input: {
 }): AgentTranscriptControl {
   const { transcript, shown, onStatus } = input;
   // Note that what the host holds is drawn whether shown or not, and held only while shown, so a tab kept behind another stands as it was.
-  const { retry } = useHostRead(LIVE_READ.TRANSCRIPT, shown ? transcript : undefined);
-  const held = useHeldRows(LIVE_READ.TRANSCRIPT, transcript);
+  const held = useQuery({ ...transcriptQuery(transcript), enabled: shown }).data;
+  const { mutate: retry } = useMutation(transcriptRetryMutation());
   const word = held?.word;
   const older = input.older ?? windowTranscriptOlder;
   const latest = useRef({ onStatus, older });
   latest.current = { onStatus, older };
-  const [olderRead, setOlderRead] = useState<OlderRead>({
-    transcript,
-    out: undefined,
-    failedAt: undefined,
+  // The older page asked for, as the mutation that asks it holds it: its transcript and where below.
+  const olderRead = useMutation({
+    mutationKey: olderKeyOf(transcript),
+    mutationFn: (params: AgentTranscriptOlderParams) => latest.current.older(params),
   });
-  // Note that another transcript's tab starts from nothing of this one's.
-  const ownOlder: OlderRead = sameTranscript(olderRead.transcript, transcript)
-    ? olderRead
-    : { transcript, out: undefined, failedAt: undefined };
+  const queryClient = useQueryClient();
   // The hold standing, as it is timed; none while the tab holds nothing.
   const timing = useRef<HoldTiming | undefined>(undefined);
   const heldNow = useRef(held);
@@ -248,25 +252,40 @@ export function useAgentTranscript(input: {
   }, [shown, word, agentId]);
 
   const before = held?.before;
-  const out = ownOlder.out;
+  // Note that only this transcript's ask, at the page the messages still begin at, stands for it: another tab's, or one a newer page passed, says nothing here.
+  const asked = olderRead.variables;
+  const askedHere =
+    asked !== undefined && sameTranscript(asked, transcript) && asked.before === before;
+  // Note that an older read that landed stays out until the page it laid arrives, so it is never asked for twice.
+  const answer = olderRead.data;
+  const failedAnswer = answer !== undefined && "failure" in answer;
+  const loadingOlder =
+    askedHere && (olderRead.isPending || (answer !== undefined && !failedAnswer && answer.landed));
+  const olderFailed = askedHere && (olderRead.isError || failedAnswer);
+  const { mutate: askOlder } = olderRead;
+  // Note that an ask out is read off the mutation cache as well as off the drawn mutation, since a second press in the same tick comes before the mutation's notification has drawn it out.
   const loadOlder = useCallback(() => {
-    if (before === undefined || out === before) return;
-    setOlderRead({ transcript, out: before, failedAt: undefined });
-    // Note that an older read that landed stays out until the page it laid arrives, so it is never asked for twice.
-    const settle = (answer: AgentTranscriptOlderAnswer) =>
-      setOlderRead((was) => {
-        if (!sameTranscript(was.transcript, transcript) || was.out !== before) return was;
-        if ("failure" in answer) return { transcript, out: undefined, failedAt: before };
-        return answer.landed ? was : { transcript, out: undefined, failedAt: undefined };
-      });
-    latest.current
-      .older({ ...transcript, before })
-      .then(settle, () => settle({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-  }, [transcript, before, out]);
+    if (before === undefined || loadingOlder) return;
+    const out = queryClient.isMutating({
+      mutationKey: olderKeyOf(transcript),
+      exact: true,
+      predicate: (mutation) => {
+        const variables = mutation.state.variables;
+        return isOlderParams(variables) && variables.before === before;
+      },
+    });
+    if (out === 0) askOlder({ ...transcript, before });
+  }, [askOlder, queryClient, transcript, before, loadingOlder]);
 
+  const { agentId: retriedAgent, callId: retriedCall } = transcript;
   const onRetry = useCallback(() => {
-    retry();
-  }, [retry]);
+    const kind = TRANSCRIPT_KIND.AGENT;
+    retry(
+      retriedCall === undefined
+        ? { kind, agentId: retriedAgent }
+        : { kind, agentId: retriedAgent, callId: retriedCall },
+    );
+  }, [retry, retriedAgent, retriedCall]);
 
   const subagentTitles = useKeyed(
     word?.subagentTitles,
@@ -292,8 +311,8 @@ export function useAgentTranscript(input: {
     caughtUp: word?.caughtUp ?? false,
     hasOlder: before !== undefined,
     // Note that a read is out only while the messages still begin where it was asked, so a newer page that took their place ends it.
-    loadingOlder: out !== undefined && out === before,
-    olderFailed: ownOlder.failedAt !== undefined && ownOlder.failedAt === before,
+    loadingOlder,
+    olderFailed,
     loadOlder,
     pages: held?.pages ?? 0,
     pageTitle: word?.title ?? undefined,

@@ -13,7 +13,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, signedInAs, stateWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { CliPage } from "./cli-page.js";
 
 /**
@@ -71,6 +71,7 @@ async function drawPage(
     },
   );
   fakeAppPlatform(QUIET_PANEL);
+  await writeHandedAppState();
   const registry = AtomRegistry.make();
   registries.push(registry);
   const container = document.createElement("div");

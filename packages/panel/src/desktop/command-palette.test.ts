@@ -20,7 +20,12 @@ import {
   type InboxItem,
 } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@repo/features/task-wire";
+import {
+  DESCRIPTION_ACTOR,
+  TASK_TREE_ENTRY,
+  type Task,
+  type TaskSummary,
+} from "@repo/features/task-wire";
 import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -958,10 +963,15 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       each.textContent?.includes("Invoice export"),
     );
     assert.ok(row, "the agent is listed");
-    restOn(row);
-    const words = document.querySelector(
-      ".ui-tooltip-card .ui-hover-card-row [data-actor-ref]",
-    )?.textContent;
+    // Note that the card names the automation once the workspace's automations reach their query, each rest drawing it afresh.
+    const words = await vi.waitFor(() => {
+      restOn(row);
+      const named = document.querySelector(
+        ".ui-tooltip-card .ui-hover-card-row [data-actor-ref]",
+      )?.textContent;
+      assert.ok(named, "the card names who started the agent");
+      return named;
+    });
     act(() => root.unmount());
     document.body.innerHTML = "";
     return words;
@@ -1610,8 +1620,8 @@ test("a task Vespin or a coding agent made says who in its detail and is found b
     tasksControl({
       me: dean.userId,
       tasks: [
-        task("Invite emails", { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" }),
-        task("Audit log export", { actor: PLAN_ACTOR.NOTETAKER }),
+        task("Invite emails", { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" }),
+        task("Audit log export", { actor: DESCRIPTION_ACTOR.NOTETAKER }),
         task("Rate limits"),
       ],
     }),
@@ -1698,7 +1708,7 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   });
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
@@ -2254,8 +2264,12 @@ test("People says the members are being read until they answer, and a refused re
 
   await act(async () => reads.deliverMembers({ [ACME.id]: { failed: true } }));
   await settle();
-  const alert = document.querySelector("[cmdk-list] [role=alert]");
-  assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
+  await vi.waitFor(() =>
+    assert.match(
+      document.querySelector("[cmdk-list] [role=alert]")?.textContent ?? "",
+      /The workspace's members could not be read\./u,
+    ),
+  );
   assert.doesNotMatch(document.body.textContent ?? "", /No results match/u);
 
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -2264,10 +2278,10 @@ test("People says the members are being read until they answer, and a refused re
   assert.ok(retry, "Retry is offered");
   act(() => retry.click());
   await settle();
-  assert.equal(emptyLine(), "Reading the workspace's members");
+  await vi.waitFor(() => assert.equal(emptyLine(), "Reading the workspace's members"));
   await act(async () => reads.deliverMembers({ [ACME.id]: { rows: { members: [member] } } }));
   await settle();
-  assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
+  await vi.waitFor(() => assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]));
 });
 
 test("Tasks says the account's tasks are being read before the list first answers", () => {
@@ -2700,9 +2714,9 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
       open: true,
       fullScreen: room === SHELL_ROOM.NARROW,
       fullScreenOnly: room === SHELL_ROOM.NARROW,
-      tabs: [SIDE_PANEL_TAB.PLAN],
-      strip: [SIDE_PANEL_TAB.PLAN],
-      tab: SIDE_PANEL_TAB.PLAN,
+      tabs: [SIDE_PANEL_TAB.DESCRIPTION],
+      strip: [SIDE_PANEL_TAB.DESCRIPTION],
+      tab: SIDE_PANEL_TAB.DESCRIPTION,
     },
   });
   const host = document.body.appendChild(document.createElement("div"));
@@ -2750,12 +2764,12 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
   return host;
 }
 
-test("on a wide window ⌘K's Rename task puts the caret in the plan's own title", () => {
+test("on a wide window ⌘K's Rename task puts the caret in the description's own title", () => {
   const host = paletteBesideTask(SHELL_ROOM.WIDE);
 
   const title = host.querySelector('[role="textbox"][aria-label="Task name"]');
-  assert.ok(title, "the plan's title is drawn");
-  assert.ok(document.activeElement === title, "the caret is in the plan's title");
+  assert.ok(title, "the description's title is drawn");
+  assert.ok(document.activeElement === title, "the caret is in the description's title");
 });
 
 test("on a phone ⌘K's Rename task opens the task's name in the head's field", () => {
@@ -2992,10 +3006,12 @@ test("the Inbox searched lists what needs you first, each item beside its task",
   chooseFilter("Inbox");
   await settle();
 
-  assert.deepEqual(rows(), [
-    "Which webhook secret should rotate? · Billing usage alerts",
-    "Use acme.dev for previews? · Billing usage alerts",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), [
+      "Which webhook secret should rotate? · Billing usage alerts",
+      "Use acme.dev for previews? · Billing usage alerts",
+    ]),
+  );
 });
 
 test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its Inbox row and its time at its end, and its card hung beside it", async () => {
@@ -3003,6 +3019,9 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
   chooseFilter("Inbox");
   await settle();
 
+  await vi.waitFor(() =>
+    assert.ok(document.querySelector('[role="option"]'), "the item that needs you is listed"),
+  );
   const [needs, answered] = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
   assert.ok(needs, "the item that needs you is listed");
   assert.ok(needs.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
@@ -3029,9 +3048,11 @@ test("an Inbox item is found under All by words its thread says, which its row s
   type("signing");
   await settle();
 
-  assert.deepEqual(rows(), [
-    "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), [
+      "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
+    ]),
+  );
 });
 
 test("choosing an Inbox item opens it in the Inbox, as a notification's would", async () => {
@@ -3039,6 +3060,9 @@ test("choosing an Inbox item opens it in the Inbox, as a notification's would", 
   chooseFilter("Inbox");
   await settle();
 
+  await vi.waitFor(() =>
+    assert.ok(rows().includes("Use acme.dev for previews? · Billing usage alerts")),
+  );
   press("Use acme.dev for previews? · Billing usage alerts");
 
   assert.deepEqual(opened, [
@@ -3052,7 +3076,9 @@ test("an Inbox that could not be read says so, rather than that nothing matches"
   chooseFilter("Inbox");
   await settle();
 
-  assert.equal(emptyLine()?.startsWith("Your inbox could not be read."), true);
+  await vi.waitFor(() =>
+    assert.equal(emptyLine()?.startsWith("Your inbox could not be read."), true),
+  );
 });
 
 test("a query its title half answers says the thread's words that answer the rest, never the title again", async () => {
@@ -3062,9 +3088,11 @@ test("a query its title half answers says the thread's words that answer the res
   type("rotate stripe");
   await settle();
 
-  assert.deepEqual(rows(), [
-    "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), [
+      "Which webhook secret should rotate? · Billing usage alerts · Rotate the Stripe signing secret today.",
+    ]),
+  );
 });
 
 test("an Inbox item is found by a form's field and the value it was answered with", async () => {
@@ -3107,7 +3135,9 @@ test("an Inbox item is found by a form's field and the value it was answered wit
 
   type("587");
   await settle();
-  assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · 587"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · 587"]),
+  );
   type("smtp");
   assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · SMTP port"]);
 });
@@ -3123,7 +3153,9 @@ test("while main says a task's inbox changed later than the feed holds it, a que
   const fresh = { ...ROTATE, updatedAt: 12_000 };
   act(() => deliver({ items: [PREVIEWS, fresh] }));
   await settle();
-  assert.deepEqual(rows(), ["Which webhook secret should rotate? · Billing usage alerts"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), ["Which webhook secret should rotate? · Billing usage alerts"]),
+  );
 });
 
 test("an Inbox that could not be read says so in the Inbox's own group, beside the rows other groups matched, and its Retry reads it again", async () => {
@@ -3136,8 +3168,11 @@ test("an Inbox that could not be read says so in the Inbox's own group, beside t
     rows().includes("Billing usage alerts · relay"),
     "the task the Tasks group matched is listed",
   );
-  const notice = document.querySelector("[cmdk-list] [role=alert]");
-  assert.equal(notice?.textContent?.startsWith("Your inbox could not be read."), true);
+  const notice = await vi.waitFor(() => {
+    const alert = document.querySelector("[cmdk-list] [role=alert]");
+    assert.equal(alert?.textContent?.startsWith("Your inbox could not be read."), true);
+    return alert;
+  });
   const group = notice?.closest("[cmdk-group]");
   assert.equal(group?.querySelector("[cmdk-group-heading]")?.textContent, "Inbox");
   assert.ok(

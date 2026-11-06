@@ -5,7 +5,7 @@ import { decodeMention, isMentionLabel, MENTION_KIND } from "@repo/features/ment
 import { test } from "vitest";
 import { INBOX_TOOLS } from "./coder-host/inbox.js";
 import { coderInstructions } from "./coder-host/instructions.js";
-import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
+import { EDIT_DESCRIPTION_TOOL } from "./coder-host/description-edit.js";
 
 /**
  * link-examples.test.ts -- the link every author is shown how to write a
@@ -88,7 +88,7 @@ test("a coding agent is shown to name each kind as a mention Vespin draws as its
 });
 
 test("the thread post tool and the plan's edit tool show a file's link Vespin draws as its chip, written as a mention", () => {
-  for (const description of [INBOX_TOOLS.POST.description, EDIT_PLAN_TOOL.description]) {
+  for (const description of [INBOX_TOOLS.POST.description, EDIT_DESCRIPTION_TOOL.description]) {
     assert.deepEqual(drawnAs(description), [MENTION_KIND.FILE]);
     assert.ok(
       linksIn(description).every(({ label }) => isMentionLabel(label)),
@@ -130,6 +130,6 @@ function datesIn(words: string): (string | undefined)[] {
 }
 
 test("a coding agent is shown a day, a time, and a range, each a date Vespin draws as its chip", () => {
-  const words = coderInstructions(REPOSITORY, AGENT_BRIEF.PLAN, true, TASK_ADDRESS);
+  const words = coderInstructions(REPOSITORY, AGENT_BRIEF.DESCRIPTION, true, TASK_ADDRESS);
   assert.deepEqual(datesIn(words), [MENTION_KIND.DATE, MENTION_KIND.DATE, MENTION_KIND.DATE]);
 });

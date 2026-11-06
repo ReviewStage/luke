@@ -3,7 +3,7 @@
  *
  * Inbox, Tasks, Automations, an agent's page, Version history, Admin,
  * an Inbox item, and the Automations list each stand under this one bar; a
- * document (a plan, Settings, a person, the automation editor) heads itself
+ * document (a description, Settings, a person, the automation editor) heads itself
  * in its page instead (`PageHeader`). The bar is one row at the window's bar
  * height (`--ui-toolbar-height`, which the shell sets level with its title
  * bar), and its slots stand in one order, each drawn only where it says

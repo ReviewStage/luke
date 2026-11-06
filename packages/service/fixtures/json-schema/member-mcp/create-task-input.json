@@ -30,10 +30,10 @@
       "maxLength": 16000,
       "description": "The developer's own words about the task, which Vespin is handed when they open a call on it; their words where they gave them, left out otherwise."
     },
-    "plan": {
+    "description": {
       "type": "string",
       "maxLength": 200000,
-      "description": "The plan's body to start it with, as Markdown under its sections' ## headings, without the # title, which the task's name is; an agent started on it with no prompt is handed it. Left out, it starts empty."
+      "description": "The description's body to start it with, as Markdown under its sections' ## headings, without the # title, which the task's name is; an agent started on it with no prompt is handed it. Left out, it starts empty."
     },
     "status": {
       "type": "string",

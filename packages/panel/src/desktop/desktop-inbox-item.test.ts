@@ -27,7 +27,7 @@ import { LINK_PLACE } from "@repo/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
 import { formatCount } from "@repo/features/number-format";
 import { pageFrameUrl } from "@repo/features/page-frame";
-import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { pasteCutWords } from "@repo/features/words";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
@@ -129,9 +129,9 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { viewerPlace } from "../testing/viewer-place.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-// Note that each case starts with the document handing Plans on, whatever an earlier case handed.
+// Note that each case starts with the document handing Descriptions on, whatever an earlier case handed.
 beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 // Landed before any box renders, as the panel lands it after its first paint.
@@ -146,14 +146,14 @@ test("a thread leads with its item's title alone as its subject, whether the ite
   const WITHDRAWN: InboxItem = {
     ...EXPIRY,
     status: INBOX_STATUS.CLOSED,
-    closedReason: "The plan now says 7 days.",
+    closedReason: "The description now says 7 days.",
     thread: [
       {
         ...asking,
         ask: {
           ...asking.ask,
           status: INBOX_ASK_STATUS.WITHDRAWN,
-          withdrawnReason: "The plan now says 7 days.",
+          withdrawnReason: "The description now says 7 days.",
         },
       },
     ],
@@ -391,11 +391,14 @@ test("a page's link alone on its line, naming its task by the task's number, is 
   world.inboxes.set(BILLING.id, [saying(THRESHOLD, `[@${FUNNEL.title}](${link})`), RETRY]);
   const { page } = mount([], { chosen: ON_THRESHOLD, standing: [numbered, INVITES] });
   await settle();
-  assert.equal(
-    page
-      .querySelector(`[data-inbox-message-text] iframe[title="${FUNNEL.title}"]`)
-      ?.getAttribute("src"),
-    pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+  // Note that the page is drawn once its task's pages reach their query.
+  await vi.waitFor(() =>
+    assert.equal(
+      page
+        .querySelector(`[data-inbox-message-text] iframe[title="${FUNNEL.title}"]`)
+        ?.getAttribute("src"),
+      pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+    ),
   );
 });
 
@@ -1086,8 +1089,7 @@ test("files still being read as the agent posts on the item again land in its bo
       value: { items: [revised, RETRY], cursor: "2" },
     }),
   );
-  await settle();
-  assert.equal(readTitle(page), "Alert at 85%?");
+  await vi.waitFor(() => assert.equal(readTitle(page), "Alert at 85%?"));
   await act(async () => {
     slow.open();
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -1203,13 +1205,13 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
   );
 });
 
-test("in the window's Inbox an @ in the box of a task's item offers that plan's sections, read as last saved", async () => {
+test("in the window's Inbox an @ in the box of a task's item offers that description's sections, read as last saved", async () => {
   const previous = fakeActsAnswer();
   fakeActs({
     ...appBridge(),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.TASKS_REVISIONS) {
-        const lastEdit = { actor: PLAN_ACTOR.AGENT, at: 2, duringCall: false };
+        const lastEdit = { actor: DESCRIPTION_ACTOR.AGENT, at: 2, duringCall: false };
         const newest = { seq: 2, lastEdit, startedAt: 2, changes: 1 };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { revisions: [newest] } });
       }
@@ -1338,6 +1340,8 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   await settle();
   act(() => world.chooseFromOutside({ agentId: STRAY_AGENT, itemId: BUMP.id, opened: true }));
   await settle();
+  // Note that the agent's own read lands one notify tick later, which the item waits on.
+  await vi.waitFor(() => assert.equal(itemPane(page).getAttribute("aria-label"), BUMP.title));
   await pressNoteSkill(page, "/release");
 
   assert.deepEqual(files, [".agents/skills/release/SKILL.md"]);
@@ -1850,7 +1854,9 @@ test("what an item's box holds unsent, its words and its files, outlasts every m
   };
   act(() => deliver([answered, RETRY], "2"));
   await settle();
-  assert.equal(composerEditor(itemPane(page)).getAttribute("aria-label"), "Reply");
+  await vi.waitFor(() =>
+    assert.equal(composerEditor(itemPane(page)).getAttribute("aria-label"), "Reply"),
+  );
   assert.deepEqual(box(), ["Use 90%", ["alerts.yml"]], "a teammate's answer takes nothing");
 
   const asked: InboxItem = {
@@ -2073,13 +2079,13 @@ test.each([
       [
         askingMessage(EXPIRY_ASK, {
           status: INBOX_ASK_STATUS.WITHDRAWN,
-          withdrawnReason: "The plan settled it.",
+          withdrawnReason: "The description settled it.",
         }),
       ],
       { status: INBOX_STATUS.CLOSED, settledAt: 2_000 },
     ),
     within: '[data-inbox-comment="withdrawn"] [data-inbox-withdrawn-why]',
-    quoted: "The plan settled it.",
+    quoted: "The description settled it.",
   },
   {
     words: "the item's title",

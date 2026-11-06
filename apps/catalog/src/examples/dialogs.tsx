@@ -101,8 +101,8 @@ function DeleteDialog({ open, onClose }: DialogBody): React.JSX.Element {
       {/* The long words give way and scroll in a short window, so the answers under them stay on the card. */}
       <ScrollArea size={SCROLL_SIZE.CONTENT}>
         <Text tone={TEXT_TONE.MUTED} id={bodyId}>
-          The task, its plan, and every agent’s transcript under it go for good. Anyone in the
-          workspace who opened it sees it gone the next time they look.
+          The task, its description, and every agent’s transcript under it go for good. Anyone in
+          the workspace who opened it sees it gone the next time they look.
         </Text>
       </ScrollArea>
     </Dialog>

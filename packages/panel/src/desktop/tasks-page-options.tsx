@@ -14,7 +14,6 @@ import {
   motionKey,
   motionRows,
   NoRepositoryGlyph,
-  RepositoryCard,
   RepositoryPicture,
   ShowMoreRow,
   TaskPriorityMark,
@@ -425,7 +424,6 @@ function fieldValues(
             ),
             label: repositoryParts(repository).name,
             detail: repositoryParts(repository).owner,
-            card: <RepositoryCard repository={repository} pictures={pictures} />,
             icon: <RepositoryPicture repository={repository} pictures={pictures} />,
           })),
         ...(held.has(null)

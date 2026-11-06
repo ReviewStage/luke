@@ -343,6 +343,8 @@ import type {
   AppAutomationReads,
   AppBrowserTabs,
   AppChapters,
+  AppDescriptionComments,
+  AppDescriptionDocuments,
   AppDevicePresences,
   AppGitHubTokens,
   AppHistories,
@@ -358,8 +360,6 @@ import type {
   AppMemories,
   AppModels,
   AppPages,
-  AppPlanComments,
-  AppPlanDocuments,
   AppProviderKeys,
   AppPullRequestParts,
   AppRepositoryLists,
@@ -507,11 +507,11 @@ export interface HostOperator {
   tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
   /** The id of the task a link names by its workspace and its number; or that none was found, or the service did not answer. */
   tasksFind(params: TasksFindParams): Effect.Effect<TasksFindAnswer>;
-  /** A page of a plan's history; or that the service did not answer. */
+  /** A page of a description's history; or that the service did not answer. */
   tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
-  /** One revision of a plan beside the one before it; or that the service did not answer. */
+  /** One revision of a description beside the one before it; or that the service did not answer. */
   tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
-  /** One revision of a plan restored as its content; answers whether the service restored it. */
+  /** One revision of a description restored as its content; answers whether the service restored it. */
   tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
@@ -521,43 +521,43 @@ export interface HostOperator {
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** Every plan's or agent's pages the host holds for the windows, whole, each time any of them moves. */
   onPagesChanged(listener: (held: AppPages) => void): () => void;
-  /** One task's plan held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onPlanDocumentsChanged`. */
+  /** One task's description held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onDescriptionDocumentsChanged`. */
   tasksDocumentFollow(scope: TaskDocumentFollow): Effect.Effect<void>;
-  /** One task's plan let go by the windows: it stays followed among those let go lately until later ones push it out. */
+  /** One task's description let go by the windows: it stays followed among those let go lately until later ones push it out. */
   tasksDocumentUnfollow(scope: TaskDocumentFollow): Effect.Effect<void>;
-  /** One task's held plan read again at once, as Try again asks. */
+  /** One task's held description read again at once, as Try again asks. */
   tasksDocumentRetry(scope: TaskDocumentFollow): Effect.Effect<void>;
-  /** Every task's plan the host holds for the windows, whole, each time any of them moves. */
-  onPlanDocumentsChanged(listener: (held: AppPlanDocuments) => void): () => void;
+  /** Every task's description the host holds for the windows, whole, each time any of them moves. */
+  onDescriptionDocumentsChanged(listener: (held: AppDescriptionDocuments) => void): () => void;
   /** One task's or agent's cloud Browser tabs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onBrowserTabsChanged`. */
   tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
   /** One task's or agent's Browser tabs let go by the windows: they stay followed among those let go lately until later ones push them out. */
   tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
   /** Every task's or agent's Browser tabs the host holds for the windows, whole, each time one moves or a takeover lapses. */
   onBrowserTabsChanged(listener: (held: AppBrowserTabs) => void): () => void;
-  /** One task's plan history held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHistoriesChanged`. */
+  /** One task's description history held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHistoriesChanged`. */
   tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
   /** One task's history let go by the windows: it stays followed among those let go lately until later ones push it out. */
   tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
   /** One task's held history read again at once, as Try again asks. */
   tasksHistoryRetry(scope: TaskHistoryFollow): Effect.Effect<void>;
-  /** Every task's plan history the host holds for the windows, whole, each time any of them moves. */
+  /** Every task's description history the host holds for the windows, whole, each time any of them moves. */
   onHistoriesChanged(listener: (held: AppHistories) => void): () => void;
-  /** One picture of one plan as its bytes in base64, or why there is none. */
+  /** One picture of one description as its bytes in base64, or why there is none. */
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
-  /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
+  /** One picture kept on one description, answering the id its text names it by, or why it was not kept. */
   tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
-  /** One task's plan's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onPlanCommentsChanged`. */
+  /** One task's description's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onDescriptionCommentsChanged`. */
   tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
-  /** One plan's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
+  /** One description's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
   tasksCommentsUnfollow(scope: TasksCommentsFollow): Effect.Effect<void>;
-  /** One held plan's or page's comments read again at once, as Try again asks. */
+  /** One held description's or page's comments read again at once, as Try again asks. */
   tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
-  /** Every plan's or page's comments the host holds for the windows, whole, each time any of them moves. */
-  onPlanCommentsChanged(listener: (held: AppPlanComments) => void): () => void;
-  /** A comment thread started on one task's plan, answered as it stands, or why not. */
+  /** Every description's or page's comments the host holds for the windows, whole, each time any of them moves. */
+  onDescriptionCommentsChanged(listener: (held: AppDescriptionComments) => void): () => void;
+  /** A comment thread started on one task's description, answered as it stands, or why not. */
   tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
-  /** One thing done to one comment thread of one task's plan, answered as it stands, or why not. */
+  /** One thing done to one comment thread of one task's description, answered as it stands, or why not. */
   tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
   /** Where every one of the account's integrations stands, held followed for the windows from now until let go, and a while after; what it holds is heard through `onIntegrationsChanged`. */
   integrationsFollow(): Effect.Effect<void>;
@@ -1010,6 +1010,8 @@ export interface HostOperator {
   ): () => void;
   /** How an attached shell's connection stands, by its connection. */
   onTerminalState(listener: (state: TerminalStateEvent) => void): () => void;
+  /** A cloud agent's mirror on this Mac made where none stands, answered with its folder; none where the host could not. */
+  mirrorEnsure(params: { agentId: string }): Effect.Effect<string | undefined>;
   /** One cloud Browser tab's live view opened under the connection id given; whether the host took it. */
   browserLiveConnect(params: {
     connectionId: string;
@@ -1513,11 +1515,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_UNFOLLOW, commentsFollowParams(scope))),
     tasksCommentsRetry: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_RETRY, commentsFollowParams(scope))),
-    onPlanCommentsChanged: (listener) =>
+    onDescriptionCommentsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.PLAN_COMMENTS_CHANGED,
+        GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED,
         // Note that the held comments are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) => (isRecord(payload) ? answered<AppPlanComments>(payload) : undefined),
+        (payload) => (isRecord(payload) ? answered<AppDescriptionComments>(payload) : undefined),
         listener,
       ),
     tasksCommentStart: (params) =>
@@ -1577,11 +1579,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: scope.taskId })),
     tasksDocumentRetry: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_RETRY, { taskId: scope.taskId })),
-    onPlanDocumentsChanged: (listener) =>
+    onDescriptionDocumentsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.PLAN_DOCUMENTS_CHANGED,
-        // Note that the held plans are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) => (isRecord(payload) ? answered<AppPlanDocuments>(payload) : undefined),
+        GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED,
+        // Note that the held descriptions are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) => (isRecord(payload) ? answered<AppDescriptionDocuments>(payload) : undefined),
         listener,
       ),
     tasksBrowserTabsFollow: (scope) =>
@@ -1604,7 +1606,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onHistoriesChanged: (listener) =>
       on(
         GATEWAY_EVENT.HISTORIES_CHANGED,
-        // Note that the held histories are the host's own, handed over in this process, so they are passed on as built, as the held plans are.
+        // Note that the held histories are the host's own, handed over in this process, so they are passed on as built, as the held descriptions are.
         (payload) => (isRecord(payload) ? answered<AppHistories>(payload) : undefined),
         listener,
       ),
@@ -2040,7 +2042,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     // Note that the Start goes on whole, as the act port decoded it against the same schema the
     // Gateway's method reads, because a field copied by name is one a later field is left out of,
-    // as an empty draft's `blank` was, which handed its agent the plan.
+    // as an empty draft's `blank` was, which handed its agent the description.
     agentStart: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_START, params),
@@ -2733,6 +2735,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.TERMINAL_STATE,
         (payload) => Result.getOrUndefined(readEither(terminalStateEventSchema)(payload)),
         listener,
+      ),
+    mirrorEnsure: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MIRRORS_ENSURE, { agentId: params.agentId }),
+        (answer) => {
+          const folder = record(answer)?.folder;
+          return typeof folder === "string" ? folder : undefined;
+        },
       ),
     browserLiveConnect: (params) =>
       Effect.map(

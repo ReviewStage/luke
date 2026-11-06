@@ -259,12 +259,12 @@ function mount(
   };
 }
 
-test("on a phone Overview is headed by the way out of the task and one ⋯ of the task's own actions, naming the task in its plan's heading alone", () => {
+test("on a phone Overview is headed by the way out of the task and one ⋯ of the task's own actions, naming the task in its description's heading alone", () => {
   const page = mount(SHELL_ROOM.NARROW);
   assert.deepEqual(page.head(), { buttons: ["Inbox", "Task actions"], title: undefined });
   const menu = page.menu();
   assert.ok(menu.includes("Rename") && menu.includes("Permanently delete"), "the task's own");
-  assert.equal(page.labeled("Title actions"), false, "the plan's title draws no second ⋯");
+  assert.equal(page.labeled("Title actions"), false, "the description's title draws no second ⋯");
   assert.equal(page.labeled(`${TASK.name} actions`), false, "the column draws no ⋯ of Overview's");
 
   page.back();
@@ -325,7 +325,7 @@ test("on a phone a tab of the panel is pushed over the column, titled by the tab
   assert.deepEqual(page.told, ["toggle"]);
 });
 
-test("on a phone ⌘K's Change repository shows Overview from under the panel, and opens the repository's menu under the plan's path only once the plan is in sight", async () => {
+test("on a phone ⌘K's Change repository shows Overview from under the panel, and opens the repository's menu under the plan's path only once the description is in sight", async () => {
   const page = mount(SHELL_ROOM.NARROW, true);
   page.draw(true, SIDE_PANEL_TAB.COMMENTS, 1);
   await act(async () => undefined);
@@ -352,13 +352,13 @@ test("on a phone the ⋯'s Rename edits the task's name in the row's title", asy
   assert.deepEqual(page.told, [`rename ${TASK.id} Invite teammates`]);
 });
 
-test("on a phone, which has no ⌘F to press, Overview's ⋯ Find opens the find bar over the plan with the caret in its field", () => {
+test("on a phone, which has no ⌘F to press, Overview's ⋯ Find opens the find bar over the description with the caret in its field", () => {
   const page = mount(SHELL_ROOM.NARROW);
   page.choose("Find");
   const field = page.container.querySelector<HTMLInputElement>(
     '.find-bar input[aria-label="Find"]',
   );
-  assert.ok(field, "the plan's find bar stands");
+  assert.ok(field, "the description's find bar stands");
   assert.equal(document.activeElement, field);
 });
 
@@ -430,24 +430,24 @@ function chooseOverviewRename(container: HTMLElement): void {
   act(() => rename.click());
 }
 
-/** The plan's own title, which a wide window renames the task in. */
-function planTitle(container: HTMLElement): HTMLElement | null {
+/** The description's own title, which a wide window renames the task in. */
+function descriptionTitle(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="textbox"][aria-label="Task name"]');
 }
 
-test("on a wide window the topbar's ⋯ › Rename puts the caret in the plan's own title, and draws no phone's field", () => {
+test("on a wide window the topbar's ⋯ › Rename puts the caret in the description's own title, and draws no phone's field", () => {
   const page = mount(SHELL_ROOM.WIDE);
   chooseOverviewRename(page.container);
 
-  assert.ok(planTitle(page.container), "the plan's title is drawn");
+  assert.ok(descriptionTitle(page.container), "the description's title is drawn");
   assert.ok(
-    document.activeElement === planTitle(page.container),
-    "the caret is in the plan's title",
+    document.activeElement === descriptionTitle(page.container),
+    "the caret is in the description's title",
   );
   assert.equal(page.container.querySelector('input[aria-label="Task name"]'), null);
 });
 
-test("on a wide window whose column shows an agent, the rename ⌘K asks shows Overview and puts the caret in the plan's title once it stands", () => {
+test("on a wide window whose column shows an agent, the rename ⌘K asks shows Overview and puts the caret in the description's title once it stands", () => {
   const page = mount(SHELL_ROOM.WIDE, false, undefined, false, true);
   page.renameFromPalette();
   assert.deepEqual(page.told, [`column "${MAIN_TAB.OVERVIEW}"`]);
@@ -455,8 +455,8 @@ test("on a wide window whose column shows an agent, the rename ⌘K asks shows O
   page.draw(false, undefined, undefined, false);
 
   assert.ok(
-    document.activeElement === planTitle(page.container),
-    "the caret is in the plan's title",
+    document.activeElement === descriptionTitle(page.container),
+    "the caret is in the description's title",
   );
 });
 
@@ -478,13 +478,13 @@ function RefusingTask(): React.JSX.Element {
   });
 }
 
-test("on a wide window a refused rename keeps the name typed in the plan's title, with the refusal beside it", async () => {
+test("on a wide window a refused rename keeps the name typed in the description's title, with the refusal beside it", async () => {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(onRegistry(AtomRegistry.make(), createElement(RefusingTask))));
-  const title = planTitle(container);
-  assert.ok(title, "the plan's title is drawn");
+  const title = descriptionTitle(container);
+  assert.ok(title, "the description's title is drawn");
 
   act(() => {
     title.focus();
@@ -493,6 +493,6 @@ test("on a wide window a refused rename keeps the name typed in the plan's title
   });
   await act(async () => title.blur());
 
-  assert.equal(planTitle(container)?.textContent, "Invite teammates");
+  assert.equal(descriptionTitle(container)?.textContent, "Invite teammates");
   assert.match(container.textContent ?? "", /The task could not be renamed\. Try again\./u);
 });

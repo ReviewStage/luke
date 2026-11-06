@@ -91,7 +91,7 @@ function standingOf(shell: ReactElement): string {
 }
 
 /** A router over the shell, the places, and the routed places, standing at `at`. */
-export function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
+function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
   const root = createRootRoute({ component: ShellRoot });
   const places = createRoute({ getParentRoute: () => root, id: "places", component: ShellPlaces });
   const stateRoute = createRoute({

@@ -1,4 +1,3 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
@@ -20,12 +19,16 @@ import {
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { actMutation } from "../act-mutations.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";
+import {
+  repositoryListsQuery,
+  repositoryListsRetryMutation,
+  repositoryScope,
+} from "../live-reads.js";
 import { useRepositoryPictures } from "../repository-pictures.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { AddMenuButton } from "./add-menu-button.js";
 import { MenuRow } from "./menu-row.js";
 import { Picker, PickerRow } from "./picker-row.js";
@@ -87,18 +90,25 @@ function ChannelMark({ channel }: { channel: SlackListedChannel }): React.JSX.El
  */
 function useRepositoryRows(workspaceId: string) {
   const pictures = useRepositoryPictures();
-  const { rows: listed, status, retry } = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
+  const list = useQuery(repositoryListsQuery(workspaceId));
+  const { mutate: retry } = useMutation(repositoryListsRetryMutation());
+  const listed = list.data;
   const rows: readonly MenuRowChoice[] = useMemo(
     () => listed?.repositories.map((one) => repositoryMenuRow(one.fullName, pictures)) ?? [],
     [listed, pictures],
   );
-  const failed = status === HOST_READ_STATUS.FAILED;
+  const failed = list.isError;
   const note = failed
     ? readFailedWords(TERM.REPOSITORY.many)
     : listed === undefined
       ? readingWords(TERM.REPOSITORY.many)
       : undefined;
-  return { read: failed ? retry : () => undefined, note, pictures, rows };
+  return {
+    read: failed ? () => retry(repositoryScope(workspaceId)) : () => undefined,
+    note,
+    pictures,
+    rows,
+  };
 }
 
 /**

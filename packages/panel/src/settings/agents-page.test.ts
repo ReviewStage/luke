@@ -208,6 +208,7 @@ async function mount(): Promise<HTMLElement> {
     ),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(placeholders(container).length, 0));
   return container;
 }
 
@@ -267,7 +268,7 @@ test("while the default and the keys are read, placeholder rows stand in each gr
     ["Reading your default", 3],
   ]);
   await settle();
-  assert.deepEqual(placeholders(page), []);
+  await vi.waitFor(() => assert.equal(placeholders(page).length, 0));
   assert.ok(fastSwitch(page));
 });
 
@@ -461,7 +462,7 @@ test("on Vespin's key the resting Fast row says the same and links nowhere, sinc
     note.textContent ?? "",
     /Fast isn't enabled for this key's Anthropic organization\./u,
   );
-  assert.equal(note.querySelector("a"), null);
+  assert.equal(note.querySelector("a") === null, true);
 });
 
 test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place, which stores the version chosen", async () => {
@@ -478,7 +479,7 @@ test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place
   ];
   stored = { model: sol.id, effort: "high" };
   const page = await mount();
-  assert.equal(page.querySelector('[role="switch"][aria-label="Fast"]'), null);
+  assert.equal(page.querySelector('[role="switch"][aria-label="Fast"]') === null, true);
   const speed = segmentedGroup(page, "Speed");
   assert.deepEqual(readSegmented(speed), {
     options: ["Standard", "Fast", "Ultrafast"],
@@ -513,8 +514,8 @@ test("replacing the account's own Anthropic key moves the models the host holds,
     ).click(),
   );
   const label =
-    [...document.querySelectorAll("label")].find((each) => each.textContent === "New key") ??
-    assert.fail("no New key field");
+    [...document.querySelectorAll("label")].find((each) => each.textContent === "Paste the key") ??
+    assert.fail("no key field");
   const field = label.control instanceof HTMLInputElement ? label.control : assert.fail();
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(

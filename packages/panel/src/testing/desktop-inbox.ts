@@ -92,7 +92,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "./composer.js";
-import { onRegistry } from "./copy-feedback.js";
+import { onRegistry, settleQueries } from "./copy-feedback.js";
 import { sidebarProps } from "./desktop-sidebar.js";
 import { holdFrames, settleFrames } from "./frames.js";
 import { heardWords } from "./heard-words.js";
@@ -899,9 +899,18 @@ export function mount(
   return { page: container, asked };
 }
 
-/** Lets every promise settled so far run its continuations, and the frames a paint takes pass (`settleFrames`). */
+/**
+ * Lets every promise settled so far run its continuations, the frames a
+ * paint takes pass (`settleFrames`), and every notification TanStack Query
+ * has queued reach the surfaces observing it (`settleQueries`). The Inbox's
+ * tests act step after step on what each push left, an item chosen, marked,
+ * or answered, so a `vi.waitFor` on one step's outcome alone left the next
+ * step racing the notification after it; waiting out the queue here holds
+ * every step.
+ */
 export async function settle(): Promise<void> {
   await settleFrames();
+  await settleQueries(settleFrames);
 }
 
 /**

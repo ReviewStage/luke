@@ -326,12 +326,16 @@ async function settle(): Promise<void> {
 
 /** Presses the chip of the item's words that says the name given. */
 async function pressChip(container: HTMLElement, name: string): Promise<void> {
-  const chip = [
-    ...container.querySelectorAll<HTMLButtonElement>(
-      "[data-inbox-message-text] [data-mention-ref]",
-    ),
-  ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name));
-  assert.ok(chip, `no chip says ${name}`);
+  // Note that the item's words stand once the account's inbox read reaches its query.
+  const chip = await vi.waitFor(
+    () =>
+      [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          "[data-inbox-message-text] [data-mention-ref]",
+        ),
+      ].find((each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name)) ??
+      assert.fail(`no chip says ${name}`),
+  );
   act(() => chip.click());
   await settle();
 }
@@ -521,10 +525,14 @@ test("a link to a page of the item's task, pressed in a transcript beside the In
   assert.match(panelTabs(container)?.[0] ?? "", /^▸ Batch the invitations/);
 
   // Note that the chip is the transcript's, drawn in the panel, not the item's words.
-  const chip = [
-    ...container.querySelectorAll<HTMLElement>('aside[aria-label="Panel"] [data-mention-ref]'),
-  ].find((each) => each.textContent?.includes("Invite funnel"));
-  assert.ok(chip, "the transcript names the page");
+  // Note that the transcript is drawn once its page reaches its query.
+  const chip = await vi.waitFor(
+    () =>
+      [
+        ...container.querySelectorAll<HTMLElement>('aside[aria-label="Panel"] [data-mention-ref]'),
+      ].find((each) => each.textContent?.includes("Invite funnel")) ??
+      assert.fail("the transcript names the page"),
+  );
   act(() => chip.click());
   await settle();
 

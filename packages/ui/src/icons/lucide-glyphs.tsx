@@ -71,7 +71,7 @@ export const CircleCheckIcon = lucideGlyph(CircleCheck, "ui-glyph");
 /** An in-tray: something was posted to the Inbox. */
 export const InboxIcon = lucideGlyph(Inbox, "ui-glyph");
 
-/** A speech bubble, for a plan's comments: the side panel's Comments tab and the summary's row. */
+/** A speech bubble, for a description's comments: the side panel's Comments tab and the summary's row. */
 export const CommentsIcon = lucideGlyph(MessageSquare, "icon-button-glyph");
 
 /** A sound wave's bars: a call into an agent, which starts one where none is up. */

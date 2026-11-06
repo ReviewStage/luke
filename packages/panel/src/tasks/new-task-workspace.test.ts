@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, holdRepositoryLists, type RepositoriesRead } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
@@ -167,10 +167,10 @@ async function openNewTask(workspaceId: string, preset?: string) {
 test("a repository group's + whose repository the workspace's GitHub does not reach opens New task on none", async () => {
   const dialog = await openNewTask(PERSONAL.id, "ReviewStage/luke");
 
-  const label = dialog.repositoryChip().textContent;
+  // Note that the chip lets the repository go once the read that leaves it out reaches its query.
+  await vi.waitFor(() => assert.equal(dialog.repositoryChip().textContent, "No repository"));
   await dialog.create();
 
-  assert.equal(label, "No repository");
   assert.deepEqual(dialog.starts, [[null, PERSONAL.id]]);
 });
 

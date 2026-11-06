@@ -1,4 +1,5 @@
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { useQuery } from "@tanstack/react-query";
+import { appStateQuery, selectRun } from "./use-app-state.js";
 
 /**
  * repository-pictures.ts -- whether a surface outside the Tasks tab draws a repository by its owner's picture.
@@ -8,5 +9,5 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * A fixture run draws none, because its frames ask nothing of the network.
  */
 export function useRepositoryPictures(): boolean {
-  return useAppSlice(APP_SLICE.RUN)?.fixtureMode !== true;
+  return useQuery({ ...appStateQuery, select: selectRun }).data?.fixtureMode !== true;
 }

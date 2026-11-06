@@ -19,14 +19,14 @@ import type {
   ComposerTrigger,
   MentionNode,
   MentionNodeDoors,
-  PlanEditorModule,
-} from "../plan-editor/contract.js";
+  DescriptionEditorModule,
+} from "../description-editor/contract.js";
 import { useSelectionToolbar } from "./selection-toolbar.js";
 
 /**
  * composer-field.tsx -- the field of a box written to an agent, its message box's or the Inbox's answer box's: the editor bundle's composer mounted in the card, the words it hands back, and the commands that change them from outside.
  *
- * The field is TipTap (`../plan-editor/composer-editor.ts`), from the editor
+ * The field is TipTap (`../description-editor/composer-editor.ts`), from the editor
  * bundle the panel starts loading as it first paints (`../bundle-loader.ts`).
  * In the rare frame before it lands, the field is drawn at its own size with
  * its placeholder, inert and out of the Tab order, and the editor takes the
@@ -150,7 +150,7 @@ export function ComposerField({
   children,
 }: {
   /** The editor bundle; nothing until it has loaded, while the field stands inert. */
-  module: PlanEditorModule | undefined;
+  module: DescriptionEditorModule | undefined;
   /** Where the mounted editor's handle is kept, for the box's commands. */
   editor: RefObject<ComposerEditorHandle | undefined>;
   /** The field's own element, which the lists over it stand in. */

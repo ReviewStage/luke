@@ -25,7 +25,7 @@ import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { stateWith } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
 import { appStateFirstRead } from "./use-app-state.js";
 
@@ -112,8 +112,10 @@ async function settle(): Promise<void> {
 function drawWindow(profile: string): Effect.Effect<void> {
   return Effect.gen(function* () {
     handFixtureRun(profile);
-    yield* Effect.orDie(appStateFirstRead);
+    const state = yield* Effect.orDie(appStateFirstRead);
     yield* Effect.promise(loadTasksFixture);
+    // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
+    writeAppState(state);
     root = createRoot(document.body.appendChild(document.createElement("div")));
     act(() => root?.render(onRegistry(rendererRegistry, windowRouter().drawn())));
     yield* Effect.promise(settle);
@@ -165,7 +167,7 @@ it.effect(
     Effect.gen(function* () {
       yield* drawWindow(RUN_PROFILE.TASKS);
 
-      assert.equal(document.querySelector(".desktop-settings"), null);
+      assert.equal(document.querySelector(".desktop-settings") === null, true);
       assert.doesNotMatch(drawn(), /ada@example\.com/u);
     }),
 );
@@ -178,7 +180,7 @@ it.effect(
 
       const column = document.querySelector(".desktop-task-column");
       assert.ok(column, "the open task's column stands");
-      assert.equal(column.querySelector('[class*="skeleton"]'), null);
+      assert.equal(column.querySelector('[class*="skeleton"]') === null, true);
       assert.equal(
         document.querySelector('.desktop-task-main [role="tab"]')?.getAttribute("aria-selected"),
         "true",

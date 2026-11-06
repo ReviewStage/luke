@@ -19,6 +19,8 @@ export const HOST_CAPABILITY = {
   MAC_TERMINAL: "macTerminal",
   /** An agent's Terminal tab, and Show terminal and New terminal that open it. */
   TERMINALS: "terminals",
+  /** A cloud agent's Local tab: shells on this Mac in the agent's mirrored files. */
+  LOCAL_TERMINALS: "localTerminals",
   /** Forward to localhost, which listens on the machine's own loopback for an agent's cloud ports. */
   PORT_FORWARDS: "portForwards",
   /** Install command-line tool, which runs the `vespin` command's install script in the account of the machine the client runs on. */

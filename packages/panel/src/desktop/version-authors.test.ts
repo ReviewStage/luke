@@ -2,15 +2,15 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { SHELL_ROOM } from "../shell-room.js";
-import { HISTORY_READ } from "../tasks/use-plan-history.js";
+import { HISTORY_READ } from "../tasks/use-description-history.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -22,9 +22,9 @@ import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-his
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /**
- * Who wrote a plan's version, as its history names them: a member who left
+ * Who wrote a description's version, as its history names them: a member who left
  * is drawn by their own face, grayed, which a screen reader cannot see, so
- * their name says they left. Synthetic plan and people.
+ * their name says they left. Synthetic description and people.
  */
 
 const ignore = (): void => undefined;
@@ -39,11 +39,11 @@ const ACME = {
 
 const LEE = { userId: "user-lee", name: "Lee Park" };
 
-/** A revision of the plan by Lee, who has since left. */
+/** A revision of the description by Lee, who has since left. */
 function line(seq: number) {
   return {
     seq,
-    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by: LEE, at: 10 * seq, duringCall: false },
+    lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, by: LEE, at: 10 * seq, duringCall: false },
     startedAt: 10 * seq,
     changes: 2,
   };
@@ -65,7 +65,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history over the window, its versions by Lee read, and the sections of version 3 open. */
+/** The description's version history over the window, its versions by Lee read, and the sections of version 3 open. */
 function drawn(): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({
@@ -137,10 +137,13 @@ test("a version by a member who left names them as one, in its row and over its 
 
   const said = (selector: string) =>
     [...view.querySelectorAll(selector)].map((each) => each.textContent);
-  assert.deepEqual(said('[aria-label="Version list"] .version-row-author'), [
-    "Lee Park (former member)",
-    "Lee Park (former member)",
-  ]);
+  // Note that who left is named once the workspace's people reach their query.
+  await vi.waitFor(() =>
+    assert.deepEqual(said('[aria-label="Version list"] .version-row-author'), [
+      "Lee Park (former member)",
+      "Lee Park (former member)",
+    ]),
+  );
   assert.deepEqual(said(".version-sections-head .version-row-author"), [
     "Lee Park (former member)",
   ]);
@@ -155,8 +158,11 @@ test("a version by a member hangs their card beside its row while the pointer re
 
   const row = view.querySelector<HTMLElement>('[aria-label="Version list"] button');
   assert.ok(row, "a version is listed");
-  restOn(row);
-  const card = document.querySelector('.ui-tooltip-card [data-actor-card="person"]');
-  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Lee Park");
-  assert.match(card?.textContent ?? "", /lee@example\.com/u);
+  // Note that the card names the member once the workspace's people reach their query, each rest drawing it afresh.
+  await vi.waitFor(() => {
+    restOn(row);
+    const card = document.querySelector('.ui-tooltip-card [data-actor-card="person"]');
+    assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Lee Park");
+    assert.match(card?.textContent ?? "", /lee@example\.com/u);
+  });
 });

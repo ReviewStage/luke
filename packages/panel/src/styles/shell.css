@@ -462,7 +462,7 @@
         .ui-toolbar:not(:is(.side-panel, .settings-page, .version-page) *)
       )
     ),
-    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout) > *,
+    :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout) > *,
     .ui-toolbar:nth-child(1 of :not([hidden]))
   ):not(
     :is(
@@ -488,7 +488,8 @@
           )
         )
       ):not(
-        :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout) > *
+        :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+          > *
       )
       *
   ) {
@@ -499,9 +500,9 @@
 :where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   :is(.ui-pane-bar, .ui-toolbar):is(
-    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+    :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout)
       > :not(:nth-child(1 of :not([hidden]))),
-    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+    :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout)
       > :not(:nth-child(1 of :not([hidden])))
       *
   ) {
@@ -511,9 +512,9 @@
 :where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   :is(.ui-pane-bar, .ui-toolbar):is(
-    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+    :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout)
       > :not(:nth-last-child(1 of :not([hidden]))),
-    :is(.desktop-plan-body, .inbox-view[data-columns="both"], .automation-editor-layout)
+    :is(.desktop-description-body, .inbox-view[data-columns="both"], .automation-editor-layout)
       > :not(:nth-last-child(1 of :not([hidden])))
       *
   ) {
@@ -651,18 +652,6 @@
   .desktop-sidebar
   > .desktop-drag-strip {
   display: none;
-}
-
-/* Note that Back and Forward still stand at the drawer's top right where
-   they are drawn (an installed web app's, `HistoryButtons`), on the head's
-   own row now that no strip holds them above it, so the head ends short of
-   their two buttons rather than running its press and its name under them. */
-:where(:root)[data-ui-room="narrow"]
-  .desktop-shell[data-sidebar-collapsed]
-  .desktop-sidebar
-  > .title-bar-controls[data-edge="column"]
-  ~ :is(.sidebar-workspace, .sidebar-identity) {
-  margin-inline-end: calc(2 * var(--ui-control-height) + var(--ui-space-8));
 }
 
 /* A finger swiping the drawer in or out (`@repo/ui`'s `use-drawer-swipe.ts`)

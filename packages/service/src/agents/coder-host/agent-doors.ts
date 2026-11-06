@@ -21,7 +21,7 @@ import {
 import { readTaskHeader } from "@repo/database/models/task-store";
 import type { StoreWriter } from "@repo/database/models/writer";
 import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
-import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
+import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
@@ -67,7 +67,7 @@ import {
 } from "../automation-tools.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
-import { plansOnFor } from "../plans-on.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
 import { runMessageAgent } from "./agent-message.js";
@@ -75,11 +75,11 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
   editedTaskOf,
-  PLAN_EDIT_REFUSAL,
-  type PlanEditResult,
-  planEditRejected,
-  recordPlanEdit,
-} from "./plan-edit.js";
+  DESCRIPTION_EDIT_REFUSAL,
+  type DescriptionEditResult,
+  descriptionEditRejected,
+  recordDescriptionEdit,
+} from "./description-edit.js";
 import {
   openPullRequest,
   PULL_REQUEST_UNAVAILABLE,
@@ -194,35 +194,38 @@ function agentTaskOf(
   );
 }
 
-/** Takes one `edit_plan` call's notes into the plan of the task it names, given how many notes the turn has taken already, its pictures read through the sandbox door given. */
-export function runAgentEditPlan(
+/** Takes one `edit_description` call's notes into the description of the task it names, given how many notes the turn has taken already, its pictures read through the sandbox door given. */
+export function runAgentEditDescription(
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
   takenInTurn: number,
   sandbox: InboxSandboxDoor,
-): Effect.Effect<PlanEditResult, never, DatabaseServices> {
+): Effect.Effect<DescriptionEditResult, never, DatabaseServices> {
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
-    if (Result.isFailure(found)) return planEditRejected(found.failure);
-    // Note that no agent whose starter has Plans off is listed the tool; a harness may call it anyway, and this refuses it.
-    if (!(yield* plansOnFor(found.success.userId, found.success.kind))) {
-      return planEditRejected(PLAN_EDIT_REFUSAL.OFF);
+    if (Result.isFailure(found)) return descriptionEditRejected(found.failure);
+    // Note that no agent whose starter has Descriptions off is listed the tool; a harness may call it anyway, and this refuses it.
+    if (!(yield* descriptionsOnFor(found.success.userId, found.success.kind))) {
+      return descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.OFF);
     }
     const taskId = editedTaskOf(input);
-    if (taskId === undefined) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK_NAMED);
+    if (taskId === undefined)
+      return descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.NO_TASK_NAMED);
     const task = yield* agentTaskOf(admitted, found.success, taskId);
-    if (Option.isNone(task)) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
+    if (Option.isNone(task)) return descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.NO_TASK);
     const agentId = found.success.id;
-    // The plan is written as the member whose turn this is, whoever started the agent.
+    // The description is written as the member whose turn this is, whoever started the agent.
     const binding = { userId: admitted.caller, taskId };
-    return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn, sandbox);
+    return yield* recordDescriptionEdit(binding, { agentId }, input, takenInTurn, sandbox);
   }).pipe(
     Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
+    Effect.catch(() =>
+      Effect.succeed(descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.UNAVAILABLE)),
+    ),
   );
 }
 
-/** Runs one `look_at_picture` call: one of the pictures of the plan its address names, in the agent's workspace, read as the member whose turn this is. */
+/** Runs one `look_at_picture` call: one of the pictures of the description its address names, in the agent's workspace, read as the member whose turn this is. */
 export function runAgentLookAtPicture(
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
@@ -230,7 +233,7 @@ export function runAgentLookAtPicture(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return pictureNotLooked(found.failure);
-    if (!(yield* plansOnFor(found.success.userId, found.success.kind))) {
+    if (!(yield* descriptionsOnFor(found.success.userId, found.success.kind))) {
       return pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF);
     }
     const taskId = lookedTaskOf(input);
@@ -238,7 +241,7 @@ export function runAgentLookAtPicture(
     if (Option.isNone(yield* agentTaskOf(admitted, found.success, taskId))) {
       return pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE);
     }
-    // The plan is read as the member whose turn this is, as `editPlan` writes it.
+    // The description is read as the member whose turn this is, as `editDescription` writes it.
     return yield* runLookAtPicture({ userId: admitted.caller, taskId }, input);
   }).pipe(
     Effect.tapError(logStoreFailure),
@@ -268,10 +271,10 @@ export function runAgentOpenPullRequest(
 }
 
 /**
- * Runs one call of a comment tool (`tasks/comment-tools.ts`) on the plan of
+ * Runs one call of a comment tool (`tasks/comment-tools.ts`) on the description of
  * the task it names, or one of its pages, in the agent's workspace, as the
- * member whose turn it is, written under the agent; the plan's threads only
- * where the agent's starter has Plans on (`plansOnFor`).
+ * member whose turn it is, written under the agent; the description's threads only
+ * where the agent's starter has Descriptions on (`descriptionsOnFor`).
  */
 export function runAgentComment(
   admitted: AdmittedConversation,
@@ -286,15 +289,15 @@ export function runAgentComment(
     const task = yield* agentTaskOf(admitted, found.success, taskId);
     if (Option.isNone(task)) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
     const agentId = found.success.id;
-    // The comments are read and written as the member whose turn this is, as `editPlan` writes the plan.
+    // The comments are read and written as the member whose turn this is, as `editDescription` writes the description.
     const writer = {
-      actor: PLAN_COMMENT_ACTOR.AGENT,
+      actor: DESCRIPTION_COMMENT_ACTOR.AGENT,
       userId: admitted.caller,
       agentId,
     } as const;
-    // A page's threads stand whatever the starter's Plans; the plan's are left out while it is off.
-    const plansOn = yield* plansOnFor(found.success.userId, found.success.kind);
-    return yield* runCommentTool(name, { taskId, writer, plansOn }, input);
+    // A page's threads stand whatever the starter's Descriptions setting; the description's are left out while it is off.
+    const descriptionsOn = yield* descriptionsOnFor(found.success.userId, found.success.kind);
+    return yield* runCommentTool(name, { taskId, writer, descriptionsOn }, input);
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(commentToolRejected(COMMENT_TOOL_REFUSAL.UNAVAILABLE))),

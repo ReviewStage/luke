@@ -334,6 +334,15 @@ test("in the List, a member picked on a row's Assignee chip is sent with the nam
   const { container, sent, named } = await mountView(TasksList, TASKS, DEFAULT_LIST_DISPLAY);
 
   act(() => chipOf(container, "ACME-41", "Assignee").click());
+  // Note that the members are offered once their read reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(
+      [...document.querySelectorAll(".ui-menu-item-label")].some(
+        (label) => label.textContent === "Charles Pan",
+      ),
+      true,
+    ),
+  );
   pick("Charles Pan");
 
   assert.deepEqual(sent, [["t-41", { assigneeId: CHARLES }]]);

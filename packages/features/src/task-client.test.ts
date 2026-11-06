@@ -8,14 +8,14 @@ import { AGENT_STATUS } from "./agent-wire.js";
 import { FAILURE_FACT } from "./failure-facts.js";
 import { WRITE_UNTAKEN } from "./keyed-write.js";
 import { LIVE_POLL, LIVE_POLL_URL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
-import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
+import { DESCRIPTION_ATTACHMENT_REFUSAL } from "./description-attachment-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR, IDEMPOTENCY_KEY } from "./service-wire.js";
 import { HostedTaskClient } from "./task-client.js";
 import { TASK_BOUNDS, TASK_FILE_REFUSAL } from "./task-wire.js";
 import {
   PICTURE_KEEP_FAILURE,
-  PLAN_COMMENT_CALL_FAILURE,
+  DESCRIPTION_COMMENT_CALL_FAILURE,
   TASK_CALL_FAILURE,
 } from "./tasks-view.js";
 
@@ -70,7 +70,7 @@ it.effect(
       const conflict = { conflict: { current: "- Vespin's words." } };
       let sent = 0;
       const api = fakeCloudApi({
-        [`POST /api/plans/${TASK_ID}/edit`]: {
+        [`POST /api/plans/${TASK_ID}/description`]: {
           answer: () => {
             sent += 1;
             return sent === 1 ? { plan: saved } : conflict;
@@ -257,8 +257,8 @@ it.effect(
       );
 
       assert.deepEqual(refused, { refused: "not-yours" });
-      assert.deepEqual(elsewhere, { failure: PLAN_COMMENT_CALL_FAILURE.NOT_FOUND });
-      assert.deepEqual(blank, { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(elsewhere, { failure: DESCRIPTION_COMMENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(blank, { failure: DESCRIPTION_COMMENT_CALL_FAILURE.UNANSWERED });
       assert.equal(api.requests().length, 2);
     }),
 );
@@ -366,7 +366,7 @@ it.effect(
     Effect.gen(function* () {
       const api = fakeCloudApi({
         "GET /api/plans": { answer: () => ({ plans: [{ ...SUMMARY, archivedAt: 5 }] }) },
-        [`GET /api/plans/${TASK_ID}/revisions/3`]: {
+        [`GET /api/plans/${TASK_ID}/description/revisions/3`]: {
           status: 404,
           answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
         },
@@ -379,7 +379,7 @@ it.effect(
       assert.equal(revision, undefined);
       assert.deepEqual(recordedRoutes(api.requests()), [
         "GET /api/plans?archived=include",
-        `GET /api/plans/${TASK_ID}/revisions/3`,
+        `GET /api/plans/${TASK_ID}/description/revisions/3`,
       ]);
     }),
 );
@@ -443,7 +443,7 @@ it.effect(
 );
 
 it.effect(
-  "a picture kept answers its id, a plan at its bound of pictures or of videos answers so, and one the account may not write answers not found",
+  "a picture kept answers its id, a description at its bound of pictures or of videos answers so, and one the account may not write answers not found",
   () =>
     Effect.gen(function* () {
       const picture = "data:image/png;base64,iVBORw0KGgo=";
@@ -460,11 +460,14 @@ it.effect(
       assert.deepEqual(yield* Effect.provide(client().keepPicture(TASK_ID, picture), api.layer), {
         id: keptId,
       });
-      assert.deepEqual(yield* keep(200, () => ({ refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY })), {
-        failure: PICTURE_KEEP_FAILURE.TOO_MANY,
-      });
       assert.deepEqual(
-        yield* keep(200, () => ({ refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS })),
+        yield* keep(200, () => ({ refused: DESCRIPTION_ATTACHMENT_REFUSAL.TOO_MANY })),
+        {
+          failure: PICTURE_KEEP_FAILURE.TOO_MANY,
+        },
+      );
+      assert.deepEqual(
+        yield* keep(200, () => ({ refused: DESCRIPTION_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS })),
         { failure: PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS },
       );
       assert.deepEqual(yield* keep(404, () => ({ error: HOSTED_API_ERROR.NOT_FOUND })), {

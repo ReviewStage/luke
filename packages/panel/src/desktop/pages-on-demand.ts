@@ -12,7 +12,7 @@ import { lazyRoute } from "../lazy-route.js";
  * which offers the page's way out as the page would.
  */
 
-/** The open plan's version history, over the whole window (`desktop-version-history.tsx`). */
+/** The open description's version history, over the whole window (`desktop-version-history.tsx`). */
 export const VERSION_HISTORY = lazyRoute(() =>
   import("./desktop-version-history.js").then((loaded) => loaded.TaskVersionHistory),
 );

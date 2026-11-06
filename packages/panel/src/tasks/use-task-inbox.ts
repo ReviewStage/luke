@@ -13,8 +13,8 @@ import {
 } from "@repo/features/agent-view";
 import type { AgentAttachment } from "@repo/features/agent-wire";
 import { INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { AppInboxItems } from "@repo/host/app-state";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -30,9 +30,9 @@ import {
   useInboxDrafts,
   withoutPicks,
 } from "../composer-drafts.js";
+import { holderInboxQuery, holderInboxRetryMutation, inboxItemsQuery } from "../live-reads.js";
 import type { PictureReader } from "../picture-query.js";
 import { useSendQueue } from "../send-queue.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { messageFailureWords } from "./agent-model.js";
 import { useInboxArrivals } from "./inbox-arrivals.js";
 import {
@@ -504,20 +504,21 @@ export function useHeldTaskInbox(input: {
   // listed, one started on another Mac, posted.
   const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
   const active = shown && taskId !== undefined && readable;
-  const holder = useHostRead(
-    LIVE_READ.HOLDER_INBOX,
-    useMemo(
-      () => (active && taskId !== undefined ? { kind, id: taskId } : undefined),
-      [active, kind, taskId],
-    ),
-  );
-  const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
+  const holderKey = active && taskId !== undefined ? { kind, id: taskId } : undefined;
+  const holder = useQuery(holderInboxQuery(holderKey));
+  const { mutate: retryHolder } = useMutation(holderInboxRetryMutation());
+  // Note that Try again moves with the holder alone, as the read's own did, since a render builds its key anew.
+  const holderId = holderKey?.id;
+  const onRetry = useCallback(() => {
+    if (holderId !== undefined) retryHolder({ kind, id: holderId });
+  }, [retryHolder, kind, holderId]);
+  const feed = useQuery(inboxItemsQuery());
   // Note that an agent on a plan draws its own items among the plan's, which keep their identity while the plan's list stands.
   const planItems =
     kind === INBOX_SCOPE_KIND.AGENT && input.draftTask != null
-      ? feed.rows?.[INBOX_SCOPE_KIND.PLAN][input.draftTask]
+      ? feed.data?.[INBOX_SCOPE_KIND.PLAN][input.draftTask]
       : undefined;
-  const fedRows = feed.rows;
+  const fedRows = feed.data;
   const fed = useMemo(
     () =>
       planItems === undefined
@@ -526,9 +527,9 @@ export function useHeldTaskInbox(input: {
     [fedRows, planItems, kind, taskId, input.draftTask],
   );
   // The holder's own read stands in for the feed's once it answered, since it holds what the feed leaves out.
-  const pushed = holder.rows ?? fed;
-  const read = holder.status === HOST_READ_STATUS.READY;
-  const failed = holder.status === HOST_READ_STATUS.FAILED;
+  const pushed = holder.data ?? fed;
+  const read = holder.isSuccess;
+  const failed = holder.isError;
   const [held, setHeld] = useState<Held>(() => fresh(taskId, pushed));
   if (held.taskId !== taskId) setHeld(fresh(taskId, pushed));
   useInboxArrivals(
@@ -809,8 +810,8 @@ export function useHeldTaskInbox(input: {
     read,
     drawn: held.drawn,
     failed,
-    onRetry: holder.retry,
-    whole: holder.rows,
+    onRetry,
+    whole: holder.data,
     sending,
     pendingReplies,
     notes,

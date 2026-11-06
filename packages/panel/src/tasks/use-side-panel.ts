@@ -11,10 +11,12 @@ import {
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
+  isLocalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
+  type LocalStripTab,
   movedOrder,
   openedOrder,
   type PageStripTab,
@@ -44,20 +46,20 @@ import {
 /**
  * use-side-panel.ts -- the open task's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
  *
- * The task's column is the task's own: its Overview, holding the plan's
- * document, and its coding agents (`use-main-tabs.ts`); everything else
- * (the plan's comments, and what its agents made) stands
+ * The task's column is the task's own: its Overview, holding its
+ * description, and its coding agents (`use-main-tabs.ts`); everything else
+ * (the description's comments, and what its agents made) stands
  * in a panel at the window's right that the developer
  * opens and closes, as every devtool window's secondary sidebar does. A
  * subagent's tab opened from an agent's transcript opens it too. Not to be
  * confused with "the panel", which in this renderer is the app's whole surface.
  *
- * No fixed tab stands in the strip now. The plan's own tab once stood here
+ * No fixed tab stands in the strip now. The description's own tab once stood here
  * on every task, the task's Inbox on a task where an item waited, and the
- * plan's Comments once a comment was left on it; none is drawn or offered
- * now, since the column's Overview holds the plan, a task's threads open
- * in the window's Inbox, and the plan lists its own comments in its
- * margin's place (`plan-comments.tsx`'s `PlanCommentList`), and what an
+ * description's Comments once a comment was left on it; none is drawn or offered
+ * now, since the column's Overview holds the description, a task's threads open
+ * in the window's Inbox, and the description lists its own comments in its
+ * margin's place (`description-comments.tsx`'s `DescriptionCommentList`), and what an
  * earlier version kept of any of them reads and opens nothing
  * (`DRAWN_KINDS`). So a new task has no tab,
  * and what arrives on it adds its tab at the strip's end as it arrives,
@@ -172,12 +174,13 @@ import {
 /** The panel's kinds of tab, the fixed three. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   /**
-   * The task's plan, which the column's Overview holds now
+   * The task's description, which the column's Overview holds now
    * (`use-main-tabs.ts`). Note that it is kept here, drawn and offered
    * nowhere (`DRAWN_KINDS`), because what an earlier version kept and pinned
-   * names it, and a pin or a link naming it opens Overview instead.
+   * names it, and a pin or a link naming it opens Overview instead. Its value
+   * is the name the description had then, which is what was kept.
    */
-  PLAN: "plan",
+  DESCRIPTION: "plan",
   /**
    * The task's Inbox, whose threads open in the window's Inbox narrowed to
    * the task now. Note that it is kept here, drawn and offered nowhere
@@ -186,8 +189,8 @@ export const SIDE_PANEL_TAB = {
    */
   INBOX: "inbox",
   /**
-   * The plan's comment threads, which the plan lists in its margin's place
-   * now (`plan-comments.tsx`'s `PlanCommentList`). Note that it is kept
+   * The description's comment threads, which the description lists in its margin's place
+   * now (`description-comments.tsx`'s `DescriptionCommentList`). Note that it is kept
    * here, drawn and offered nowhere (`DRAWN_KINDS`), because what an earlier
    * version kept and pinned names it.
    */
@@ -228,6 +231,7 @@ export type SidePanelTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
+  | LocalStripTab
   | PageStripTab
   | CloudBrowserStripTab;
 
@@ -296,7 +300,7 @@ interface SidePanelTabKind {
 }
 
 export const SIDE_PANEL_TAB_KIND = {
-  [SIDE_PANEL_TAB.PLAN]: { label: "Description", icon: DocumentIcon },
+  [SIDE_PANEL_TAB.DESCRIPTION]: { label: "Description", icon: DocumentIcon },
   [SIDE_PANEL_TAB.INBOX]: { label: TAB_WORDS.INBOX, icon: InboxIcon },
   [SIDE_PANEL_TAB.COMMENTS]: { label: "Comments", icon: CommentsIcon },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
@@ -306,12 +310,12 @@ export const SIDE_PANEL_TABS: readonly FixedSidePanelTab[] = Object.values(SIDE_
 
 const FIXED_TABS: ReadonlySet<StripTab> = new Set(SIDE_PANEL_TABS);
 
-/** The kinds of old that are chosen and shown nowhere: the Inbox's, whose threads the window's Inbox holds, and Comments, which the plan lists itself. */
+/** The kinds of old that are chosen and shown nowhere: the Inbox's, whose threads the window's Inbox holds, and Comments, which the description lists itself. */
 const RETIRED_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS];
 
-/** The kinds the panel draws: none of the plan's, which the column's Overview holds, nor the retired ones. */
+/** The kinds the panel draws: none of the description's, which the column's Overview holds, nor the retired ones. */
 export const DRAWN_KINDS: readonly FixedSidePanelTab[] = SIDE_PANEL_TABS.filter(
-  (kind) => kind !== SIDE_PANEL_TAB.PLAN && !RETIRED_KINDS.includes(kind),
+  (kind) => kind !== SIDE_PANEL_TAB.DESCRIPTION && !RETIRED_KINDS.includes(kind),
 );
 
 /** Whether a tab is of a retired kind, which nothing chooses, shows, or reopens. */
@@ -599,6 +603,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly pages: readonly OpenPage[];
   /** The open Terminal tabs, by agent, in the order opened. */
   readonly terminals: readonly TerminalStripTab[];
+  /** The open Local tabs, by agent, in the order opened. */
+  readonly locals: readonly LocalStripTab[];
   /** The agents' cloud Browser tabs opened in this window, by the id the service keeps each under, in the order opened: the only ones the strip draws. */
   readonly openedCloudBrowsers: readonly string[];
   /** The agent whose Terminal tab was shown last on each task, by task. */
@@ -702,6 +708,8 @@ export interface SidePanelControl {
   pages: readonly OpenPage[];
   /** The open Terminal tabs in the order opened, after the page tabs; only those of the open task's agents are drawn. */
   terminals: readonly TerminalStripTab[];
+  /** The open Local tabs in the order opened, after the Terminal tabs; only those of the open task's agents are drawn. */
+  locals: readonly LocalStripTab[];
   /** The agent whose Terminal tab was shown last on the open task, which ⌘J goes to among several. */
   lastTerminal: string | undefined;
   /** What each Pull request tab shows, by agent and then by the number it names (`pull-request-number.ts`), of those whose view was chosen; the overview otherwise. */
@@ -817,8 +825,8 @@ function clampWidth(width: number): number {
 }
 
 /**
- * Whether the open task holds something of each fixed kind: its plan
- * always, its plan any comment. A kind not yet read on the task is absent,
+ * Whether the open task holds something of each fixed kind: its description
+ * always, its description any comment. A kind not yet read on the task is absent,
  * which draws no tab, as nothing does.
  */
 export type TaskHolds = Partial<Record<FixedSidePanelTab, boolean | undefined>>;
@@ -1112,6 +1120,10 @@ function withTab(
     isTerminalTab(tab) && !held.terminals.some((each) => sameTab(each, tab))
       ? [...held.terminals, tab]
       : held.terminals;
+  const locals =
+    isLocalTab(tab) && !held.locals.some((each) => sameTab(each, tab))
+      ? [...held.locals, tab]
+      : held.locals;
   const lastTerminals =
     isTerminalTab(tab) && taskId !== undefined && held.lastTerminals[taskId] !== tab.terminal
       ? { ...held.lastTerminals, [taskId]: tab.terminal }
@@ -1128,6 +1140,7 @@ function withTab(
     pages === held.pages &&
     transcripts === held.transcripts &&
     terminals === held.terminals &&
+    locals === held.locals &&
     lastTerminals === held.lastTerminals &&
     chosen === held.tab
     ? held
@@ -1138,6 +1151,7 @@ function withTab(
         files,
         pages,
         terminals,
+        locals,
         lastTerminals,
         openedCloudBrowsers,
         tab: chosen,
@@ -1404,6 +1418,10 @@ export function drawsTerminal(
   return drawn.taskAgents?.includes(tab.terminal) === true;
 }
 
+export function drawsLocal(tab: LocalStripTab, drawn: Pick<DrawnTabs, "taskAgents">): boolean {
+  return drawn.taskAgents?.includes(tab.local) === true;
+}
+
 /** The open file tabs of files opened on the task, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -1458,6 +1476,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnChanges(held, drawn),
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
     ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
+    ...held.locals.filter((each) => drawsLocal(each, drawn)),
     ...drawnCloudBrowsers(held, drawn),
   ];
   return inTaskOrder(kinds, orderOn(held, drawn.task.id), (tab) => tab);
@@ -1525,14 +1544,16 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
             ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
             : isTerminalTab(tab)
               ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
-              : isCloudBrowserTab(tab)
-                ? {
-                    ...held,
-                    openedCloudBrowsers: held.openedCloudBrowsers.filter(
-                      (each) => each !== tab.cloudBrowser,
-                    ),
-                  }
-                : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+              : isLocalTab(tab)
+                ? { ...held, locals: held.locals.filter((each) => !sameTab(each, tab)) }
+                : isCloudBrowserTab(tab)
+                  ? {
+                      ...held,
+                      openedCloudBrowsers: held.openedCloudBrowsers.filter(
+                        (each) => each !== tab.cloudBrowser,
+                      ),
+                    }
+                  : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.task.id, tab);
   const left = stripOf(forgotten, drawn);
@@ -1802,8 +1823,10 @@ function settled(state: SidePanelState): HeldState {
   ];
   return {
     ...state,
-    // The plan's tab leads, since a kept order from before it stood here holds it nowhere.
-    tabs: [...new Set([SIDE_PANEL_TAB.PLAN, ...state.tabs.filter(current), ...SIDE_PANEL_TABS])],
+    // The description's tab leads, since a kept order from before it stood here holds it nowhere.
+    tabs: [
+      ...new Set([SIDE_PANEL_TAB.DESCRIPTION, ...state.tabs.filter(current), ...SIDE_PANEL_TABS]),
+    ],
     tab: tab === undefined || !panelChoice(tab) ? undefined : tab,
     width: clampWidth(state.width),
     subagents: [],
@@ -1811,6 +1834,7 @@ function settled(state: SidePanelState): HeldState {
     files: [],
     pages: [],
     terminals: [],
+    locals: [],
     openedCloudBrowsers: [],
     lastTerminals: {},
     pullRequestViews: new Map(),
@@ -1936,6 +1960,7 @@ function shownTab(
   if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
   if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];
+  if (isLocalTab(kept)) return drawsLocal(kept, drawn) ? kept : tabs[0];
   // Note that a cloud Browser tab chosen stands while the list is on its way, so it is not swapped for another and back.
   if (isCloudBrowserTab(kept)) {
     return drawn.cloudBrowsers === undefined || drawn.cloudBrowsers.includes(kept.cloudBrowser)
@@ -2194,7 +2219,7 @@ export function useSidePanel(
   );
   // Note that the retired kinds, which a step of the history or a pin an
   // earlier version kept may still name, are never chosen nor shown: a
-  // task's threads open in the window's Inbox, and the plan lists its comments. A tab shown on another task
+  // task's threads open in the window's Inbox, and the description lists its comments. A tab shown on another task
   // is not counted viewed on the open one, because the task it is viewed on is the one about to open, whose
   // strip is not drawn yet; it goes to that strip's end only where it is
   // sure to stand in none of it (`withTabLastOn`).
@@ -2416,6 +2441,7 @@ export function useSidePanel(
     changes: taskTabs(state, taskId).changes ?? NO_CHANGES,
     pages: state.pages,
     terminals: state.terminals,
+    locals: state.locals,
     lastTerminal: taskId === undefined ? undefined : state.lastTerminals[taskId],
     pullRequestViews: state.pullRequestViews,
     onPullRequestView,

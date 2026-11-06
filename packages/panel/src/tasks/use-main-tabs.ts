@@ -23,9 +23,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * started on the task stands under a tab of its own, as an editor draws its
  * files, so an agent's transcript, its calls, and its composer take the room
  * the task is worked in, and a task opens on them. Its Overview, the task's
- * details (its head and its plan document), is no tab among them but a page
+ * details (its head and its description), is no tab among them but a page
  * of its own the topbar's Details opens (`main-tabs.tsx`), kept first in the
- * order below so the agents' tabs move after it. What supports them, the task's Inbox and the plan's comments among it,
+ * order below so the agents' tabs move after it. What supports them, the task's Inbox and the description's comments among it,
  * stands in the side panel (`use-side-panel.ts`). Overview always stands
  * and never closes nor moves; the agents' tabs stand one per agent in the
  * order started, and a draft agent's, opened from the column's "+", after
@@ -64,9 +64,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  *
  * These facts are this window's preference rather than anything main
  * holds, so they are kept in the renderer's own storage, read once at
- * mount. The plan's own tab, the Inbox, the task's Call, and its Chat once
- * stood here (`RETIRED_MAIN_TAB`), the plan's under the word `plan`, which
- * is why Overview, holding the plan now, is kept under a word of its own; what
+ * mount. The description's own tab, the Inbox, the task's Call, and its Chat once
+ * stood here (`RETIRED_MAIN_TAB`), the description's under the word `plan`, which
+ * is why Overview, holding the description now, is kept under a word of its own; what
  * a launch kept of them reads and is let go, so every other choice it holds
  * still stands. The agents' tabs once stood in
  * the side panel, whose record kept them; a window with no record of its own
@@ -83,7 +83,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
  * The column's own tabs, named by a word: the task's Overview, holding its
- * plan document, which leads the strip on every task. Note that it is not
+ * description, which leads the strip on every task. Note that it is not
  * spelled `plan`, the word a retired tab was kept under below.
  */
 export const MAIN_TAB = {
@@ -100,14 +100,15 @@ export function isOverviewTab(tab: StripTab | undefined): tab is OverviewTab {
 
 /**
  * The column's own tabs an earlier version had and this one does not, which
- * what it kept may still name: the plan's own, whose document Overview
+ * what it kept may still name: the description's own, which Overview
  * holds now, and the Inbox, which stands in the side panel, the task's Call, whose calls every agent's tab takes
  * now, and the task's Chat, gone with Chat. Note that a
  * kind is retired here rather than deleted, because a kept state naming one
  * would otherwise not read at all and lose every other choice it holds.
  */
 const RETIRED_MAIN_TAB = {
-  PLAN: "plan",
+  // Note that the value is the name the description had, which is what an earlier version kept.
+  DESCRIPTION: "plan",
   INBOX: "inbox",
   CALL: "call",
   CHAT: "chat",
@@ -170,7 +171,7 @@ const readTabSchema = Schema.Union([
 /**
  * One task's choices: the tabs viewed on it, the latest last, and its order
  * since a tab was first moved on it. Note that what an earlier version kept
- * of the plan's tab, the Inbox, the Call, and whether the Chat was open
+ * of the description's tab, the Inbox, the Call, and whether the Chat was open
  * beside these is left unread.
  */
 const taskChoicesSchema = Schema.Struct({

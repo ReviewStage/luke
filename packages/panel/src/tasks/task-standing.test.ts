@@ -12,14 +12,14 @@ import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, handMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import type { RepositoryChooser } from "./repository-chip.js";
@@ -76,10 +76,16 @@ function drawn(
   const root = createRoot(host);
   roots.push(root);
   act(() =>
-    root.render([
-      createElement(TaskPath, { key: "path", task, door: { workspaceName: "Acme", ...door } }),
-      createElement(TaskStandingChips, { key: "chips", task, onSet }),
-    ]),
+    root.render(
+      withQueryClient(
+        createElement(
+          Fragment,
+          null,
+          createElement(TaskPath, { key: "path", task, door: { workspaceName: "Acme", ...door } }),
+          createElement(TaskStandingChips, { key: "chips", task, onSet }),
+        ),
+      ),
+    ),
   );
   return host;
 }
@@ -263,7 +269,12 @@ test("the assignee's menu lists No assignee, then the reader, then every other m
   });
 
   act(() => chip(host, "Assignee").click());
-  const rows = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  // Note that the members are listed once the read the host holds reaches its query.
+  const rows = await vi.waitFor(() => {
+    const listed = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+    assert.equal(listed.length, 4);
+    return listed;
+  });
   assert.deepEqual(
     rows.map((row) => row.textContent),
     [
@@ -351,7 +362,10 @@ test("the assignee's menu says No members match when a search finds nobody", asy
     input?.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
-  assert.equal(document.querySelector(".ui-combobox-empty")?.textContent, "No members match");
+  // Note that the menu says so once the members the host holds reach their query.
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector(".ui-combobox-empty")?.textContent, "No members match"),
+  );
 });
 
 test("the assignee's menu says the members could not be read, with Retry, never that none match, and Retry reads them again", async () => {
@@ -388,8 +402,12 @@ test("the assignee's menu says the members could not be read, with Retry, never 
 
   act(() => chip(host, "Assignee").click());
 
-  const note = document.querySelector(".ui-combobox-note");
-  assert.match(note?.textContent ?? "", /Members could not be read\./u);
+  // Note that the menu says the read failed once the failure reaches its query.
+  const note = await vi.waitFor(() => {
+    const said = document.querySelector(".ui-combobox-note");
+    assert.match(said?.textContent ?? "", /Members could not be read\./u);
+    return said;
+  });
   assert.equal(document.querySelector(".ui-combobox-empty"), null);
   const retry =
     [...(note?.querySelectorAll("button") ?? [])].find((button) =>
@@ -397,7 +415,7 @@ test("the assignee's menu says the members could not be read, with Retry, never 
     ) ?? assert.fail("no Retry");
   await act(async () => retry.click());
 
-  assert.equal(document.querySelector(".ui-combobox-note"), null);
+  await vi.waitFor(() => assert.equal(document.querySelector(".ui-combobox-note") === null, true));
   assert.ok(
     [...document.querySelectorAll('[role="option"]')].some((row) =>
       (row.textContent ?? "").includes("Ada Lovelace"),

@@ -4,6 +4,7 @@ import {
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
+  isLocalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -89,6 +90,7 @@ function sideTabLabel(tab: SidePanelTab, taskId: string, tasks: StepNameTasks): 
       : undefined;
   }
   if (isTerminalTab(tab)) return TAB_WORDS.TERMINAL;
+  if (isLocalTab(tab)) return TAB_WORDS.LOCAL;
   if (isCloudBrowserTab(tab)) return TAB_WORDS.BROWSER;
   if (isSubagentTab(tab)) return "Worker";
   if (isTranscriptTab(tab)) return agentNameNow(tasks, taskId, tab.transcript);
@@ -132,8 +134,8 @@ export function stepTitle(
   tasks: StepTitleTasks,
 ): StepTitle | undefined {
   if (routed === ROUTED_PLACE.SETTINGS) return { label: "Settings" };
-  if (routed === ROUTED_PLACE.ADMIN) return { label: "Admin" };
-  // Note that a person's page and the Board are routed places over the window's state, so they are named before it.
+  // Note that Admin's step is named as the place the window's state holds under it, as it was while Admin stood in for that place.
+  // A person's page and the Board are routed places over the window's state too, but are named for themselves, as they always were.
   if (tasks.personView.userId !== undefined) {
     return { label: tasks.personView.name ?? "Profile" };
   }

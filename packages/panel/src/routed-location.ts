@@ -13,7 +13,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { type RoutedPlace, routedPlaceOf } from "./route-gates.js";
 
 /** The location the router's history stands on, redrawn as it moves. */
-export function useHistoryLocation(): HistoryLocation {
+function useHistoryLocation(): HistoryLocation {
   const { history } = useRouter();
   return useSyncExternalStore(history.subscribe, () => history.location);
 }

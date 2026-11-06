@@ -4,7 +4,7 @@
    insets, which a narrow pane's container query and the secondary column's
    `:has()` undo, so they stay in this layer, which cannot undo a utility;
    and the reach of what the caller lays in. The measure is a collection
-   page's, a plan's reading width in the window and the admin's wider
+   page's, a description's reading width in the window and the admin's wider
    column on the web, and the secondary column takes its share from the
    measure's end. The page queries its own width rather than the
    viewport's, so a page in a narrow pane narrows as it would in a narrow

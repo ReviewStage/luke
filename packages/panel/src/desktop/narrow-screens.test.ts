@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
@@ -25,10 +25,10 @@ import { useSettingsRoute } from "../settings-link.js";
 import "./settings-route.lazy.js";
 import { useStageRoom } from "../stage-room.js";
 import {
+  type DescriptionHistorySource,
   type HistorySpot,
-  type PlanHistorySource,
-  usePlanHistory,
-} from "../tasks/use-plan-history.js";
+  useDescriptionHistory,
+} from "../tasks/use-description-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -41,7 +41,6 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
-import { HOST_READ_STATUS } from "../use-host-read.js";
 // Note that Settings is loaded as the shell loads it, on first use, so the
 // module is read here first and its load settles within the test's own ticks.
 import "./desktop-settings.js";
@@ -50,7 +49,7 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
 
 /**
  * narrow-screens.test.ts -- on a stage as narrow as a phone's, Settings and a
- * plan's version history each show their list or the item chosen
+ * description's version history each show their list or the item chosen
  * in it, one at a time and the whole width: each opens on its list, a row
  * pressed stands its item alone under a way back to the list, and a link to
  * an item opens on it with the same way back. The focus goes with each swap:
@@ -62,7 +61,7 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
  */
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
 /** A signed-in account's Settings, its page and its presses given by the window. */
 const SETTINGS: SettingsPanelProps = {
@@ -73,7 +72,6 @@ const SETTINGS: SettingsPanelProps = {
     provider: "github",
   },
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: accepted,
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {
@@ -114,25 +112,25 @@ const UNDER_SPLIT = 800;
 /** The screens that take the whole window, and so are as wide as the stage they fill. */
 const WHOLE_WINDOW_SCREENS = ["app-stage", "desktop-settings", "desktop-version-history"];
 
-/** A revision of the plan by the notetaker. */
+/** A revision of the description by the notetaker. */
 function line(seq: number) {
   return {
     seq,
-    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
+    lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
     startedAt: 10 * seq,
     changes: 2,
   };
 }
 
-/** The plan's history as main holds it for the version history: two revisions, each the plan as it stands. */
+/** The description's history as main holds it for the version history: two revisions, each the description as it stands. */
 const HELD_HISTORY = {
   rows: { revisions: [line(3), line(2)] },
-  status: HOST_READ_STATUS.READY,
-  retry: () => Promise.resolve(),
+  failed: false,
+  onRetry: () => undefined,
 };
 
 /** The history's older pages and its restore, as the service answers them. */
-const HISTORY: PlanHistorySource = {
+const HISTORY: DescriptionHistorySource = {
   readPage: () => Promise.resolve({ revisions: [] }),
   restore: () => Promise.resolve(false),
 };
@@ -244,11 +242,11 @@ function SettingsWindow({ link }: { link: SettingsLink | undefined }): React.JSX
 }
 
 /** The version history the last window drew, which the window's history moves as it goes back and forth. */
-let standingVersions: ReturnType<typeof usePlanHistory> | undefined;
+let standingVersions: ReturnType<typeof useDescriptionHistory> | undefined;
 
-/** The plan's version history over the window, opened on the plan as it stands or where `returnTo` says. */
+/** The description's version history over the window, opened on the description as it stands or where `returnTo` says. */
 function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): React.JSX.Element {
-  const versions = usePlanHistory({
+  const versions = useDescriptionHistory({
     source: HISTORY,
     taskId: DOCUMENT_TASK.id,
     history: HELD_HISTORY,

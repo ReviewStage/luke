@@ -28,13 +28,13 @@ import {
   type MentionPlace,
   mentionName,
   type NumberedTaskIdOf,
-  type PlanMention,
+  type DescriptionMention,
   pageRepositoryOf,
   pastedLinkMention,
   sectionAnchors,
 } from "@repo/features/mention-link";
 import { type KnownNames, placeChipLook } from "@repo/features/place-chip-model";
-import { planSections } from "@repo/features/plan-document";
+import { descriptionSections } from "@repo/features/description-document";
 import { UNTITLED_TASK_NAME } from "@repo/features/task-wire";
 import {
   THING_KIND,
@@ -61,7 +61,11 @@ import { CalendarIcon } from "@repo/ui/icons";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
-import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
+import type {
+  HeadingsChange,
+  MentionNode,
+  MentionNodeDoors,
+} from "../description-editor/contract.js";
 import { LinkAutomations, useSectionHeading } from "./chip-cards.js";
 import {
   DATE_PICKER_CLOSE,
@@ -152,14 +156,14 @@ import { useWordsDates } from "./words-dates.js";
  * has no page, so in words that take no change it opens nothing; in an
  * editor's words a press opens the date's picker, which names the chip
  * anew in place or takes it out (`date-picker.tsx`), and so it does in
- * words drawn at rest that take a change, the plan's or the reader's own
+ * words drawn at rest that take a change, the description's or the reader's own
  * comment's, which are then saved with the date written anew
  * (`words-dates.tsx`).
  *
- * A section is known by its heading's anchor, so a section of the plan
- * drawn here whose anchor no heading of the plan spells any longer is gone:
+ * A section is known by its heading's anchor, so a section of the description
+ * drawn here whose anchor no heading of the description spells any longer is gone:
  * its chip keeps the name it was written with, struck through, its card
- * says it is no longer in the plan, and a press opens the task at its top.
+ * says it is no longer in the description, and a press opens the task at its top.
  * A section of another task is drawn as found, since what that task holds
  * is not at hand.
  *
@@ -179,7 +183,7 @@ import { useWordsDates } from "./words-dates.js";
  * the recording masks.
  */
 
-/** Where a mention's chip stands: what it names is there, or the plan no longer holds it. */
+/** Where a mention's chip stands: what it names is there, or the description no longer holds it. */
 const MENTION_STATE = {
   FOUND: "found",
   GONE: "gone",
@@ -187,13 +191,13 @@ const MENTION_STATE = {
 
 type MentionState = (typeof MENTION_STATE)[keyof typeof MENTION_STATE];
 
-/** What a place drawing mentions knows and does: the task or the agent on no task whose words it draws, where its mentions are written, its plan's sections' anchors, and what opening a mention does. */
+/** What a place drawing mentions knows and does: the task or the agent on no task whose words it draws, where its mentions are written, its description's sections' anchors, and what opening a mention does. */
 export interface MentionDoors {
-  /** The task, or the agent on no task, whose words the place draws; none where neither holds them, so a section of any plan is drawn as found. */
+  /** The task, or the agent on no task, whose words the place draws; none where neither holds them, so a section of any description is drawn as found. */
   readonly holder: MentionHolder | undefined;
   readonly place: MentionPlace;
   readonly anchors: ReadonlySet<string>;
-  readonly onOpenTask: (mention: PlanMention) => void;
+  readonly onOpenTask: (mention: DescriptionMention) => void;
   /** Shows a file's tab, at its lines where a mention names them; none where no file can be opened from here. */
   readonly onOpenFile: ((path: string, lines: MentionLines | undefined) => void) | undefined;
   /** One of the plan's agents as its chip wears it, none for an agent not of the plan; the door is none where the place knows the plan's agents not. */
@@ -209,11 +213,11 @@ interface MentionedAgentLook {
 }
 
 /**
- * A mention named again where an edit of the plan it names renamed the
- * section it names or moved its anchor (`../plan-editor/plan-mentions.ts`):
+ * A mention named again where an edit of the description it names renamed the
+ * section it names or moved its anchor (`../description-editor/description-mentions.ts`):
  * the target at its anchor now, under the section's heading now, so the
- * words the plan is saved with call it what its chip does; or nothing where
- * the target names no section of the plan, or one whose heading and anchor
+ * words the description is saved with call it what its chip does; or nothing where
+ * the target names no section of the description, or one whose heading and anchor
  * the edit left as they were, or one of a section the edit did not keep.
  */
 export function retargetedMention(
@@ -239,7 +243,7 @@ export function retargetedMention(
 /** What a gone section's card says of it. */
 const GONE_WORDS = "No longer in the description";
 
-/** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
+/** Whether what the mention names is there to open: a section of this description is there while a heading of the description spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
   if (mention.kind !== MENTION_KIND.SECTION || mention.taskId !== holderTaskId(doors.holder)) {
     return MENTION_STATE.FOUND;
@@ -1049,18 +1053,18 @@ export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
   return (href, label, at) => linkChip(href, label, doors, at);
 }
 
-/** What a place pasted into knows to call a pasted address by: the names the window holds, how it finds a task a link names by its number, and the plan it stands on, whose headings name its sections. */
+/** What a place pasted into knows to call a pasted address by: the names the window holds, how it finds a task a link names by its number, and the description it stands on, whose headings name its sections. */
 export interface PastedNames {
   readonly known: KnownNames;
   /** The id of the task a link names by its number among those the window lists (`useNumberedTaskIdOf`). */
   readonly taskIdOf: NumberedTaskIdOf;
   /** The plan the words are pasted on; none off a plan. */
   readonly taskId: string | undefined;
-  /** The plan's text as the place holds it. */
+  /** The description's text as the place holds it. */
   readonly text: () => string;
 }
 
-/** What a pasted address's chip is called: a section of the plan pasted on by its heading, a plan, a page, or an agent by the name the window holds, else what its address says. */
+/** What a pasted address's chip is called: a section of the description pasted on by its heading, a plan, a page, or an agent by the name the window holds, else what its address says. */
 function pastedName(
   mention: Mention,
   said: string,
@@ -1070,7 +1074,7 @@ function pastedName(
   if (mention.kind !== MENTION_KIND.SECTION)
     return chipName(mention, said, true, names.known, undefined, undefined, repository);
   if (mention.taskId !== names.taskId) return said;
-  const headings = planSections(names.text()).map((section) => section.heading);
+  const headings = descriptionSections(names.text()).map((section) => section.heading);
   return headings[sectionAnchors(headings).indexOf(mention.anchor)] ?? said;
 }
 

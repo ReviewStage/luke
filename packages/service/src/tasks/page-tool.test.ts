@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
-import { listPages, readPageVersion } from "@repo/database/models/plan-pages";
+import { listPages, readPageVersion } from "@repo/database/models/task-pages";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
@@ -42,11 +42,11 @@ const openAgent = (userId: string, place: { taskId: string } | { organizationId:
   Effect.map(
     createAgent(userId, {
       ...("taskId" in place
-        ? { taskId: place.taskId, planSnapshot: null, prompt: null }
+        ? { taskId: place.taskId, descriptionSnapshot: null, prompt: null }
         : {
             taskId: null,
             organizationId: place.organizationId,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: "Chart it",
           }),
       idempotencyKey: randomUUID(),

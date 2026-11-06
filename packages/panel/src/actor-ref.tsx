@@ -647,7 +647,7 @@ function subLine(...parts: readonly (string | undefined)[]): string | undefined 
   return said.length === 0 ? undefined : said.join(" · ");
 }
 
-/** What someone last did in this plan, as a quieter row under their card's head. */
+/** What someone last did in this description, as a quieter row under their card's head. */
 function LatestRow({ latest }: { latest: ReactNode }): React.JSX.Element {
   return (
     <HoverCardRow
@@ -664,7 +664,7 @@ export function PersonCard({
   latest,
 }: {
   actor: PersonActor;
-  /** Their latest activity in this plan, in a line: "Edited Rollout · 2h ago". */
+  /** Their latest activity in this description, in a line: "Edited Rollout · 2h ago". */
   latest?: ReactNode;
 }): React.JSX.Element {
   // The card hanging is the pointer on their name, a press from their page, so its chunk is read now.
@@ -687,7 +687,7 @@ export function AppCard({
 }: {
   /** How long ago he wrote: "2h ago". */
   sub?: ReactNode;
-  /** What he last wrote in this plan, in a line: "Edited Rollout and Risks". */
+  /** What he last wrote in this description, in a line: "Edited Rollout and Risks". */
   latest?: ReactNode;
 }): React.JSX.Element {
   return (

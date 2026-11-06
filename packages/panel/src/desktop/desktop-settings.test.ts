@@ -43,7 +43,7 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
  */
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
 /** The sidebar's groups and their rows, in the order the approved layout lists them, where no workspace is listed to head the first and no experiment is on. */
 const PAGE_GROUPS = [
@@ -117,7 +117,6 @@ function settingsProps(
   return {
     account: ACCOUNT,
     onSignOut: () => Promise.resolve(),
-    onDeleteAccount: accepted,
     view,
     onViewChange,
     microphone: {
@@ -318,39 +317,6 @@ test("Settings names its page once, by the page's own header, which also holds t
     [...header.querySelectorAll("button")].map((button) => button.textContent),
     ["Reset to defaults"],
   );
-});
-
-test("a page group's head folds its pages, its one chevron turning with the fold, and a press brings them back", () => {
-  const page = mount(createElement(SettingsHarness));
-  const head = (name: string) =>
-    [
-      ...page.querySelectorAll<HTMLButtonElement>(
-        'nav[aria-label="Settings pages"] button[aria-expanded]',
-      ),
-    ].find((each) => each.textContent === name) ?? assert.fail(`${name} heads a group`);
-  const account = head("Account");
-  const turns = () => [...account.querySelectorAll(".ui-disclosure-turn")];
-  assert.equal(turns().length, 1, "the head draws one chevron");
-  assert.deepEqual(
-    [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
-    ["true", "true"],
-  );
-  assert.ok(pageButtons(page).some((each) => each.textContent === "Account"));
-
-  act(() => account.click());
-  assert.deepEqual(
-    [account.getAttribute("aria-expanded"), turns()[0]?.getAttribute("data-open")],
-    ["false", "false"],
-  );
-  assert.ok(!pageButtons(page).some((each) => each.textContent === "Account"));
-  assert.ok(
-    pageButtons(page).some((each) => each.textContent === "Workspace"),
-    "the other groups stand",
-  );
-
-  act(() => account.click());
-  assert.equal(turns()[0]?.getAttribute("data-open"), "true");
-  assert.ok(pageButtons(page).some((each) => each.textContent === "Account"));
 });
 
 test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {

@@ -54,7 +54,7 @@ const openAgent = (automationOrigin?: StoredAutomationOrigin) =>
     const started = yield* createAgent(userId, {
       taskId: null,
       organizationId: workspaceId,
-      planSnapshot: null,
+      descriptionSnapshot: null,
       prompt: "Tidy the docs.",
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",

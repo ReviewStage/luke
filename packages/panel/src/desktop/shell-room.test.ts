@@ -41,7 +41,7 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
  */
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
 /** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
@@ -52,7 +52,6 @@ const SETTINGS: SettingsPanelProps = {
     provider: "github",
   },
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: accepted,
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {
@@ -441,36 +440,17 @@ test("beside the work an open floating sidebar leaves the work answering, as it 
   assert.equal(main.hasAttribute("inert"), false);
 });
 
-/** Answers the page as a browser tab's, whose own Back and Forward walk the history. */
-function inBrowserTab(): void {
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: (query: string) => ({
-      matches: query === "(display-mode: browser)",
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }),
-  });
-}
-
 /** Whether the column's Back and Forward stand. */
 function historyArrows(page: HTMLElement): boolean {
   return page.querySelector('.title-bar-controls[data-edge="column"]') !== null;
 }
 
-test("a phone's browser tab draws no Back and Forward in the drawer's head, its browser's own walking the history; a wide one keeps them", () => {
-  inBrowserTab();
+test("a phone draws no Back and Forward in the drawer's head; a wide window keeps them", () => {
   const page = mount(PHONE, false);
   openDrawer();
   assert.equal(historyArrows(page), false);
 
   resizeStage(WIDE);
-  assert.equal(historyArrows(page), true);
-});
-
-test("a phone's installed app, with no browser around it, keeps Back and Forward in the drawer's head", () => {
-  const page = mount(PHONE, false);
-  openDrawer();
   assert.equal(historyArrows(page), true);
 });
 

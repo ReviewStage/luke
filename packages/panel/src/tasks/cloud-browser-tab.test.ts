@@ -20,6 +20,7 @@ import { EXPERIMENT } from "@repo/settings";
 import { COMMAND_KEY } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
 import type { WireBoundaryInput } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -27,6 +28,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { browserTabsQuery } from "../live-reads.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
@@ -431,28 +433,35 @@ test("a tab the member opened here is listed before the service lists it, and le
   };
   const lay = holdBrowserTabs(handHostReads({}).deliverBrowserTabs, () => [LISTED]);
   let read: readonly AgentBrowserTab[] | undefined;
+  let listed: readonly AgentBrowserTab[] | undefined;
   function Probe() {
     read = useCloudBrowserTabs({ taskId: TASK }, true);
+    listed = useQuery({ ...browserTabsQuery({ taskId: TASK }), enabled: false }).data;
     return null;
   }
 
   noteOpenedCloudTab({ taskId: TASK }, opened);
   draw(createElement(Probe));
   await settle();
-  assert.deepEqual(
-    read?.map((tab) => tab.id),
-    [TAB, OTHER_TAB],
-    "listed beside what the service listed, before it lists it",
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      read?.map((tab) => tab.id),
+      [TAB, OTHER_TAB],
+      "listed beside what the service listed, before it lists it",
+    ),
   );
 
   // The service lists it, and later its agent's browser closes it: it goes, as any listed tab would.
   act(() => lay({ taskId: TASK }, [LISTED, opened]));
-  await settle();
+  // Note that each list reaches the tabs' query one notify tick later, so the one listing the tab lands before the next.
+  await vi.waitFor(() => assert.equal(listed?.length, 2));
   act(() => lay({ taskId: TASK }, [LISTED]));
   await settle();
-  assert.deepEqual(
-    read?.map((tab) => tab.id),
-    [TAB],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      read?.map((tab) => tab.id),
+      [TAB],
+    ),
   );
 });
 

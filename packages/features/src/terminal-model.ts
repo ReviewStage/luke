@@ -53,6 +53,10 @@ export const TERMINAL_UNREACHED = {
   NOT_FOUND: "not-found",
   /** The deployment serves no terminal relay. */
   RELAY: "relay",
+  /** A Local tab's: the agent's files could not be mirrored on this Mac. */
+  MIRROR: "mirror",
+  /** A Local tab's: no shell could be opened in the mirror. */
+  SHELL: "shell",
 } as const;
 
 type TerminalUnreached = (typeof TERMINAL_UNREACHED)[keyof typeof TERMINAL_UNREACHED];
@@ -115,6 +119,8 @@ const UNREACHED_WORDS = {
     "This sandbox shut down after being idle. Send the agent a message to start a fresh one.",
   [TERMINAL_UNREACHED.NOT_FOUND]: "Could not find this agent’s shell.",
   [TERMINAL_UNREACHED.RELAY]: "The terminal service isn’t set up on this deployment.",
+  [TERMINAL_UNREACHED.MIRROR]: "Could not mirror this agent’s files on this Mac.",
+  [TERMINAL_UNREACHED.SHELL]: "Could not open a shell in this agent’s files.",
 } as const satisfies Record<TerminalUnreached, string>;
 
 /** The line a shell that ended leaves, its status where the host said it. */

@@ -7,6 +7,7 @@ import {
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS, VERB } from "@repo/features/words";
+import { ACT_KIND } from "@repo/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
@@ -26,9 +27,10 @@ import {
 } from "@repo/ui";
 import { accountActor } from "@repo/ui/actor-model";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
-import type { ActionResult } from "@repo/wire";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { mutationOptions, useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { sendAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { githubTokenQuery, githubTokenRetryMutation } from "../live-reads.js";
@@ -133,6 +135,23 @@ function GitHubTokenRow({ accountId }: { accountId: string | undefined }): React
 }
 
 /**
+ * The account's delete, as the question asking it holds its own mutation
+ * over it. Note that the delete happens at the service before anything
+ * local moves, so a failure answers why and the account still stands.
+ */
+const ACCOUNT_DELETE_MUTATION = mutationOptions({
+  mutationKey: [ACT_KIND.ACCOUNT_DELETE],
+  mutationFn: (): Promise<ActionResult> =>
+    sendAct(ACT_KIND.ACCOUNT_DELETE, undefined).then(
+      () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      () => ({
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "The account could not be deleted. Try again.",
+      }),
+    ),
+});
+
+/**
  * Who is signed in, the member's own GitHub personal access token, and the
  * two ways out of being signed in, at the head of the Account page Settings
  * opens on, and the one place either way out is offered. Sign out acts on
@@ -144,18 +163,17 @@ function GitHubTokenRow({ accountId }: { accountId: string | undefined }): React
 export function AccountSection({
   account,
   onSignOut,
-  onDeleteAccount,
 }: {
   account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
   onSignOut: () => Promise<void>;
-  onDeleteAccount: () => Promise<ActionResult>;
 }): React.JSX.Element {
   const signOut = useBusyPress(() => signOutSayingFailure(onSignOut));
   // Note that the section is only drawn while its page is, so the page
   // leaving takes the question with it.
+  const deleting = useMutation(ACCOUNT_DELETE_MUTATION);
   const deletion = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    onDeleteAccount,
+    () => deleting.mutateAsync(),
     confirmFailure(FAILURE_SURFACE.ACCOUNT_DELETE),
   );
 

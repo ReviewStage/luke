@@ -66,6 +66,7 @@ function environment(cronSecret: string | undefined): HostedEnvironmentValues {
     cronSecret: cronSecret === undefined ? undefined : Redacted.make(cronSecret),
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
+    titleAnthropicApiKey: undefined,
   };
 }
 

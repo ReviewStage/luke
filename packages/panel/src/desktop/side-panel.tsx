@@ -8,7 +8,6 @@ import {
   type AgentSummary,
 } from "@repo/features/agent-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
 import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
 import type { TaskStatus } from "@repo/features/task-wire";
@@ -60,10 +59,12 @@ import {
   isChangesTab,
   isCloudBrowserTab,
   isFileTab,
+  isLocalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
+  type LocalStripTab,
   type PageStripTab,
   type StripTab,
   type SubagentStripTab,
@@ -73,7 +74,7 @@ import {
   tabKey,
 } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import {
   Fragment,
@@ -95,6 +96,7 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
+import { pagesQuery, pullRequestPublishedQuery } from "../live-reads.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { ADDRESS, type Address } from "../route.js";
 import { centerWithin } from "../scroll-within.js";
@@ -132,6 +134,8 @@ import {
   useCloudBrowserTabs,
 } from "../tasks/cloud-browser-tabs.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
+import { LocalStanding } from "../tasks/local-shells.js";
+import { LocalTab } from "../tasks/local-tab.js";
 import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
@@ -156,12 +160,14 @@ import {
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
 import type { AgentsControl, HeldPeople } from "../tasks/use-agents.js";
+import { useDescriptionComments } from "../tasks/use-description-comments.js";
+import { useOpenLocal } from "../tasks/use-local-session.js";
 import { OnLeavingHere, PullRequestsOnGitHub } from "../tasks/use-open-link.js";
-import { usePlanComments } from "../tasks/use-plan-comments.js";
 import {
   DRAWN_KINDS,
   type DrawnTabs,
   drawsChanges,
+  drawsLocal,
   drawsSubagent,
   drawsTerminal,
   type FileHistoryStep,
@@ -181,7 +187,6 @@ import {
   sameHolder,
 } from "../tasks/use-side-panel.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
-import { useHostReads, usePlacesPages } from "../use-host-read.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
@@ -383,12 +388,13 @@ const NO_KINDS: readonly FixedSidePanelTab[] = [];
 
 /** No Terminal tab, as the Inbox's panel draws. */
 const NO_TERMINALS: readonly TerminalStripTab[] = [];
+const NO_LOCALS: readonly LocalStripTab[] = [];
 
 /**
  * The fixed kinds each holder's panel offers: a task's every one it draws,
  * never the plan's, which the column's Overview holds, nor the Inbox's,
  * whose threads open in the window's Inbox; an agent's page none, the
- * plan's comments being a task's alone.
+ * description's comments being a task's alone.
  */
 const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.TASK]: DRAWN_KINDS,
@@ -450,6 +456,7 @@ export const ADD_SECTION = {
   PULL_REQUESTS: "Pull requests",
   PAGES: "Pages",
   TERMINAL: "Terminal",
+  LOCAL: "Local",
   BROWSER: "Browser",
 } as const;
 
@@ -726,7 +733,7 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
   return {
     id: tab,
     ...tabLook({ kind: TAB_KIND.PANEL, tab, plan }),
-    replayMasked: tab === SIDE_PANEL_TAB.PLAN && plan !== undefined,
+    replayMasked: tab === SIDE_PANEL_TAB.DESCRIPTION && plan !== undefined,
   };
 }
 
@@ -752,6 +759,11 @@ export function panelEntries(input: {
   pages?: readonly PageLine[];
   /** The task's agents' terminals on offer, and the door a row's pick asks a new shell through; none where the caller offers none. */
   terminals?: {
+    readonly offers: readonly TerminalOffer[];
+    readonly onNew: (agentId: string) => void;
+  };
+  /** The task's cloud agents' Local tabs on offer, and the door a row's pick asks a new local shell through; none where the caller offers none. */
+  locals?: {
     readonly offers: readonly TerminalOffer[];
     readonly onNew: (agentId: string) => void;
   };
@@ -855,8 +867,33 @@ export function panelEntries(input: {
           }),
     onPick: () => input.terminals?.onNew(agent.id),
   }));
+  // A Local row adds a shell on this Mac in its cloud agent's mirror, beside its Terminal row.
+  const localRows = (input.locals?.offers ?? []).map(({ agent, label }) => ({
+    row: {
+      id: tabKey({ local: agent.id }),
+      ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
+      detail: <LocalStanding agentId={agent.id} />,
+      section: ADD_SECTION.LOCAL,
+      replayMasked: true,
+    },
+    endMark: agentEndMark(agent, true),
+    card:
+      cards === undefined
+        ? undefined
+        : hungCard({
+            kind: TAB_KIND.LOCAL,
+            subject: agentSubject(
+              cards.agents,
+              agent.id,
+              cards.held,
+              cards.shownAgent === agent.id,
+            ),
+            models: cards.agents.models,
+          }),
+    onPick: () => input.locals?.onNew(agent.id),
+  }));
   const browserRows = browserEntries(input.browsers, cards);
-  return [...kinds, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
+  return [...kinds, ...changesRows, ...pageRows, ...terminalRows, ...localRows, ...browserRows];
 }
 
 /**
@@ -877,6 +914,8 @@ export function panelOffers(input: {
   pages: readonly PageLine[];
   /** Adds a shell to an agent's sandbox; none where the platform runs no terminals. */
   onNewTerminal: ((agentId: string) => void) | undefined;
+  /** Adds a shell on this Mac in a cloud agent's mirror; none where the platform mirrors none. */
+  onNewLocal?: ((agentId: string) => void) | undefined;
   /** The agent whose browser a new tab is offered in first: the one the panel or the column shows. */
   viewedAgent: string | undefined;
   /** The tabs the holder's agents' cloud browsers hold, each offered to open in the strip; none where the caller reads none. */
@@ -911,6 +950,17 @@ export function panelOffers(input: {
     ...(onNewTerminal === undefined || holder === SIDE_PANEL_HOLDER.INBOX
       ? undefined
       : { terminals: { offers: terminalOffers(agents, panel), onNew: onNewTerminal } }),
+    // Note that only a cloud agent has a mirror, so an agent on a Mac is offered no Local tab.
+    ...(input.onNewLocal === undefined || holder === SIDE_PANEL_HOLDER.INBOX
+      ? undefined
+      : {
+          locals: {
+            offers: terminalOffers(agents, panel).filter(
+              ({ agent }) => agent.machine !== AGENT_MACHINE.DEVICE,
+            ),
+            onNew: input.onNewLocal,
+          },
+        }),
     browsers: {
       agents: cloudOffers,
       onAgent: (agentId: string) =>
@@ -944,7 +994,7 @@ function terminalOffers(
   panel: Pick<SidePanelControl, "tab" | "lastTerminal">,
 ): readonly TerminalOffer[] {
   const listed = agents.agents ?? [];
-  const target = terminalTarget(TERMINAL_ASK.SHOW, {
+  const target = terminalTarget({
     here: panel.tab === undefined ? undefined : agentOfTab(panel.tab),
     agents: listed.map((agent) => agent.id),
     lastUsed: panel.lastTerminal,
@@ -992,6 +1042,7 @@ function stripTabs(input: {
   changes: readonly ChangesStripTab[];
   pages: readonly DrawnPage[];
   terminals: readonly TerminalStripTab[];
+  locals: readonly LocalStripTab[];
   /** The holder's cloud Browser tabs, as the service lists them: the agent's, or the task's agents'. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
   held: HeldTranscripts;
@@ -1007,7 +1058,8 @@ function stripTabs(input: {
   /** Who each agent's pull request names, as its Changes tab last read them. */
   people: ReadonlyMap<string, HeldPeople>;
 }): DrawnTab[] {
-  const { panel, unread, agents, subagents, files, changes, pages, terminals, held } = input;
+  const { panel, unread, agents, subagents, files, changes, pages, terminals, locals, held } =
+    input;
   const { copied, onOpenAgent, shownAgent, agentsOf } = input;
   const { cloudBrowsers } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
@@ -1124,6 +1176,19 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
+  // A Local tab wears its agent's glyph and name, and hangs its agent's card.
+  const localTabs = locals.map((tab) => {
+    const subject = agentSubject(agentsOf(tab.local), tab.local, held, false);
+    return {
+      tab,
+      look: look(tab, {
+        ...tabLook({ kind: TAB_KIND.LOCAL, agent: subject.agent }),
+        detail: subject.name,
+        card: hungCard({ kind: TAB_KIND.LOCAL, subject, models }),
+      }),
+      close: () => panel.onClose(tab),
+    };
+  });
   // A cloud Browser tab is named by its page's title, wearing the glyph of whose browser it is in,
   // and hangs a card saying whose browser that is, with its address; a draft closed is discarded.
   const cloudBrowserTabs = panel.strip.filter(isCloudBrowserTab).flatMap((tab) => {
@@ -1175,6 +1240,7 @@ function stripTabs(input: {
     ...changesTabs,
     ...pageTabs,
     ...terminalTabs,
+    ...localTabs,
     ...cloudBrowserTabs,
   ];
 }
@@ -1234,6 +1300,7 @@ function PanelTabs({
   changes,
   pages,
   terminals,
+  locals,
   cloudBrowsers,
   offers,
   held,
@@ -1270,6 +1337,8 @@ function PanelTabs({
   pages: readonly DrawnPage[];
   /** The open Terminal tabs of the task's agents, in the order opened. */
   terminals: readonly TerminalStripTab[];
+  /** The open Local tabs of the task's cloud agents, in the order opened. */
+  locals: readonly LocalStripTab[];
   /** The task's agents' cloud Browser tabs, as the service lists them. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
   /** What the "+" offers (`panelEntries`), which the empty panel offers too. */
@@ -1303,6 +1372,7 @@ function PanelTabs({
     changes,
     pages,
     terminals,
+    locals,
     cloudBrowsers,
     held,
     copied,
@@ -1786,7 +1856,7 @@ export interface TaskCards {
  * worker's, read as its tab reads its own, `chosen` telling whether that
  * tab is the one shown, whose transcript follows the run; a tab that hangs
  * none leaves the row its hint. A call's own rows name no worker, and hang
- * none for one. An agent's transcript also names the task whose plan it was
+ * none for one. An agent's transcript also names the task whose description it was
  * handed, by `task`, and every transcript names an agent a call is about by
  * its tab's tile and name, by `agent`. Every kind of target names the tab
  * it opens, so a kind added to `TOOL_TARGET` is a choice made here.
@@ -1797,7 +1867,7 @@ export function taskCards(input: {
   chosen: (tab: StripTab) => boolean;
   /** What the transcript stands on, its task or its agent on no task, which a page's row reads its card from and a plan's row names; none where its rows open neither. */
   pages: PagePlace | undefined;
-  /** The plan's task, which an agent's plan card names as its sender. */
+  /** The description's task, which an agent's description card names as its sender. */
   task?: BriefTask | undefined;
 }): TaskCards {
   const { agents, held, chosen, pages, task } = input;
@@ -1813,7 +1883,7 @@ export function taskCards(input: {
         return pages === undefined
           ? undefined
           : { kind: TAB_KIND.PAGE, place: pages, pageId: opened.page, name };
-      case TOOL_TARGET.PLAN:
+      case TOOL_TARGET.DESCRIPTION:
         return taskId === undefined
           ? undefined
           : { kind: TAB_KIND.PLAN, taskId, name: task?.name, status: task?.status };
@@ -1877,7 +1947,7 @@ function taskAgentLabel(agents: AgentsControl, agentId: string): string | undefi
 /** What the chosen tab shows. */
 /**
  * A page's tab, with the page's comment threads where it stands on a task,
- * held on the task and the page and written through the plan's comment
+ * held on the task and the page and written through the description's comment
  * doors naming the page, beside the open task or an Inbox item's alike; a
  * page an agent on no task showed has none.
  */
@@ -1889,7 +1959,7 @@ function TaskPagePane({
 }): React.JSX.Element {
   const taskId = "taskId" in pane.place ? pane.place.taskId : undefined;
   const pageId = pane.page.id;
-  const control = usePlanComments(
+  const control = useDescriptionComments(
     useMemo(() => (taskId === undefined ? undefined : { taskId, pageId }), [taskId, pageId]),
   );
   return <PagePane {...pane} comments={control === undefined ? undefined : { control, doors }} />;
@@ -2018,6 +2088,18 @@ function TabContent({
         shown={shown}
         onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: tab.terminal })}
         onClose={() => onCloseTab(tab)}
+        shells={shellsList}
+      />
+    );
+  }
+  if (isLocalTab(tab)) {
+    return (
+      <LocalTab
+        key={tab.local}
+        agentId={tab.local}
+        agents={agentsOf(tab.local)}
+        shown={shown}
+        onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: tab.local })}
         shells={shellsList}
       />
     );
@@ -2477,7 +2559,7 @@ export function SidePanel({
       number === undefined ? [] : [{ agentId, number }],
     ),
   );
-  useHostReads(LIVE_READ.PULL_REQUEST_PUBLISHED, numberedTabs);
+  useQueries({ queries: numberedTabs.map((key) => pullRequestPublishedQuery(key)) });
   // Whether a File or Changes tab's tree is open, for every one of them
   // alike and for the window's life, as an editor's explorer stands across
   // its tabs.
@@ -2538,10 +2620,19 @@ export function SidePanel({
   const terminals = !terminalsHere
     ? NO_TERMINALS
     : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
-  // A Pull request or Terminal tab draws its agent where the agent stands, through the place's agents where they list it.
+  // An agent's Local tab stands as its Terminal tab does, on a host that mirrors an agent's files on this Mac alone.
+  const localsOffered =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.LOCAL_TERMINALS) })
+      .data === true;
+  const localsHere = localsOffered && holder !== SIDE_PANEL_HOLDER.INBOX;
+  const locals = !localsHere
+    ? NO_LOCALS
+    : panel.locals.filter((each) => drawsLocal(each, { taskAgents: agents.agentIds }));
+  // A Pull request, Terminal, or Local tab draws its agent where the agent stands, through the place's agents where they list it.
   const agentsOf = useAgentsElsewhere(agents, [
     ...changes.map((each) => each.changes),
     ...terminals.map((each) => each.terminal),
+    ...locals.map((each) => each.local),
   ]);
   // The cloud Browser tabs stand on every platform, since the page draws them
   // from the service and needs nothing of main's: an agent's page lists its
@@ -2603,15 +2694,22 @@ export function SidePanel({
       ),
     [panel.pages, panel.strip, pagePlace],
   );
-  const pagesBeside = usePlacesPages(
-    useMemo(() => placesBeside(pagesElsewhere, pagePlace), [pagesElsewhere, pagePlace]),
+  // The pages of each place the strip's other page tabs stand on, held while the strip draws them.
+  const besidePlaces = useMemo(
+    () => placesBeside(pagesElsewhere, pagePlace),
+    [pagesElsewhere, pagePlace],
   );
+  const besidePages = useQueries({
+    queries: besidePlaces.map((place) => pagesQuery(place)),
+    combine: (reads) =>
+      new Map(besidePlaces.map((place, at) => [pagePlaceId(place), reads[at]?.data])),
+  });
   const pageTabs = panel.pages.flatMap((tab): DrawnPage[] => {
     const place = tab.place ?? pagePlace;
     const listed = pageStandsOn(tab, pagePlace)
       ? taskPages
       : pagesElsewhere.includes(tab)
-        ? pagesBeside(place)
+        ? besidePages.get(pagePlaceId(place))
         : undefined;
     const line = listed?.find((each) => each.id === tab.page);
     return line === undefined ? [] : [{ tab, line, place }];
@@ -2631,9 +2729,11 @@ export function SidePanel({
                 ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
                 : isTerminalTab(tab)
                   ? TAB_WORDS.TERMINAL
-                  : isCloudBrowserTab(tab)
-                    ? cloudBrowserLabel(tab.cloudBrowser)
-                    : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+                  : isLocalTab(tab)
+                    ? TAB_WORDS.LOCAL
+                    : isCloudBrowserTab(tab)
+                      ? cloudBrowserLabel(tab.cloudBrowser)
+                      : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   // A page or a file of another task than the panel's own names that task under the bar, and Open task goes
   // there with the tab still chosen, the panel standing as it is.
   const ownTask = holder === SIDE_PANEL_HOLDER.AGENT || onAgent ? undefined : taskId;
@@ -2663,6 +2763,7 @@ export function SidePanel({
   const wiring: PanelWiring | undefined = listing ? undefined : { tab: tabId, panel: panelId };
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
+  const openLocal = useOpenLocal(panel, noFocusMove);
   const offeredChanges = panel.changes;
   const changesPeople = useChangesPeopleOf(
     useMemo(() => offeredChanges.map((tab) => tab.changes), [offeredChanges]),
@@ -2676,6 +2777,7 @@ export function SidePanel({
     onNewTerminal: terminalsHere
       ? (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW)
       : undefined,
+    onNewLocal: localsHere ? (agentId: string) => openLocal(agentId, true) : undefined,
     viewedAgent,
     listedBrowsers,
     cards: {
@@ -2766,6 +2868,7 @@ export function SidePanel({
           changes={changes}
           pages={pageTabs}
           terminals={terminals}
+          locals={locals}
           cloudBrowsers={cloudBrowsers}
           offers={offers}
           held={drawnTranscripts}

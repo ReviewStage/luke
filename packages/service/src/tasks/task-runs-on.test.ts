@@ -106,7 +106,7 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          planSnapshot: "# Relay\n",
+          descriptionSnapshot: "# Relay\n",
           prompt: null,
           repository: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,

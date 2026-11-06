@@ -31,14 +31,13 @@ import {
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}, {@link MENU_COMMAND_LABELS}, or {@link PALETTE_COMMAND_LABELS}. */
 export const APP_COMMAND = {
   NEW_TASK: "new-task",
-  // Note that copying what the focused pane shows, a plan or an agent's concise transcript, keeps Copy plan's id, because it took Copy plan's place, so a menu bar built before it still reaches it.
-  COPY_CONTENT: "copy-plan",
+  COPY_CONTENT: "copy-content",
   COPY_FULL_TRANSCRIPT: "copy-full-transcript",
   COPY_LINK: "copy-link",
   COMMENT_ON_SELECTION: "comment-on-selection",
   // Note that Mark done keeps Archive's id, because it took Archive's place, so the menu bar's item and any saved use of the id still reach it.
   MARK_TASK_DONE: "archive-plan",
-  // Note that deleting the focused thing, a task or an agent, keeps the task's delete's id, on the same terms as Copy plan's.
+  // Note that deleting the focused thing, a task or an agent, keeps the task's delete's id, because it took the task's delete's place, so the menu bar's item and any saved use of the id still reach it.
   DELETE: "delete-plan",
   VERSION_HISTORY: "version-history",
   OPEN_ON_GITHUB: "open-on-github",
@@ -409,7 +408,7 @@ export interface AppShortcut {
  * ⌘K for the command palette as Linear, Slack, and
  * Raycast have it, ⌘J for the terminal as VS Code and Cursor have the
  * panel that holds it, ⌥⌘K to mention a File tab's selected lines in the
- * agent's message box, beside the palette's ⌘K, ⌥⌘M to comment on a plan's
+ * agent's message box, beside the palette's ⌘K, ⌥⌘M to comment on a description's
  * words selected as Google Docs has it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
  * found, as every Mac app has them, ⌘+, ⌘−, and ⌘0 to zoom as every
  * browser has them, and ⌘Z and ⇧⌘Z to undo and redo as every Mac app has
@@ -424,7 +423,7 @@ export interface AppShortcut {
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_TASK]: { label: "New task", chord: { key: SHORTCUT_KEY.N } },
-  // Note that a link takes ⇧⌘C, as Arc and Dia copy a page's address, and what the focused pane shows takes ⌥⌘C beside it: the plan where the plan is focused, an agent's concise transcript where its pane or tab is, each menu item saying which (`command-items.tsx` in `@repo/panel`).
+  // Note that a link takes ⇧⌘C, as Arc and Dia copy a page's address, and what the focused pane shows takes ⌥⌘C beside it: the description where the description is focused, an agent's concise transcript where its pane or tab is, each menu item saying which (`command-items.tsx` in `@repo/panel`).
   [APP_COMMAND.COPY_LINK]: { label: "Copy link", chord: { key: SHORTCUT_KEY.C, shift: true } },
   [APP_COMMAND.COPY_CONTENT]: {
     label: "Copy transcript",
@@ -1208,7 +1207,7 @@ export interface WritingShortcut {
  * chords are TipTap's own, which are Google Docs' for the most part, with two
  * moved off the window's: Strikethrough takes ⇧⌘X, as Google Docs has it,
  * and Code block takes none rather
- * than ⌥⌘C, which copies the plan or a transcript, since ``` makes one as quickly. Bold's ⌘B is
+ * than ⌥⌘C, which copies the description or a transcript, since ``` makes one as quickly. Bold's ⌘B is
  * Toggle sidebar's key too, and is Bold's only while an editor has the caret:
  * an editor stops the chords it answers on their way to the window's keymap
  * (`writing-keys.ts` in `@repo/panel`).

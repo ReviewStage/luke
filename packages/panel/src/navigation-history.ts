@@ -1,7 +1,7 @@
 /**
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
- * A place is a task's page, a plan's version history, the home page,
+ * A place is a task's page, a description's version history, the home page,
  * the Inbox, or a routed place, Settings, Admin, a workspace's Board, or a
  * person's page, and the history is the one a browser keeps: the places behind,
  * the one standing, and the places ahead, which a new visit clears. It is
@@ -34,7 +34,7 @@
  * however many of its pages are turned, since each turn replaces its entry
  * (`settings-link.ts`), so Back from any page of it returns to wherever it
  * was opened from; leaving one for a place the window's state says is a
- * visit after it (`onLeaveRouted`). A plan's version
+ * visit after it (`onLeaveRouted`). A description's version
  * history is one step the same way, whichever version is chosen in it or
  * whichever revision's sections are open, and going back to it opens it on
  * that version with those sections. Whatever is opened from it — a version's
@@ -107,6 +107,7 @@ import {
   isCloudBrowserTab,
   isDraftTab,
   isFileTab,
+  isLocalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -138,9 +139,9 @@ import {
 import { useRoutedLocation } from "./routed-location.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
+import type { HistorySpot } from "./tasks/use-description-history.js";
 import { standInboxTask, useInboxTask } from "./tasks/use-inbox-task.js";
 import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
-import type { HistorySpot } from "./tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -419,7 +420,7 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
   return sameTab(one.tab, other.tab);
 }
 
-/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, the same Automations page, the same workspace's Board, or a routed place at the same address. */
+/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same description's version history, the home page, the Inbox on any plan, the same agent's or person's page, the same Automations page, the same workspace's Board, or a routed place at the same address. */
 function samePage(one: Place, other: Place): boolean {
   if (one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.ROUTED && other.kind === PLACE_KIND.ROUTED) {
@@ -531,7 +532,7 @@ function tabSurface(taskId: string, tab: StripTab, side: boolean): OpenSurface {
   if (isSubagentTab(tab)) return { surface: PRODUCT_SURFACE.SUBAGENT, of, side };
   if (isFileTab(tab)) return { surface: PRODUCT_SURFACE.FILES, of, side };
   if (isChangesTab(tab)) return { surface: PRODUCT_SURFACE.PULL_REQUEST, of, side };
-  if (isTerminalTab(tab)) return { surface: PRODUCT_SURFACE.TERMINAL, of, side };
+  if (isTerminalTab(tab) || isLocalTab(tab)) return { surface: PRODUCT_SURFACE.TERMINAL, of, side };
   if (isCloudBrowserTab(tab)) return { surface: PRODUCT_SURFACE.BROWSER, of, side };
   if (isPageTab(tab)) return { surface: PRODUCT_SURFACE.PAGE, of, side };
   // A word of a strip's own: the column's Overview, which shows the task, the task's Inbox, or its comments.
@@ -954,7 +955,7 @@ function sameReading(one: HistoryReading, other: HistoryReading): boolean {
   );
 }
 
-/** The window's history, with the way a restore leaves a plan's version history and a page's way out. */
+/** The window's history, with the way a restore leaves a description's version history and a page's way out. */
 export interface WindowHistory extends NavigationHistory {
   /** Leaves the routed place standing, Settings or Admin, for the place the window's state says, as a visit after it; nothing off one. */
   onLeaveRouted: () => void;
@@ -1545,7 +1546,7 @@ function awayStep(
 /**
  * The window's history: Tasks on the task it is bound for — the one asked
  * for, so a move waiting on the host's answer is already where it is going —
- * or on that plan's version history, or the Inbox, or Settings on its page. A task the
+ * or on that description's version history, or the Inbox, or Settings on its page. A task the
  * account's list once held and holds no more is passed over, unless the list
  * itself could not be read, or it is the task the window is bound for. Note that a
  * task no list has held yet is still a place, because the list may not have
@@ -1768,7 +1769,7 @@ export function useWindowHistory(input: {
       if (to.page.kind !== AUTOMATIONS_PAGE.EDIT) return true;
       return to.workspaceId === listedWorkspace && !deletedAutomations.has(to.page.automationId);
     }
-    // A task's version history is the plan's, which stands only while the account has Plans on.
+    // A task's version history is the description's, which stands only while the account has Descriptions on.
     if (
       to.kind === PLACE_KIND.VERSION_HISTORY &&
       !experimentOn(experiments, EXPERIMENT.DESCRIPTIONS)
