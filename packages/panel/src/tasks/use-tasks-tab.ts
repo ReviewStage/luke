@@ -3771,13 +3771,14 @@ export function useTasksTab(input: {
   );
   const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
   const endLocal = useEndLocal();
-  // Note that a Local tab's terminal ends as its tab closes, whichever way it closes, since the tab is the only place it stands.
+  // Note that a Local tab's terminal ends as its tab closes, whichever way it closes, since the tab
+  // is the only place it stands, so the tab goes on no stack of closed tabs: nothing opens it again.
   const closeSidePanelTab = useCallback(
     (tab: SidePanelTab) => {
       if (isLocalTab(tab)) endLocal(tab);
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0) {
+      if (task !== undefined && at >= 0 && !isLocalTab(tab)) {
         const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
         const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, task, tab, at, file };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
@@ -3819,8 +3820,6 @@ export function useTasksTab(input: {
     // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
     if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
-    // Note that a Local tab's terminal ended as it closed, so nothing opens it again.
-    if (isLocalTab(tab)) return false;
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);

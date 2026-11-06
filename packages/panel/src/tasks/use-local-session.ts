@@ -223,9 +223,12 @@ export function useLocalSession(agentId: string, shellId: string, shown: boolean
   }, []);
 
   // A new shell in the agent's mirror, held beside the terminal, or why
-  // main could not make the mirror or the shell. Note that a terminal whose
-  // tab closed while its shell opened lets the shell go, since no tab will
-  // show it; its connect has been let go too, so it answers nothing more.
+  // main could not make the mirror or the shell. Note that a shell no
+  // terminal will keep is let go as it lands, because nothing else would
+  // end it: one whose tab closed while it opened, its connect let go too so
+  // it answers nothing more, and one that lost to another open for the same
+  // terminal, as a tab hidden and shown again asks, which answers the
+  // shell that won.
   const open = useCallback(async (): Promise<Opened> => {
     const mirrored = await act(ACT_KIND.MAC_SHELL_MIRROR, { agentId }).catch(() => undefined);
     if (mirrored === undefined) return { why: TERMINAL_UNREACHED.MIRROR };
@@ -235,11 +238,14 @@ export function useLocalSession(agentId: string, shellId: string, shown: boolean
     }).catch(() => undefined);
     if (opened === undefined) return { why: TERMINAL_UNREACHED.SHELL };
     const { terminalId } = opened;
-    if (heldNow() === undefined) {
+    const held = heldNow();
+    if (held === undefined || held.terminalId !== undefined) {
       tell(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId });
-      return { why: TERMINAL_UNREACHED.SHELL };
+      return held?.terminalId === undefined
+        ? { why: TERMINAL_UNREACHED.SHELL }
+        : { terminalId: held.terminalId };
     }
-    writeHeld((held) => ({ ...held, terminalId }));
+    writeHeld((was) => ({ ...was, terminalId }));
     return { terminalId };
   }, [act, tell, agentId, heldNow, writeHeld]);
 

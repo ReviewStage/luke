@@ -149,7 +149,7 @@ export function LocalTab({
   const session = useLocalSession(agentId, shell, shown);
   useFindSource(useScrollbackFind(session.find));
   const look = terminalLook(session.state);
-  // A phone draws no bar over the screen: its header's ⋯ opens the agent, saying where the connection stands.
+  // A phone draws no bar over the screen: its header's ⋯ opens the agent.
   const phone = usePhoneRoom();
   // Note that a phone has no title bar to carry "connecting…", so a state only that bar says is said in a bar over the screen.
   const bar = look.bar ?? (phone ? look.phoneBar : undefined);
@@ -160,7 +160,7 @@ export function LocalTab({
             {
               label: OPEN_AGENT,
               icon: <AgentGlyph agent={subject.agent} />,
-              detail: `${subject.name} · ${look.words}`,
+              detail: subject.name,
               onSelect: onOpenAgent,
             },
           ],

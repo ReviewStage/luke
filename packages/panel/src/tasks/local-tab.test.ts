@@ -765,6 +765,30 @@ test("closing a Local tab ends its terminal: out of the window's list, and its s
   ]);
 });
 
+test("a tab hidden and shown again while its shell opens keeps one shell, letting the other go", async () => {
+  keep(UNOPENED);
+  main.holding.add(ACT_KIND.MAC_SHELL_OPEN);
+  const tab = await mount();
+  await tab.render(false);
+  await tab.render(true);
+  assert.deepEqual(
+    tab.kinds().filter((kind) => kind === "macShell.open"),
+    ["macShell.open", "macShell.open"],
+  );
+  main.holding.clear();
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  const [kept1] = kept();
+  assert.ok(kept1?.terminalId);
+  assert.deepEqual(main.shells, new Set([OLDEST, NEWER, kept1.terminalId]));
+  assert.deepEqual(lastPayload(ACT_KIND.MAC_SHELL_ATTACH), {
+    agentId: AGENT.id,
+    terminalId: kept1.terminalId,
+    cols: 80,
+    rows: 24,
+  });
+});
+
 test("a tab closed while its shell still opens lets the shell go once it opens", async () => {
   keep(UNOPENED);
   main.holding.add(ACT_KIND.MAC_SHELL_OPEN);
@@ -897,11 +921,11 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
   assert.equal(findTally(), "1 of 1");
 });
 
-test("on a phone the tab draws no bar over the screen, and the task's header's ⋯ opens the agent, saying where the connection stands", async () => {
+test("on a phone the tab draws no bar over the screen, and the task's header's ⋯ opens the agent", async () => {
   const tab = await mount(true, false, SIDE_BUNDLES, true);
   assert.equal(tab.container.querySelector(".file-view-bar"), null);
   assert.deepEqual(tab.handed().labels(), ["Open agent"]);
-  assert.equal(tab.handed().item("Open agent").detail, "Invite flow · connecting…");
+  assert.equal(tab.handed().item("Open agent").detail, "Invite flow");
   tab.handed().press("Open agent");
   assert.equal(tab.agentOpened(), 1);
 });
