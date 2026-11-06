@@ -10,7 +10,7 @@ import { Data, Effect, MutableHashMap, Option } from "effect";
 /**
  * kept-content.ts -- content the service answers under a key it never changes under, kept in this process alone so a thing shown again asks the service nothing.
  *
- * A picture a tool answered an agent, an inbox item's attachment, a plan's
+ * A picture a tool answered an agent, an inbox item's attachment, a description's
  * picture or a comment's file, a page's version, a file of a repository read
  * at a commit, and an image of a pull request that is an upload or a file at
  * a commit are each read once per account and answered from here after
@@ -41,7 +41,7 @@ const KEPT_SHARE = 4;
 export const KEPT_KIND = {
   AGENT_PICTURE: "agent-picture",
   INBOX_ATTACHMENT: "inbox-attachment",
-  PLAN_PICTURE: "plan-picture",
+  DESCRIPTION_PICTURE: "description-picture",
   PAGE_VERSION: "page-version",
   FILE_AT_COMMIT: "file-at-commit",
   GITHUB_IMAGE: "github-image",
@@ -60,8 +60,8 @@ export class InboxAttachmentKey extends Data.TaggedClass(KEPT_KIND.INBOX_ATTACHM
   readonly attachmentId: string;
 }> {}
 
-/** A picture of a plan, or a file one of its comments carries: each upload is given an id of its own. */
-export class PlanPictureKey extends Data.TaggedClass(KEPT_KIND.PLAN_PICTURE)<{
+/** A picture of a description, or a file one of its comments carries: each upload is given an id of its own. */
+export class DescriptionPictureKey extends Data.TaggedClass(KEPT_KIND.DESCRIPTION_PICTURE)<{
   readonly planId: string;
   readonly attachmentId: string;
 }> {}
@@ -99,7 +99,7 @@ export class GitHubImageKey extends Data.TaggedClass(KEPT_KIND.GITHUB_IMAGE)<{
 export type KeptKey =
   | AgentPictureKey
   | InboxAttachmentKey
-  | PlanPictureKey
+  | DescriptionPictureKey
   | PageVersionKey
   | FileAtCommitKey
   | GitHubImageKey;
@@ -114,7 +114,7 @@ type Carrying<Answer> = Exclude<
 interface KeptAnswers {
   readonly [KEPT_KIND.AGENT_PICTURE]: Carrying<AgentInboxAttachmentView>;
   readonly [KEPT_KIND.INBOX_ATTACHMENT]: Carrying<AgentInboxAttachmentView>;
-  readonly [KEPT_KIND.PLAN_PICTURE]: Carrying<TasksPictureAnswer>;
+  readonly [KEPT_KIND.DESCRIPTION_PICTURE]: Carrying<TasksPictureAnswer>;
   readonly [KEPT_KIND.PAGE_VERSION]: Carrying<TasksPageAnswer>;
   readonly [KEPT_KIND.FILE_AT_COMMIT]: Carrying<TasksFileAnswer>;
   readonly [KEPT_KIND.GITHUB_IMAGE]: Carrying<AgentGitHubImageView>;
@@ -172,11 +172,11 @@ export function keptOfAgent(agentId: string): (key: KeptKey) => boolean {
   };
 }
 
-/** Whether a key names content of the task: its plan's pictures and its comments' files, its pages, and the files read through it. */
+/** Whether a key names content of the task: its description's pictures and its comments' files, its pages, and the files read through it. */
 export function keptOfTask(taskId: string): (key: KeptKey) => boolean {
   return (key) => {
     switch (key._tag) {
-      case KEPT_KIND.PLAN_PICTURE:
+      case KEPT_KIND.DESCRIPTION_PICTURE:
         return key.planId === taskId;
       case KEPT_KIND.PAGE_VERSION:
         return key.ownerKind === PAGE_OWNER.TASK && key.ownerId === taskId;

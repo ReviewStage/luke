@@ -368,7 +368,7 @@ test("a server whose sign-in expired is handed all the same, its card saying a c
   assert.equal(opened.note, SERVER_MENTION_NOTE.EXPIRED);
 });
 
-test("off an agent, as in a plan's or Vespin's words, the server's row has no switch and nothing is said of a turn", async () => {
+test("off an agent, as in a description's or Vespin's words, the server's row has no switch and nothing is said of a turn", async () => {
   const container = await drawn(
     createElement(TranscriptWords, { text: `Check ${SERVER} and ${TOOL}.` }),
   );

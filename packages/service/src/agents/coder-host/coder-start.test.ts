@@ -189,7 +189,13 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         assert.deepEqual([again.created, again.agent.id], [false, first.agent.id]);
         const agent = Option.getOrThrow(yield* readAgent(owner, first.agent.id));
         assert.deepEqual(
-          [agent.taskId, agent.organizationId, agent.repository, agent.prompt, agent.planSnapshot],
+          [
+            agent.taskId,
+            agent.organizationId,
+            agent.repository,
+            agent.prompt,
+            agent.descriptionSnapshot,
+          ],
           [null, workspaceId, RELAY_REPOSITORY, TASK, null],
         );
         assert.deepEqual(
@@ -368,7 +374,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
 });
 
 it.layer(getTestDB())("an agent started on a task", (it) => {
-  /** A Start on the task, handed the plan, under a fresh key. */
+  /** A Start on the task, handed the description, under a fresh key. */
   const taskAsk = (taskId: string): StartAsk => ({
     taskId,
     prompt: undefined,

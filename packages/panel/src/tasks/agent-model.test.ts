@@ -192,16 +192,16 @@ function writtenFor(id: string, clientKey: string, text: string): AgentTranscrip
 }
 
 test("a sent line is read back by the row written under its key alone, so two lines of the same words are each read back by their own", () => {
-  const plan = developer("m-plan", "Go on.");
+  const description = developer("m-plan", "Go on.");
   const first = sentUnder("key-1", "Go on.");
   const second = sentUnder("key-2", "Go on.");
-  // The plan already says the same words, and a row of the same words under another key is another line's.
-  assert.deepEqual(unreadSentLines([first, second], [plan]), [first, second]);
-  const secondLanded = [plan, writtenFor("m-2", "key-2", "Go on.")];
+  // The description already says the same words, and a row of the same words under another key is another line's.
+  assert.deepEqual(unreadSentLines([first, second], [description]), [first, second]);
+  const secondLanded = [description, writtenFor("m-2", "key-2", "Go on.")];
   assert.deepEqual(unreadSentLines([first, second], secondLanded), [first]);
   const both = [...secondLanded, writtenFor("m-1", "key-1", "Go on.")];
   assert.deepEqual(unreadSentLines([first, second], both), []);
-  assert.equal(messageWords(both[2] ?? plan), "Go on.");
+  assert.equal(messageWords(both[2] ?? description), "Go on.");
 });
 
 test("the line an agent was started on stands until the transcript reads back the developer's first row, whatever key that row was written under", () => {

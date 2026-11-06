@@ -155,7 +155,7 @@ it.layer(getTestDB())("the per-task Vespin's conversations", (it) => {
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             repository: "acme/relay",
-            planSnapshot: "# Teammate invitations\n",
+            descriptionSnapshot: "# Teammate invitations\n",
             prompt: null,
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),

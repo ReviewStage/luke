@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
-import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
+import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import type { Task } from "@repo/features/task-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
@@ -21,23 +21,23 @@ import { editorBundleLanded, installEditorLayout } from "../testing/composer.js"
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
-import { PlanBody } from "./plan-body.js";
-import { planEditMutation } from "./plan-edit-mutation.js";
+import { DescriptionBody } from "./description-body.js";
+import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
- * editor-pictures.test.ts -- a picture laid into the plan's editor is drawn
+ * editor-pictures.test.ts -- a picture laid into the description's editor is drawn
  * at once from the Mac's own bytes, dimmed, with "Uploading" where its
  * caption will stand, and as the kept picture once the service kept it; a
  * keep that failed says why with Retry and Remove, and Remove takes it out;
- * a video of another plan pasted in is kept on this one as it is, waiting
+ * a video of another description pasted in is kept on this one as it is, waiting
  * as a quiet box rather than a picture its bytes cannot draw; and Insert
  * image is offered while the text is edited, and only then; and
  * a selected picture's tools are each still named in a narrow column.
- * Synthetic plan and pictures.
+ * Synthetic description and pictures.
  */
 
 const TASK_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
@@ -122,9 +122,9 @@ function drawn(node: ReactNode): HTMLElement {
 /** The plan's page, editable, with its editor opened on the Approach section. */
 async function editing(): Promise<HTMLElement> {
   const container = drawn(
-    createElement(PlanBody, {
+    createElement(DescriptionBody, {
       task: TASK,
-      edit: planEditMutation(TASK.id, (request) => {
+      edit: descriptionEditMutation(TASK.id, (request) => {
         saved.push(request.document.value);
         return Promise.resolve({ saved: true });
       }),
@@ -214,7 +214,7 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
   assert.equal(container.querySelector(".editor-picture"), null);
 });
 
-test("a video of another plan pasted in is kept on this plan as it is, waiting as a quiet box", async () => {
+test("a video of another description pasted in is kept on this description as it is, waiting as a quiet box", async () => {
   const OTHER_TASK = "6e2f4a8b-1c3d-4e5f-9a0b-2c4d6e8f0a1b";
   const video = `data:${CONVERSATION_MEDIA_TYPE.WEBM};base64,GkXfow==`;
   const kept: string[] = [];
@@ -235,7 +235,7 @@ test("a video of another plan pasted in is kept on this plan as it is, waiting a
   });
   const container = await editing();
   const editable = container.querySelector(".ProseMirror") ?? assert.fail("the editor stands");
-  const address = planAttachmentAddress(
+  const address = descriptionAttachmentAddress(
     { taskId: OTHER_TASK, attachmentId: "9a1b3c5d-7e9f-4a2b-8c4d-6e8f0a2b4c6d" },
     "acme",
   );
@@ -260,8 +260,10 @@ test("a video of another plan pasted in is kept on this plan as it is, waiting a
   assert.equal(uploading?.querySelector("img"), null);
 });
 
-test("Insert image is offered while the plan's text is edited, and lays in the files chosen", async () => {
-  const reading = drawn(createElement(PlanBody, { task: TASK, sectionLinks: SECTION_LINKS }));
+test("Insert image is offered while the description's text is edited, and lays in the files chosen", async () => {
+  const reading = drawn(
+    createElement(DescriptionBody, { task: TASK, sectionLinks: SECTION_LINKS }),
+  );
   assert.equal(appCommandOffered(APP_COMMAND.INSERT_PICTURE), false);
   act(() => roots.pop()?.unmount());
   reading.remove();
@@ -313,7 +315,7 @@ test("Escape while a picture is being kept leaves the editor open until it is, t
   assert.ok(
     saved
       .at(-1)
-      ?.includes(`![Screenshot](https://vespin.dev/acme/plan/${TASK_ID}/files/${KEPT_ID})`),
+      ?.includes(`![Screenshot](https://vespin.dev/acme/task/${TASK_ID}/files/${KEPT_ID})`),
     "the saved text names the kept picture",
   );
 });
@@ -339,7 +341,7 @@ function selectPicture(container: HTMLElement): HTMLElement {
 
 /**
  * The column the picture stands in laid out at `width`, its picture 200
- * pixels under the top of the plan's scroller, as the window would report it.
+ * pixels under the top of the description's scroller, as the window would report it.
  */
 function layOutColumn(container: HTMLElement, width: number): void {
   const column =

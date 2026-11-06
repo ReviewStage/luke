@@ -1289,20 +1289,20 @@ its hash (`workspace-mcp/bearer.ts`), and runs each call as the agent's starter
 through the shared doors (`src/agents/coder-host/agent-doors.ts`): Claude
 Code sees them as `mcp__workspace__<tool>`, Codex as the `workspace` server. Its shell,
 files, search, and page reads are the harness's own. Among Vespin's tools,
-`edit_plan` (`src/agents/coder-host/plan-edit.ts`) takes notes
-(`@repo/features/plan-notes`'s `planNotesSchema`)
+`edit_description` (`src/agents/coder-host/description-edit.ts`) takes notes
+(`@repo/features/description-notes`'s `descriptionNotesSchema`)
 into the description of the task the call names, the agent's own or any other of
-its workspace, through the description's one write (`plan-notes.ts`): an open
+its workspace, through the description's one write (`description-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
 corrected in the code, a decision it made. The save is journaled on the task's
 row (`task.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and the "recent edits by agents" every agent on the task
 is handed say what the row says now, and a turn may take only so many
-notes. Every agent is offered `edit_plan`, `show_page`, `look_at_picture`,
+notes. Every agent is offered `edit_description`, `show_page`, `look_at_picture`,
 and the comment tools, one on no task among them, as an automation's run
 starts one: its pages stand on the agent itself, a look names its description by
-the picture's address, and every `edit_plan` and comment call names its
+the picture's address, and every `edit_description` and comment call names its
 task, any of its workspace.
 Beside them stand
 the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent on
@@ -1830,7 +1830,7 @@ the task's workspace no longer reaches, read at the start rather than when
 the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the
 task's description as the Markdown Copy puts on the clipboard
-(`@repo/features/plan-markdown`); then
+(`@repo/features/description-markdown`); then
 makes the agent and its conversation
 (`createAgent`), and opens the agent's session on its harness under the
 developer's own bearer with the snapshot as the first message of a typed
@@ -2321,7 +2321,7 @@ path override from `route-path` (`apps/web/server/function-dispatch.ts`): it onc
 read `path`, and every File tab read was answered 404.
 
 `GET /api/plans/{id}/revisions` reads the description's history for the Mac's
-version history (`packages/database/src/models/plan-revisions.ts`): fifty revisions a page,
+version history (`packages/database/src/models/description-revisions.ts`): fifty revisions a page,
 newest first, each its writer as the "Edited by" line names it, when it
 began and last moved, how many changes it made, and for a restore the
 revision it brought back; `?before=<seq>` reads the page before that
@@ -2331,14 +2331,14 @@ revision's content and the content before it, null for the first, each
 formatted under the task's name as it stands now, so a rename since is no
 difference between them. `POST /api/plans/{id}/revisions/{seq}/restore`
 puts that revision's text back through the description's one
-locked save (`src/tasks/plan-notes.ts`'s `restoreRevision`), kept as a
+locked save (`src/tasks/description-notes.ts`'s `restoreRevision`), kept as a
 revision of the developer's naming the one restored, and answers the description.
 It takes no body and no base: what it replaced is the revision before it,
 so a restore over a save that landed meanwhile is undone by restoring that.
 Every member of the task's workspace reads the history any of them wrote;
 a task of a workspace the account is not in reads as an empty history and
 restores as `not-found`. `packages/features/src/task-wire.ts` declares the answers
-(`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
+(`descriptionRevisionsAnswerSchema`, `descriptionRevisionAnswerSchema`).
 
 A task's repository is `task.repository` (migration `20260930133000_plan_repository`), the full name
 `owner/name` as GitHub spells it, or null for a task with none, which is
@@ -2371,15 +2371,15 @@ is `other-workspace`, naming that workspace, since an installation stands
 for one workspace alone and moving the task there is what reaches the repository:
 a task a personal workspace held before #2524 is left that way.
 
-A description's text has one write, `src/tasks/plan-notes.ts`, and three
+A description's text has one write, `src/tasks/description-notes.ts`, and three
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
 whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what others wrote meanwhile
 where it can be, and answered as a conflict with the text as it stands and
-the description's last edit, naming who wrote it, with nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
+the description's last edit, naming who wrote it, with nothing saved, where it cannot (`packages/features/src/description-edit.ts`); a
 restore above is the second. An agent's
-`edit_plan` (`src/agents/coder-host/plan-edit.ts`), the third, answers with notes
-(`packages/features/src/plan-notes.ts`): a point added under a heading, a
+`edit_description` (`src/agents/coder-host/description-edit.ts`), the third, answers with notes
+(`packages/features/src/description-notes.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
 text as it stands, passing over a note that names a phrase the description does not
 hold, and saves it under a binding of account and task the service built

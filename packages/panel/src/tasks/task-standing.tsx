@@ -46,7 +46,7 @@ import { type RepositoryChooser, useRepositoryMenu } from "./repository-chip.js"
 import { TaskRelationAsked, type TaskRelationsDoor } from "./task-relation-menu.js";
 
 /**
- * task-standing.tsx -- a task's head over its plan: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
+ * task-standing.tsx -- a task's head over its description: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
  *
  * Over the title stands the task's path (`TaskPath`), a caption-size
  * `Breadcrumbs`: its repository, the owner's picture and `owner/name`, or
@@ -245,7 +245,7 @@ export interface TaskStandingDoor {
   readonly onOpenTask?: ((taskId: string) => void) | undefined;
   /** The add menu's door, and the ask from the task's menus or ⌘K to open it; none where no relation is added here. */
   readonly relations?: TaskRelationsDoor | undefined;
-  /** Whether the plan is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
+  /** Whether the description is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
   readonly inSight?: boolean | undefined;
 }
 
@@ -476,7 +476,7 @@ export function TaskStandingChips({
   onSet: ((standing: TaskStanding) => void | Promise<void>) | undefined;
   /** The add menu's door; without it the menu hangs nowhere here. */
   relations?: TaskRelationsDoor | undefined;
-  /** Whether the plan is in sight, which S waits on, so it never opens a menu behind another tab. */
+  /** Whether the description is in sight, which S waits on, so it never opens a menu behind another tab. */
   inSight?: boolean | undefined;
 }): React.JSX.Element | null {
   const { status, priority } = task;

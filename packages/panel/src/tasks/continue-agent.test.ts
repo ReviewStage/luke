@@ -97,7 +97,7 @@ function agentOf(id: string, overrides: Partial<AgentSummary> = {}): AgentSummar
     createdAt: 1_000,
     status: AGENT_STATUS.COMPLETED,
     turnId: null,
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
     ...overrides,
   };
 }
@@ -1090,7 +1090,7 @@ test("where the tab's place opens drafts, Continue on a closed box opens the con
   assert.equal(button.disabled, false, "nothing is out to hold the press for");
 });
 
-test("a message refused before the transcript has read anything stands as the developer's line marked Not delivered, never as the agent's plan", async () => {
+test("a message refused before the transcript has read anything stands as the developer's line marked Not delivered, never as the agent's description", async () => {
   const tab = await drawnTab({
     status: AGENT_STATUS.COMPLETED,
     message: { failure: AGENT_CALL_FAILURE.AGENT_RETIRED },

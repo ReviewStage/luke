@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
-import { PLAN_ACTOR, type PlanSectionEdit } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, type DescriptionSectionEdit } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { test } from "vitest";
 import {
@@ -125,10 +125,15 @@ function said(activity: ActorActivity | undefined): string | undefined {
   return activity === undefined ? undefined : activityWords(activity);
 }
 
-test("a plan's edit is named by who wrote it: a member as the members read them, Vespin, an agent by its name, and nobody before history", () => {
-  const byApp = { actor: PLAN_ACTOR.NOTETAKER, by: DANA_REF, at: 0, duringCall: false };
-  const byAgent = { actor: PLAN_ACTOR.AGENT, label: "Fix auth flow", at: 0, duringCall: false };
-  const byDana = { actor: PLAN_ACTOR.DEVELOPER, by: DANA_REF, at: 0, duringCall: false };
+test("a description's edit is named by who wrote it: a member as the members read them, Vespin, an agent by its name, and nobody before history", () => {
+  const byApp = { actor: DESCRIPTION_ACTOR.NOTETAKER, by: DANA_REF, at: 0, duringCall: false };
+  const byAgent = {
+    actor: DESCRIPTION_ACTOR.AGENT,
+    label: "Fix auth flow",
+    at: 0,
+    duringCall: false,
+  };
+  const byDana = { actor: DESCRIPTION_ACTOR.DEVELOPER, by: DANA_REF, at: 0, duringCall: false };
 
   assert.equal(editActor(byDana, SAM_READS)?.kind, ACTOR_KIND.PERSON);
   assert.equal(called(editActor(byDana, { ...SAM_READS, readerId: DANA.userId })), "You");
@@ -143,15 +148,15 @@ test("a plan's edit is named by who wrote it: a member as the members read them,
     },
   );
   assert.equal(
-    editActor({ actor: PLAN_ACTOR.EARLIER, at: 0, duringCall: false }, SAM_READS),
+    editActor({ actor: DESCRIPTION_ACTOR.EARLIER, at: 0, duringCall: false }, SAM_READS),
     undefined,
   );
 });
 
-test("what someone last did in a plan is the sections whose last change is theirs, the newest change's moment, and a few named before the rest are counted", () => {
-  const edit = (section: string, at: number, by = DANA_REF): PlanSectionEdit => ({
+test("what someone last did in a description is the sections whose last change is theirs, the newest change's moment, and a few named before the rest are counted", () => {
+  const edit = (section: string, at: number, by = DANA_REF): DescriptionSectionEdit => ({
     section,
-    actor: PLAN_ACTOR.DEVELOPER,
+    actor: DESCRIPTION_ACTOR.DEVELOPER,
     by,
     at,
     duringCall: false,
@@ -159,7 +164,7 @@ test("what someone last did in a plan is the sections whose last change is their
   const edits = [
     edit("", 1),
     edit("Goal", 5),
-    { section: "Approach", actor: PLAN_ACTOR.NOTETAKER, at: 9, duringCall: false },
+    { section: "Approach", actor: DESCRIPTION_ACTOR.NOTETAKER, at: 9, duringCall: false },
     edit("Rollout", 3, { userId: SAM.userId, name: SAM.name }),
   ];
   const dana = personActor(DANA_REF, [DANA, SAM], SAM.userId);
@@ -198,7 +203,7 @@ test("two who left under one name each keep a face, told apart by their account 
 
 test("two agents of one name each keep a face, told apart by their ids, and agents an older service sent no id for are told apart by name", () => {
   const edit = (agentId?: string) => ({
-    actor: PLAN_ACTOR.AGENT,
+    actor: DESCRIPTION_ACTOR.AGENT,
     label: "claude-opus-5.5",
     ...(agentId === undefined ? undefined : { agentId }),
     at: 0,
@@ -377,14 +382,14 @@ test("a linked GitHub login who left keeps their picture and their account's nam
 
 test("a task Vespin or an agent made names them, the automation whose run started the agent in its place, and an agent the window does not hold as an agent; a task made by hand names nobody", () => {
   assert.equal(originActor(undefined, undefined), undefined);
-  assert.equal(originActor({ actor: PLAN_ACTOR.NOTETAKER }, undefined), APP_ACTOR);
+  assert.equal(originActor({ actor: DESCRIPTION_ACTOR.NOTETAKER }, undefined), APP_ACTOR);
   const held = {
     name: "Teammate invitations",
     provider: MODEL_PROVIDER.ANTHROPIC,
     state: ACTOR_STATE.WORKING,
     taskId: "task-invitations",
   };
-  assert.deepEqual(originActor({ actor: PLAN_ACTOR.AGENT, agentId: "agent-1" }, held), {
+  assert.deepEqual(originActor({ actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-1" }, held), {
     kind: ACTOR_KIND.AGENT,
     agentId: "agent-1",
     taskId: "task-invitations",
@@ -394,12 +399,12 @@ test("a task Vespin or an agent made names them, the automation whose run starte
   });
   assert.deepEqual(
     originActor(
-      { actor: PLAN_ACTOR.AGENT, agentId: "agent-2" },
+      { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-2" },
       { ...held, automationName: "Weekly dependency bump" },
     ),
     { kind: ACTOR_KIND.AUTOMATION, name: "Weekly dependency bump", state: ACTOR_STATE.REST },
   );
-  assert.deepEqual(originActor({ actor: PLAN_ACTOR.AGENT }, undefined), {
+  assert.deepEqual(originActor({ actor: DESCRIPTION_ACTOR.AGENT }, undefined), {
     kind: ACTOR_KIND.AGENT,
     name: "Agent",
     provider: undefined,

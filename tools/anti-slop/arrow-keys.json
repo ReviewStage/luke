@@ -1,11 +1,11 @@
 {
   "exempt": [
     {
-      "path": "packages/panel/src/plan-editor/",
+      "path": "packages/panel/src/description-editor/",
       "reason": "The plan editor's ProseMirror keymaps move the caret between blocks and out of the first line."
     },
     {
-      "path": "packages/panel/src/tasks/plan-body.tsx",
+      "path": "packages/panel/src/tasks/description-body.tsx",
       "reason": "With nothing focused, the arrows select a block of the plan document: editor navigation, not a list."
     },
     {

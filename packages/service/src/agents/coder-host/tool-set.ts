@@ -18,7 +18,7 @@ import { AGENT_TOOL, type AgentTool, toolsOf } from "../agent-runtime/tools.js";
  * search, eve's provider-run web search on the agent's own model call and
  * key, the hosted page read, the delegation of a slice of its
  * work to a worker, the notes it takes on
- * its plan (`plan-edit.ts`), its to-do list, and the
+ * its description (`description-edit.ts`), its to-do list, and the
  * threads it posts to the inbox (`inbox.ts`), the pull
  * request the service opens for it (`pull-request.ts`), its reach to the
  * other coding agents of its workspace, a message to one among it
@@ -49,7 +49,7 @@ export const CODER_TOOL = {
   WEB_SEARCH: AGENT_TOOL.WEB_SEARCH,
   READ_WEB_PAGE: AGENT_TOOL.READ_WEB_PAGE,
   DELEGATE: AGENT_TOOL.DELEGATE,
-  EDIT_PLAN: AGENT_TOOL.EDIT_PLAN,
+  EDIT_DESCRIPTION: AGENT_TOOL.EDIT_DESCRIPTION,
   LOOK_AT_PICTURE: AGENT_TOOL.LOOK_AT_PICTURE,
   WRITE_TODOS: AGENT_TOOL.WRITE_TODOS,
   POST_THREAD: AGENT_TOOL.POST_THREAD,
@@ -138,18 +138,18 @@ export function macToolsOf(agent: Pick<Agent, "machine">): ReadonlySet<MacTool> 
 /** What of an agent decides which tools eve offers it. */
 export type CoderOfferedTo = Pick<Agent, "repository" | "machine">;
 
-/** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether it has Plans on (`../plans-on.ts`). */
+/** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether it has Descriptions on (`../descriptions-on.ts`). */
 export interface OfferedBeside {
   readonly memoryOn: boolean;
-  readonly plansOn: boolean;
+  readonly descriptionsOn: boolean;
 }
 
 /**
  * The coder's tools eve offers some agents and not others: each one some
- * agent's repository, machine, Memory, or Plans withholds. Note that
+ * agent's repository, machine, Memory, or Descriptions withholds. Note that
  * no tool is withheld by the agent's task, since every one that acts on a
  * task names it or acts on the agent itself where it works on none: the
- * plan's notes, pictures, and comments any task of its workspace, and a
+ * description's notes, pictures, and comments any task of its workspace, and a
  * page the agent's own task, or the agent where it has none.
  */
 const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
@@ -158,7 +158,7 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
   ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }),
   CODER_TOOL.SAVE_MEMORY,
   CODER_TOOL.SEARCH_MEMORY,
-  CODER_TOOL.EDIT_PLAN,
+  CODER_TOOL.EDIT_DESCRIPTION,
   CODER_TOOL.LOOK_AT_PICTURE,
 ]);
 
@@ -167,7 +167,7 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
  * coder's tool no agent is denied, and each narrowed one where its
  * repository or where it runs offers it, `run_on_mac` among them,
  * `save_memory` and `search_memory` where its starter has Memory on, and
- * `edit_plan` and `look_at_picture` where it has Plans on, the same rules eve's tool files read as each
+ * `edit_description` and `look_at_picture` where it has Descriptions on, the same rules eve's tool files read as each
  * turn started; an eve agent's MCP popover reads it (`../workspace-tools.ts`).
  */
 export function offeredCoderTools(
@@ -179,7 +179,7 @@ export function offeredCoderTools(
     ...machineToolsOf(agent),
     ...macToolsOf(agent),
     ...(beside.memoryOn ? [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY] : []),
-    ...(beside.plansOn ? [CODER_TOOL.EDIT_PLAN, CODER_TOOL.LOOK_AT_PICTURE] : []),
+    ...(beside.descriptionsOn ? [CODER_TOOL.EDIT_DESCRIPTION, CODER_TOOL.LOOK_AT_PICTURE] : []),
   ]);
   return [...toolsOf(AGENT_ROLE.CODER)].filter(
     (tool) => !NARROWED_CODER_TOOLS.has(tool) || offered.has(tool),

@@ -27,7 +27,7 @@ function EditableDocument(): React.JSX.Element {
   const title = useRef<HTMLElement | null>(null);
   const titleBlock = useRef<HTMLDivElement | null>(null);
   const [heard, setHeard] = useState("Nothing opened yet");
-  // The words are the heading's own once drawn, as a plan's title's are.
+  // The words are the heading's own once drawn, as a description's title's are.
   useLayoutEffect(() => {
     if (title.current !== null) title.current.textContent = "Turn the lint guard on";
   }, []);

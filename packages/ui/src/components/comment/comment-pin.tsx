@@ -6,8 +6,8 @@ import type { CommentAuthor } from "./comment.js";
 /**
  * comment-pin.tsx -- comments pinned to what they are on, as a design tool pins them: a speech bubble whose pointed corner touches it, wearing the face of who started its first thread, and a count where more than one thread stands there.
  *
- * It is the comments' own marker, as small as the plan's folded count, a
- * line's face over the menus' raised surface, so it reads as the plan's
+ * It is the comments' own marker, as small as the description's folded count, a
+ * line's face over the menus' raised surface, so it reads as the description's
  * comments do wherever it stands over something the owner drew; on a touch
  * screen its press takes a finger's target around it, as a text press's
  * does, while it stays drawn as small. Its owner stands it where the

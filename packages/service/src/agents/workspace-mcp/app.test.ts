@@ -8,7 +8,10 @@ import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { listAgentBrowserTabs } from "@repo/database/models/agent-browser-tabs";
 import { createAgent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
-import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
+import {
+  keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
+} from "@repo/database/models/description-attachments";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, turns } from "@repo/database/schemas/storage";
@@ -18,7 +21,7 @@ import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@repo/features/browser-agent-actions";
 import { INBOX_TOOL } from "@repo/features/inbox-wire";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@repo/features/picture-wire";
-import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
+import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import { EXPERIMENT } from "@repo/settings";
 import {
   TURN_ORIGIN,
@@ -67,7 +70,7 @@ import {
   type AgentDoorSeams,
   type AgentToolCall,
   runAgentComment,
-  runAgentEditPlan,
+  runAgentEditDescription,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
   runAgentShowImage,
@@ -77,7 +80,7 @@ import {
 import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
-import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
+import { DESCRIPTION_EDIT_REFUSAL } from "../coder-host/description-edit.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
   WORKSPACE_INTEGRATION_MCP_PATH,
@@ -204,7 +207,7 @@ const agentWithBearer = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "acme/relay",
-    planSnapshot: "# Teammate invitations\n",
+    descriptionSnapshot: "# Teammate invitations\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
     payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
@@ -230,7 +233,7 @@ const agentOnNoTaskWithBearer = Effect.gen(function* () {
   const started = yield* createAgent(userId, {
     taskId: null,
     organizationId,
-    planSnapshot: null,
+    descriptionSnapshot: null,
     prompt: "Chart the funnel",
     idempotencyKey: randomUUID(),
     model: "openai/gpt-5.5",
@@ -317,8 +320,8 @@ function post(
   });
 }
 
-/** Turns Plans on for an agent's starter, whose agents are offered the plan's tools only then. */
-const plansOn = (userId: string) =>
+/** Turns Task descriptions on for an agent's starter, whose agents are offered the description's tools only then. */
+const descriptionsOn = (userId: string) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
 
 /** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
@@ -327,7 +330,7 @@ const SERVED_TOOLS = [
   "read_threads",
   "withdraw_ask",
   "open_pull_request",
-  "edit_plan",
+  "edit_description",
   "look_at_picture",
   "show_image",
   "show_page",
@@ -389,7 +392,7 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   read_threads: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
   withdraw_ask: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
   open_pull_request: (admitted, input) => runAgentOpenPullRequest(admitted, input),
-  edit_plan: (admitted, input) => runAgentEditPlan(admitted, input, 0, NO_SANDBOX),
+  edit_description: (admitted, input) => runAgentEditDescription(admitted, input, 0, NO_SANDBOX),
   look_at_picture: (admitted, input) => runAgentLookAtPicture(admitted, input),
   show_image: (admitted, input) => runAgentShowImage(admitted, input, NO_SANDBOX),
   show_page: (admitted, input) => runAgentShowPage(admitted, input, NO_SANDBOX),
@@ -548,7 +551,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "a tool the server does not hold and a method it does not know are protocol errors; a notification is taken with no body",
+    "a tool the server does not hold and a method it does not know are protocol errors, a tool since renamed is a tool error naming the tool in its place, and a notification is taken with no body",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -559,6 +562,12 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
           id: 4,
           method: "tools/call",
           params: { name: "bash", arguments: {} },
+        });
+        const renamedTool = yield* post(fetch, agent.bearer, {
+          jsonrpc: "2.0",
+          id: 7,
+          method: "tools/call",
+          params: { name: "edit_plan", arguments: { taskId: agent.taskId, notes: [] } },
         });
         const unknownMethod = yield* post(fetch, agent.bearer, {
           jsonrpc: "2.0",
@@ -577,6 +586,8 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         );
 
         assert.equal(unknownTool.body.error.code, -32602);
+        assert.equal(renamedTool.body.result.isError, true);
+        assert.match(renamedTool.body.result.content[0].text, /`edit_description`/u);
         assert.equal(unknownMethod.body.error.code, -32601);
         assert.deepEqual(
           [notification.status, notification.body],
@@ -614,7 +625,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
 
   it.effect.each([
     {
-      // An agent on no task is listed the plan's tools all the same.
+      // An agent on no task is listed the description's tools all the same.
       why: "in no repository, the checkout's",
       agent: agentOnNoTaskWithBearer,
       withheld: ["open_pull_request"],
@@ -634,7 +645,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       withheld: ["browser", "run_on_mac"],
     },
   ])(
-    "tools/list leaves out what eve offers no agent $why, and the memory and the plan's tools where its starter has Memory and Plans off",
+    "tools/list leaves out what eve offers no agent $why, and the memory and the description's tools where its starter has Memory and Task descriptions off",
     ({ agent: made, withheld }) =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -644,7 +655,13 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const listed = yield* Effect.promise(() => client.listTools());
         yield* Effect.promise(() => client.close());
 
-        const left = [...withheld, "save_memory", "search_memory", "edit_plan", "look_at_picture"];
+        const left = [
+          ...withheld,
+          "save_memory",
+          "search_memory",
+          "edit_description",
+          "look_at_picture",
+        ];
         assert.deepEqual(
           listed.tools.map((tool) => tool.name).sort(),
           SERVED_TOOLS.filter((name) => !left.includes(name)).sort(),
@@ -653,12 +670,12 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "edit_plan holds a turn to its 40 notes across calls, refuses notes before the turn is recorded, and a new turn starts its count afresh",
+    "edit_description holds a turn to its 40 notes across calls, refuses notes before the turn is recorded, and a new turn starts its count afresh",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentInSandbox;
-        yield* plansOn(agent.userId);
+        yield* descriptionsOn(agent.userId);
         const runTurn = Database.use((db) =>
           db.insert(turns).values({
             userId: agent.userId,
@@ -668,22 +685,25 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
           }),
         );
         const client = yield* connected(fetch, agent.bearer);
-        const editPlan = (count: number, turn: string) => {
+        const editDescription = (count: number, turn: string) => {
           const notes = Array.from({ length: count }, (_, index) => ({
             kind: "add",
             section: "Approach",
             text: `- ${turn} note ${index + 1}.`,
           }));
           return Effect.promise(() =>
-            client.callTool({ name: "edit_plan", arguments: { taskId: agent.taskId, notes } }),
+            client.callTool({
+              name: "edit_description",
+              arguments: { taskId: agent.taskId, notes },
+            }),
           );
         };
 
-        const early = yield* editPlan(1, "Unrecorded turn");
+        const early = yield* editDescription(1, "Unrecorded turn");
         yield* runTurn;
-        const first = yield* editPlan(39, "First turn");
-        const fortieth = yield* editPlan(1, "First turn's last");
-        const past = yield* editPlan(1, "First turn's extra");
+        const first = yield* editDescription(39, "First turn");
+        const fortieth = yield* editDescription(1, "First turn's last");
+        const past = yield* editDescription(1, "First turn's extra");
         yield* Database.use((db) =>
           db
             .update(turns)
@@ -691,18 +711,18 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
             .where(eq(turns.conversationId, agent.conversationId)),
         );
         yield* runTurn;
-        const next = yield* editPlan(1, "Second turn");
+        const next = yield* editDescription(1, "Second turn");
         yield* Effect.promise(() => client.close());
 
         assert.deepEqual(firstJson(early), {
           status: "rejected",
-          reason: PLAN_EDIT_REFUSAL.NO_TURN,
+          reason: DESCRIPTION_EDIT_REFUSAL.NO_TURN,
         });
         assert.deepEqual(firstJson(first), { status: "accepted", taken: 39 });
         assert.deepEqual(firstJson(fortieth), { status: "accepted", taken: 1 });
         assert.deepEqual(firstJson(past), {
           status: "rejected",
-          reason: PLAN_EDIT_REFUSAL.TOO_MANY,
+          reason: DESCRIPTION_EDIT_REFUSAL.TOO_MANY,
         });
         assert.equal(past.isError, true);
         assert.deepEqual(firstJson(next), { status: "accepted", taken: 1 });
@@ -787,7 +807,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
-        yield* plansOn(agent.userId);
+        yield* descriptionsOn(agent.userId);
         const client = yield* connected(fetch, agent.bearer);
 
         const listed = yield* Effect.promise(() => client.listTools());
@@ -799,7 +819,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         }
         const loaded = (name: string) =>
           listed.tools.find((tool) => tool.name === name)?._meta?.["anthropic/alwaysLoad"];
-        assert.equal(loaded("edit_plan"), true);
+        assert.equal(loaded("edit_description"), true);
         assert.equal(loaded("look_at_picture"), undefined);
       }),
   );
@@ -829,16 +849,16 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "a picture of the agent's plan comes back as its look's status and image content, never as text",
+    "a picture of the agent's description comes back as its look's status and image content, never as text",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
-        yield* plansOn(agent.userId);
-        const kept = yield* keepPlanAttachment(agent.userId, agent.taskId, PICTURE);
-        if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT)
+        yield* descriptionsOn(agent.userId);
+        const kept = yield* keepDescriptionAttachment(agent.userId, agent.taskId, PICTURE);
+        if (kept.status !== DESCRIPTION_ATTACHMENT_KEEP.KEPT)
           return assert.fail("the picture was not kept");
-        const address = planAttachmentAddress(
+        const address = descriptionAttachmentAddress(
           { taskId: agent.taskId, attachmentId: kept.id },
           "acme",
         );
@@ -858,19 +878,20 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "a look at a video of the agent's plan comes back as the refusal alone, with no image and none of its bytes",
+    "a look at a video of the agent's description comes back as the refusal alone, with no image and none of its bytes",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
-        yield* plansOn(agent.userId);
+        yield* descriptionsOn(agent.userId);
         const video: Picture = {
           contentType: PICTURE_MEDIA_TYPE.WEBM,
           bytes: webmBytes(1280, 800),
         };
-        const kept = yield* keepPlanAttachment(agent.userId, agent.taskId, video);
-        if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("the video was not kept");
-        const address = planAttachmentAddress(
+        const kept = yield* keepDescriptionAttachment(agent.userId, agent.taskId, video);
+        if (kept.status !== DESCRIPTION_ATTACHMENT_KEEP.KEPT)
+          return assert.fail("the video was not kept");
+        const address = descriptionAttachmentAddress(
           { taskId: agent.taskId, attachmentId: kept.id },
           "acme",
         );

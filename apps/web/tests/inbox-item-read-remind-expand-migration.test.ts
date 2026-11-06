@@ -26,13 +26,21 @@ import * as SqlClient from "effect/sql/SqlClient";
 
 const MIGRATION = "20261105235359_inbox_item_read_remind_expand";
 
-/** A migrations folder holding every migration named before `MIGRATION`'s, and none after. */
+/**
+ * The rename of the description's tables and columns, which a later
+ * migration made. Note that it is taken with the ones before, because the
+ * rows are written through today's models, which name the new columns, and
+ * no migration between the two touches what it renames.
+ */
+const DESCRIPTION_RENAME = "20261106055235_description_rename";
+
+/** A migrations folder holding every migration named before `MIGRATION`'s, and none after but the description's rename. */
 const foldersBefore = Effect.gen(function* () {
   const fileSystem = yield* FileSystem;
   const path = yield* Path;
   const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "before-remind-expand-" });
   const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
-    (name) => name.localeCompare(MIGRATION) < 0,
+    (name) => name.localeCompare(MIGRATION) < 0 || name === DESCRIPTION_RENAME,
   );
   for (const name of names) {
     yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));

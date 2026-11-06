@@ -939,14 +939,14 @@ test("an item's row reads as its task line and time, then its title, over the la
     {
       ...EXPIRY,
       status: INBOX_STATUS.CLOSED,
-      closedReason: "The plan now says 7 days.",
+      closedReason: "The description now says 7 days.",
       thread: [
         {
           ...expiryAsking,
           ask: {
             ...expiryAsking.ask,
             status: INBOX_ASK_STATUS.WITHDRAWN,
-            withdrawnReason: "The plan now says 7 days.",
+            withdrawnReason: "The description now says 7 days.",
           },
         },
       ],

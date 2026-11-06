@@ -141,7 +141,7 @@ function takesWords(takes: Takes): string | undefined {
  * Where a transcript's rewinds land: the lines a person wrote that opened a
  * turn, the first included, each one Edit may write again, and, for each
  * reply, the next line that opened a turn, whoever sent it, which its Revert
- * to here drops from. Note that a plan the agent was handed is drawn as its
+ * to here drops from. Note that a description the agent was handed is drawn as its
  * card, which offers no Edit, so only a first line drawn as a bubble is
  * written again. Every message but the last is followed by one, which a
  * rewind to just before it drops, and so is the last while lines sent and not

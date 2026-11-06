@@ -14,12 +14,13 @@
 import assert from "node:assert/strict";
 import "@orpc/experimental-effect/extensions/effect";
 import { it } from "@effect/vitest";
-import { bodyCap, HOSTED_ERRORS } from "@repo/features/contract";
-import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
-import { HTTP_METHOD } from "@repo/wire";
 import { oc } from "@orpc/contract";
 import { openapi } from "@orpc/openapi";
 import { implement } from "@orpc/server";
+import { HOSTED_API_ERROR } from "@repo/features";
+import { bodyCap, HOSTED_ERRORS } from "@repo/features/contract";
+import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
+import { HTTP_METHOD } from "@repo/wire";
 import { Context, Effect, Layer, Schema, SchemaTransformation } from "effect";
 import { HttpRouter } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -250,6 +251,35 @@ it.effect(
         assert.equal(answered.headers.get("x-content-type-options"), "nosniff", path);
         assert.equal(answered.headers.get("cross-origin-resource-policy"), "same-origin", path);
       }
+    }),
+);
+
+it.effect(
+  "a path the description was edited and read back at before its rename asks the older client to update, where any other unserved path is none",
+  () =>
+    Effect.gen(function* () {
+      // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
+      const services = Context.empty() as Context.Context<WebServices>;
+      const handle = hostedFetch(testRouter);
+      for (const [method, path] of [
+        [HTTP_METHOD.POST, "/api/plans/ABC/edit"],
+        [HTTP_METHOD.GET, "/api/plans/ABC/revisions"],
+        [HTTP_METHOD.GET, "/api/plans/ABC/revisions/3"],
+        [HTTP_METHOD.POST, "/api/plans/ABC/revisions/3/restore"],
+      ] as const) {
+        const answered = yield* Effect.promise(() =>
+          handle(new Request(new URL(path, ORIGIN), { method }), services),
+        );
+        assert.deepEqual(
+          [answered.status, (yield* Effect.promise(() => answered.json())).error],
+          [HOSTED_HTTP_STATUS.UPGRADE_REQUIRED, HOSTED_API_ERROR.HOST_UPGRADE_NEEDED],
+          path,
+        );
+      }
+      const elsewhere = yield* Effect.promise(() =>
+        handle(new Request(new URL("/api/plans/ABC/edits", ORIGIN)), services),
+      );
+      assert.equal(elsewhere.status, HOSTED_HTTP_STATUS.NOT_FOUND);
     }),
 );
 

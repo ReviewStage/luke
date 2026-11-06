@@ -4,7 +4,7 @@ import {
   encodeMention,
   MENTION_KIND,
   type MentionLines,
-  type PlanMention,
+  type DescriptionMention,
 } from "@repo/features/mention-link";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeRef } from "@repo/features/task-wire";
@@ -52,7 +52,7 @@ import {
   type TaskMentionsValue,
   tasklessMentions,
   useMentionAgentsReader,
-  useSavedPlanText,
+  useSavedDescriptionText,
 } from "../tasks/task-mentions.js";
 import {
   cardTitle,
@@ -133,7 +133,7 @@ import { taskCardOf } from "./task-card.js";
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`). The chosen item's box
  * mentions what its repository and workspace hold (`answerPlace`), and,
- * for an item of a task, what the task's page offers besides: its plan
+ * for an item of a task, what the task's page offers besides: its description
  * and sections as saved, its pages, its agents, and their pull requests
  * (`heldTaskMentions`); and
  * its skills are read through its holder and drawn as chips that open
@@ -439,11 +439,11 @@ export const DesktopInbox = memo(function DesktopInbox({
     if (!openHere(address)) elsewhere();
   };
   // A task or a section a mention names opens as a link to it would.
-  const openMention = (mention: PlanMention) =>
+  const openMention = (mention: DescriptionMention) =>
     openPlaceHere(placeOfMention(mention), () => tasks.onShowMention(mention));
-  // An item of a task offers what the task's page does: its plan and sections as saved, its pages, its agents, and their pull requests.
+  // An item of a task offers what the task's page does: its description and sections as saved, its pages, its agents, and their pull requests.
   const heldTask = chosen?.holder.kind === INBOX_HOLDER.TASK ? chosen.holder.task : undefined;
-  const planText = useSavedPlanText(heldTask);
+  const descriptionText = useSavedDescriptionText(heldTask);
   const mentions =
     place === undefined
       ? undefined
@@ -454,7 +454,7 @@ export const DesktopInbox = memo(function DesktopInbox({
         : heldTaskMentions(
             heldTask,
             place.workspace,
-            planText,
+            descriptionText,
             { pages: view.pages, agents: named, readAgents: readMentionAgents },
             { onOpenTask: openMention, onOpenFile: openMentionedFile },
           );
@@ -853,7 +853,7 @@ function InboxSidePanel({
               tasks.onShowAgent(taskId, agent),
             );
       }
-      case TOOL_TARGET.PLAN:
+      case TOOL_TARGET.DESCRIPTION:
         if (taskId === undefined) return;
         return openPlace({ kind: LINK_PLACE.TASK, planId: taskId }, () => tasks.onShowTask(taskId));
       case TOOL_TARGET.INBOX:

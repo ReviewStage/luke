@@ -6,8 +6,10 @@
  * private, no-store`, as `hostedJsonResponse` set it, unless its procedure
  * set a `cache-control` of its own through the context's `resHeaders` (the
  * admin gate's `no-store`, on its refusals too), and a refusal does not;
- * a request the router does not match is the hosted vocabulary's own 405 when
- * the path is a procedure's under another method and its 404 otherwise, as
+ * a request the router does not match is the hosted vocabulary's own 426,
+ * an update needed, where the path is one a renamed procedure was served at
+ * (`RETIRED_TASK_PATHS`), which only an older client asks; its 405 when
+ * the path is a procedure's under another method; and its 404 otherwise, as
  * the old groups' method check and `hostedNotFoundRoute` answered them, where the handler
  * would answer it unmatched; and a defect is a bare 500 with no body, as the
  * platform's web handler answered one, where oRPC would describe it.
@@ -25,13 +27,13 @@
  * answered it.
  */
 
-import { getBodyCap } from "@repo/features/contract";
-import { HTTP_METHOD } from "@repo/wire";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIMatcher } from "@orpc/openapi/standard";
 import { ORPCError, type Router } from "@orpc/server";
 import { ResponseHeadersHandlerPlugin } from "@orpc/server/plugins";
 import type { StandardHandlerInterceptor } from "@orpc/server/standard";
+import { getBodyCap, RETIRED_TASK_PATHS } from "@repo/features/contract";
+import { HTTP_METHOD } from "@repo/wire";
 import type { Context } from "effect";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
@@ -203,6 +205,16 @@ export function hostedFetch(router: HostedRouter): HostedFetch {
       context: { "effect/context": services, "effect/wrap": hostedRefusalWrap, request },
     });
     if (matched) return sameOriginOnly(settled(response));
+    const { pathname } = new URL(request.url);
+    if (RETIRED_TASK_PATHS.some((retired) => retired.test(pathname))) {
+      return sameOriginOnly(
+        refusalResponse(
+          request,
+          HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
+          HOSTED_REFUSAL.HOST_UPGRADE_NEEDED,
+        ),
+      );
+    }
     return sameOriginOnly(
       (await servedUnderAnotherMethod(request))
         ? refusalResponse(

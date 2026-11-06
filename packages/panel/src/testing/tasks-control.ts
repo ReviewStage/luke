@@ -24,7 +24,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
-import { planEditMutation } from "../tasks/plan-edit-mutation.js";
+import { descriptionEditMutation } from "../tasks/description-edit-mutation.js";
 import {
   AGENT_RENAME_SHAPE,
   type AgentsControl,
@@ -34,7 +34,7 @@ import {
   MODELS_READ,
 } from "../tasks/use-agents.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
-import { HISTORY_READ } from "../tasks/use-plan-history.js";
+import { HISTORY_READ } from "../tasks/use-description-history.js";
 import { DRAWN_KINDS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -426,8 +426,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     listRead: true,
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
-    planEdit: (taskId) =>
-      planEditMutation(taskId, () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED })),
+    descriptionEdit: (taskId) =>
+      descriptionEditMutation(taskId, () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED })),
     mainTabs: {
       tabs: [MAIN_TAB.OVERVIEW],
       tab: MAIN_TAB.OVERVIEW,

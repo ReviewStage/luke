@@ -89,17 +89,17 @@ import { OpenLinkProvider } from "./use-open-link.js";
 /**
  * `@` in an agent's message box and its transcript, on a task's page and
  * off it, over the real editor bundle: the word typed opens the list of the
- * plan's sections and the repository's files, the row chosen is written
+ * description's sections and the repository's files, the row chosen is written
  * into the message as its link and drawn in the box as its chip, the link
  * is what is sent, and a sent message's mention is drawn as the chip that
  * opens it. Off a task's page an `@` is a letter, and a sent mention is
  * still its chip, opened through the window's own doors.
- * Synthetic plan and repository.
+ * Synthetic description and repository.
  */
 
 const TASK_ID = "pl_1";
 
-const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
+const DESCRIPTION_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
 
 const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "rollout" };
 
@@ -354,7 +354,7 @@ function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsVal
     taskName: "Invitations",
     workspace: PLACE.workspace,
     repository,
-    text: () => PLAN_TEXT,
+    text: () => DESCRIPTION_TEXT,
     doors: {
       holder: { taskId: TASK_ID },
       place: { workspace: PLACE.workspace, repository },
@@ -488,7 +488,7 @@ function listedCount(container: HTMLElement): number {
   );
 }
 
-test("an @ typed in the box on a plan's page offers the plan's sections, and the row chosen is drawn as its chip and sent as its link", async () => {
+test("an @ typed in the box on a plan's page offers the description's sections, and the row chosen is drawn as its chip and sent as its link", async () => {
   const { container, sent } = await box(planPage([]));
 
   typeInComposer(container, "Follow @roll");
@@ -601,7 +601,7 @@ test("the box is a combobox naming the @ list it opened and the row highlighted 
   assert.equal(field.getAttribute("aria-activedescendant"), null);
 });
 
-test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no plan's sections", async () => {
+test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no description's sections", async () => {
   const page = tasklessMentions(
     { workspace: "acme", workspaceId: "workspace-1", repository: "acme/relay" },
     ignore,

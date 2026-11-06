@@ -10,12 +10,12 @@ import type { AppPlatform } from "@repo/panel/app-platform";
 import { openBrowserLiveOverPort } from "@repo/panel/browser-live-port";
 import { applySessionReplay } from "./session-replay";
 
-/** What of this window's work is unsaved: a page's, which stands an ask, and a plan's words. */
-const unsaved = { page: false, planWords: false };
+/** What of this window's work is unsaved: a page's, which stands an ask, and a description's words. */
+const unsaved = { page: false, descriptionWords: false };
 
 /** Tells main whether this window holds unsaved work, which a quit, a restart to update, and a sign-out ask about with its own sheet. */
 const tellUnsavedWork = (): void =>
-  tellAct(ACT_KIND.WINDOW_UNSAVED_WORK, { holding: unsaved.page || unsaved.planWords });
+  tellAct(ACT_KIND.WINDOW_UNSAVED_WORK, { holding: unsaved.page || unsaved.descriptionWords });
 
 /**
  * The desktop's platform. The clipboard, the save dialog, the panel's focus,
@@ -49,8 +49,8 @@ export const DESKTOP_PLATFORM: AppPlatform = {
     unsaved.page = ask !== undefined;
     tellUnsavedWork();
   },
-  unsavedPlanWords: (planWords) => {
-    unsaved.planWords = planWords;
+  unsavedDescriptionWords: (descriptionWords) => {
+    unsaved.descriptionWords = descriptionWords;
     tellUnsavedWork();
   },
 };

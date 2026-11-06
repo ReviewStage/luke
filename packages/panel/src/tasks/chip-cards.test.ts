@@ -160,7 +160,7 @@ const TASK: TaskSummary = {
   repository: "acme/relay",
 };
 
-const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Roll it out\n\nStore first.\n";
+const DESCRIPTION_TEXT = "## Goal\n\nInvite by email.\n\n## Roll it out\n\nStore first.\n";
 
 const SWEEP: AutomationSummary = {
   id: "3f0e6f5c-7d1a-4f6e-9a55-000000000001",
@@ -351,7 +351,7 @@ const PAGE: TaskMentionsValue = {
   taskName: TASK.name,
   workspace: PLACE.workspace,
   repository: PLACE.repository,
-  text: () => PLAN_TEXT,
+  text: () => DESCRIPTION_TEXT,
   doors: {
     holder: { taskId: TASK_ID },
     place: PLACE,

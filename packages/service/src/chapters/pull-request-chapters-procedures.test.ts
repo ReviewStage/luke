@@ -222,7 +222,7 @@ const standing = (
     const agent = Option.getOrThrow(
       yield* createAgent(owner, {
         taskId: task.id,
-        planSnapshot: "# Invitations",
+        descriptionSnapshot: "# Invitations",
         prompt: null,
         idempotencyKey: randomUUID(),
         model: AGENT_DEFAULT_CHOICE.model,

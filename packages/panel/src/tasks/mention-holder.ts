@@ -1,8 +1,8 @@
 /**
  * mention-holder.ts -- what holds a place's mentions: a task's page, or the page of an agent on no task.
  *
- * A task's page offers its plan's sections and pages, and draws a section
- * of its own plan as found or gone; an agent's own page offers the pages
+ * A task's page offers its description's sections and its pages, and draws a section
+ * of its own description as found or gone; an agent's own page offers the pages
  * it showed itself, which stand on the agent rather than a task. A place
  * neither holds, as New task's composer and the window's Inbox are, has no
  * holder, and offers neither.

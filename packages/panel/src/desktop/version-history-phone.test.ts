@@ -2,14 +2,14 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import type { NavigationHistory } from "../navigation-history.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { HISTORY_READ } from "../tasks/use-plan-history.js";
+import { HISTORY_READ } from "../tasks/use-description-history.js";
 import type { VersionHistoryControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
@@ -23,21 +23,21 @@ import { TaskVersionHistory } from "./desktop-version-history.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /**
- * version-history-phone.test.ts -- a plan's version history on a phone is
+ * version-history-phone.test.ts -- a description's version history on a phone is
  * headed as every phone's page is: its list by one way out, named for the
  * step Back goes to, or from a revision's sections back to every version,
  * and its title, with no Back and Forward; a version by the way back to the
  * list, when it was saved, and a ⋯ holding its restore. A wide room keeps
- * its rows and bar. Synthetic plan and revisions.
+ * its rows and bar. Synthetic description and revisions.
  */
 
 const ignore = (): void => undefined;
 
-/** A revision of the plan by the developer. */
+/** A revision of the description by the developer. */
 function line(seq: number) {
   return {
     seq,
-    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 10 * seq, duringCall: false },
+    lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, at: 10 * seq, duringCall: false },
     startedAt: 10 * seq,
     changes: 2,
   };
@@ -72,7 +72,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history in `room` over its versions 3 and 2, as `history` stands, every way out written down. */
+/** The description's version history in `room` over its versions 3 and 2, as `history` stands, every way out written down. */
 function drawn(
   room: ShellRoom,
   history: Partial<VersionHistoryControl>,

@@ -20,7 +20,12 @@ import {
   type InboxItem,
 } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@repo/features/task-wire";
+import {
+  DESCRIPTION_ACTOR,
+  TASK_TREE_ENTRY,
+  type Task,
+  type TaskSummary,
+} from "@repo/features/task-wire";
 import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -1613,8 +1618,8 @@ test("a task Vespin or a coding agent made says who in its detail and is found b
     tasksControl({
       me: dean.userId,
       tasks: [
-        task("Invite emails", { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" }),
-        task("Audit log export", { actor: PLAN_ACTOR.NOTETAKER }),
+        task("Invite emails", { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" }),
+        task("Audit log export", { actor: DESCRIPTION_ACTOR.NOTETAKER }),
         task("Rate limits"),
       ],
     }),
@@ -1701,7 +1706,7 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   });
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
@@ -2706,9 +2711,9 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
       open: true,
       fullScreen: room === SHELL_ROOM.NARROW,
       fullScreenOnly: room === SHELL_ROOM.NARROW,
-      tabs: [SIDE_PANEL_TAB.PLAN],
-      strip: [SIDE_PANEL_TAB.PLAN],
-      tab: SIDE_PANEL_TAB.PLAN,
+      tabs: [SIDE_PANEL_TAB.DESCRIPTION],
+      strip: [SIDE_PANEL_TAB.DESCRIPTION],
+      tab: SIDE_PANEL_TAB.DESCRIPTION,
     },
   });
   const host = document.body.appendChild(document.createElement("div"));
@@ -2756,12 +2761,12 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
   return host;
 }
 
-test("on a wide window ⌘K's Rename task puts the caret in the plan's own title", () => {
+test("on a wide window ⌘K's Rename task puts the caret in the description's own title", () => {
   const host = paletteBesideTask(SHELL_ROOM.WIDE);
 
   const title = host.querySelector('[role="textbox"][aria-label="Task name"]');
-  assert.ok(title, "the plan's title is drawn");
-  assert.ok(document.activeElement === title, "the caret is in the plan's title");
+  assert.ok(title, "the description's title is drawn");
+  assert.ok(document.activeElement === title, "the caret is in the description's title");
 });
 
 test("on a phone ⌘K's Rename task opens the task's name in the head's field", () => {

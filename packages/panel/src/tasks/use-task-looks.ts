@@ -2,8 +2,8 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import { READ_MARK, type ReadMark, readsUnread } from "@repo/features/read-mark";
 import {
-  PLAN_ACTOR,
-  type PlanSectionEdit,
+  DESCRIPTION_ACTOR,
+  type DescriptionSectionEdit,
   type Task,
   type TaskSummary,
 } from "@repo/features/task-wire";
@@ -16,7 +16,7 @@ import { actMutation, pressMutation } from "../act-mutations.js";
 import { appStateQuery, memoizedSelect } from "../use-app-state.js";
 
 /**
- * use-task-looks.ts -- what changed since the developer last looked at a task: the open plan's sections, and the sidebar's unread tasks and agents.
+ * use-task-looks.ts -- what changed since the developer last looked at a task: the open description's sections, and the sidebar's unread tasks and agents.
  *
  * A look is the plan opened, whichever of its column's tabs it opens on. Its
  * mark is kept on the account by the service (`@repo/features/read-mark`),
@@ -60,7 +60,7 @@ interface Visit {
   readonly changed: ReadonlySet<string>;
 }
 
-/** The open plan's sections changed since the last look, each by its heading, and the dismissal that clears them. */
+/** The open description's sections changed since the last look, each by its heading, and the dismissal that clears them. */
 export interface TaskLooks {
   readonly changed: ReadonlySet<string>;
   readonly dismiss: () => void;
@@ -88,8 +88,8 @@ const selectMarkedUnreadIds = memoizedSelect(
     ),
 );
 
-/** The save that last changed each of the plan's sections, each by its heading. */
-function sectionSavesOf(task: Task): readonly PlanSectionEdit[] {
+/** The save that last changed each of the description's sections, each by its heading. */
+function sectionSavesOf(task: Task): readonly DescriptionSectionEdit[] {
   return task.sectionEdits ?? [];
 }
 
@@ -124,8 +124,8 @@ function newestChangeOf(task: Pick<TaskSummary, "updatedAt" | "agents">): number
  * developer's save did before saves named their member, because a save the
  * window cannot place is as likely the reader's as anyone's.
  */
-function readersOwn(edit: PlanSectionEdit, readerId: string | undefined): boolean {
-  if (edit.actor !== PLAN_ACTOR.DEVELOPER) return false;
+function readersOwn(edit: DescriptionSectionEdit, readerId: string | undefined): boolean {
+  if (edit.actor !== DESCRIPTION_ACTOR.DEVELOPER) return false;
   return edit.by === undefined || readerId === undefined || edit.by.userId === readerId;
 }
 
@@ -169,7 +169,7 @@ function revisited(
 }
 
 /**
- * The drawn plan's sections changed since the developer last looked at it,
+ * The drawn description's sections changed since the developer last looked at it,
  * and the plan read: as it opens, which takes back a mark of it as unread,
  * as its agents' activity moves while it stays open, and as it is left,
  * neither of which does. Note that the visit reads the mark `row` carries as

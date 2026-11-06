@@ -10,7 +10,7 @@
  * label is its verb and noun, so the menu bar, the Keyboard shortcuts page,
  * ⌘K, and the menus never word it apart; a command no chord reaches is
  * worded here alone. A chord that acts on whichever thing is focused, as
- * ⌥⌘C copies the plan or an agent's transcript and ⌘⌫ deletes a task or an
+ * ⌥⌘C copies the description or an agent's transcript and ⌘⌫ deletes a task or an
  * agent, keeps its own words in the table, which ⌘K and the menu bar say,
  * and each thing's item says its own verb (`keyedAs`).
  *
@@ -102,7 +102,7 @@ function unkeyed(verb: string, icon: React.JSX.Element, noun?: string): PanelCom
 /** Every command a menu offers beside ⌘K, by what it does. */
 export const PANEL_COMMAND = {
   COPY_CONTENT: keyed(APP_COMMAND.COPY_CONTENT, <GLYPH.COPY />),
-  COPY_PLAN: keyedAs(APP_COMMAND.COPY_CONTENT, "Copy description", <GLYPH.COPY />),
+  COPY_DESCRIPTION: keyedAs(APP_COMMAND.COPY_CONTENT, "Copy description", <GLYPH.COPY />),
   COPY_LINK: keyed(APP_COMMAND.COPY_LINK, <GLYPH.LINK />),
   MARK_TASK_DONE: unkeyed("Mark done", <GLYPH.DONE />),
   DELETE: keyed(APP_COMMAND.DELETE, <GLYPH.DELETE />),

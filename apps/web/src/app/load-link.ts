@@ -11,10 +11,13 @@
  * instead, and says nothing here. `/app`, the panel's own path, names no
  * place, so the panel opens where it rests there; so does `/app.html`, the build's
  * file name, which only the dev server answers, the site sending it to
- * `/app`.
+ * `/app`. A tab opened at a link written before the task was a task,
+ * `/<workspace>/plan/…`, is moved onto the address written now,
+ * `/<workspace>/task/…`, before it is read, so the address bar, a reload, and
+ * Copy link name it as every link does now.
  */
 
-import { readShownLink, type ShownLink } from "@repo/features/link-grammar";
+import { currentTaskPath, readShownLink, type ShownLink } from "@repo/features/link-grammar";
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import type { AppBridge } from "@repo/host/bridge";
 import { savesStep } from "@repo/panel/navigation-history";
@@ -39,6 +42,13 @@ function linkHere(): ShownLink | undefined {
  * own move along it, never a write.
  */
 export function withLoadLink(bridge: AppBridge, history: RouterHistory): AppBridge {
+  const opened = addressHere();
+  const current = currentTaskPath(opened);
+  if (current !== opened) {
+    history.replace(current, history.location.state);
+    // Note that the history writes the address bar on its next tick, so the move is flushed now, before anything reads the address.
+    history.flush();
+  }
   let loaded = savesStep(history.location) ? undefined : linkHere();
   return {
     ...bridge,

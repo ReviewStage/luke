@@ -62,7 +62,7 @@ const AGENT: AgentSummary = {
   turnId: null,
 };
 
-const PLAN: AgentTranscriptMessage = {
+const DESCRIPTION: AgentTranscriptMessage = {
   id: "plan",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "Audit the retry paths." }],
@@ -86,7 +86,7 @@ function page(
   status: AgentStatus,
   cursor: string,
 ): AgentMessagesAnswerView {
-  return { messages: [PLAN, reply(words)], cursor, status, title: null, subagents: [] };
+  return { messages: [DESCRIPTION, reply(words)], cursor, status, title: null, subagents: [] };
 }
 
 /** A call the reply made, answered. */

@@ -43,7 +43,7 @@ import {
  *
  * Each column of the task's page wraps the tab it shows in a scope, which
  * offers Find while the column holds the window's keys (`desktop-tasks.tsx`),
- * so ⌘F finds in the plan's document, an agent's transcript, or whatever
+ * so ⌘F finds in the description, an agent's transcript, or whatever
  * the side panel shows, and never in both columns at once, which is why
  * Electron's `findInPage`, a find over the whole window, is not used. The
  * bar is the one Chrome, VS Code, and Slack draw: the field, "3 of 12" or

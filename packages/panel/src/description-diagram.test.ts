@@ -1,0 +1,450 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import { DESCRIPTION_ACTOR, type Task } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
+import {
+  DIAGRAM_APPEARANCE,
+  DIAGRAM_DRAWING,
+  type DiagramAppearance,
+  type DiagramDrawing,
+  type DiagramModule,
+} from "@repo/ui/diagram-contract";
+import { Effect } from "effect";
+import { act, createElement, type ReactElement, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { type SideBundles, sideBundles } from "./bundle-loader.js";
+import { MarkdownMessage } from "./markdown-message.js";
+import { DiagramPreview } from "./description-diagram.js";
+import { SHELL_ROOM } from "./shell-room.js";
+import { ShellRoomContext } from "./stage-room.js";
+import { DescriptionBody } from "./tasks/description-body.js";
+import { HISTORY_READ } from "./tasks/use-description-history.js";
+import { VersionView } from "./tasks/version-view.js";
+import { fakeAppBridge } from "./testing/app-bridge.js";
+import { registryWith } from "./testing/app-state.js";
+import { onRegistry } from "./testing/copy-feedback.js";
+import { DOCUMENT_TASK } from "./testing/document-task.js";
+import { landedBundles, onSideBundles } from "./testing/side-bundles.js";
+
+/**
+ * description-diagram.test.ts -- a ```` ```mermaid ```` fence on a plan's page and
+ * in its versions draws as the picture the diagram bundle answered, its code
+ * a press away; a fence the bundle refuses says so over its code; a fence
+ * whose code a version changed is drawn as its code with the changes marked;
+ * and every other fence, and every fence where the words are not a description's,
+ * stays code. Mermaid cannot lay out under jsdom, so the bundle stands in at
+ * its one boundary, the bundle's importer, answering a picture named by the
+ * code and the appearance it was asked in. On a finger's device, or in a
+ * phone's narrow room, a tap on a diagram opens it over the window, which
+ * its Close or Escape shuts; with a mouse in a wide room a tap opens nothing,
+ * while the keyboard's press on the picture opens it in any room.
+ * Synthetic description.
+ */
+
+/** The code the stand-in refuses, as Mermaid refuses code it cannot parse. */
+const UNPARSED = "flowchart LR\n  A -->";
+
+/** What the stand-in answers: a picture named by what it was asked to draw, or a refusal for `UNPARSED`. */
+function stoodInDrawing(code: string, appearance: DiagramAppearance): DiagramDrawing {
+  if (code === UNPARSED) return { kind: DIAGRAM_DRAWING.REFUSED };
+  return { kind: DIAGRAM_DRAWING.DRAWN, url: pictureOf(code, appearance) };
+}
+
+/** The address the stand-in answers for a code in an appearance. */
+function pictureOf(code: string, appearance: DiagramAppearance): string {
+  return `data:image/svg+xml,${encodeURIComponent(`${appearance}:${code}`)}`;
+}
+
+/** The diagram bundle's stand-in. */
+const STAND_IN: DiagramModule = {
+  draw: (code, appearance) => Promise.resolve(stoodInDrawing(code, appearance)),
+};
+
+let bundles: SideBundles;
+
+// The bundle already landed, as it is once a diagram has been shown in this window.
+beforeAll(async () => {
+  bundles = await Effect.runPromise(landedBundles({ diagram: () => Promise.resolve(STAND_IN) }));
+});
+
+/** Whether the window is in its dark appearance, and who hears it flip. */
+const appearance = { dark: false, listeners: new Set<() => void>() };
+
+/** Whether the window is worked by a finger, which a press on a diagram asks as it lands. */
+const device = { finger: false };
+
+const roots: Root[] = [];
+
+beforeEach(() => {
+  appearance.dark = false;
+  device.finger = false;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      get matches() {
+        return query.includes("pointer: coarse") ? device.finger : appearance.dark;
+      },
+      addEventListener: (_type: string, listener: () => void) => appearance.listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) =>
+        appearance.listeners.delete(listener),
+    }),
+  });
+  fakeAppBridge({});
+});
+
+afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+});
+
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+/** `node` drawn in a window of its own, once every draw it asked for has landed. */
+async function drawn(node: ReactElement): Promise<HTMLElement> {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        onSideBundles(bundles, node),
+      ),
+    ),
+  );
+  await settle();
+  return container;
+}
+
+/** A description whose text holds `fence` under a heading. */
+function taskWith(fence: string): Task {
+  return { ...DOCUMENT_TASK, document: { body: `## Flow\n\n${fence}\n`, assumptions: [] } };
+}
+
+/** A Mermaid fence around `code`. */
+const mermaidFence = (code: string) => `\`\`\`mermaid\n${code}\n\`\`\``;
+
+/** The diagrams a page draws, as their pictures' addresses. */
+function pictures(container: HTMLElement): (string | null)[] {
+  return [...container.querySelectorAll(".description-diagram img")].map((img) =>
+    img.getAttribute("src"),
+  );
+}
+
+/** The failure note's Retry, where the fence has one. */
+function retry(container: HTMLElement): HTMLButtonElement | undefined {
+  return (
+    [
+      ...container.querySelectorAll<HTMLButtonElement>(".description-diagram [role=alert] button"),
+    ].find((button) => button.textContent === "Retry") ?? undefined
+  );
+}
+
+/** The diagram's Show code, or Show diagram, toggle. */
+function toggle(container: HTMLElement): HTMLButtonElement {
+  return (
+    container.querySelector<HTMLButtonElement>(".description-diagram-head button") ??
+    assert.fail("the diagram has its toggle")
+  );
+}
+
+/** A version of the description drawn against the one before it, as the version history draws it. */
+function Version({ previous, now }: { previous: string; now: string }): ReactNode {
+  const restore = { busy: false, onRestore: () => undefined };
+  return createElement(VersionView, {
+    onRetry: () => undefined,
+    viewing: {
+      line: {
+        seq: 2,
+        lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, at: 2, duringCall: false },
+        startedAt: 1,
+        changes: 1,
+      },
+      current: false,
+      read: {
+        kind: HISTORY_READ.READY,
+        previous: { body: previous, assumptions: [] },
+        document: { body: now, assumptions: [] },
+      },
+    },
+    restore,
+  });
+}
+
+test("a Mermaid fence on a plan's page draws as the picture the diagram bundle answered, out of the screen recording", async () => {
+  const code = "sequenceDiagram\n  Admin->>Service: Invite";
+
+  const page = await drawn(createElement(DescriptionBody, { task: taskWith(mermaidFence(code)) }));
+
+  assert.deepEqual(pictures(page), [pictureOf(code, DIAGRAM_APPEARANCE.LIGHT)]);
+  assert.equal(page.querySelector(".description-diagram pre"), null);
+  assert.ok(page.querySelector(".description-diagram")?.classList.contains("ph-no-capture"));
+});
+
+test("a diagram's picture is named for its title, or its first line where it has none", async () => {
+  const titled = "---\ntitle: Invite flow\n---\nflowchart LR\n  Invite --> Join";
+  const plain = "%% a note\n\nsequenceDiagram\n  Admin->>Service: Invite";
+  const configured = "---\nconfig:\n  layout: elk\n---\nflowchart LR\n  A --> B";
+  const pie = 'pie title "Votes so far"\n  "Yes" : 3';
+  const page = await drawn(
+    createElement(DescriptionBody, {
+      task: taskWith(
+        [titled, plain, configured, pie].map((code) => mermaidFence(code)).join("\n\n"),
+      ),
+    }),
+  );
+
+  const alts = [...page.querySelectorAll(".description-diagram img")].map((img) =>
+    img.getAttribute("alt"),
+  );
+
+  assert.deepEqual(alts, [
+    "Diagram: Invite flow",
+    "Diagram: sequenceDiagram",
+    "Diagram: flowchart LR",
+    "Diagram: Votes so far",
+  ]);
+});
+
+test("while an edited diagram is drawn again, the picture kept is still named for the code it shows", async () => {
+  const before = "---\ntitle: Before\n---\nflowchart LR\n  A --> B";
+  const after = "---\ntitle: After\n---\nflowchart LR\n  A --> B";
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const show = (code: string, previous: string | undefined) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+          onSideBundles(bundles, createElement(DiagramPreview, { code, previous })),
+        ),
+      ),
+    );
+  const alt = () => container.querySelector("img")?.getAttribute("alt");
+  show(before, undefined);
+  await settle();
+
+  show(after, before);
+
+  assert.equal(alt(), "Diagram: Before");
+  await settle();
+  assert.equal(alt(), "Diagram: After");
+});
+
+test("Show code puts the fence's code in the picture's place, and Show diagram brings the picture back", async () => {
+  const code = "flowchart LR\n  Invite --> Join";
+  const page = await drawn(createElement(DescriptionBody, { task: taskWith(mermaidFence(code)) }));
+
+  act(() => toggle(page).click());
+
+  assert.deepEqual(pictures(page), []);
+  assert.equal(page.querySelector(".description-diagram pre")?.textContent, `${code}\n`);
+  assert.equal(toggle(page).textContent, "Show diagram");
+
+  act(() => toggle(page).click());
+
+  assert.deepEqual(pictures(page), [pictureOf(code, DIAGRAM_APPEARANCE.LIGHT)]);
+  assert.equal(toggle(page).textContent, "Show code");
+});
+
+test("a fence the diagram bundle refuses says it could not be drawn, over its code", async () => {
+  const page = await drawn(
+    createElement(DescriptionBody, { task: taskWith(mermaidFence(UNPARSED)) }),
+  );
+
+  assert.deepEqual(pictures(page), []);
+  assert.equal(
+    page.querySelector(".description-diagram [role=alert]")?.textContent,
+    "This diagram could not be drawn.",
+  );
+  assert.equal(retry(page), undefined);
+  assert.equal(page.querySelector(".description-diagram pre")?.textContent, `${UNPARSED}\n`);
+});
+
+test("a diagram bundle that failed to load says so with Retry, which imports it again and draws the fence", async () => {
+  const code = "flowchart TD\n  Offline --> Online";
+  let online = false;
+  const unloaded = sideBundles({
+    diagram: () => (online ? Promise.resolve(STAND_IN) : Promise.reject(new Error("offline"))),
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        onSideBundles(
+          unloaded,
+          createElement(DescriptionBody, { task: taskWith(mermaidFence(code)) }),
+        ),
+      ),
+    ),
+  );
+  await settle();
+
+  assert.equal(
+    container.querySelector(".description-diagram [role=alert]")?.textContent,
+    "This diagram could not be drawn.Retry",
+  );
+  assert.deepEqual(pictures(container), []);
+
+  online = true;
+  await act(async () => retry(container)?.click());
+  await settle();
+
+  assert.deepEqual(pictures(container), [pictureOf(code, DIAGRAM_APPEARANCE.LIGHT)]);
+  assert.equal(container.querySelector(".description-diagram [role=alert]"), null);
+});
+
+test("the diagram is drawn again in the window's new appearance when it flips", async () => {
+  const code = "flowchart TD\n  Accept --> Member";
+  const page = await drawn(createElement(DescriptionBody, { task: taskWith(mermaidFence(code)) }));
+
+  appearance.dark = true;
+  act(() => {
+    for (const listener of appearance.listeners) listener();
+  });
+  await settle();
+
+  assert.deepEqual(pictures(page), [pictureOf(code, DIAGRAM_APPEARANCE.DARK)]);
+});
+
+test("a fence in another language, and a Mermaid fence where the words are not a description's, stay code", async () => {
+  const code = "flowchart LR\n  Caption --> Code";
+  const shell = "```sh\npnpm install\n```";
+
+  const page = await drawn(createElement(DescriptionBody, { task: taskWith(shell) }));
+  const caption = await drawn(createElement(MarkdownMessage, { words: mermaidFence(code) }));
+
+  assert.equal(page.querySelector(".description-diagram"), null);
+  assert.equal(page.querySelector("pre")?.textContent, "pnpm install\n");
+  assert.equal(caption.querySelector(".description-diagram"), null);
+  assert.equal(caption.querySelector("pre")?.textContent, `${code}\n`);
+});
+
+test("a version draws a fence it left alone as its diagram, and one whose code it changed as its code with the changes marked", async () => {
+  const kept = "sequenceDiagram\n  Mail-->>Invitee: Link";
+  const before = "flowchart LR\n  Invite --> Join";
+  const after = "flowchart LR\n  Invite --> Accept";
+
+  const version = await drawn(
+    createElement(Version, {
+      previous: `## Flow\n\n${mermaidFence(kept)}\n\n## Steps\n\n${mermaidFence(before)}\n`,
+      now: `## Flow\n\n${mermaidFence(kept)}\n\n## Steps\n\n${mermaidFence(after)}\n`,
+    }),
+  );
+
+  assert.deepEqual(pictures(version), [pictureOf(kept, DIAGRAM_APPEARANCE.LIGHT)]);
+  const changed = [...version.querySelectorAll("pre")].find((pre) =>
+    pre.textContent?.includes("Invite"),
+  );
+  assert.ok(changed, "the changed fence stands as its code");
+  assert.equal(changed.closest(".description-diagram"), null);
+  assert.deepEqual(
+    [...changed.querySelectorAll("del, ins")].map((mark) => [mark.tagName, mark.textContent]),
+    [
+      ["DEL", "Join"],
+      ["INS", "Accept"],
+    ],
+  );
+});
+
+/** The diagram opened over the window, if it is. */
+function viewer(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(".attachment-viewer");
+}
+
+/** The diagram's picture on the page. */
+function picture(container: HTMLElement): HTMLImageElement {
+  return (
+    container.querySelector<HTMLImageElement>(".description-diagram-picture") ??
+    assert.fail("the diagram is drawn")
+  );
+}
+
+/** A pointer's press on `element`, which counts its clicks, as a key's press does not. */
+function tap(element: HTMLElement): void {
+  element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+}
+
+/** The press around the diagram's picture, which the keyboard reaches. */
+function press(container: HTMLElement): HTMLButtonElement {
+  return (
+    picture(container).closest<HTMLButtonElement>("button") ??
+    assert.fail("the diagram is a press the keyboard reaches")
+  );
+}
+
+test("on a finger's device a tap on a diagram opens it over the window at its own pixels, and Close shuts it", async () => {
+  device.finger = true;
+  const code = "flowchart LR\n  Invite --> Join";
+  const page = await drawn(createElement(DescriptionBody, { task: taskWith(mermaidFence(code)) }));
+
+  act(() => tap(picture(page)));
+
+  const open = viewer() ?? assert.fail("the diagram opens over the window");
+  assert.equal(
+    open.querySelector(".ui-zoom-image")?.getAttribute("src"),
+    pictureOf(code, DIAGRAM_APPEARANCE.LIGHT),
+  );
+  const close =
+    open.querySelector<HTMLButtonElement>('button[aria-label="Close"]') ??
+    assert.fail("the viewer offers Close");
+  act(() => close.click());
+  assert.equal(viewer(), null);
+});
+
+test("in a phone's narrow room a tap on a diagram opens it, and Escape shuts it", async () => {
+  const code = "flowchart LR\n  Invite --> Join";
+  const room = document.body.appendChild(document.createElement("div"));
+  room.className = "desktop-shell";
+  room.dataset.room = "narrow";
+  // Note that the shell hands its room down as well as writing it on its element, as `app.tsx` does.
+  const page = await drawn(
+    createElement(
+      ShellRoomContext.Provider,
+      { value: SHELL_ROOM.NARROW },
+      createElement(DescriptionBody, { task: taskWith(mermaidFence(code)) }),
+    ),
+  );
+  room.append(page);
+
+  act(() => tap(picture(page)));
+
+  const card =
+    document.querySelector<HTMLElement>('[role="dialog"]') ??
+    assert.fail("the diagram opens over the window");
+  act(() => {
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(viewer(), null);
+});
+
+test("with a mouse in a wide room a tap on a diagram opens nothing over the window", async () => {
+  const code = "flowchart LR\n  Invite --> Join";
+  const page = await drawn(createElement(DescriptionBody, { task: taskWith(mermaidFence(code)) }));
+
+  act(() => tap(picture(page)));
+
+  assert.equal(viewer(), null);
+});
+
+test("in a wide room the keyboard's press on a diagram, named for what it does, opens it over the window", async () => {
+  const code = "flowchart LR\n  Invite --> Join";
+  const page = await drawn(createElement(DescriptionBody, { task: taskWith(mermaidFence(code)) }));
+  const enlarge = press(page);
+  assert.equal(enlarge.getAttribute("aria-label"), "Enlarge Diagram: flowchart LR");
+
+  act(() => enlarge.click());
+
+  assert.ok(viewer(), "the diagram opens over the window");
+});

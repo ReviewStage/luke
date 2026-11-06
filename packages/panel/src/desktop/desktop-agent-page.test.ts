@@ -640,7 +640,7 @@ function PanelPage(): React.JSX.Element {
   });
 }
 
-test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers no Inbox, its threads opening in the window's Inbox, and none of a task's Plan or Comments", async () => {
+test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers no Inbox, its threads opening in the window's Inbox, and none of a task's Description or Comments", async () => {
   localStorage.clear();
   installScrollIntoView();
   transcript = {
@@ -687,7 +687,7 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
     `the worker's tab stands in the panel: ${opened.join(", ")}`,
   );
   assert.deepEqual(
-    offered.filter((label) => /^(Plan|Comments|Inbox)/u.test(label ?? "")),
+    offered.filter((label) => /^(Description|Comments|Inbox)/u.test(label ?? "")),
     [],
     "no task's kind nor an Inbox is offered",
   );
@@ -820,7 +820,7 @@ test("the chip of a page an agent on a task showed hangs the page's card, read f
   );
 });
 
-test("an agent on a task, an archived one's page among them, opens on its plan sent by the task, whose name opens the task's plan", async () => {
+test("an agent on a task, an archived one's page among them, opens on its description sent by the task, whose name opens the task's plan", async () => {
   const task: Task = {
     id: PAGE_TASK,
     workspaceId: PAGE.workspaceId,
@@ -830,7 +830,7 @@ test("an agent on a task, an archived one's page among them, opens on its plan s
     repository: "acme/relay",
     document: { body: "", assumptions: [] },
   };
-  listed = { ...PAGE, planId: PAGE_TASK, automationId: null, brief: AGENT_BRIEF.PLAN };
+  listed = { ...PAGE, planId: PAGE_TASK, automationId: null, brief: AGENT_BRIEF.DESCRIPTION };
   transcript = {
     messages: [
       { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "# Invitations" }] },
@@ -1416,7 +1416,7 @@ interface OpenedOrigin {
 function origin(page: HTMLElement): OpenedOrigin {
   const card =
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
-  const head = card.querySelector<HTMLElement>("[data-origin-plan] > summary");
+  const head = card.querySelector<HTMLElement>("[data-origin-description] > summary");
   act(() => head?.click());
   return { card, sender: card.querySelector<HTMLElement>(".ui-message-line-sender") };
 }

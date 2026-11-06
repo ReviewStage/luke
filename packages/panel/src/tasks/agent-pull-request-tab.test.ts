@@ -77,7 +77,7 @@ import {
 import { installShownFailureReporter } from "../failure-report.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
-import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
+import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
@@ -297,7 +297,8 @@ beforeAll(async () => {
     landedBundles({
       diffView: () => Promise.resolve(DIFF_STAND_IN),
       fileTree: () => Promise.resolve(TREE_STAND_IN),
-      planEditor: () => import("../plan-editor/index.js").then((entry) => entry.planEditor),
+      descriptionEditor: () =>
+        import("../description-editor/index.js").then((entry) => entry.descriptionEditor),
     }),
   );
 });

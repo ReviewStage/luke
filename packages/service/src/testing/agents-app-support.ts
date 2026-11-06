@@ -8,7 +8,7 @@ import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { readAgent } from "@repo/database/models/agent-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { savePlanText } from "@repo/database/models/task-store";
+import { saveDescriptionText } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, messages } from "@repo/database/schemas/storage";
@@ -162,7 +162,7 @@ export function freshInstallation(
 export const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
 
-/** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
+/** The saved description as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
 export const SNAPSHOT = `# Teammate invitations\n\n${SAVED}`;
 
 export const SOL = "openai/gpt-6.1-sol";
@@ -678,8 +678,8 @@ export const openTask = (
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
-    yield* savePlanText(owner, task.id, SAVED);
-    // Both accounts have Plans on, so an agent started on the task is handed its plan.
+    yield* saveDescriptionText(owner, task.id, SAVED);
+    // Both accounts have Descriptions on, so an agent started on the task is handed its description.
     for (const account of [owner, other]) {
       yield* writeAccountPreferences(account, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
     }

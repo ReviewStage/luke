@@ -884,7 +884,7 @@ function threadRows(
 const RESOLVED_IT = "resolved this without an answer";
 
 /**
- * A line of what happened to the thread, drawn as a plan comment's
+ * A line of what happened to the thread, drawn as a description comment's
  * "resolved this" is: whoever did it, their face on the gutter's line, their
  * name, what they did, and when; a close's note under it, as a member's
  * message draws its words and files, and a withdrawal's why, in the muted
@@ -1321,7 +1321,7 @@ function QuestionClose({
 }
 
 /**
- * The thread's subject, as a plan or a pull request leads with one: the
+ * The thread's subject, as a description or a pull request leads with one: the
  * item's title alone, the thread under it, its words quoted into a reply
  * as the thread's are.
  */

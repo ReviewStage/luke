@@ -30,7 +30,7 @@ export const WORKSPACE_TOOL_GROUP = {
   THREADS: "Threads",
   AGENTS: "Agents and tasks",
   AUTOMATIONS: "Automations",
-  PLAN: "Description and comments",
+  DESCRIPTION: "Description and comments",
   PAGES: "Pages and pictures",
   WEB: "Browser and web",
   CODE: "Code",
@@ -138,20 +138,20 @@ const WORKSPACE_TOOL_WORDS = {
     group: WORKSPACE_TOOL_GROUP.AUTOMATIONS,
     summary: "Runs an automation now",
   },
-  [AGENT_TOOL.EDIT_PLAN]: {
-    group: WORKSPACE_TOOL_GROUP.PLAN,
+  [AGENT_TOOL.EDIT_DESCRIPTION]: {
+    group: WORKSPACE_TOOL_GROUP.DESCRIPTION,
     summary: "Takes notes in its task's description",
   },
   [AGENT_TOOL.READ_COMMENTS]: {
-    group: WORKSPACE_TOOL_GROUP.PLAN,
+    group: WORKSPACE_TOOL_GROUP.DESCRIPTION,
     summary: "Reads the comment threads on the description",
   },
   [AGENT_TOOL.REPLY_TO_COMMENT]: {
-    group: WORKSPACE_TOOL_GROUP.PLAN,
+    group: WORKSPACE_TOOL_GROUP.DESCRIPTION,
     summary: "Answers a comment thread it was mentioned in",
   },
   [AGENT_TOOL.UPDATE_COMMENT]: {
-    group: WORKSPACE_TOOL_GROUP.PLAN,
+    group: WORKSPACE_TOOL_GROUP.DESCRIPTION,
     summary: "Resolves or reopens a comment thread",
   },
   [AGENT_TOOL.SHOW_PAGE]: {
