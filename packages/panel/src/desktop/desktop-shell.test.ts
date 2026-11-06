@@ -509,6 +509,15 @@ test("the sidebar's Home row is the place shown on Home, and not over the Inbox"
   assert.equal(homeRow(mount(true)).getAttribute("aria-current"), null);
 });
 
+test("a person's page stands over Home with no row of the place under it current", async () => {
+  const page = mount(false, {
+    personView: { ...tasksControl().personView, userId: "user-charles" },
+  });
+  await settle();
+
+  assert.equal(homeRow(page).getAttribute("aria-current"), null);
+});
+
 test("Home, pressed or by its chord from Settings, brings the Tasks tab forward on Home", () => {
   let home = 0;
   const tabs: PanelTab[] = [];

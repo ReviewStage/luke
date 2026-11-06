@@ -1847,12 +1847,13 @@ function SidebarColumn({
     },
   });
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
-  // The window's Inbox, an agent's page, the Automations page, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
-  // Note that Admin stands over the window's state, which stays as it was under it, so no place of that state is shown then.
+  // The window's Inbox, an agent's or a person's page, the Automations page, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
+  // Note that Admin, the Board, and a person's page stand over the window's state, which stays as it was under them, so no place of that state is shown then.
   const inAdmin = tasks.adminView.open;
   const inInbox = onTasks && !inAdmin && tasks.inboxView.open;
   const inAutomations = onTasks && !inAdmin && tasks.automationsView.open;
   const inBoard = onTasks && !inAdmin && tasks.boardView.open;
+  const inPerson = onTasks && !inAdmin && tasks.personView.userId !== undefined;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   // The workspace's runs, followed while the sidebar stands, as the Runs tab follows them, for the row to count the ones still at work.
@@ -1872,6 +1873,7 @@ function SidebarColumn({
     inInbox ||
     inAutomations ||
     inBoard ||
+    inPerson ||
     inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
   const waiting = useInboxWaiting(tasks);
