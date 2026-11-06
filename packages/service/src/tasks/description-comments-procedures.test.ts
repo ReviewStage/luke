@@ -29,9 +29,9 @@ import { announcingClock, driven } from "../testing/clock-driven.js";
 import { descriptionCommentsProcedures } from "./description-comments-procedures.js";
 
 /**
- * A plan's comments read held on Sync, through the route a desktop
+ * A description's comments read held on Sync, through the route a desktop
  * holds: a read at the current cursor answers within a coalesce window of
- * a thread started, answered, or deleted on the plan, and of the reader
+ * a thread started, answered, or deleted on the description, and of the reader
  * leaving the plan's workspace, which it then answers as not found. A hold
  * that watched the wrong topics would answer none of these before the hold
  * ends. The hub's waits run on a clock that announces each one, so a write
@@ -67,7 +67,7 @@ const openSharedDescription = Effect.gen(function* () {
   return { owner, teammate, workspace, taskId };
 });
 
-/** A thread the member starts on the plan's one sentence, answering its id. */
+/** A thread the member starts on the description's one sentence, answering its id. */
 const started = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const from = DESCRIPTION_TEXT.indexOf(WORDS);
@@ -119,7 +119,7 @@ const onHub = Effect.gen(function* () {
         ),
     }),
   });
-  /** The plan's comments read as the account, past the cursor where one is named. */
+  /** The description's comments read as the account, past the cursor where one is named. */
   const read = (userId: string, taskId: string, after?: string) =>
     Effect.gen(function* () {
       const url = new URL(`/api/plans/${taskId}/comments`, ORIGIN);
@@ -174,7 +174,7 @@ const heldThrough = <A, E, R>(
     return { value, answered };
   });
 
-it.layer(getTestDB())("a plan's comments read held on Vespin Sync", (it) => {
+it.layer(getTestDB())("a description's comments read held on Vespin Sync", (it) => {
   it.effect(
     "a teammate's thread started, answered, and deleted each wake a member's held read at once",
     () =>

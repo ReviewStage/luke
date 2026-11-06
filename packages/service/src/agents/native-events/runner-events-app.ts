@@ -163,7 +163,7 @@ interface Applying {
   readonly read: NativeReader;
   /** Who pays for the agent, as recorded as it started; none for an agent from before payers. */
   readonly payer: AgentPayer | undefined;
-  /** The plan or prompt the agent was handed first, whose share of its context the ring estimates. */
+  /** The description or prompt the agent was handed first, whose share of its context the ring estimates. */
   readonly brief: string;
 }
 

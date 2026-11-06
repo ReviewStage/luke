@@ -47,7 +47,7 @@ import { readAdminOverviewSource } from "./admin-overview-queries.js";
 
 /**
  * admin-overview-queries.test.ts -- the Overview's reads over a real dialect:
- * a meaningful action is a task, the developer's own plan revision, or an
+ * a meaningful action is a task, the developer's own description revision, or an
  * agent started, and nothing else makes an account active; each
  * daily count lands on its own UTC day; the funnel counts what the window's
  * new accounts ever did; reach counts the week's active developers alone;
@@ -226,7 +226,7 @@ const signIn = (userId: string, updatedAt: string) =>
 /**
  * Ada joined this week and did one of everything. Bob joined long ago, made a
  * task in the prior week, and this week only had the app's notetaker write on its
- * plan, which is the app's and not a meaningful action of its own. Carol joined
+ * description, which is the app's and not a meaningful action of its own. Carol joined
  * this week and did nothing. Root is an admin who joined this week and acted.
  */
 const seedService = Effect.gen(function* () {

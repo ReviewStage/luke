@@ -93,7 +93,7 @@ const agentExtraCheckouts = (userId: string, agent: Agent) =>
  * what its row names (`instructions.ts`'s `agentCoderInstructions`): whether
  * its token reads the repository's CI, whose its commits are and the
  * co-author trailer where its starter's choice credits one, the workspace its links are written under, the number
- * its task goes by there, and whether its starter turned Memory and Plans on.
+ * its task goes by there, and whether its starter turned Memory and Descriptions on.
  */
 const nativeCoderInstructions = (
   userId: string,

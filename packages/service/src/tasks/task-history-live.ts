@@ -15,7 +15,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
 
 /**
- * task-history-live.ts -- one task's newest page of plan history, written for Neon Realtime, so the version history holds the revisions as saves land rather than reading them again on every edit of the task.
+ * task-history-live.ts -- one task's newest page of description history, written for Neon Realtime, so the version history holds the revisions as saves land rather than reading them again on every edit of the task.
  *
  * The statement reads what `listRevisions` reads for its newest page: the
  * newest revisions, one past the page among them to say whether an older

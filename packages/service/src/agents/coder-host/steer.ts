@@ -81,7 +81,7 @@ import { agentStatusOf } from "./status.js";
  * after all takes it with its kind and sender. Files the developer
  * attached go with the words, to eve and onto the row, each image kept beside the conversation first
  * and named to eve by its id (`attached-files.ts`), and so does what the words
- * mention of the plan, as it stands now (`mentioned-context.ts`), and a
+ * mention of the description, as it stands now (`mentioned-context.ts`), and a
  * server it mentions is handed to the agent's next turn, unless the words
  * are another coding agent's or a reviewer's, which hand none, or an
  * automation's run, which hands only those its automation's own prompt
@@ -134,7 +134,7 @@ import { agentStatusOf } from "./status.js";
  * send is made under, which a repeat carries again, and what sent them, which
  * the row keeps and eve is not told; and what the row says carried it, the
  * developer's typed ask unless the caller names another agent's message, a
- * thread, a plan comment, GitHub, the app, or an automation's run, which eve is
+ * thread, a description comment, GitHub, the app, or an automation's run, which eve is
  * not told either.
  */
 export interface SteerLine {
@@ -185,7 +185,7 @@ const REFUSAL_OF_UNWRITTEN_LINE = {
 /**
  * Whether a message to an agent whose session has not claimed its record
  * opens one: where its Start opened none, as an agent started blank, with
- * neither the plan nor a prompt, has none until its first words; or past the
+ * neither the description nor a prompt, has none until its first words; or past the
  * grace its first turn may land in, where the session its Start opened never
  * started. Inside the grace a Start's session is still coming up, and a
  * second opened beside it would only lose the record to it, so the developer

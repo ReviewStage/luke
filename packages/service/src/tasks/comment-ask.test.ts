@@ -10,7 +10,7 @@ import { test } from "vitest";
 import { commentAskMessage } from "./comment-ask.js";
 
 /**
- * A plan's comment thread as it is handed to an agent: the words it is
+ * A description's comment thread as it is handed to an agent: the words it is
  * handed over in. The hand-over itself, through the one steer path every
  * message to an agent takes, is the comments route's suite
  * (`apps/web/tests/description-comments.test.ts`). Synthetic throughout.
@@ -37,7 +37,7 @@ const THREAD: DescriptionCommentThread = {
   ],
 };
 
-test("a thread is handed over as its quoted words, its section's name, its comments, and the task a reply names, and never the plan's text", () => {
+test("a thread is handed over as its quoted words, its section's name, its comments, and the task a reply names, and never the description's text", () => {
   const message = commentAskMessage({
     taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
     taskName: "Invites",
@@ -45,7 +45,7 @@ test("a thread is handed over as its quoted words, its section's name, its comme
     sender: "Dean",
   });
 
-  assert.ok(message.startsWith('Dean sent you a comment thread on the plan "Invites"'));
+  assert.ok(message.startsWith('Dean sent you a comment thread on the description of "Invites"'));
   assert.ok(message.includes('On: "a retry" (section "Testing")'));
   assert.ok(message.includes("Dean: Is this covered already?"));
   assert.ok(message.includes("Read the thread, then answer"));

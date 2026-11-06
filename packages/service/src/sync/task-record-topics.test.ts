@@ -49,7 +49,7 @@ import {
  * agent's own pages on no task (`agentPagesLive`). Each write that moves
  * one, through its real writer, notifies a topic the read is woken on, so a
  * window holding it hears it within a coalesce window rather than at the
- * hold's end: the plan saved, a page shown on the task and a comment left
+ * hold's end: the description saved, a page shown on the task and a comment left
  * on it, a page an agent
  * on no task shows, an agent's tab opened, pointed at, taken over, handed
  * back, and closed, an agent renamed, and what admits the reader to the
@@ -85,7 +85,7 @@ const wakes = <A, E, R>(
 
 it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
   it.effect(
-    "the plan's notes saved, a page shown on the task, and a comment left on it notify the task, which wakes its record, pages, history, and comments",
+    "the description's notes saved, a page shown on the task, and a comment left on it notify the task, which wakes its record, pages, history, and comments",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;

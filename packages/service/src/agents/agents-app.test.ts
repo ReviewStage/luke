@@ -105,7 +105,7 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 /**
  * The coding-agent routes, answered by the group the way a function answers
  * them, over a real dialect: a Start is one agent whose eve session opens
- * with the plan as its first message, a retry under the same key is that
+ * with the description as its first message, a retry under the same key is that
  * agent and opens nothing again, the list reads each agent's status from its
  * newest turn, the transcript answers the conversation's rows past a cursor,
  * and a Stop is eve's cancel of the turn under way and the row's stamp. eve
@@ -171,7 +171,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   });
 
   it.effect(
-    "a continue is handed the plan as it stands now and every step after the source's brief, its reasoning left out, on the source's choice and servers, and names where it came from",
+    "a continue is handed the description as it stands now and every step after the source's brief, its reasoning left out, on the source's choice and servers, and names where it came from",
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, eve, source } = yield* sourceAgent;

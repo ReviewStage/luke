@@ -40,7 +40,7 @@ const SWEEP_MONITOR: CronMonitor = {
   failuresBeforeIssue: 3,
 };
 
-/** How long a picture pasted into a plan waits for a save to name it before the sweep deletes it: a day, so an edit left open over lunch keeps its pictures. */
+/** How long a picture pasted into a description waits for a save to name it before the sweep deletes it: a day, so an edit left open over lunch keeps its pictures. */
 const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
 
 /** How long a sandbox firewall's record outlives its last write before the sweep drops it: an hour past the longest a session runs, so its session has surely ended. */

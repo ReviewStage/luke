@@ -50,7 +50,7 @@ export function within(column: AnyColumn, since: Date, until: Date | undefined) 
  * took it, when, and what it was. This is the one definition of "active" on the admin
  * dashboard: the Overview's active-developer tiles, feature reach's base, the
  * most active accounts, and the meaningful retention grid, and the roster's
- * active days and ranking, all count through it. A plan revision counts only
+ * active days and ranking, all count through it. A description revision counts only
  * as the developer's own, under their user id; the app's notes are the app's,
  * and an agent's revisions are the agent. `until`, where given, ends the
  * span, as the Day page's one UTC day does.

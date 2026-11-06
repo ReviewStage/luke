@@ -1596,7 +1596,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message mentioning a section of the agent's plan hands eve the section as it stands beside the words, and the line reads as the words alone",
+    "a message mentioning a section of the agent's description hands eve the section as it stands beside the words, and the line reads as the words alone",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -1609,7 +1609,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           { type: "text", text: words },
           {
             type: "text",
-            text: `${MENTIONED_HEADING}\n\nThe plan's section "Goal":\n\n## Goal\n\nInvite a teammate by email.`,
+            text: `${MENTIONED_HEADING}\n\nThe description's section "Goal":\n\n## Goal\n\nInvite a teammate by email.`,
           },
         ]);
         assert.deepEqual((yield* transcript()).lines, [SNAPSHOT, words]);

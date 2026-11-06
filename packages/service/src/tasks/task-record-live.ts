@@ -12,9 +12,9 @@ import { and, eq, max, sql } from "drizzle-orm";
 import { Option } from "effect";
 
 /**
- * task-record-live.ts -- where an open task's plan, pages, calls, and the code its agents showed stand, written for Neon Realtime, so the desktop reads each again the moment its rows move.
+ * task-record-live.ts -- where an open task's description, pages, calls, and the code its agents showed stand, written for Neon Realtime, so the desktop reads each again the moment its rows move.
  *
- * Four parts, each a mark and none of the words it marks: the plan's text
+ * Four parts, each a mark and none of the words it marks: the description's text
  * (`plan`), one row marked by its last save, which only a save of the text
  * moves, whoever wrote it; the pages agents
  * showed (`pages`), one row a page at its newest version; the task's
@@ -40,7 +40,7 @@ function memberOfTask(userId: string) {
 }
 
 /**
- * The plan marked by its last save, as the open document reads it
+ * The description marked by its last save, as the open document reads it
  * (`Task.updatedAt`): a rename, a status, or a pin is no save, so none of
  * them moves it, and a save by anyone does.
  */

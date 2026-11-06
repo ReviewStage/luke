@@ -1159,7 +1159,7 @@ function forwardedPng(attachmentId: string, bytes: Uint8Array) {
   };
 }
 
-test("start_agent on the plan with a note hands the agent the pictures images names, kept beside the caller's own conversation, as file parts of its first message", async () => {
+test("start_agent on the description with a note hands the agent the pictures images names, kept beside the caller's own conversation, as file parts of its first message", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
   await turnDescriptions(caller.userId, true);
@@ -1179,7 +1179,10 @@ test("start_agent on the plan with a note hands the agent the pictures images na
   assert.equal(eve.sent.length, 1);
   const [opening] = eve.sent;
   const message = sentWords(opening?.body);
-  assert.ok(message.startsWith("# Teammate invitations"), "a plan start opens on the plan");
+  assert.ok(
+    message.startsWith("# Teammate invitations"),
+    "a description start opens on the description",
+  );
   assert.ok(message.includes(NOTE), message);
   assert.deepEqual(sentFiles(opening?.body), [
     forwardedPng(shownId, shown),
@@ -1983,7 +1986,7 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   assert.equal(eve.sent.length, 1, "a task of another workspace starts nothing");
 
   // An agent on no task starts one on a task made for it, untitled for its agent's title to name,
-  // assigned to the member it works for, in progress with a blank plan, the prompt handed to the agent
+  // assigned to the member it works for, in progress with a blank description, the prompt handed to the agent
   // alone, in its own repository, or in none where it names none, and on a task it names only where it names one. A run's agent starts one
   // on a task made for it that belongs to its run, and one on a named task that the task alone owns.
   const {
@@ -2080,7 +2083,7 @@ async function tasksNamed(userId: string, workspaceId: string, name: string): Pr
     .map((each) => each.id);
 }
 
-test("create_task makes a task in the caller's workspace for the member the agent acts for, on the repository it works in unless another or none is named, with the brief and plan given and no agent on it, once under the call's key; start_agent then starts on it by its id", async () => {
+test("create_task makes a task in the caller's workspace for the member the agent acts for, on the repository it works in unless another or none is named, with the brief and description given and no agent on it, once under the call's key; start_agent then starts on it by its id", async () => {
   const { workspaceId, elsewhere, plans: tasks, agents } = await openWorkspaces();
   // Bob's agent on Alice's task: the task it makes is Bob's, not the owner's of the task it works on.
   const bob = agents.teammates.userId;
@@ -2089,7 +2092,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
   const name = "Invite expiry migration";
-  // A plan handed with its # title keeps its body alone, the task's name standing for the title.
+  // A description handed with its # title keeps its body alone, the task's name standing for the title.
   const body = "## Goal\n\nAdd the invitation's expiry.";
   const plan = `# ${name}\n\n${body}`;
   const countedBefore = tasksCounted(bob);
@@ -2117,7 +2120,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
     [stored.ownerId, stored.task.workspaceId, stored.task.repository, stored.text, stored.brief],
     [bob, workspaceId, RELAY_FULL_NAME, body, "Invites should lapse after a week."],
   );
-  // Its plan's first revision is the calling agent's, as its history shows it.
+  // Its description's first revision is the calling agent's, as its history shows it.
   const history = await database.run(listRevisions(bob, taskId));
   assert.deepEqual(
     history.revisions.map((revision) => revision.agentId),
@@ -2131,7 +2134,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.deepEqual(await tasksNamed(alice, workspaceId, name), [taskId]);
   assert.deepEqual(await tasksNamed(alice, elsewhere, name), []);
 
-  // A title in a plan written with CRLF line ends is dropped as well.
+  // A title in a description written with CRLF line ends is dropped as well.
   const crlf = await call(
     CODER_TOOL.CREATE_TASK,
     { name: "Seats", plan: "\r\n# Seats\r\n\r\n## Goal\r\n\r\nBill by seat." },
@@ -2143,7 +2146,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
     "## Goal\r\n\r\nBill by seat.",
   );
 
-  // A line opening on # that is no Markdown title is the plan's own, and stays.
+  // A line opening on # that is no Markdown title is the description's own, and stays.
   const kept = await call(
     CODER_TOOL.CREATE_TASK,
     { name: "Limits", plan: "#define MAX 10\n\n## Goal\n\nUpdate limits." },
@@ -2209,7 +2212,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Old way"), []);
   assert.equal(eve.sent.length, 1, "a refused start starts nothing");
 
-  // With Plans off a plan given is not written, and a start with no prompt hands the brief in the plan's place.
+  // With Descriptions off a description given is not written, and a start with no prompt hands the brief in the description's place.
   await turnDescriptions(bob, false);
   const planless = await call(
     CODER_TOOL.CREATE_TASK,
@@ -3846,15 +3849,17 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
   );
 });
 
-test("read_task reads a teammate's task of the caller's workspace with its plan as saved, cuts a long plan on a line, reads no plan once the caller's starter turned Plans off, and reads no task of another workspace", async () => {
+test("read_task reads a teammate's task of the caller's workspace with its description as saved, cuts a long description on a line, reads no description once the caller's starter turned Descriptions off, and reads no task of another workspace", async () => {
   const { workspaceId, plans: taskIds, numbers, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   await turnDescriptions(caller.userId, true);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
-  const plan = "# Billing\n\nCharge by seat.";
+  const description = "# Billing\n\nCharge by seat.";
   assert.ok(
-    Option.isSome(await database.run(saveDescriptionText(teammates.userId, taskIds.billing, plan))),
+    Option.isSome(
+      await database.run(saveDescriptionText(teammates.userId, taskIds.billing, description)),
+    ),
   );
 
   const home = `https://vespin.dev/workspace-${workspaceId}/task`;
@@ -3865,11 +3870,11 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     [read.task.name, read.task.isYourTask, read.task.mention],
     ["Billing", false, `[@Billing](${home}/${numbers.billing})`],
   );
-  assert.deepEqual(read.plan, { text: plan, saved: true, leftOutChars: 0 });
+  assert.deepEqual(read.plan, { text: description, saved: true, leftOutChars: 0 });
   const own = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.invitations });
   assert.equal(isRecord(own.task) && own.task.isYourTask, true, JSON.stringify(own));
 
-  // A plan past the bound is cut on a line, and what was left out is counted.
+  // A description past the bound is cut on a line, and what was left out is counted.
   const line = `${"x".repeat(999)}\n`;
   const long = line.repeat(41);
   await database.run(saveDescriptionText(teammates.userId, taskIds.billing, long));
@@ -3878,13 +3883,13 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   assert.equal(cut.plan.text, line.repeat(40).slice(0, -1));
   assert.equal(cut.plan.leftOutChars, long.length - (line.length * 40 - 1));
 
-  // With Plans off the task is read all the same, without its plan.
+  // With Descriptions off the task is read all the same, without its description.
   await turnDescriptions(caller.userId, false);
   const planless = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.equal(planless.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(planless));
   assert.deepEqual([isRecord(planless.task), "plan" in planless], [true, false]);
 
-  // A task started from a brief, its plan still untouched, is read with the developer's words.
+  // A task started from a brief, its description still untouched, is read with the developer's words.
   const briefed = await database.run(
     createTask(teammates.userId, {
       organizationId: workspaceId,
@@ -4416,7 +4421,7 @@ test("create_automation and update_automation take a Sentry trigger once the wor
   );
 });
 
-/** Turns the Plans experiment on or off for a member, whose agents read and write no plan while it is off. */
+/** Turns the Descriptions experiment on or off for a member, whose agents read and write no description while it is off. */
 async function turnDescriptions(userId: string, on: boolean): Promise<void> {
   await database.run(
     writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } }),

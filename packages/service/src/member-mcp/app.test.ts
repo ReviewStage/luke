@@ -207,10 +207,10 @@ const decodeFound = Schema.decodeUnknownSync(
   Schema.Struct({ memories: Schema.Array(Schema.Struct({ id: Schema.String })) }),
 );
 
-/** The plan a stranger's task and a member's both hold, and the words a thread stands on in it. */
-const PLAN_NOTE = { kind: NOTE_KIND.ADD, section: "Problem", text: "Seats drift." } as const;
+/** The description a stranger's task and a member's both hold, and the words a thread stands on in it. */
+const DESCRIPTION_NOTE = { kind: NOTE_KIND.ADD, section: "Problem", text: "Seats drift." } as const;
 
-/** Plans turned on or off for the account, as Settings › Experimental turns it. */
+/** Descriptions turned on or off for the account, as Settings › Experimental turns it. */
 const descriptionsFor = (userId: string, on: boolean) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
@@ -549,18 +549,18 @@ it.effect(
         });
         yield* recordMemberDescriptionNotes(
           { userId: stranger.userId, taskId: task.id },
-          { notes: [PLAN_NOTE] },
+          { notes: [DESCRIPTION_NOTE] },
         );
         const { text } = Option.getOrThrow(yield* readTask(stranger.userId, task.id));
-        const from = text.indexOf(PLAN_NOTE.text);
+        const from = text.indexOf(DESCRIPTION_NOTE.text);
         const started = yield* startDescriptionCommentThread(
           { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: stranger.userId },
           task.id,
           {
             clientKey: randomUUID(),
             scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
-            quote: PLAN_NOTE.text,
-            anchor: { from, to: from + PLAN_NOTE.text.length },
+            quote: DESCRIPTION_NOTE.text,
+            anchor: { from, to: from + DESCRIPTION_NOTE.text.length },
             text,
             words: "A stranger's comment.",
           },
@@ -617,7 +617,7 @@ it.effect(
           [MEMBER_MCP_TOOL.READ_COMMENTS, { taskId }],
           [
             MEMBER_MCP_TOOL.COMMENT_ON_DESCRIPTION,
-            { taskId, quote: PLAN_NOTE.text, words: "Planted." },
+            { taskId, quote: DESCRIPTION_NOTE.text, words: "Planted." },
           ],
           [MEMBER_MCP_TOOL.REPLY_TO_COMMENT, { taskId, thread: threadId, words: "Planted." }],
           [MEMBER_MCP_TOOL.UPDATE_COMMENT, { taskId, thread: threadId, resolved: true }],
@@ -702,7 +702,7 @@ it.effect(
 );
 
 it.effect(
-  "a task a member makes, its plan's notes, an agent they archive, and an automation they make, change, run, and delete are the member's own, as the desktop shows them",
+  "a task a member makes, its description's notes, an agent they archive, and an automation they make, change, run, and delete are the member's own, as the desktop shows them",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services } = yield* standing;
@@ -769,7 +769,7 @@ it.effect(
       assert.equal(after.task.ownerId, member.userId);
       assert.equal(after.task.task.status, TASK_STATUS.IN_PROGRESS);
       assert.equal(after.task.text, "## Problem\n\nSeats drift.\n\nInvoices lag too.");
-      // The plan's first text and the note are the member's own, as their window writes it, and no agent's.
+      // The description's first text and the note are the member's own, as their window writes it, and no agent's.
       assert.deepEqual(
         [...new Set(after.revisions.revisions.map(({ lastEdit }) => lastEdit.actor))],
         [DESCRIPTION_ACTOR.DEVELOPER],
@@ -972,7 +972,7 @@ it.layer(getTestDB())("the member's inbox over a started agent", (it) => {
 });
 
 it.effect(
-  "a member's thread and reply are their own and reach the agent in the thread as the window's do, and resolving settles it; with Plans off no thread is started on the plan",
+  "a member's thread and reply are their own and reach the agent in the thread as the window's do, and resolving settles it; with Descriptions off no thread is started on the description",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services, heard } = yield* standing;
@@ -984,7 +984,7 @@ it.effect(
         const task = yield* createTask(member.userId, { organizationId: own, name: "Seats" });
         yield* recordMemberDescriptionNotes(
           { userId: member.userId, taskId: task.id },
-          { notes: [PLAN_NOTE] },
+          { notes: [DESCRIPTION_NOTE] },
         );
         return { taskId: task.id, agentId: yield* standingAgent(member.userId, task.id) };
       }).pipe(Effect.provide(services));
@@ -1007,7 +1007,7 @@ it.effect(
       const { thread } = decodeThread(
         yield* call(MEMBER_MCP_TOOL.COMMENT_ON_DESCRIPTION, {
           taskId,
-          quote: PLAN_NOTE.text,
+          quote: DESCRIPTION_NOTE.text,
           words: `${mention} do seats still drift?`,
         }),
       );
@@ -1021,7 +1021,7 @@ it.effect(
         yield* Effect.promise(() =>
           client.callTool({
             name: MEMBER_MCP_TOOL.COMMENT_ON_DESCRIPTION,
-            arguments: { taskId, quote: PLAN_NOTE.text, words: "Still drifting?" },
+            arguments: { taskId, quote: DESCRIPTION_NOTE.text, words: "Still drifting?" },
           }),
         ),
       );
@@ -1046,7 +1046,7 @@ it.effect(
         [
           {
             thread,
-            on: PLAN_NOTE.text,
+            on: DESCRIPTION_NOTE.text,
             comments: [`${mention} do seats still drift?`, "Invoices too."],
           },
         ],

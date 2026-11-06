@@ -16,9 +16,9 @@ import type { WebServices } from "../runtime.js";
 import { taskFilesProcedures } from "./task-files-procedures.js";
 
 /**
- * A picture added to a plan through the plan files procedures, over a real
+ * A picture added to a description through the plan files procedures, over a real
  * dialect: the member who adds one is counted as having added a file to the
- * plan, in the plan's workspace, and one who may not write the plan is
+ * description, in the plan's workspace, and one who may not write the description is
  * refused and counted for nothing.
  *
  * Synthetic accounts, bearers, workspaces, and tasks throughout.
@@ -40,7 +40,7 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A picture sent to the plan under the account's bearer, as its status. */
+/** A picture sent to the description under the account's bearer, as its status. */
 const keepAs = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     // SAFETY: the procedures yield the database, the clock and the analytics alone, which the test's own context holds.
@@ -70,7 +70,7 @@ const keepAs = (userId: string, taskId: string) =>
 
 it.layer(getTestDB())("the plan files route", (it) => {
   it.effect(
-    "a picture added to a plan is counted under the member in the plan's workspace, and one refused is not",
+    "a picture added to a description is counted under the member in the plan's workspace, and one refused is not",
     () =>
       Effect.gen(function* () {
         const [starter, outsider] = [yield* openAccount, yield* openAccount];

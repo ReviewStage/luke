@@ -26,10 +26,10 @@ import {
 
 /**
  * `look_at_picture`, the planning model's and a coding agent's look at one
- * of the plan's pictures, through its public functions against a real
+ * of the description's pictures, through its public functions against a real
  * dialect: a member's look hands the model the picture as an image while
- * the conversation keeps only that it looked; a picture of another plan, one
- * the plan does not hold, and one read by an account outside the plan's
+ * the conversation keeps only that it looked; a picture of another description, one
+ * the description does not hold, and one read by an account outside the plan's
  * workspace are refused alike; a video is refused, and its bytes reach no
  * model in any form; and a turn looks as often as it asks. The
  * model is the boundary, played by reading what it would be shown.
@@ -66,7 +66,7 @@ const openPicturedTasks = Effect.gen(function* () {
   return { owner, outsider, planId: task.id, otherId: other.id, attachmentId: kept.id, address };
 });
 
-/** A look as a turn makes one: bound to the plan as the account. */
+/** A look as a turn makes one: bound to the description as the account. */
 function lookCall(userId: string, taskId: string): DescriptionDocumentBinding {
   return { userId, taskId: taskId };
 }
@@ -91,7 +91,7 @@ it.layer(getTestDB())("look_at_picture", (it) => {
   );
 
   it.effect(
-    "a picture of another plan, one the plan does not hold, an outsider's look, and an address that is no picture's are refused, in words the model reads and keeps",
+    "a picture of another description, one the description does not hold, an outsider's look, and an address that is no picture's are refused, in words the model reads and keeps",
     () =>
       Effect.gen(function* () {
         const {
@@ -127,7 +127,7 @@ it.layer(getTestDB())("look_at_picture", (it) => {
   );
 
   it.effect(
-    "a turn looks at the plan's pictures as often as it asks, and every look answers the picture",
+    "a turn looks at the description's pictures as often as it asks, and every look answers the picture",
     () =>
       Effect.gen(function* () {
         const { owner, planId: taskId, address } = yield* openPicturedTasks;
@@ -145,7 +145,7 @@ it.layer(getTestDB())("look_at_picture", (it) => {
   );
 
   it.effect(
-    "a look at a video the plan holds is refused, pointing at its words, and the model is handed none of its bytes",
+    "a look at a video the description holds is refused, pointing at its words, and the model is handed none of its bytes",
     () =>
       Effect.gen(function* () {
         const { owner, planId: taskId } = yield* openPicturedTasks;

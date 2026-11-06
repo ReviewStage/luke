@@ -77,7 +77,7 @@ const createTask = (userId: string, organizationId: string, createdAt: string) =
     return id;
   });
 
-/** A plan revision of `taskId`, numbered `seq`, written by `actor` as `userId`. */
+/** A description revision of `taskId`, numbered `seq`, written by `actor` as `userId`. */
 const reviseDescription = (
   taskId: string,
   seq: number,

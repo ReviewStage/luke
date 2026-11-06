@@ -1069,7 +1069,11 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           },
           "the run's agent works on a task the run made, named for it and assigned to its owner",
         );
-        assert.equal(made.text, "", "the task's plan is blank, the prompt being the agent's");
+        assert.equal(
+          made.text,
+          "",
+          "the task's description is blank, the prompt being the agent's",
+        );
         assert.ok(agent.prompt?.startsWith(PROMPT), "the automation's prompt opens the agent's");
         assert.match(agent.prompt ?? "", /the automation "Flaky-test sweep"/u);
         assert.deepEqual(

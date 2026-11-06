@@ -36,7 +36,7 @@
  * block that would close a cycle is refused
  * (`@repo/database/models/task-block-store`).
  *
- * `/api/plans/{id}/revisions` is the plan's history for the History tab, a
+ * `/api/plans/{id}/revisions` is the description's history for the History tab, a
  * page at a time; `/api/plans/{id}/revisions/{seq}` one revision's content
  * beside the one before it; and `/api/plans/{id}/revisions/{seq}/restore`
  * puts that content back as a revision of the developer's
@@ -639,11 +639,11 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * The developer's edit of the plan's document: answered with the plan as
+     * The developer's edit of the description: answered with the plan as
      * saved and the transaction it was saved in, which a host waits for on
      * the plan's record before it lets a delivery of the plan land, with the
      * text as it now stands and who last wrote it where the edit conflicts
-     * with it, or as refused where the plan would be longer than a plan may be.
+     * with it, or as refused where the description would be longer than a description may be.
      */
     edit: plans.edit.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
@@ -670,7 +670,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * A page of the plan's history, the newest first. A plan with no history
+     * A page of the description's history, the newest first. A description with no history
      * yet answers an empty page, and so does a plan id the account does not
      * own, which it answers no differently.
      */
@@ -690,7 +690,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * One revision's content put back as the plan's, a revision of the
+     * One revision's content put back as the description, a revision of the
      * developer's naming it, answered with the plan as it now stands and the
      * transaction its revision was written in, none where it changed
      * nothing. It names nothing in a body: the plan and the revision are the

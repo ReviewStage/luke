@@ -283,7 +283,7 @@ export function createTaskRelated(
   );
 }
 
-/** Who a task's first plan is written by, as its history names them. */
+/** Who a task's first description is written by, as its history names them. */
 type RevisionWriter = Parameters<typeof recordRevision>[0]["writer"];
 
 /** A task as a door asks for it: `NewTask`'s fields, the repository as named, the assignee null for no one, and the relations it starts in. */
@@ -294,7 +294,7 @@ export type TaskCreateAsked = Omit<NewTask, "repository" | "githubAccess" | "ass
   /** The member it is assigned to, null for no one; left out for its parent's, or no one at the top. */
   readonly assigneeId?: string | null;
   readonly relations: readonly TaskCreateRelation[];
-  /** Who the plan's text is written by, as its first revision names them, where the task starts with text. */
+  /** Who the description's text is written by, as its first revision names them, where the task starts with text. */
   readonly writer?: RevisionWriter;
 };
 
@@ -310,7 +310,7 @@ export interface TaskCreated extends TaskStartCommitted {
  * sub-task relation, takes its parent's repository and, where it names no
  * assignee, its parent's (`taskParentOf`); a parent of others takes theirs
  * (`relationsAsked`); a repository is reached as the workspace reaches it.
- * The task, its plan's first revision, and every relation are one write
+ * The task, its description's first revision, and every relation are one write
  * (`createTaskRelated`). A make under an id that made its task answers it,
  * unmade, and counts none.
  */
@@ -371,7 +371,7 @@ export const createTaskAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
   const text = started.text ?? "";
   const write = createTaskRelated(userId, started, beside);
-  // The task and its plan's first revision land together, so a make run again at once makes one task.
+  // The task and its description's first revision land together, so a make run again at once makes one task.
   const created =
     text === "" || writer === undefined
       ? yield* write

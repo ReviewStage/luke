@@ -112,7 +112,7 @@ import {
  * `run.sh --demo` signs in as `DEMO_DEAN` and opens on what this writes:
  * Dean's own workspace and acme beside it, with seven teammates as
  * members; twenty-one tasks across every status and priority, one broken
- * into sub-tasks and some waiting on others, each with a plan and comments
+ * into sub-tasks and some waiting on others, each with a description and comments
  * on it, open, answered, and resolved; eight finished coding agents of
  * Dean's with their transcripts, a pilot and the agents it started among
  * them, on his host where the run starts one, and the pages they showed;
@@ -390,7 +390,7 @@ function threadOf(step: string, outcome: DescriptionCommentOutcome) {
 }
 
 /**
- * One comment thread on the task's plan, started by its writer on the words
+ * One comment thread on the task's description, started by its writer on the words
  * it quotes, the replies under it a minute apart, and resolved where it
  * stands resolved.
  */
@@ -402,7 +402,7 @@ function seedComment(
   key: () => string,
 ) {
   return Effect.gen(function* () {
-    const from = task.plan.indexOf(comment.quote);
+    const from = task.description.indexOf(comment.quote);
     const started = yield* clock.ago(
       comment.ago,
       startDescriptionCommentThread(writer, task.id, {
@@ -410,7 +410,7 @@ function seedComment(
         scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
         quote: comment.quote,
         anchor: { from, to: from + comment.quote.length },
-        text: task.plan,
+        text: task.description,
         words: comment.words,
       }),
     );
@@ -441,7 +441,7 @@ function seedComment(
 
 /**
  * The task under its fixed id, made by its maker, or by the agent named,
- * under its parent and assigned, its plan saved, and the comments on it; one that is done or canceled
+ * under its parent and assigned, its description saved, and the comments on it; one that is done or canceled
  * stands to do until it is moved there.
  */
 function seedTask(
@@ -469,9 +469,9 @@ function seedTask(
     yield* written(task.name, made);
     const saved = yield* clock.ago(
       task.savedAgo,
-      saveDescriptionText(task.creator.id, task.id, task.plan),
+      saveDescriptionText(task.creator.id, task.id, task.description),
     );
-    yield* written(`${task.name}'s plan`, saved);
+    yield* written(`${task.name}'s description`, saved);
     for (const comment of task.comments) {
       const writer = { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: comment.by.id } as const;
       yield* seedComment(task, writer, comment, clock, key);
@@ -756,7 +756,7 @@ function seedPages(agent: DemoAgent, row: Agent, clock: SeedClock) {
  * Every agent: its row, then the sub-tasks its steps made, under its id,
  * so the agents started on them find them; then the blocks between the
  * tasks, and each agent's pages and transcript, and the comments it
- * started on its task's plan. Answers each agent's row and the sub-tasks'
+ * started on its task's description. Answers each agent's row and the sub-tasks'
  * ids.
  */
 function seedAgents(

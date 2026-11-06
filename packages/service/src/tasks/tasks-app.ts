@@ -19,7 +19,7 @@ import {
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 
 /**
- * tasks-app.ts -- a plan's attachment served as its bytes, a picture its text names or a file one of its comments carries: the one plan read the hosted oRPC router does not answer, since it answers bytes rather than JSON.
+ * tasks-app.ts -- a description's attachment served as its bytes, a picture its text names or a file one of its comments carries: the one plan read the hosted oRPC router does not answer, since it answers bytes rather than JSON.
  *
  * The plans themselves, and each one's edit, history, transcript, work,
  * and Stop, are the router's (`tasks-procedures.ts`), and so are its
@@ -31,13 +31,13 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  */
 
 const TASKS_PATH = {
-  /** GET serves one attachment of the plan as its bytes; the rewrite moves the path's ids into the `id` and `attachment` queries. */
+  /** GET serves one attachment of the description as its bytes; the rewrite moves the path's ids into the `id` and `attachment` queries. */
   ATTACHMENT: "/api/plans/attachment",
 } as const;
 
 const TASK_ID_QUERY = "id";
 
-/** The query naming one attachment of the plan by its id. */
+/** The query naming one attachment of the description by its id. */
 const ATTACHMENT_QUERY = "attachment";
 
 export interface TasksAppSeams {
@@ -50,7 +50,7 @@ export type TasksAppServices = DatabaseServices;
 type TasksServices = TasksAppServices | HttpServerRequest.HttpServerRequest | Scope.Scope;
 
 /**
- * GET serves one attachment of the plan as its bytes, to the members of the
+ * GET serves one attachment of the description as its bytes, to the members of the
  * plan's workspace alone: a picture or a video its text names, under the
  * media type the service sniffed it to be as it was kept, or else a file one
  * of its comments carries, under the type it traveled as. An attachment of a plan the

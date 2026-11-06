@@ -3,7 +3,7 @@ import { type DescriptionNote, NOTE_KIND } from "@repo/features/description-note
 /**
  * task-contents.ts -- the notes a notetaker would take, as a test writes them.
  *
- * A note names a heading of the plan's text, and lands at the end of the
+ * A note names a heading of the description's text, and lands at the end of the
  * section under it, written as given. Every word a test writes with one is
  * invented.
  */
