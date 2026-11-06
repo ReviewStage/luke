@@ -140,6 +140,11 @@ token-shaped parts of addresses. Reports name your account by its id only. The
 Service does not send Sentry what was sent to or returned by a model, though an
 error's own words can quote what an agent was working on.
 
+For about one launch in twenty, the Mac app also sends Sentry performance
+profiles of its windows for as long as they are open: which of the app's own
+functions were running, by name and file, sampled many times a second. A
+profile holds no words you or an agent wrote.
+
 ### Feedback
 
 If you send feedback, we receive your words, any screenshots you attach, and,

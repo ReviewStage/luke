@@ -14,7 +14,10 @@ import {
   withoutAccessTokens,
 } from "@repo/features/sentry-breadcrumbs";
 import { type SentryCapture, sentryReporterLayer } from "@repo/features/sentry-reporting";
-import { SENTRY_TRACES_SAMPLE_RATE } from "@repo/features/sentry-tracing";
+import {
+  SENTRY_PROFILE_SESSION_SAMPLE_RATE,
+  SENTRY_TRACES_SAMPLE_RATE,
+} from "@repo/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@repo/host";
 import type { AppStateStore } from "@repo/host/client";
 import type { EffectDesktopService } from "@repo/host/desktop-service";
@@ -51,6 +54,14 @@ declare const PACKAGED_SENTRY_RELEASE: string;
  *
  * Main reports on behalf of every renderer, so what leaves goes through the
  * same token filters as the preload's and the renderers' own.
+ *
+ * Main also decides, once a launch, whether its windows are profiled: where
+ * they are, the SDK serves every document with `Document-Policy: js-profiling`,
+ * which the browser's profiler needs, and each window profiles as it starts
+ * (`renderer/desktop-sentry-sdk.ts`). Note that the choice is made here rather
+ * than by each window's SDK, because the policy alone already costs a page:
+ * Chromium readies its profiler for every document it is granted to, so a
+ * launch left unprofiled is served none.
  */
 export function initializeCrashReporting(runMode: RunMode, environment: SentryEnvironment): void {
   Sentry.init({
@@ -59,6 +70,7 @@ export function initializeCrashReporting(runMode: RunMode, environment: SentryEn
     release: PACKAGED_SENTRY_RELEASE,
     environment,
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
+    enableRendererProfiling: Math.random() < SENTRY_PROFILE_SESSION_SAMPLE_RATE,
     integrations: [Sentry.startupTracingIntegration()],
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
