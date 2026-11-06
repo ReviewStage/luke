@@ -494,9 +494,10 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const switchThisMac = (next: boolean) => (next ? turnThisMacOn() : turningOff.ask());
 
   const listed = hosts?.map(machineOf) ?? [];
-  // Note that This Mac stands first, on its switch's row, only where the app keeps its host.
+  // Note that This Mac's host stands on its switch's row only while it is on; one the service still lists while it is off, as an uninstall that could not reach the service leaves it, stands as any host does, by its own name, with its Remove.
+  const naming = thisMac?.enrolled === true ? thisMac : undefined;
   const listedMac =
-    thisMac === undefined ? undefined : hosts?.find((host) => isThisMac(machineOf(host), thisMac));
+    naming === undefined ? undefined : hosts?.find((host) => isThisMac(machineOf(host), naming));
   const loaded = signedIn && hosts !== undefined && installScriptUrl !== undefined;
   const others = hosts?.filter((host) => host !== listedMac) ?? [];
   return (
@@ -513,7 +514,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
               <ThisMacRow host={listedMac} book={book} on={thisMacOn} onChange={switchThisMac} />
             )}
             {others.map((host) => {
-              const label = machineName(machineOf(host), listed, thisMac);
+              const label = machineName(machineOf(host), listed, naming);
               return (
                 <HostRow
                   key={host.id}

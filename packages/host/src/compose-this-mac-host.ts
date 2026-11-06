@@ -4,7 +4,17 @@ import { HOST_RELEASE } from "@repo/features/host-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import { EXPERIMENT, type Experiment } from "@repo/settings";
-import { Duration, Effect, MutableRef, Option, type Path, Result, Schedule, Stream } from "effect";
+import {
+  Duration,
+  Effect,
+  MutableRef,
+  Option,
+  type Path,
+  Result,
+  Schedule,
+  Semaphore,
+  Stream,
+} from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -225,14 +235,19 @@ export function composeThisMacHost(
       report("this Mac's host was installed and started");
     });
 
+    // Note that keeping the host running and turning This Mac off take turns, so an install under way finishes before an uninstall begins, and one asked after reads the record the uninstall left.
+    const oneAtATime = (yield* Semaphore.make(1)).withPermits(1);
+
     /** The account's host running where it stands, the script run where launchd holds none; nothing is enrolled here, since only turning This Mac on enrolls it. */
-    const keepRunning = Effect.gen(function* () {
-      if (HOST_RELEASE === undefined || !host.runsHost) return;
-      const record = yield* ownServiceRecord;
-      if (Option.isNone(record) || record.value.refused === true) return;
-      if (!(yield* accountOwns(record.value)) || (yield* host.loaded)) return;
-      yield* installed;
-    });
+    const keepRunning = oneAtATime(
+      Effect.gen(function* () {
+        if (HOST_RELEASE === undefined || !host.runsHost) return;
+        const record = yield* ownServiceRecord;
+        if (Option.isNone(record) || record.value.refused === true) return;
+        if (!(yield* accountOwns(record.value)) || (yield* host.loaded)) return;
+        yield* installed;
+      }),
+    );
 
     /** How many times This Mac was turned on, which the loop reads so a turn on is kept running, the script run after its enroll. */
     const turns = MutableRef.make(0);
@@ -257,16 +272,18 @@ export function composeThisMacHost(
     );
 
     /** This Mac turned off: the install's own uninstall run, which takes the host out of the account and off this Mac; whether it ran. */
-    const turnedOff = Effect.gen(function* () {
-      if (!host.runsHost) return false;
-      const removed = yield* host.uninstall;
-      if (Result.isFailure(removed)) {
-        report(`this Mac's host could not be removed: ${removed.failure}`);
-        return false;
-      }
-      report("this Mac's host was removed");
-      return true;
-    });
+    const turnedOff = oneAtATime(
+      Effect.gen(function* () {
+        if (!host.runsHost) return false;
+        const removed = yield* host.uninstall;
+        if (Result.isFailure(removed)) {
+          report(`this Mac's host could not be removed: ${removed.failure}`);
+          return false;
+        }
+        report("this Mac's host was removed");
+        return true;
+      }),
+    );
 
     /** The account's host stopped and kept from starting at the next login, its files kept. */
     const keepStopped = Effect.gen(function* () {

@@ -327,6 +327,15 @@ test("a refused Remove is said in the dialog that asked it, though the list drew
   assert.ok(said.includes("Could not reach the service. Try again."), said);
 });
 
+test("a host the service still lists for this Mac while it is off stands as any host does, with its Remove", async () => {
+  await machinesWithThisMac(SERVER_AND_THIS_MAC, { machineId: MACHINE_ID });
+
+  assert.equal(thisMacSwitch().getAttribute("aria-checked"), "false");
+  act(() => removeOf("Studio").click());
+  const asked = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
+  assert.ok(asked.includes("Remove Studio?"), asked);
+});
+
 test("a Mac turned on whose host the service does not list yet reads offline on This Mac's row", async () => {
   await machinesWithThisMac([], {
     deviceId: "2d4f6a8c-0e1b-4c3d-9e5f-7a9b1c3d5e60",
