@@ -93,6 +93,7 @@ import {
   runnerTook,
   swappedBearer,
 } from "../../testing/runner-sandbox-fake.js";
+import { sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import {
   AgentSandboxImage,
   IMAGE_PREPARING_STATUS,
@@ -421,11 +422,13 @@ const repositoryAgent = (
       seams.onGitHub?.(sent);
       return undefined;
     });
+    // The SDK's calls of Vercel reach the same fake as the client's, through its own `fetch`.
+    const http = Layer.merge(github.layer, sandboxFetchOver(api.respond));
     const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          github.layer,
-          machineOver(github.layer),
+          http,
+          machineOver(http),
           Layer.succeed(HostedEnvironment, NO_KEYS),
           Layer.succeed(AgentSandboxImage, {
             snapshotId: seams.snapshotId ?? Effect.succeed(Option.some(SNAPSHOT)),
@@ -2128,13 +2131,17 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // The first message's read of the runner's exit is held, inside its lease.
         const held = gate();
         let holding = false;
-        const http = fakeHttpClientLayer(async (url, init) => {
+        const holdingRespond = async (url: string, init: RequestInit) => {
           if (holding && url.includes("wait=true")) {
             holding = false;
             await held.pass();
           }
           return api.respond(url, init);
-        });
+        };
+        const http = Layer.merge(
+          fakeHttpClientLayer(holdingRespond),
+          sandboxFetchOver(holdingRespond),
+        );
         const { userId, agent } = yield* openAgent;
         const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(services(api, SNAPSHOT, http)),

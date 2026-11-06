@@ -2,6 +2,8 @@
 
 import assert from "node:assert/strict";
 import {
+  CHATGPT_DEVICE_FAILURE_MESSAGE,
+  CHATGPT_DEVICE_LOGIN,
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
@@ -16,7 +18,7 @@ import type { PortActKind, PortActResult } from "@repo/host/contract";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@repo/settings/settings-views";
-import { BUTTON_VARIANT, SETTINGS_ROW_STATE } from "@repo/ui";
+import { SETTINGS_ROW_STATE } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -72,14 +74,23 @@ const CHATGPT_PLAN: SubscriptionKeySummary = {
   forAgents: true,
 };
 
+/** The code a Connect Codex start hands out. */
+const DEVICE_LOGIN = {
+  loginId: "login-1",
+  userCode: "225Q-1343X",
+  verificationUrl: "https://auth.openai.com/codex/device",
+  intervalSeconds: 5,
+  expiresAt: AT + 15 * 60 * 1000,
+};
+
 /** What the test's service holds for the account. */
 let held: ProviderKeysAnswer = { keys: [] };
 /** Why the next save is refused, or nothing where it is kept. */
 let refusal: (typeof PROVIDER_KEY_REJECTION)[keyof typeof PROVIDER_KEY_REJECTION] | undefined;
 /** Every act the page sent, in order. */
 let sent: AnyAct[] = [];
-/** The ChatGPT sign-in's answer while it is held open, as a sign-in waits on the browser. */
-let signInOpen: PromiseWithResolvers<FakeActAnswer> | undefined;
+/** Connect Codex's wait while it is held open, as a login waits on its code being entered; none answers it connected at once. */
+let waitOpen: PromiseWithResolvers<FakeActAnswer> | undefined;
 /** How the keys the host holds are delivered to the window again, as each write's own answer lays them. */
 let deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void = () => undefined;
 
@@ -128,15 +139,20 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
         ),
       };
       return written(held);
-    case ACT_KIND.CHATGPT_SIGN_IN_CANCEL:
-      // Ending a sign-in answers it as canceled, as the host does.
-      signInOpen?.resolve(done({ cancelled: true }));
-      signInOpen = undefined;
-      return Promise.resolve(done(undefined));
-    case ACT_KIND.CHATGPT_SIGN_IN:
-      if (signInOpen !== undefined) return signInOpen.promise;
+    case ACT_KIND.CHATGPT_DEVICE_START:
+      return Promise.resolve(done(DEVICE_LOGIN));
+    case ACT_KIND.CHATGPT_DEVICE_CANCEL: {
+      // Ending a login answers its wait as canceled, as the service does.
+      const canceled = { outcome: CHATGPT_DEVICE_LOGIN.CANCELED };
+      waitOpen?.resolve(done(canceled));
+      waitOpen = undefined;
+      return Promise.resolve(done(canceled));
+    }
+    case ACT_KIND.CHATGPT_DEVICE_WAIT:
+      if (waitOpen !== undefined) return waitOpen.promise;
       held = { ...held, subscriptions: [...subscriptions, CHATGPT_PLAN] };
-      return written(held);
+      deliverKeys({ rows: held });
+      return Promise.resolve(done({ outcome: CHATGPT_DEVICE_LOGIN.CONNECTED, keys: held }));
     default:
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
   }
@@ -148,7 +164,7 @@ beforeEach(() => {
   held = { keys: [] };
   refusal = undefined;
   sent = [];
-  signInOpen = undefined;
+  waitOpen = undefined;
   deliverKeys = () => undefined;
   window.localStorage.clear();
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
@@ -249,6 +265,14 @@ async function open(page: HTMLElement, harness: string): Promise<HTMLElement> {
     ) ?? assert.fail(`no ${harness} dialog`)
   );
 }
+
+/** Connect Codex, standing over the window, found by the title that names it. */
+const connectCodex = () =>
+  [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+    (dialog) =>
+      document.getElementById(dialog.getAttribute("aria-labelledby") ?? "")?.textContent ===
+      "Connect Codex",
+  ) ?? assert.fail("no Connect Codex dialog");
 
 /** The dialog's row a label names. */
 const row = (dialog: Element, label: string) =>
@@ -593,29 +617,39 @@ test("a Claude token Anthropic rejected says so in its row and offers Replace to
   assert.equal(field.value, "");
 });
 
-test("a ChatGPT sign-in OpenAI no longer honors says it signed out of ChatGPT, and its row's Sign in again opens the dialog on Continue with ChatGPT", async () => {
+test("a ChatGPT sign-in OpenAI no longer honors says it signed out of ChatGPT, and its row's Sign in again opens the dialog on its Connect", async () => {
   held = { keys: [], subscriptions: [{ ...CHATGPT_PLAN, status: PROVIDER_KEY_STATUS.INVALID }] };
   const page = await mount();
   assert.deepEqual(rowState(page, "Codex"), needsHand("ChatGPT plan · Signed out"));
   const dialog = await open(page, "Codex");
   assert.deepEqual(lineOf(row(dialog, "ChatGPT plan")), needsHand("Signed out of ChatGPT."));
   assert.ok(
-    document.activeElement === button(row(dialog, "ChatGPT plan"), "Continue with ChatGPT"),
-    "Continue with ChatGPT has focus",
+    document.activeElement === button(row(dialog, "ChatGPT plan"), "Connect ChatGPT plan"),
+    "Connect has focus",
   );
 });
 
-test("Codex's ChatGPT plan continues with ChatGPT on the desktop, meets the first sign-in with OpenAI's notice once, and disconnects after asking", async () => {
+test("Codex's ChatGPT plan connects through Connect Codex's code, closes it once connected, meets the first connection with OpenAI's notice once, and disconnects after asking", async () => {
+  waitOpen = Promise.withResolvers();
   const page = await mount();
   const dialog = await open(page, "Codex");
-  assert.ok(dialog.querySelector('a[href="https://platform.openai.com/api-keys"]'));
-  await press(row(dialog, "ChatGPT plan"), "Continue with ChatGPT");
-  assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN).length, 1);
-  assert.equal(
-    document.querySelectorAll('[role="dialog"]').length,
-    1,
-    "OpenAI's notice opens no card over the dialog",
+  await press(row(dialog, "ChatGPT plan"), "Connect ChatGPT plan");
+  assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_DEVICE_START).length, 1);
+  const connecting = connectCodex();
+  assert.match(connecting.textContent ?? "", /225Q-1343X/u);
+  assert.match(connecting.textContent ?? "", /Waiting for Codex/u);
+  assert.deepEqual(
+    sent.filter((each) => each.kind === ACT_KIND.CHATGPT_DEVICE_WAIT).map((each) => each.payload),
+    [{ loginId: DEVICE_LOGIN.loginId, intervalSeconds: DEVICE_LOGIN.intervalSeconds }],
   );
+
+  held = { ...held, subscriptions: [CHATGPT_PLAN] };
+  deliverKeys({ rows: held });
+  act(() => waitOpen?.resolve(done({ outcome: CHATGPT_DEVICE_LOGIN.CONNECTED, keys: held })));
+  waitOpen = undefined;
+  await settle();
+  assert.ok(!document.body.contains(connecting), "connecting closes Connect Codex");
+  assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_DEVICE_CANCEL).length, 0);
   assert.match(row(dialog, "ChatGPT plan").textContent ?? "", /You're using your ChatGPT plan/u);
   await press(row(dialog, "ChatGPT plan"), "Got it");
   assert.doesNotMatch(dialog.textContent ?? "", /You're using your ChatGPT plan/u);
@@ -632,34 +666,42 @@ test("Codex's ChatGPT plan continues with ChatGPT on the desktop, meets the firs
   assert.equal(rowButton(page, "Codex").textContent, "Connect");
 });
 
-test("a ChatGPT sign-in waiting on the browser says so without trailing dots, beside a quiet Cancel that ends it", async () => {
-  signInOpen = Promise.withResolvers();
+test("closing Connect Codex withdraws the login still waiting", async () => {
+  waitOpen = Promise.withResolvers();
   const page = await mount();
   const dialog = await open(page, "Codex");
-  await press(row(dialog, "ChatGPT plan"), "Continue with ChatGPT");
-  const waiting = button(row(dialog, "ChatGPT plan"), "Waiting for ChatGPT");
-  assert.match(
-    row(dialog, "ChatGPT plan").textContent ?? "",
-    /Finish signing in in your browser\./u,
+  await press(row(dialog, "ChatGPT plan"), "Connect ChatGPT plan");
+  await press(connectCodex(), "Close");
+  assert.deepEqual(
+    sent.filter((each) => each.kind === ACT_KIND.CHATGPT_DEVICE_CANCEL).map((each) => each.payload),
+    [{ loginId: DEVICE_LOGIN.loginId }],
   );
-  assert.equal(waiting.getAttribute("aria-busy"), "true");
-  const cancel = button(row(dialog, "ChatGPT plan"), "Cancel");
-  assert.equal(cancel.getAttribute("data-variant"), BUTTON_VARIANT.QUIET);
-  await press(row(dialog, "ChatGPT plan"), "Cancel");
-  assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN_CANCEL).length, 1);
 });
 
-test("without the sign-in's loopback, Codex's ChatGPT plan row offers nothing and says why, while its API key row works", async () => {
+test("a login that expires says so with Try again, which asks for a new code", async () => {
+  waitOpen = Promise.withResolvers();
+  const page = await mount();
+  const dialog = await open(page, "Codex");
+  await press(row(dialog, "ChatGPT plan"), "Connect ChatGPT plan");
+  const expired = CHATGPT_DEVICE_FAILURE_MESSAGE[CHATGPT_DEVICE_LOGIN.EXPIRED];
+  const waiting = waitOpen;
+  waitOpen = Promise.withResolvers();
+  act(() => waiting.resolve(done({ outcome: CHATGPT_DEVICE_LOGIN.EXPIRED, message: expired })));
+  await settle();
+  assert.ok(connectCodex().textContent?.includes(expired));
+  await press(connectCodex(), "Try again");
+  assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_DEVICE_START).length, 2);
+  assert.match(connectCodex().textContent ?? "", /225Q-1343X/u);
+});
+
+test("on the web, without the desktop's sign-in, Codex's ChatGPT plan still offers Connect", async () => {
   const page = await mount(
     DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.CHATGPT_SIGN_IN),
   );
   const dialog = await open(page, "Codex");
-  const plan = row(dialog, "ChatGPT plan");
-  assert.equal(plan.textContent, "ChatGPT planDesktop app only");
-  assert.equal(plan.querySelector("button"), null);
-  const field = labeled(row(dialog, "OpenAI API key"), "API key");
-  await pasteAndSave(field, KEY.replace("sk-ant-api03", "sk-proj"));
-  assert.deepEqual(rowState(page, "Codex"), connectedWith("OpenAI API key sk-ant-…wxyz"));
+  waitOpen = Promise.withResolvers();
+  await press(row(dialog, "ChatGPT plan"), "Connect ChatGPT plan");
+  assert.match(connectCodex().textContent ?? "", /225Q-1343X/u);
 });
 
 test("setup connects Claude in place, with no dialog: Connect opens one row at a time on the plan's setup-token beside a choice of the key, Cancel closes it, and a saved token closes it to its state line", async () => {
@@ -696,19 +738,11 @@ test("setup connects Claude in place, with no dialog: Connect opens one row at a
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 });
 
-test("setup's Codex row continues with ChatGPT in place, says where to finish while it waits, ends a waiting sign-in with its Cancel, and meets the first sign-in with OpenAI's notice under the closed row", async () => {
-  signInOpen = Promise.withResolvers();
+test("setup's Codex row connects through Connect Codex, which closes with the row once connected, and meets the first connection with OpenAI's notice under the closed row", async () => {
   const { page } = await mountSetup();
   await press(row(page, "Codex"), "Connect Codex");
-  assert.ok(document.activeElement === button(page, "Continue with ChatGPT"));
-  await press(row(page, "Codex"), "Continue with ChatGPT");
-  assert.match(row(page, "Codex").textContent ?? "", /Finish signing in in your browser\./u);
-  assert.equal(button(page, "Waiting for ChatGPT").getAttribute("aria-busy"), "true");
-  await press(row(page, "Codex"), "Cancel");
-  assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_SIGN_IN_CANCEL).length, 1);
-
-  await press(row(page, "Codex"), "Connect Codex");
-  await press(row(page, "Codex"), "Continue with ChatGPT");
+  assert.ok(document.activeElement === button(page, "Connect ChatGPT plan"));
+  await press(row(page, "Codex"), "Connect ChatGPT plan");
   assert.deepEqual(lineOf(row(page, "Codex")), connectedWith("ChatGPT plan"));
   assert.equal(row(page, "Codex").querySelector("[role='radio']"), null, "connecting closes it");
   assert.match(row(page, "Codex").textContent ?? "", /You're using your ChatGPT plan/u);

@@ -50,6 +50,17 @@ export const ACCOUNT_ASK_ACT_KIND = {
   CHATGPT_SIGN_IN: "chatGpt.signIn",
   CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
   /**
+   * Settings › Agents › Codex › Connect: Codex's device-code login, run by
+   * the service, begun, waited on while the host asks after it on its
+   * interval, and withdrawn. Nothing crosses from the renderer but the
+   * login's id and interval; the answers carry the code
+   * the developer enters at the verification page, and once connected the
+   * keys as the service then holds them, never a token.
+   */
+  CHATGPT_DEVICE_START: "chatGpt.device.start",
+  CHATGPT_DEVICE_WAIT: "chatGpt.device.wait",
+  CHATGPT_DEVICE_CANCEL: "chatGpt.device.cancel",
+  /**
    * Settings › Integrations › GitHub: the member's own classic GitHub
    * personal access token held for the window while it holds the stream
    * open, asked again at once, saved, and removed. The hold's stream carries
@@ -289,7 +300,6 @@ export const CHAPTERS_ACT_KIND = {
   CHAPTERS_FOLLOW: "chapters.follow",
   CHAPTERS_RETRY: "chapters.retry",
   CHAPTERS_GENERATE: "chapters.generate",
-  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
 } as const;
 
 /**
@@ -803,6 +813,9 @@ export const PORT_ACT_USE = {
   PROVIDER_KEYS_FOR_AGENTS: ACT_USE.WRITE,
   CHATGPT_SIGN_IN: ACT_USE.WRITE,
   CHATGPT_SIGN_IN_CANCEL: ACT_USE.WRITE,
+  CHATGPT_DEVICE_START: ACT_USE.WRITE,
+  CHATGPT_DEVICE_WAIT: ACT_USE.WRITE,
+  CHATGPT_DEVICE_CANCEL: ACT_USE.WRITE,
   GITHUB_TOKEN_FOLLOW: ACT_USE.READ,
   GITHUB_TOKEN_RETRY: ACT_USE.READ,
   GITHUB_TOKEN_SAVE: ACT_USE.WRITE,
@@ -885,7 +898,6 @@ export const PORT_ACT_USE = {
   CHAPTERS_FOLLOW: ACT_USE.READ,
   CHAPTERS_RETRY: ACT_USE.READ,
   CHAPTERS_GENERATE: ACT_USE.WRITE,
-  CHAPTERS_MODEL_WRITE: ACT_USE.WRITE,
 
   CLI_INSTALL: ACT_USE.WRITE,
 

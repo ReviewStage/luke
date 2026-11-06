@@ -86,7 +86,7 @@ export const FIREWALL_SLOT = {
   RUNNER: "runner",
   /** A Codex launch's OpenAI API key, swapped in for its placeholder on OpenAI's API, for that launch alone. */
   OPENAI_KEY: "openai-key",
-  /** A Codex launch's ChatGPT plan access token, swapped in for its placeholder on OpenAI's API and renewed by the sweep while it stands. */
+  /** A Codex launch's ChatGPT plan access token, swapped in for its placeholder on the plan's backend (OpenAI's API, or Codex's ChatGPT backend) and renewed by the sweep while it stands. */
   OPENAI_PLAN: "openai-plan",
 } as const;
 

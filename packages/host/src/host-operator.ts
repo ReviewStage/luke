@@ -82,7 +82,13 @@ import {
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
   agentTranscriptOlderAnswerSchema,
+  type ChatGptDeviceLoginParams,
+  type ChatGptDevicePollAnswerView,
+  type ChatGptDeviceStartAnswerView,
+  type ChatGptDeviceWaitParams,
   type ChatGptSignInAnswerView,
+  chatGptDevicePollAnswerViewSchema,
+  chatGptDeviceStartAnswerViewSchema,
   chatGptSignInAnswerViewSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -167,9 +173,6 @@ import {
 } from "@repo/features/mcp-client-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
-  type ChaptersModelAnswerView,
-  type ChaptersModelWriteParams,
-  chaptersModelAnswerViewSchema,
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
   type PullRequestChaptersReadParams,
@@ -820,8 +823,6 @@ export interface HostOperator {
   pullRequestChaptersGenerate(
     params: PullRequestChaptersParams,
   ): Effect.Effect<PullRequestChaptersAnswerView>;
-  /** The account's chapters model drawn over its preferences at once and written to the service; the model as kept, or why it is unchanged. */
-  chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
   installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
   /** A workspace's skills let go by the windows. */
@@ -876,6 +877,12 @@ export interface HostOperator {
   chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
   chatGptSignInCancel(): Effect.Effect<void>;
+  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
+  chatGptDeviceStart(): Effect.Effect<ChatGptDeviceStartAnswerView>;
+  /** A device-code login waited on until it settles or an ask after it goes unanswered; the keys as they then stand once it connected. */
+  chatGptDeviceWait(params: ChatGptDeviceWaitParams): Effect.Effect<ChatGptDevicePollAnswerView>;
+  /** A device-code login withdrawn; how it then stands. */
+  chatGptDeviceCancel(params: ChatGptDeviceLoginParams): Effect.Effect<ChatGptDevicePollAnswerView>;
   /** The member's own GitHub token as its login, hint, and status, never the token, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onGitHubTokenChanged`. */
   githubTokenFollow(): Effect.Effect<void>;
   /** The member's GitHub token let go by the windows. */
@@ -2229,11 +2236,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, pullRequestChaptersRead(params)),
         answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    chaptersModelWrite: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
-        answerOf(chaptersModelAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     installedSkillsFollow: (params) =>
       fire(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW, { workspaceId: params.workspaceId }),
@@ -2346,6 +2348,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         answerOf(chatGptSignInAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chatGptSignInCancel: () => fire(client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL)),
+    chatGptDeviceStart: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_START),
+        answerOf(chatGptDeviceStartAnswerViewSchema, AGENT_UNANSWERED),
+      ),
+    chatGptDeviceWait: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_WAIT, {
+          loginId: params.loginId,
+          intervalSeconds: params.intervalSeconds,
+        }),
+        answerOf(chatGptDevicePollAnswerViewSchema, AGENT_UNANSWERED),
+      ),
+    chatGptDeviceCancel: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_CANCEL, { loginId: params.loginId }),
+        answerOf(chatGptDevicePollAnswerViewSchema, AGENT_UNANSWERED),
+      ),
     githubTokenFollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW, {})),
     githubTokenUnfollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW, {})),
     githubTokenRetry: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_RETRY, {})),

@@ -11,6 +11,10 @@
  * starts only in a running sandbox; asked of any other, the service answers
  * where the sandbox stands instead.
  *
+ * The ports a server listens on are read the same way, from the kernel's
+ * socket tables in the running session (`listening-ports.ts`), and never
+ * from a sandbox that is not running.
+ *
  * The GitHub credential the firewall carries for the agent is set here in
  * the agent's own GitHub slot, in the shape its own session and a copy of
  * its work set it (`../sandbox-firewall.ts`'s `githubEntry`): an
@@ -21,6 +25,7 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
+import type { ListeningPortsAnswer } from "@repo/features/listening-ports-wire";
 import {
   SANDBOX_STATE,
   type SandboxState,
@@ -46,6 +51,7 @@ import {
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
+import { listeningPortsOf, readSocketTables } from "./listening-ports.js";
 import {
   holdsTerminal,
   killTerminal,
@@ -97,6 +103,10 @@ export type SandboxOpen =
 export interface AgentSandboxService {
   /** The agent's shells and where its sandbox stands; none while it is not running. */
   readonly terminals: (sessionId: string) => Effect.Effect<TerminalsAnswer, SandboxUnavailable>;
+  /** Whether the agent's sandbox is running, and the ports a server listens on in it; none while it is not running, which a read never changes. */
+  readonly listeningPorts: (
+    sessionId: string,
+  ) => Effect.Effect<ListeningPortsAnswer, SandboxUnavailable>;
   /** A new shell in the agent's running sandbox, under the id given, named where the developer named it. */
   readonly start: (
     sessionId: string,
@@ -188,6 +198,15 @@ function agentSandboxOver(
         // A list tmux could not give is an outage, never a sandbox with no shells.
         if (listed === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
         return { sandbox: state, terminals: listed };
+      }),
+    listeningPorts: (sessionId) =>
+      Effect.gen(function* () {
+        const { running } = yield* standing(sessionId);
+        if (running === undefined) return { running: false, ports: [] };
+        const ports = listeningPortsOf(yield* api.run(running, readSocketTables()));
+        // Tables the kernel could not be read for are an outage, never a sandbox with no servers.
+        if (ports === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
+        return { running: true, ports };
       }),
     start: (sessionId, terminalId, title) =>
       inRunning(sessionId, (running) =>

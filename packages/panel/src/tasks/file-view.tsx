@@ -580,8 +580,7 @@ function historyActions(history: FileHistory): MenuAction[] {
 /**
  * The bar across a File tab and its tree, or a Changes tab and its own, drawn
  * by `PaneBar`: Back and Forward where the tab keeps a history, then what
- * leads it (a File tab's path, or Files changed's count of the files
- * viewed), the GitHub button, dimmed with no page to open yet, the tab's own
+ * leads it (a File tab's path, where there is one), the GitHub button, dimmed with no page to open yet, the tab's own
  * controls, the ⋯, and the tree's toggle last, where there is a tree, at
  * the bar's very end beside the tree it opens, as the window's title bar
  * ends with the side panel's.
@@ -595,8 +594,8 @@ export function FileViewBar({
   tree,
 }: {
   history?: FileHistory | undefined;
-  /** What leads the bar after Back and Forward: a File tab's path and the commit it is read at, or Files changed's count. */
-  lead: ReactNode;
+  /** What leads the bar after Back and Forward: a File tab's path and the commit it is read at; none leads with nothing. */
+  lead?: ReactNode;
   /** The page on GitHub, and the door that opens it; none dims the button. */
   github: { readonly href: string; readonly open: (url: string) => void } | undefined;
   /** The tab's own controls after the GitHub button: View settings, or a ⋯ of its own. */
@@ -606,7 +605,7 @@ export function FileViewBar({
   /** The tree's toggles, where there is a tree. */
   tree?: PaneToggles | undefined;
 }): React.JSX.Element {
-  // Note that a path stands among the controls, since Back and Forward come before it, and a count with no history leads the bar as words do.
+  // Note that a path stands among the controls, since Back and Forward come before it, and a lead with no history leads the bar as words do.
   const crumbs = history !== undefined;
   return (
     <PaneBar

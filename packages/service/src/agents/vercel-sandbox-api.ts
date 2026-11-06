@@ -6,16 +6,17 @@
  * outside an eve tool — a retired session's sandboxes deleted, a sandbox no
  * terminal holds stopped, a developer's resume, a short command for a
  * terminal's list, a terminal's PTY, the GitHub credential at its firewall —
- * it asks here, of the calls that SDK's `APIClient` makes (`@vercel/sandbox`
- * 3.3.0, the copy eve 0.74.0 bundles: re-read `listSandboxes`, `getSandbox`,
- * `deleteSandbox`, `stopSession`, `runCommand`, `openInteractive`,
- * `updateNetworkPolicy`, `getSession`, `extendTimeout`, and `updateSandbox`
- * when it moves; a sandbox's snapshot retention is set by Vercel's documented
- * "Update a sandbox" and checked against its documented "List snapshots"),
- * directly rather than through the SDK,
- * because
- * the SDK bundled into a function fails it as it loads and carries a dozen
- * Node modules these calls never use.
+ * it asks here. A sandbox's delete, and a drive's lookup, create, and delete,
+ * go through `@vercel/sandbox` itself, at the version the catalog pins, which
+ * loads in a function's bundle; a create's drive mounts are sent as that
+ * SDK sends them; the rest
+ * are still the calls that SDK's `APIClient` makes (`@vercel/sandbox` 3.3.0,
+ * the copy eve 0.74.0 bundles: re-read `listSandboxes`, `getSandbox`,
+ * `stopSession`, `runCommand`, `openInteractive`, `updateNetworkPolicy`,
+ * `getSession`, `extendTimeout`, and `updateSandbox` when it moves; a
+ * sandbox's snapshot retention is set by Vercel's documented "Update a
+ * sandbox" and checked against its documented "List snapshots"), made
+ * directly, until each moves onto the SDK.
  *
  * A native harness's sandbox is the one sandbox we open ourselves rather
  * than eve, so its calls are copied from the SDK's 3.8.0 client, the first
@@ -38,7 +39,18 @@
 import { gzipSync } from "node:zlib";
 import { readEither } from "@repo/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
-import { Data, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
+import { APIError, Drive, Sandbox } from "@vercel/sandbox";
+import {
+  Context,
+  Data,
+  Duration,
+  Effect,
+  Option,
+  Redacted,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { EXCESS_KEYS, unparsedWire } from "../core.js";
 import { jsonOf } from "../http/http-effect.js";
@@ -134,6 +146,9 @@ export const SANDBOX_CALL = {
   SNAPSHOT_LOOKUP: "snapshot-lookup",
   SNAPSHOT_LIST: "snapshot-list",
   RETENTION: "retention",
+  DRIVE_GET: "drive-get",
+  DRIVE_CREATE: "drive-create",
+  DRIVE_DELETE: "drive-delete",
 } as const;
 
 export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
@@ -282,6 +297,16 @@ interface SandboxCreate {
     readonly deleteEvicted: boolean;
   };
   readonly env: Readonly<Record<string, string>>;
+  /** The drives mounted read-write, each by its name at the absolute path it is keyed by. */
+  readonly mounts?: Readonly<Record<string, string>>;
+  /** Whether its filesystem is restored at its next session, and snapshotted at each stop for that; so where unsaid. */
+  readonly persistent?: boolean;
+}
+
+/** A drive as a lookup names it: its name, and the sandbox it is mounted read-write in, where one holds it. */
+interface ListedDrive {
+  readonly name: string;
+  readonly currentSandboxName?: string | undefined;
 }
 
 /** A persistent sandbox opened on an image rather than a snapshot: a template being prepared. */
@@ -376,7 +401,7 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     policy: NetworkPolicy,
   ) => Effect.Effect<void, SandboxUnavailable>;
-  /** Opens a persistent sandbox from the snapshot named, on the open internet; answers it with the session it runs. */
+  /** Opens a sandbox from the snapshot named, persistent unless it says not, on the open internet; answers it with the session it runs. */
   readonly create: (ask: SandboxCreate) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
   /** The sandbox of that name, as it stands, without resuming it; none where there is no such sandbox. */
   readonly getNamed: (name: string) => Effect.Effect<ListedSandbox | undefined, SandboxUnavailable>;
@@ -481,6 +506,12 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     commandId: string,
   ) => Effect.Effect<void, SandboxUnavailable>;
+  /** The drive under the name; none where there is none. */
+  readonly getDrive: (name: string) => Effect.Effect<ListedDrive | undefined, SandboxUnavailable>;
+  /** The drive under the name, created in the sandboxes' region where there is none. */
+  readonly getOrCreateDrive: (name: string) => Effect.Effect<ListedDrive, SandboxUnavailable>;
+  /** Deletes the drive under the name with all it holds; one already gone is no failure. */
+  readonly deleteDrive: (name: string) => Effect.Effect<void, SandboxUnavailable>;
 }
 
 /** The OIDC token's claims the API is asked under: the project and team it names. */
@@ -739,6 +770,30 @@ function refused(
   });
 }
 
+/**
+ * What `@vercel/sandbox` threw as the failure it is: an `APIError` read as
+ * Vercel's answer is, by its status and its body's text, and anything else
+ * as the cause. Note that the SDK has already tried a 429, a 5xx, and a
+ * failure to connect again twice by then.
+ */
+function sdkFailure(call: SandboxCall, cause: unknown): SandboxUnavailable {
+  if (!(cause instanceof APIError))
+    return new SandboxUnavailable({ call, detail: causeDetail(cause) });
+  return refused(call, { status: cause.response.status, text: cause.text ?? "" });
+}
+
+/** Drives mounted read-write as Vercel's create takes them, as `@vercel/sandbox`'s own `toAPIMounts` sends them. */
+function driveMounts(mounts: Readonly<Record<string, string>>) {
+  return Object.fromEntries(
+    Object.entries(mounts).map(([path, drive]) => [path, { drive, mode: "read-write" }]),
+  );
+}
+
+/** A drive as a lookup answers it. */
+function listedDrive(drive: Drive): ListedDrive {
+  return { name: drive.name, currentSandboxName: drive.currentSandboxName };
+}
+
 /** The call tried again where Vercel answered one of the passing refusals given; any other failure answers at once. */
 function retryingPassing<A>(
   effect: Effect.Effect<A, SandboxUnavailable>,
@@ -835,6 +890,15 @@ function tarOf(files: readonly SandboxFile[]): Uint8Array {
   return gzipSync(Buffer.concat(blocks));
 }
 
+/**
+ * The `fetch` `@vercel/sandbox` sends each request through: the platform's
+ * own, unless a test hands the fake of Vercel it already answers the
+ * `HttpClient` with.
+ */
+export const SandboxFetch = Context.Reference<typeof fetch>("@repo/service/SandboxFetch", {
+  defaultValue: () => globalThis.fetch,
+});
+
 /** How the deployment's own OIDC token is read: the function's in production, a fixed one in a test. */
 export type OidcTokenRead = () => Promise<string>;
 
@@ -907,7 +971,7 @@ function commandRunOf(text: string): CommandRun | undefined {
 export function vercelSandboxApi(
   readToken: OidcTokenRead,
 ): Effect.Effect<VercelSandboxApi, never, HttpClient.HttpClient> {
-  return Effect.map(HttpClient.HttpClient, (client) => {
+  return Effect.map(Effect.all([HttpClient.HttpClient, SandboxFetch]), ([client, sdkFetch]) => {
     /** The token's headers and claims for the call given, which a failure to read them names. */
     const credentials = (call: SandboxCall) =>
       Effect.gen(function* () {
@@ -919,7 +983,7 @@ export function vercelSandboxApi(
         if (claims === undefined) {
           return yield* new SandboxUnavailable({ call, detail: "a token naming no project" });
         }
-        return { headers: { authorization: `Bearer ${token}` }, ...claims };
+        return { token, headers: { authorization: `Bearer ${token}` }, ...claims };
       });
 
     /** A URL on the API, under the team the token names and the extra query given. */
@@ -1025,18 +1089,27 @@ export function vercelSandboxApi(
       deleteSandbox: (name) =>
         Effect.gen(function* () {
           const asked = yield* credentials(SANDBOX_CALL.DELETE);
-          const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
-            projectId: asked.projectId,
-            deleteOrphanSnapshots: "true",
-          });
-          const deleted = yield* callApi(
-            client,
-            SANDBOX_CALL.DELETE,
-            HttpClientRequest.delete(url, { headers: asked.headers }),
+          yield* Effect.tryPromise({
+            try: async (signal) => {
+              // Note that the lookup asks no resume, because a sandbox on its way out is never woken to be deleted.
+              const sandbox = await Sandbox.get({
+                name,
+                resume: false,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                fetch: sdkFetch,
+                signal,
+              });
+              await sandbox.delete({ deleteOrphanSnapshots: true, signal });
+            },
+            catch: (cause) => sdkFailure(SANDBOX_CALL.DELETE, cause),
+          }).pipe(
+            Effect.catchIf(
+              (failure) => failure.status === NOT_FOUND_STATUS,
+              () => Effect.void,
+            ),
           );
-          if (!succeeded(deleted.status) && deleted.status !== NOT_FOUND_STATUS) {
-            return yield* refused(SANDBOX_CALL.DELETE, deleted);
-          }
         }),
       run: (sandboxSessionId, ask) =>
         Effect.gen(function* () {
@@ -1139,13 +1212,14 @@ export function vercelSandboxApi(
               ports: [],
               source: { type: "snapshot", snapshotId: ask.snapshotId },
               name: ask.name,
-              persistent: true,
+              persistent: ask.persistent ?? true,
               tags: ask.tags,
               timeout: ask.timeoutMs,
               resources: { vcpus: ask.vcpus },
               keepLastSnapshots: ask.keepLastSnapshots,
               env: ask.env,
               networkPolicy: OPEN_INTERNET_POLICY,
+              ...(ask.mounts === undefined ? undefined : { mounts: driveMounts(ask.mounts) }),
             }),
           );
           const created = yield* callApi(client, SANDBOX_CALL.CREATE, request);
@@ -1512,6 +1586,69 @@ export function vercelSandboxApi(
           if (!succeeded(killed.status) && killed.status !== NOT_FOUND_STATUS) {
             return yield* refused(SANDBOX_CALL.KILL, killed);
           }
+        }),
+      getDrive: (name) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.DRIVE_GET);
+          return yield* Effect.tryPromise({
+            try: (signal) =>
+              Drive.get({
+                name,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                fetch: sdkFetch,
+                signal,
+              }),
+            catch: (cause) => sdkFailure(SANDBOX_CALL.DRIVE_GET, cause),
+          }).pipe(
+            Effect.map(listedDrive),
+            Effect.catchIf(
+              (failure) => failure.status === NOT_FOUND_STATUS,
+              () => Effect.succeed(undefined),
+            ),
+          );
+        }),
+      getOrCreateDrive: (name) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.DRIVE_CREATE);
+          // Note that the drive takes Vercel's default region, as every sandbox we create does, since a mount must match it.
+          const drive = yield* Effect.tryPromise({
+            try: (signal) =>
+              Drive.getOrCreate({
+                name,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                fetch: sdkFetch,
+                signal,
+              }),
+            catch: (cause) => sdkFailure(SANDBOX_CALL.DRIVE_CREATE, cause),
+          });
+          return listedDrive(drive);
+        }),
+      deleteDrive: (name) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.DRIVE_DELETE);
+          yield* Effect.tryPromise({
+            try: async (signal) => {
+              const drive = await Drive.get({
+                name,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                fetch: sdkFetch,
+                signal,
+              });
+              await drive.delete({ signal });
+            },
+            catch: (cause) => sdkFailure(SANDBOX_CALL.DRIVE_DELETE, cause),
+          }).pipe(
+            Effect.catchIf(
+              (failure) => failure.status === NOT_FOUND_STATUS,
+              () => Effect.void,
+            ),
+          );
         }),
     };
   });

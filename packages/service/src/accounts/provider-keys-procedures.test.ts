@@ -12,11 +12,19 @@ import {
 } from "@repo/credentials/testing";
 import { Database } from "@repo/database/core/query";
 import { listProviderKeyRows, setPlanStatus } from "@repo/database/models/provider-key-store";
-import { accountProviderKey } from "@repo/database/schemas/account-provider-key";
+import {
+  accountChatGptDeviceLogin,
+  accountProviderKey,
+} from "@repo/database/schemas/account-provider-key";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB } from "@repo/database/testing";
 import {
+  CHATGPT_DEVICE_LOGIN,
   type ChatGptCredentialsSaveRequest,
+  type ChatGptDevicePollAnswer,
+  type ChatGptDeviceStartAnswer,
+  chatGptDevicePollAnswerSchema,
+  chatGptDeviceStartAnswerSchema,
   chatGptHostAnswerSchema,
   FAST_ACCESS,
   PROVIDER_KEY_KIND,
@@ -56,6 +64,7 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
+import { CODEX_DEVICE_OAUTH } from "./chatgpt-credentials.js";
 import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
 /**
@@ -353,6 +362,109 @@ const readHost = (body: WireBoundaryInput) => {
   if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
   return read.success;
 };
+
+const DEVICE_PATH = {
+  START: "/api/account/chatgpt/device",
+  POLL: "/api/account/chatgpt/device/poll",
+  CANCEL: "/api/account/chatgpt/device/cancel",
+} as const;
+
+/** What the fake OpenAI holds of Codex's device-code login, synthetic throughout. */
+const DEVICE = {
+  AUTH_ID: "deviceauth-test-0000000000000000000000did",
+  USER_CODE: "ABCD-1234",
+  AUTHORIZATION_CODE: "test-authorization-code-0000000000000acd",
+  CODE_VERIFIER: "test-code-verifier-000000000000000000000ver",
+  REFRESH_TOKEN: "test-codex-refresh-token-00000000000000ref",
+  WORKSPACE: "chatgpt-workspace-0000",
+} as const;
+
+/** The tokens Codex's exchange answers: an access token whose own expiry says when it lapses, and an ID token for Codex's client naming the workspace. */
+const DEVICE_TOKENS = {
+  access_token: unsignedJwt({
+    iss: AUTH_ORIGIN,
+    exp: 4_000_000_000,
+    client_id: CODEX_DEVICE_OAUTH.CLIENT_ID,
+  }),
+  refresh_token: DEVICE.REFRESH_TOKEN,
+  id_token: signedJwt(
+    {
+      ...ID_CLAIMS,
+      aud: CODEX_DEVICE_OAUTH.CLIENT_ID,
+      [CODEX_DEVICE_OAUTH.AUTH_CLAIM]: {
+        chatgpt_account_id: DEVICE.WORKSPACE,
+        chatgpt_plan_type: "team",
+      },
+    },
+    OPENAI_KEY,
+  ),
+} as const;
+
+/** What a device login must never answer, log, or store in the clear. */
+const DEVICE_SECRETS = [
+  DEVICE.AUTH_ID,
+  DEVICE.AUTHORIZATION_CODE,
+  DEVICE.CODE_VERIFIER,
+  DEVICE_TOKENS.access_token,
+  DEVICE.REFRESH_TOKEN,
+  DEVICE_TOKENS.id_token,
+];
+
+/**
+ * OpenAI's device-code endpoints as Codex reaches them: a user code issued
+ * with its interval as a string, a code poll answering whatever the test
+ * sets (403 until the code is entered), and a token endpoint that exchanges
+ * the one authorization code it issued; discovery and the published keys
+ * beside them.
+ */
+function fakeDeviceAuth() {
+  const state = { codePollStatus: HTTP_STATUS.FORBIDDEN as number };
+  const auth = (request: RecordedRequest): Response => {
+    if (request.url === CODEX_DEVICE_OAUTH.USER_CODE_URL) {
+      return jsonResponse({
+        device_auth_id: DEVICE.AUTH_ID,
+        usercode: DEVICE.USER_CODE,
+        interval: "5",
+      });
+    }
+    if (request.url === CODEX_DEVICE_OAUTH.CODE_POLL_URL) {
+      if (state.codePollStatus !== HTTP_STATUS.OK) return jsonResponse({}, state.codePollStatus);
+      return jsonResponse({
+        authorization_code: DEVICE.AUTHORIZATION_CODE,
+        code_challenge: "test-code-challenge",
+        code_verifier: DEVICE.CODE_VERIFIER,
+      });
+    }
+    if (request.url === CODEX_DEVICE_OAUTH.TOKEN_URL) return jsonResponse(DEVICE_TOKENS);
+    return openAiAuth()(request);
+  };
+  return { state, auth };
+}
+
+const startDevice = (userId: string) =>
+  request(userId, { method: "POST", path: DEVICE_PATH.START });
+
+const pollDevice = (userId: string, loginId: string) =>
+  request(userId, { method: "POST", path: DEVICE_PATH.POLL, body: { loginId } });
+
+const cancelDevice = (userId: string, loginId: string) =>
+  request(userId, { method: "POST", path: DEVICE_PATH.CANCEL, body: { loginId } });
+
+/** A device start's answer as the wire reads it. */
+function startOf(answered: Answer): ChatGptDeviceStartAnswer {
+  assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+  const read = readEither(chatGptDeviceStartAnswerSchema)(unparsedWire(answered.body));
+  if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
+  return read.success;
+}
+
+/** A device poll's or cancel's answer as the wire reads it. */
+function pollOf(answered: Answer): ChatGptDevicePollAnswer {
+  assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+  const read = readEither(chatGptDevicePollAnswerSchema)(unparsedWire(answered.body));
+  if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
+  return read.success;
+}
 
 /** The answer as the wire reads it, failing the test where it is not the wire's. */
 function keysOf(answered: Answer): ProviderKeysAnswer {
@@ -1170,6 +1282,172 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           accessToken: unsignedJwt({ ...ACCESS_CLAIMS, aud: ["https://api.openai.com/v1", "x"] }),
         });
         assert.equal(listed.rejected, undefined);
+      }),
+  );
+
+  it.effect(
+    "a device-code login polled before its code is entered is pending, then connects the account's plan sealed under the ChatGPT hint, and answers connected again",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const device = fakeDeviceAuth();
+        const { owner, ask, checks, logged } = yield* openAccounts({
+          ring: KEK.ONE,
+          auth: device.auth,
+        });
+        const startedAt = yield* Clock.currentTimeMillis;
+
+        const startedAnswer = yield* ask(startDevice(owner));
+        const started = startOf(startedAnswer);
+        const pending = pollOf(yield* ask(pollDevice(owner, started.loginId)));
+        device.state.codePollStatus = HTTP_STATUS.OK;
+        const connectedAnswer = yield* ask(pollDevice(owner, started.loginId));
+        const connected = pollOf(connectedAnswer);
+        const again = pollOf(yield* ask(pollDevice(owner, started.loginId)));
+
+        assert.deepEqual(
+          { ...started, loginId: "" },
+          {
+            loginId: "",
+            userCode: DEVICE.USER_CODE,
+            verificationUrl: "https://auth.openai.com/codex/device",
+            intervalSeconds: 5,
+            expiresAt: startedAt + 15 * 60_000,
+          },
+        );
+        assert.deepEqual(pending, { outcome: CHATGPT_DEVICE_LOGIN.PENDING });
+        assert.equal(connected.outcome, CHATGPT_DEVICE_LOGIN.CONNECTED);
+        assert.deepEqual(connected.keys?.subscriptions, [
+          {
+            provider: PROVIDER_KEY_PROVIDER.OPENAI,
+            kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+            hint: "ChatGPT",
+            addedAt: startedAt,
+            status: PROVIDER_KEY_STATUS.UNVERIFIED,
+            statusAt: startedAt,
+            forAgents: true,
+          },
+        ]);
+        assert.deepEqual(again, { outcome: CHATGPT_DEVICE_LOGIN.CONNECTED, keys: connected.keys });
+        assert.deepEqual(countedProviders(owner), [{ provider: PROVIDER_KEY_PROVIDER.OPENAI }]);
+
+        // The calls Codex makes, in Codex's own bodies.
+        const bodyOf = (url: string) =>
+          Effect.promise(() =>
+            new Response(checks.find((check) => check.url === url)?.init.body).text(),
+          );
+        assert.deepEqual(JSON.parse(yield* bodyOf(CODEX_DEVICE_OAUTH.USER_CODE_URL)), {
+          client_id: CODEX_DEVICE_OAUTH.CLIENT_ID,
+        });
+        assert.deepEqual(JSON.parse(yield* bodyOf(CODEX_DEVICE_OAUTH.CODE_POLL_URL)), {
+          device_auth_id: DEVICE.AUTH_ID,
+          user_code: DEVICE.USER_CODE,
+        });
+        assert.deepEqual(
+          [...new URLSearchParams(yield* bodyOf(CODEX_DEVICE_OAUTH.TOKEN_URL))],
+          [
+            ["grant_type", "authorization_code"],
+            ["client_id", CODEX_DEVICE_OAUTH.CLIENT_ID],
+            ["code", DEVICE.AUTHORIZATION_CODE],
+            ["redirect_uri", "https://auth.openai.com/deviceauth/callback"],
+            ["code_verifier", DEVICE.CODE_VERIFIER],
+          ],
+        );
+        assert.equal(
+          checks.filter((check) => check.url === CODEX_DEVICE_OAUTH.TOKEN_URL).length,
+          1,
+          "the authorization code is exchanged once",
+        );
+
+        const stored = JSON.stringify([
+          ...(yield* db
+            .select()
+            .from(accountProviderKey)
+            .where(eq(accountProviderKey.userId, owner))),
+          ...(yield* db
+            .select()
+            .from(accountChatGptDeviceLogin)
+            .where(eq(accountChatGptDeviceLogin.userId, owner))),
+        ]);
+        for (const secret of DEVICE_SECRETS) {
+          for (const answered of [startedAnswer, connectedAnswer]) {
+            assert.ok(!answered.text.includes(secret));
+          }
+          assert.ok(!stored.includes(secret));
+          assert.ok(logged.every((line) => !line.includes(secret)));
+        }
+      }),
+  );
+
+  it.effect(
+    "a device-code login whose code lapsed answers expired, and one OpenAI refuses answers refused, each as its fixed sentence",
+    () =>
+      Effect.gen(function* () {
+        const device = fakeDeviceAuth();
+        const { owner, other, ask } = yield* openAccounts({ ring: KEK.ONE, auth: device.auth });
+
+        const lapsing = startOf(yield* ask(startDevice(owner)));
+        yield* TestClock.adjust("16 minutes");
+        const expired = pollOf(yield* ask(pollDevice(owner, lapsing.loginId)));
+
+        const refusing = startOf(yield* ask(startDevice(other)));
+        device.state.codePollStatus = HTTP_STATUS.BAD_REQUEST;
+        const refused = pollOf(yield* ask(pollDevice(other, refusing.loginId)));
+        // A refused login stays refused, though OpenAI would now answer the code.
+        device.state.codePollStatus = HTTP_STATUS.OK;
+        const stillRefused = pollOf(yield* ask(pollDevice(other, refusing.loginId)));
+
+        assert.deepEqual(expired, {
+          outcome: CHATGPT_DEVICE_LOGIN.EXPIRED,
+          message: "The code expired before it was entered. Start again for a new one.",
+        });
+        assert.deepEqual(refused, {
+          outcome: CHATGPT_DEVICE_LOGIN.REFUSED,
+          message: "ChatGPT did not connect this account. Start again to try once more.",
+        });
+        assert.deepEqual(stillRefused, refused);
+        for (const userId of [owner, other]) {
+          assert.equal(keysOf(yield* ask(request(userId))).subscriptions, undefined);
+        }
+      }),
+  );
+
+  it.effect(
+    "one account can neither poll nor cancel another's device-code login, and a canceled login answers canceled",
+    () =>
+      Effect.gen(function* () {
+        const device = fakeDeviceAuth();
+        const { owner, other, ask, checks } = yield* openAccounts({
+          ring: KEK.ONE,
+          auth: device.auth,
+        });
+        const { loginId } = startOf(yield* ask(startDevice(owner)));
+        device.state.codePollStatus = HTTP_STATUS.OK;
+
+        const othersPoll = pollOf(yield* ask(pollDevice(other, loginId)));
+        const othersCancel = pollOf(yield* ask(cancelDevice(other, loginId)));
+        assert.equal(othersPoll.outcome, CHATGPT_DEVICE_LOGIN.CANCELED);
+        assert.equal(othersCancel.outcome, CHATGPT_DEVICE_LOGIN.CANCELED);
+        assert.ok(
+          checks.every((check) => check.url !== CODEX_DEVICE_OAUTH.CODE_POLL_URL),
+          "another account's poll asks OpenAI nothing",
+        );
+        assert.equal(keysOf(yield* ask(request(other))).subscriptions, undefined);
+
+        // The owner's login stood through both, and its own cancel drops it.
+        device.state.codePollStatus = HTTP_STATUS.FORBIDDEN;
+        assert.equal(
+          pollOf(yield* ask(pollDevice(owner, loginId))).outcome,
+          CHATGPT_DEVICE_LOGIN.PENDING,
+        );
+        assert.equal(
+          pollOf(yield* ask(cancelDevice(owner, loginId))).outcome,
+          CHATGPT_DEVICE_LOGIN.CANCELED,
+        );
+        assert.deepEqual(pollOf(yield* ask(pollDevice(owner, loginId))), {
+          outcome: CHATGPT_DEVICE_LOGIN.CANCELED,
+          message: "This connection was canceled. Start again for a new code.",
+        });
       }),
   );
 });

@@ -29,6 +29,7 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { openGithubUser, openTokenMember } from "../testing/github-app-fake.js";
 import { keepAwakeDetached, scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
+import { agentPortsProcedures } from "./agent-ports-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { type SandboxStopReach, SessionSandboxes } from "./session-sandboxes.js";
 import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./terminal/agent-sandbox.js";
@@ -57,6 +58,9 @@ const SHELL: TerminalSummary = {
   running: false,
 };
 
+/** The ports a running sandbox listens on. */
+const PORTS = [3000, 5173];
+
 /** A sandbox standing as given, keeping what it was asked: lists, starts, and resumes, by session. */
 function scriptedSandbox(state: SandboxState) {
   const asked: { readonly what: string; readonly sessionId: string }[] = [];
@@ -66,6 +70,12 @@ function scriptedSandbox(state: SandboxState) {
       Effect.sync(() => {
         asked.push({ what: "terminals", sessionId });
         return { sandbox: state, terminals: shells };
+      }),
+    listeningPorts: (sessionId) =>
+      Effect.sync(() => {
+        asked.push({ what: "ports", sessionId });
+        const running = state === SANDBOX_STATE.RUNNING;
+        return { running, ports: running ? PORTS : [] };
       }),
     start: (sessionId, terminalId) =>
       Effect.sync(() => {
@@ -192,7 +202,12 @@ const standing = (
         ),
       ),
     );
+    const resolveUserId = (incoming: Request) =>
+      Effect.succeed(
+        Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+      );
     const handle = hostedFetch({
+      agentPorts: agentPortsProcedures({ resolveUserId, sandbox }),
       agents: agentsProcedures({
         resolveUserId: (incoming: Request) =>
           Effect.succeed(
@@ -246,11 +261,12 @@ const standing = (
 const agentOf = (agentId: string) => `/api/agents/${agentId}`;
 const terminalsOf = (agentId: string) => `/api/agents/${agentId}/terminals`;
 const resumeOf = (agentId: string) => `/api/agents/${agentId}/sandbox/resume`;
+const portsOf = (agentId: string) => `/api/agents/${agentId}/ports`;
 const terminalOf = (agentId: string, terminalId: string) => `${terminalsOf(agentId)}/${terminalId}`;
 
 it.layer(getTestDB())("the agent terminals procedures", (it) => {
   it.effect(
-    "the agent's member lists its shells, and another account reads the agent as none",
+    "the agent's member lists its shells and ports, and another account reads the agent as none",
     () =>
       Effect.gen(function* () {
         const { userId, agent, sessionId } = yield* openAgent;
@@ -266,11 +282,21 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
 
         const listed = yield* call(terminalsOf(agent.id), "Bearer owner");
         const strangers = yield* call(terminalsOf(agent.id), "Bearer stranger");
+        const ports = yield* call(portsOf(agent.id), "Bearer owner");
+        const strangersPorts = yield* call(portsOf(agent.id), "Bearer stranger");
 
         assert.equal(listed.status, 200);
         assert.deepEqual(listed.body, { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] });
         assert.equal(strangers.status, 404);
-        assert.deepEqual(sandbox.asked, [{ what: "terminals", sessionId }]);
+        assert.deepEqual(ports, {
+          status: 200,
+          body: { running: true, ports: PORTS },
+        });
+        assert.equal(strangersPorts.status, 404);
+        assert.deepEqual(sandbox.asked, [
+          { what: "terminals", sessionId },
+          { what: "ports", sessionId },
+        ]);
       }),
   );
 
@@ -355,7 +381,9 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
           yield* call(resumeOf(agent.id), "Bearer reader", { method: "POST" }),
           refused,
         );
+        assert.deepEqual(yield* call(portsOf(agent.id), "Bearer reader"), refused);
         assert.equal((yield* call(terminalsOf(agent.id), "Bearer tokenless")).status, 404);
+        assert.equal((yield* call(portsOf(agent.id), "Bearer tokenless")).status, 404);
         assert.equal(sandbox.asked.length, asked, "no refused call reaches the sandbox");
       }),
   );

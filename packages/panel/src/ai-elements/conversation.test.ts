@@ -141,6 +141,62 @@ test("a reader scrolled up to an earlier line is left there when a new line come
   assert.deepEqual(layout.writes, [], "the reader's place stands");
 });
 
+/** The lines shrinking 80px under a reader 50px short of the end, long after their wheel, and the browser pulling the scroll up to their new end. */
+function shrunkPast(layout: StandInBox): void {
+  layout.height = 220;
+}
+
+test.each([
+  {
+    how: "the window reporting the shrink before the scroll",
+    shrink: (box: HTMLElement, layout: StandInBox) => {
+      shrunkPast(layout);
+      box.scrollTop = 120;
+      act(() => relayout());
+      lateScroll(box, 120, 2000);
+    },
+  },
+  {
+    how: "the scroll heard before the window reports the shrink",
+    shrink: (box: HTMLElement, layout: StandInBox) => {
+      shrunkPast(layout);
+      lateScroll(box, 120, 2000);
+      act(() => relayout());
+    },
+  },
+  {
+    how: "the lines shrinking to just where the reader stands, which scrolls nothing",
+    shrink: (_box: HTMLElement, layout: StandInBox) => {
+      layout.height = 250;
+      act(() => relayout());
+    },
+  },
+  {
+    how: "a press in the log just before, as a fold closed",
+    shrink: (box: HTMLElement, layout: StandInBox) => {
+      act(() => {
+        box.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+        box.dispatchEvent(new Event("pointerup", { bubbles: true }));
+      });
+      shrunkPast(layout);
+      scroll(box, 120);
+      act(() => relayout());
+    },
+  },
+])(
+  "a reader scrolled up near the newest line is not taken to it when the lines shrink under them, $how, and grow back",
+  ({ shrink }) => {
+    const { box, layout } = mount(["one", "two"]);
+    scroll(box, 200);
+    readerScroll(box, 150);
+    shrink(box, layout);
+    layout.writes.splice(0);
+    layout.height = 300;
+    act(() => relayout());
+    assert.deepEqual(layout.writes, [], "the log stays off its newest line");
+  },
+);
+
 test("a reader scrolled up to an earlier line is left there when the page around the log is hidden and shown again", () => {
   const { box, layout } = mount(["one", "two"]);
   scroll(box, 200);

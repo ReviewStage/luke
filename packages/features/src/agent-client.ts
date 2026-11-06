@@ -43,6 +43,9 @@ import {
   type AgentReviewOptionsAnswerView,
   type AgentWorkspaceListParams,
   type AgentWorkspaceToolsAnswerView,
+  type ChatGptDeviceLoginParams,
+  type ChatGptDevicePollAnswerView,
+  type ChatGptDeviceStartAnswerView,
   type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -84,7 +87,6 @@ import {
   type RefusedDevice,
   TRANSCRIPT_PARTS_QUERY,
 } from "./agent-wire.js";
-import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
 import type { AgentChangeRequest } from "./contract/agents.js";
 import {
   credentialMissingDataSchema,
@@ -150,13 +152,13 @@ import {
   type ChatGptCredentialsSaveRequest,
   type ChatGptHostAnswer,
   chatGptCredentialsSaveRequestSchema,
+  chatGptDeviceLoginRequestSchema,
   PROVIDER_KEY_QUERY,
   providerKeyForAgentsRequestSchema,
   providerKeySaveRequestSchema,
 } from "./provider-key-wire.js";
 import type { PullRequestChaptersLiveAnswer } from "./pull-request-chapters-live.js";
 import {
-  type ChaptersModelAnswerView,
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "./pull-request-chapters-view.js";
@@ -498,27 +500,6 @@ function defaultOf(read: AccountPreferencesAnswerWire | Failed): AgentDefaultAns
   return read.txid === undefined ? { choice } : { choice, txid: read.txid };
 }
 
-/** The chapters model as nothing the window can show: the call never answered, or answered no model this build offers. */
-const CHAPTERS_MODEL_UNANSWERED = {
-  failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
-} as const;
-
-/** The chapters model a write left off the preferences snapshot, with the transaction it committed in, or unanswered where it carries none this build offers. */
-function chaptersModelAnswerOf(
-  asked: Effect.Effect<AccountPreferencesAnswerWire, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
-  return Effect.match(asked, {
-    onFailure: () => CHAPTERS_MODEL_UNANSWERED,
-    onSuccess: (read) => {
-      const model = Option.getOrUndefined(
-        Schema.decodeUnknownOption(chaptersModelSchema)(read.chaptersModel),
-      );
-      if (model === undefined) return CHAPTERS_MODEL_UNANSWERED;
-      return read.txid === undefined ? { model } : { model, txid: read.txid };
-    },
-  });
-}
-
 /**
  * The window's reads and writes of a task's coding agents: the models the
  * service offers and the account's default among them, a task's agents,
@@ -642,15 +623,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** The account's chapters model written on its own, answering it as kept with the transaction it committed in. */
-  writeChaptersModel(
-    model: ChaptersModelId,
-  ): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
-    return chaptersModelAnswerOf(
-      askHosted(this.#hosted.account.writePreferences, { chaptersModel: model }),
-    );
-  }
-
   /**
    * The memories our agents kept in a workspace the account is a member of,
    * sealed for following, each with its keeper's name and whether the
@@ -725,6 +697,33 @@ export class HostedAgentClient {
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(askHosted(this.#hosted.account.saveChatGptCredentials, admitted), {});
+  }
+
+  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses. */
+  startChatGptDeviceLogin(): Effect.Effect<
+    ChatGptDeviceStartAnswerView,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedAnswer(askHosted(this.#hosted.account.startChatGptDeviceLogin, undefined), {});
+  }
+
+  /** How a device-code login stands, the keys once it connected; a login id the service would refuse by shape never travels. */
+  pollChatGptDeviceLogin(
+    params: ChatGptDeviceLoginParams,
+  ): Effect.Effect<ChatGptDevicePollAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(chatGptDeviceLoginRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.account.pollChatGptDeviceLogin, admitted), {});
+  }
+
+  /** A device-code login withdrawn, answering how it then stands; a login id the service would refuse by shape never travels. */
+  cancelChatGptDeviceLogin(
+    params: ChatGptDeviceLoginParams,
+  ): Effect.Effect<ChatGptDevicePollAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(chatGptDeviceLoginRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.account.cancelChatGptDeviceLogin, admitted), {});
   }
 
   /**

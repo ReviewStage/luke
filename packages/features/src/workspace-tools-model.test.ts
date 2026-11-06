@@ -17,12 +17,6 @@ describe("runOnMacReason", () => {
       expected: RUN_ON_MAC_REASON.SETTINGS_OFF,
     },
     {
-      case: "Settings off before outside words",
-      settingsOff: true,
-      standing: { on: false, reason: RUN_ON_MAC_OFF.OUTSIDE_WORDS },
-      expected: RUN_ON_MAC_REASON.SETTINGS_OFF,
-    },
-    {
       case: "nothing for Settings off while another Mac listens",
       settingsOff: true,
       standing: { on: true },
@@ -39,12 +33,6 @@ describe("runOnMacReason", () => {
       settingsOff: false,
       standing: { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY },
       expected: RUN_ON_MAC_REASON.MAC_AWAY,
-    },
-    {
-      case: "outside words",
-      settingsOff: false,
-      standing: { on: false, reason: RUN_ON_MAC_OFF.OUTSIDE_WORDS },
-      expected: RUN_ON_MAC_REASON.OUTSIDE_WORDS,
     },
     { case: "on", settingsOff: false, standing: { on: true }, expected: undefined },
     { case: "unread", settingsOff: false, standing: undefined, expected: undefined },

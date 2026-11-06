@@ -1,5 +1,5 @@
 /**
- * vercel-sandbox-fake.ts -- what Vercel Sandbox's REST API refuses of a list, a stop, or a sandbox's tags before it answers one, for the suites that stand a fake of it.
+ * vercel-sandbox-fake.ts -- what Vercel Sandbox's REST API refuses of a list, a stop, or a sandbox's tags before it answers one, and how a lookup and a delete are answered to `@vercel/sandbox`, for the suites that stand a fake of it.
  *
  * A fake that answers any query would have answered the `limit=100` every
  * real list was refused for, and a fake that answers any POST would have
@@ -9,6 +9,9 @@
  * each fake's list and stop asks this first and answers what it returns
  * where it returns anything.
  */
+
+import { Layer } from "effect";
+import { SandboxFetch } from "../agents/vercel-sandbox-api.js";
 
 /** `GET /v2/sandboxes`'s bounds on `limit`, as Vercel's REST reference states them. */
 const LIST_LIMIT = { MIN: 1, MAX: 50 } as const;
@@ -67,5 +70,56 @@ export function sandboxTagsRefusal(
       },
     },
     { status: INVALID_QUERY_STATUS },
+  );
+}
+
+/** The size, place, and working directory every faked session reports, which nothing reads beyond `@vercel/sandbox`'s check of its answers. */
+const SESSION_SIZE = {
+  MEMORY_MB: 4096,
+  VCPUS: 2,
+  REGION: "iad1",
+  CWD: "/vercel/sandbox",
+} as const;
+
+/** A sandbox as a fake's list names it: what a lookup's and a delete's answers are built from. */
+interface ListedFake {
+  readonly name: string;
+  readonly status: string;
+  readonly currentSessionId: string;
+  readonly createdAt: number;
+  readonly timeout?: number;
+}
+
+/** A sandbox as a delete answers it, with the fields `@vercel/sandbox` checks beside those a list names. */
+export function sandboxDeleted<Listed extends ListedFake>(listed: Listed) {
+  return { sandbox: { ...listed, persistent: true, updatedAt: listed.createdAt } };
+}
+
+/** A sandbox and its current session as a lookup answers them, with the fields `@vercel/sandbox` checks. */
+export function sandboxFound<Listed extends ListedFake>(listed: Listed) {
+  return {
+    ...sandboxDeleted(listed),
+    session: {
+      id: listed.currentSessionId,
+      memory: SESSION_SIZE.MEMORY_MB,
+      vcpus: SESSION_SIZE.VCPUS,
+      region: SESSION_SIZE.REGION,
+      timeout: listed.timeout ?? 0,
+      status: listed.status,
+      requestedAt: listed.createdAt,
+      createdAt: listed.createdAt,
+      cwd: SESSION_SIZE.CWD,
+      updatedAt: listed.createdAt,
+    },
+    routes: [],
+  };
+}
+
+/** `@vercel/sandbox`'s `fetch` over a fake's responder, which the `HttpClient` the fake stands behind answers through too. */
+export function sandboxFetchOver(
+  respond: (url: string, init: RequestInit) => Response | Promise<Response>,
+): Layer.Layer<never> {
+  return Layer.succeed(SandboxFetch, (input, init) =>
+    Promise.resolve(respond(String(input), init ?? {})),
   );
 }
