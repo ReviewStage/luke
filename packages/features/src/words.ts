@@ -106,6 +106,20 @@ export function orList(names: readonly string[]): string {
   return OR.format(names);
 }
 
+/**
+ * The parts `orList` joins `count` items with, in order: each item by its
+ * index, and the words between them (", ", " or ", ", or "), so a line can
+ * draw each item as something other than words, a person's chip say.
+ */
+export function orListParts(
+  count: number,
+): readonly ({ readonly item: number } | { readonly words: string })[] {
+  const keys = Array.from({ length: count }, (_, index) => String(index));
+  return OR.formatToParts(keys).map((part) =>
+    part.type === "element" ? { item: Number(part.value) } : { words: part.value },
+  );
+}
+
 /** What a page that needs an account says to someone not signed in. One line for every page, so none is worded its own way. */
 export const SIGNED_OUT_WORDS = "Sign in to use this page.";
 
