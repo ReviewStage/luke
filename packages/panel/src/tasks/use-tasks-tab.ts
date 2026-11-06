@@ -1968,7 +1968,7 @@ export function useTasksTab(input: {
         onOpened();
       }, withdraw);
     },
-    [act, fixture, openTaskId],
+    [sendSelect, fixture, openTaskId],
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leaveTask = useCallback(() => {
@@ -2642,7 +2642,7 @@ export function useTasksTab(input: {
       }
       return sendEdit({ taskId, edit: request });
     },
-    [fixture, act],
+    [fixture, sendEdit],
   );
 
   // The chip's menu stands on the open task's toolbar, so another task's is
@@ -2667,7 +2667,7 @@ export function useTasksTab(input: {
       readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
       restore: (taskId, seq) => sendRestore({ taskId, seq }),
     }),
-    [act],
+    [act, sendRestore],
   );
   const historyTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   // The open task's history is held while its version history is shown, and main keeps it a while after, so one opened again lists its versions in its first frame.
