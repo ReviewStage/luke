@@ -171,7 +171,6 @@ import {
 import {
   AgentMachine,
   type AgentMachineService,
-  CREDENTIAL_RENEWAL,
   type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
@@ -354,7 +353,6 @@ function runnerBearer(bearer: string, host: string): RunnerCredential {
     header: BEARER_HEADER,
     scheme: BEARER_PREFIX,
     slot: LAUNCH_SWAP.RUNNER,
-    renewal: CREDENTIAL_RENEWAL.FIXED,
   };
 }
 
@@ -538,8 +536,7 @@ function launchFingerprint(
         ]),
     ...declared.filter(isHeld).map((each) => ({
       slot: each.slot,
-      credential:
-        each.renewal === CREDENTIAL_RENEWAL.FIXED ? Redacted.value(each.value) : undefined,
+      credential: Redacted.value(each.value),
     })),
   ];
   // Note that one slot is digested alone, as the one a launch could hold before credentials were declared.

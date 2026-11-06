@@ -54,7 +54,7 @@ import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import { KEY_REFUSAL, PLAN_REFUSAL } from "../eve-host/eve-sessions.js";
-import { CREDENTIAL_RENEWAL, LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
+import { LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import { LAUNCH_SWAP } from "../sandbox-firewall.js";
 import { BEARER_PREFIX } from "../workspace-mcp/bearer.js";
@@ -110,7 +110,6 @@ function launchCredential(
         header: sent.header,
         scheme: sent.scheme,
         slot: LAUNCH_SWAP.CLAUDE,
-        renewal: CREDENTIAL_RENEWAL.FIXED,
       },
     ],
   };

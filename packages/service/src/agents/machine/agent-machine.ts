@@ -185,23 +185,14 @@ interface MachineFirewall {
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
 }
 
-/** Whether the service renews a runner's credential while its launch stands. */
-export const CREDENTIAL_RENEWAL = {
-  /** Fixed for its launch: a Mac hands it to the runner, and a sandbox holds it at its firewall. */
-  FIXED: "fixed",
-  /** Renewed by the service: a Mac hands nothing, its runner asking our token route for each, and a sandbox holds it at its firewall as it holds a fixed one. */
-  RENEWED: "renewed",
-} as const;
-
-export type CredentialRenewal = (typeof CREDENTIAL_RENEWAL)[keyof typeof CREDENTIAL_RENEWAL];
-
 /**
  * A credential a launch declares for its runner, which the machine decides
  * how to hand over (`deliverCredentials`): the variable the runner reads it
  * in, its value, without its scheme, where the runner sends it (the domain,
  * and the path prefix where one is named), in which header, named in lower
- * case, behind which scheme (`Bearer ` or nothing), the slot a firewall
- * holds it in, and whether the service renews it.
+ * case, behind which scheme (`Bearer ` or nothing), and the slot a
+ * firewall holds it in. Each is fixed for its launch: a Mac hands it to the
+ * runner, and a sandbox holds it at its firewall.
  */
 export interface RunnerCredential {
   readonly variable: string;
@@ -210,7 +201,6 @@ export interface RunnerCredential {
   readonly header: string;
   readonly scheme: string;
   readonly slot: LaunchSwapKind;
-  readonly renewal: CredentialRenewal;
 }
 
 /** Credentials as a machine hands them over: the variables the runner is started with, every one secret, and the swaps its place's firewall keeps for the launch, none on a machine with no firewall of ours. */

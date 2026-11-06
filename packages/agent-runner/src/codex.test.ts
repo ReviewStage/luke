@@ -139,6 +139,9 @@ const ENV = {
 /** A launch in the cloud's sandbox, whose bearer is the launch's placeholder and whose plan is signed in on host-supplied tokens. */
 const SANDBOX_ENV = {
   [RUNNER_ENV.BEARER]: BEARER,
+  // Named as a host's launch names them, which a sandbox's runner reads neither of.
+  [RUNNER_ENV.CODEX_PLAN_BACKEND]: CODEX_PLAN_BACKEND.CHATGPT,
+  [RUNNER_ENV.CHATGPT_ACCOUNT_ID]: "chatgpt-workspace-from-env",
   CODEX_HOME: "/home/agent/.codex",
   PATH: "/usr/bin",
 };

@@ -79,7 +79,6 @@ import { providerModelOf } from "../../providers/model-catalog.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import { KEY_REFUSAL, PLAN_REFUSAL, type PlanRefusal } from "../eve-host/eve-sessions.js";
 import {
-  CREDENTIAL_RENEWAL,
   LaunchRefused,
   type MachineLayout,
   type RunnerCredential,
@@ -150,7 +149,6 @@ function apiKeyCredential(key: Redacted.Redacted<string>): RunnerCredential {
     header: BEARER_HEADER,
     scheme: BEARER_SCHEME,
     slot: LAUNCH_SWAP.OPENAI_KEY,
-    renewal: CREDENTIAL_RENEWAL.FIXED,
   };
 }
 
