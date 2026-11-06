@@ -116,9 +116,10 @@ declare global {
 
 /** Lets the window's promises settle. */
 async function settled(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
+  // Note that each tick is a macrotask of its own act, since TanStack Query hands its answers to React on one and React draws them as an act ends.
+  for (let tick = 0; tick < 12; tick += 1) {
+    await act(() => new Promise<void>((done) => setTimeout(done, 0)));
+  }
 }
 
 /** The tab drawn over the cut turn, each part read whole answering as `answer` resolves, and the reads it was asked. */

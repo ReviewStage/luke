@@ -28,11 +28,13 @@ import {
   Text,
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { queryOptions, type UseQueryResult, useQuery } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act.js";
+import { useCallback, useState } from "react";
+import { askAct, useAct } from "../act.js";
 import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import { unreadShown } from "../failure-report.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import { DeviceGlyph } from "../tasks/runs-on.js";
 
 /**
@@ -147,6 +149,29 @@ function failedStanding(failed: HostPairingFailed, unanswered: Standing): Standi
   return failed.failure === HOST_PAIRING_CALL_FAILURE.UNANSWERED
     ? unanswered
     : { kind: STANDING.REFUSED, refusal: failed };
+}
+
+/**
+ * The read of the pairing a code names, asked as the dialog opens and again
+ * on Try again: answered at once on a failure, never tried again on its own.
+ */
+function hostPairingQueryOptions(code: string) {
+  return queryOptions({
+    queryKey: [QUERY_ROOT.HOST_PAIRING, code],
+    queryFn: () => askAct(ACT_KIND.HOSTS_PAIRING_READ, { code }),
+    retry: false,
+  });
+}
+
+/** Where the pairing's read leaves the dialog before anything is pressed. */
+function readStanding(pairing: UseQueryResult<HostPairingAnswer | HostPairingFailed>): Standing {
+  if (pairing.isPending || (pairing.isError && pairing.isFetching))
+    return { kind: STANDING.READING };
+  if (pairing.isError) return failedStanding(UNANSWERED, { kind: STANDING.UNREAD });
+  const answer = pairing.data;
+  return "failure" in answer
+    ? failedStanding(answer, { kind: STANDING.UNREAD })
+    : { kind: STANDING.ASKING, box: answer };
 }
 
 /** Hands Settings › Hosts a code to approve, as a pairing's link opened in this window does. */
@@ -318,31 +343,18 @@ export function HostConnectDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const [standing, setStanding] = useState<Standing>({ kind: STANDING.READING });
-  const [attempt, setAttempt] = useState(0);
-
   // The dialog opening reads the pairing the code names, so the member sees whose box it is before anything is pressed.
-  useEffect(() => {
-    let live = true;
-    setStanding({ kind: STANDING.READING });
-    act(ACT_KIND.HOSTS_PAIRING_READ, { code })
-      .catch(() => UNANSWERED)
-      .then((answer) => {
-        if (!live) return;
-        setStanding(
-          "failure" in answer
-            ? failedStanding(answer, { kind: STANDING.UNREAD })
-            : { kind: STANDING.ASKING, box: answer },
-        );
-      });
-    return () => {
-      live = false;
-    };
-  }, [act, code, attempt]);
+  const pairing = useQuery(hostPairingQueryOptions(code));
+  // Note that a press is the code's own, so a dialog handed another code reads that one afresh.
+  const [afterPress, setAfterPress] = useState<{
+    readonly code: string;
+    readonly standing: Standing;
+  }>();
+  const standing = afterPress?.code === code ? afterPress.standing : readStanding(pairing);
 
   const answer = useCallback(
     (box: HostPairingAnswer, pressed: Answer) => {
-      setStanding({ kind: STANDING.ASKING, box, sending: pressed });
+      setAfterPress({ code, standing: { kind: STANDING.ASKING, box, sending: pressed } });
       const sent =
         pressed === ANSWER.CONNECT
           ? act(ACT_KIND.HOSTS_PAIRING_APPROVE, { code })
@@ -352,9 +364,11 @@ export function HostConnectDialog({
         .then((answered) => {
           const unanswered = { kind: STANDING.ASKING, box, sending: SENDING.UNANSWERED } as const;
           const ended = pressed === ANSWER.CONNECT ? STANDING.CONNECTED : STANDING.DENIED;
-          setStanding(
-            "failure" in answered ? failedStanding(answered, unanswered) : { kind: ended, box },
-          );
+          setAfterPress({
+            code,
+            standing:
+              "failure" in answered ? failedStanding(answered, unanswered) : { kind: ended, box },
+          });
         });
     },
     [act, code],
@@ -388,7 +402,7 @@ export function HostConnectDialog({
       return (
         <ReadingDialog
           unread={standing.kind === STANDING.UNREAD}
-          onRetry={() => setAttempt((count) => count + 1)}
+          onRetry={() => void pairing.refetch()}
           onClose={onClose}
         />
       );

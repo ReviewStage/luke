@@ -275,9 +275,10 @@ afterEach(() => {
 });
 
 async function settle(): Promise<void> {
-  await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  // Note that each tick is a macrotask of its own act, since TanStack Query hands its answers to React on one and React draws them as an act ends.
+  for (let tick = 0; tick < 8; tick += 1) {
+    await act(() => new Promise<void>((done) => setTimeout(done, 0)));
+  }
 }
 
 function workspace(extra: Partial<Workspace> = {}): Workspace {

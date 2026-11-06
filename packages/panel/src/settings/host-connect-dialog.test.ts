@@ -4,11 +4,13 @@ import assert from "node:assert/strict";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOST_PAIRING_CALL_FAILURE, type HostPairingView } from "@repo/features/host-pairing-view";
 import { ACT_KIND } from "@repo/host/acts";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { HostConnectDialog } from "./host-connect-dialog.js";
 
 /**
@@ -60,10 +62,13 @@ async function opened(): Promise<string[]> {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(HostConnectDialog, {
-        code: CODE,
-        onClose: () => told.push("closed"),
-      }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(HostConnectDialog, {
+          code: CODE,
+          onClose: () => told.push("closed"),
+        }),
+      ),
     ),
   );
   await settle();
