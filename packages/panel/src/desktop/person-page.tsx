@@ -43,7 +43,6 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  Time,
   type ToolbarPickUp,
   useLeaving,
   useMenu,
@@ -225,10 +224,11 @@ const AUTOMATION_THING = "Automation";
 /**
  * One of their agents as a row, the row the task's own agents stand in at
  * the head of its description (`agent-list-row.tsx`): its glyph wearing
- * where it stands and its name on one dense line, then the task it works
- * on, where it runs, its failed mark once its turn failed, when it last
- * moved, and its pull request's chip, which opens its Pull request tab on
- * that task; a press opens its tab, and its ⋯, right-click,
+ * where it stands and its name on one dense line, muted after it the task
+ * it works on where the agent goes by another name, then where it runs,
+ * its failed mark once its turn failed, and its pull request's chip, which
+ * opens its Pull request tab on that task; its card says when it last
+ * moved; a press opens its tab, and its ⋯, right-click,
  * long press and menu key offer the agent's one menu over the doors a row has
  * (`agent-actions.tsx`), as a task's summary offers it: Copy link, Rename,
  * which turns the row into its name's field, Archive, asking first while a
@@ -240,14 +240,12 @@ function AgentRow({
   each,
   tasks,
   pullRequests,
-  now,
   place,
 }: {
   each: PersonAgent;
   tasks: TasksControl;
   /** The pull request each listed agent opened, by agent. */
   pullRequests: ReadonlyMap<string, AgentPullRequest>;
-  now: number;
   /** Where it stands in its section's run of rows (`VirtualRows`). */
   place: VirtualRowPlace;
 }): React.JSX.Element {
@@ -297,12 +295,8 @@ function AgentRow({
         devices={macs}
         pullRequest={pullRequests.get(agent.id)}
         refused={rename?.refused === true ? <span>{RENAME_FAILED}</span> : undefined}
-        context={
-          <OneLine className={HOME_ROW_CONTEXT} words={task.name}>
-            <ReplayMask>{task.name}</ReplayMask>
-          </OneLine>
-        }
-        time={<Time at={at} now={now} hint={false} />}
+        // Note that the task is named only where the agent goes by another name, since most are named for their task.
+        about={task.name === subject.name ? undefined : task.name}
         editing={editing}
         motionKey={agent.id}
         place={place}
@@ -343,14 +337,12 @@ function PersonAgentsSection({
   agents,
   tasks,
   pullRequests,
-  now,
 }: {
   title: string;
   agents: readonly PersonAgent[];
   tasks: TasksControl;
   /** The pull request each listed agent opened, by agent. */
   pullRequests: ReadonlyMap<string, AgentPullRequest>;
-  now: number;
 }): React.JSX.Element {
   const drawn = useLeaving(agents, agentKey);
   const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
@@ -372,13 +364,7 @@ function PersonAgentsSection({
         row: (index, at) => {
           const entry = drawn[index];
           return entry === undefined ? null : (
-            <AgentRow
-              each={entry.value}
-              tasks={tasks}
-              pullRequests={pullRequests}
-              now={now}
-              place={at}
-            />
+            <AgentRow each={entry.value} tasks={tasks} pullRequests={pullRequests} place={at} />
           );
         },
       }}
@@ -866,7 +852,6 @@ function PersonColumn({
               agents={page.working}
               tasks={tasks}
               pullRequests={pullRequests}
-              now={now}
             />
           )}
           {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
@@ -924,7 +909,6 @@ function PersonColumn({
               agents={page.agents}
               tasks={tasks}
               pullRequests={pullRequests}
-              now={now}
             />
           )}
           {automations.length === 0 ? null : (

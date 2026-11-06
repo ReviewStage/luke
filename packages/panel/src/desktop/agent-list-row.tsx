@@ -29,13 +29,14 @@ import { SUMMARY_GLYPH } from "./agent-archive.js";
  *
  * The row is a `ListRow` whose glyph is its tab's (`AgentGlyph`), which
  * gives way to the working mark while the agent works, and whose name is
- * masked in a screen recording. Under the name stands the title of the
- * thread it waits on the developer in, where one waits, or what the place
- * says went wrong with the row, such as a rename refused. At its end stand,
- * in turn, what the place says of it first (`context`), such as the task a
- * person's agent works on, the attention mark where a thread waits, where
- * it runs (`runs-on.tsx`), Cloud or the device, its failed mark once its
- * turn failed, and what the place says of it last (`time`). Its pull
+ * masked in a screen recording. After the name, muted, stands what went
+ * wrong with the row, such as a rename refused, else the title of the
+ * thread it waits on the developer in, where one waits, else what the
+ * place says it is about (`about`), such as the task a person's agent
+ * works on. At its end stand, in turn, the attention mark where a thread
+ * waits, where it runs (`runs-on.tsx`), Cloud or the device, and its
+ * failed mark once its turn failed, the same at the head of a task's
+ * description and on a person's page. Its pull
  * request, where it opened one, stands after them as a chip of GitHub's
  * mark in GitHub's color for where it stands and its number
  * (`pull-request-chip.tsx`), hanging the pull request's one card, the agent
@@ -56,8 +57,7 @@ export function AgentListRow({
   pullRequest,
   waitingOn,
   refused,
-  context,
-  time,
+  about,
   editing = false,
   motionKey,
   place,
@@ -82,10 +82,8 @@ export function AgentListRow({
   waitingOn?: string | undefined;
   /** What went wrong with the row, said under its name in a waiting thread's place. */
   refused?: ReactNode;
-  /** What the place says of it before where it runs. */
-  context?: ReactNode;
-  /** What the place says of it after its failed mark. */
-  time?: ReactNode;
+  /** What the place says the agent is about, said after its name where nothing else is. */
+  about?: string | undefined;
   editing?: boolean | undefined;
   motionKey?: string | undefined;
   /** Where it stands in its list's run of rows, where the list draws only those near the view (`VirtualRows`). */
@@ -113,14 +111,14 @@ export function AgentListRow({
         }
         title={title ?? name}
         titleReplayMasked
-        description={refused ?? waitingOn}
+        description={refused ?? waitingOn ?? about}
         descriptionReplayMasked={refused === undefined}
-        metaAt={LIST_ROW_META.TITLE}
+        // Note that a waiting thread or a refusal takes a line of its own under the name, and what the row is about stays on the name's.
+        metaAt={waitingOn === undefined && refused === undefined ? undefined : LIST_ROW_META.TITLE}
         hint={card === undefined || editing ? undefined : { Hint: RowHint, label: name }}
         meta={
           editing ? null : (
             <Inline gap={GAP.ITEM} wrap={false}>
-              {context}
               {waitingOn === undefined ? null : (
                 <>
                   <AttentionMark />
@@ -131,7 +129,6 @@ export function AgentListRow({
                 <RunsOnPlace agent={agent} devices={devices} />
                 {agentEndMark(agent, true)}
               </ReplayMask>
-              {time}
             </Inline>
           )
         }
