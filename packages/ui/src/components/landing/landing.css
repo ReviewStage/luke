@@ -9,7 +9,6 @@
   }
 
   .ui-landing-page > * {
-    /* off-scale: 1376px, the rails' 1280px and an inset either side */
     --ui-landing-margin: max(0px, (100cqw - 1376px) / 2);
     --ui-landing-inset: calc(var(--ui-landing-margin) + 48px);
     --ui-landing-gutter: calc(var(--ui-landing-inset) + 32px);
@@ -926,13 +925,10 @@
     background: transparent;
   }
 
-  /* off-scale: 1120px, the Pinned line */
   @container (width < 1120px) {
     .ui-landing-hero {
-      /* off-scale: the ball's least size, and its share of the screen */
       --ui-landing-orb-least: 160px;
       --ui-landing-orb-screen: 58svh;
-      /* off-scale: the room above the words and above the ball, each a share of the screen */
       --ui-landing-hero-top: min(96px, 8svh);
       --ui-landing-orb-top: min(24px, 2svh);
 
@@ -958,7 +954,6 @@
     }
   }
 
-  /* off-scale: 640px, a phone's landing */
   @container (width < 640px) {
     .ui-landing-lost {
       padding: 32px var(--ui-landing-gutter) 72px;

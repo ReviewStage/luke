@@ -105,7 +105,7 @@
     :disabled,
     [aria-disabled="true"]
   ) {
-    outline: none; /* no ring: the row's fill marks it, as a menu's does */
+    outline: none;
     --ui-button-fill: var(--ui-color-fill-strong);
   }
 

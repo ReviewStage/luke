@@ -1,5 +1,5 @@
 @layer components {
   .ui-combobox-list:focus-visible {
-    outline: none; /* no ring: the active option marks it */
+    outline: none;
   }
 }

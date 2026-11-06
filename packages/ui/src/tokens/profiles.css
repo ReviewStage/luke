@@ -92,7 +92,7 @@
 
   --ui-inline-ref-pill-width: 240px;
   --ui-inline-ref-pill-stated-width: 360px;
-  --ui-inline-ref-bleed: 3px; /* off-scale: the wash's bleed */
+  --ui-inline-ref-bleed: 3px;
 
   --ui-dialog-confirm-width: 400px;
   --ui-dialog-wide-width: 520px;
@@ -272,7 +272,7 @@
 
   --ui-inline-ref-pill-width: 240px;
   --ui-inline-ref-pill-stated-width: 360px;
-  --ui-inline-ref-bleed: 3px; /* off-scale: the wash's bleed */
+  --ui-inline-ref-bleed: 3px;
 
   --ui-dialog-confirm-width: 400px;
   --ui-dialog-wide-width: 520px;

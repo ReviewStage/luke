@@ -41,7 +41,7 @@
   }
 
   .ui-chart :is(.recharts-layer, .recharts-sector, .recharts-surface):not([tabindex="0"]) {
-    outline: none; /* no ring: no Tab stops here */
+    outline: none;
   }
 
   @media (forced-colors: active) {

@@ -6,7 +6,6 @@
     --ui-public-page-ruled: var(--ui-space-48);
   }
 
-  /* off-scale: 520px, a phone's landing */
   @container (width < 520px) {
     .ui-public-page > * {
       --ui-public-page-start: var(--ui-space-32);
@@ -24,7 +23,6 @@
     letter-spacing: var(--ui-display-landing-tracking, var(--ui-type-title-tracking));
   }
 
-  /* off-scale: 520px, a phone's page */
   @container (width < 520px) {
     .ui-public-page-title[data-style="page"] {
       font-size: var(--ui-display-feature-size-narrow, var(--ui-type-title-size));
@@ -35,7 +33,6 @@
     font-size: var(--ui-display-hero-size, var(--ui-type-title-size));
   }
 
-  /* off-scale: 576px, where the hero's 2.25rem title needs about 490px and steps down before the column squeezes it */
   @container (width < 576px) {
     .ui-public-page-title[data-style="hero"] {
       font-size: var(--ui-display-hero-size-narrow, var(--ui-type-title-size));

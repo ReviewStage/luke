@@ -5,7 +5,7 @@
 }
 
 .ui-editable-block:focus-visible {
-  outline: none; /* no ring: the tint below marks the block */
+  outline: none;
 }
 
 .ui-editable-block:focus-visible::before {

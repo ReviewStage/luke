@@ -3,8 +3,8 @@
     position: absolute;
     top: var(--ui-space-4);
     right: var(--ui-space-4);
-    width: 5px; /* off-scale: a status dot */
-    height: 5px; /* off-scale: a status dot */
+    width: 5px;
+    height: 5px;
     border-radius: var(--ui-radius-full);
     background: var(--ui-color-accent-text);
     content: "";

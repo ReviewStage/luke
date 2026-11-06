@@ -33,7 +33,6 @@
     margin-inline-start: auto;
   }
 
-  /* off-scale: 380px, where a row's control and words stop fitting on one line (tokens/profiles.css) */
   @container ui-settings-row (width < 380px) {
     .ui-settings-row:not([data-density="compact"], [data-labels-control="true"])
       .ui-settings-row-title {

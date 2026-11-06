@@ -51,8 +51,8 @@
     .ui-chip-face:not(:has(> svg:not(.settings-chevron))):not(:has(> img))::before {
     content: "";
     flex: none;
-    width: 7px; /* off-scale: a status dot */
-    height: 7px; /* off-scale: a status dot */
+    width: 7px;
+    height: 7px;
     border-radius: var(--ui-radius-full);
     background: var(--ui-chip-tone);
   }

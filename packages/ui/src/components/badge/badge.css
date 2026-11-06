@@ -3,7 +3,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* off-scale: 520px, where a snug badge's words stop fitting (visually-hidden.css reads the same line) */
   @container ui-room (width < 520px) {
     .ui-badge-words[data-under="snug"] {
       position: absolute;
@@ -15,7 +14,6 @@
     }
   }
 
-  /* off-scale: 440px, where a tight badge's words stop fitting (visually-hidden.css reads the same line) */
   @container ui-room (width < 440px) {
     .ui-badge-words[data-under="tight"] {
       position: absolute;

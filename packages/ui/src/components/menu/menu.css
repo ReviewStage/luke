@@ -12,7 +12,7 @@
 
   .ui-menu-item:focus-visible,
   .ui-menu:focus-visible {
-    outline: none; /* no ring: the row's fill marks it */
+    outline: none;
   }
 
   .ui-menu-item:is(:disabled, [aria-disabled="true"]) > :not(.ui-menu-item-copy),

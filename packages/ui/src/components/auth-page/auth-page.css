@@ -3,7 +3,6 @@
     padding: var(--ui-space-40) var(--ui-space-32);
   }
 
-  /* off-scale: 400px, a phone's card */
   @container (width < 400px) {
     .ui-auth-card {
       padding: var(--ui-space-32) var(--ui-space-20);

@@ -6,7 +6,6 @@
       scale(var(--ui-choice-bar-thumb-scale-x), var(--ui-choice-bar-thumb-scale-y));
   }
 
-  /* off-scale: 520px, where a fill bar's options stop fitting */
   @container ui-choice-bar (width < 520px) {
     .ui-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
       .ui-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])

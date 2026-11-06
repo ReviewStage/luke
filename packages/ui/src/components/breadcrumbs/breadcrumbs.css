@@ -91,7 +91,6 @@
     display: none;
   }
 
-  /* off-scale: 520px, where the narrow crumbs take over from the wide */
   @container ui-breadcrumb-bar (width < 520px) {
     .ui-breadcrumbs li[data-shown="wide"] {
       display: none;
@@ -119,7 +118,6 @@
     }
   }
 
-  /* off-scale: 300px, where the narrowest crumbs take over */
   @container ui-breadcrumb-bar (width < 300px) {
     .ui-breadcrumbs li:is([data-shown="wide-or-narrow"], [data-shown="narrow"]) {
       display: none;
