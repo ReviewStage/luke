@@ -1,5 +1,5 @@
 /**
- * sandbox-firewall-store.ts -- the swaps a runner's launch holds at its sandbox session's firewall: kept as it launches, read under its account, and dropped once its session is long gone.
+ * sandbox-firewall-store.ts -- the swaps a runner's launch holds at its sandbox session's firewall: kept as it launches, read under its account, and deleted by its agent's next launch elsewhere.
  *
  * Every write to a session's firewall composes the whole policy, and the one
  * source a writer cannot gather again is the launch's, whose placeholders are
@@ -8,12 +8,19 @@
  * sandbox session and the account whose agent the session is, beside the
  * agent it runs, replacing an earlier launch's; nothing but the launch keeps
  * a row. A row is the account's own, keyed by the account and the session,
- * so a read and a keep reach that account's row alone; the sweep's drop
- * reads nothing and is the deployment's. The row holds the swaps only as the
- * service sealed them (`provider-key-seal.ts`'s `sealFirewallEntries`).
+ * so a read and a keep reach that account's row alone. The row holds the
+ * swaps only as the service sealed them (`provider-key-seal.ts`'s
+ * `sealFirewallEntries`).
+ *
+ * Note that nothing deletes a row on a timer, because nothing reads one
+ * past its session: a read names its session, and a sandbox session that
+ * stopped never runs again. A launch deletes the rows its agent's launches
+ * kept for the account's other sessions, since an agent runs in one
+ * session at a time, so what stands past its session is at most one row an
+ * agent, until its next launch or its agent's deletion.
  */
 
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
@@ -79,15 +86,19 @@ const upsertLaunch = SqlSchema.void({
     ),
 });
 
-const deleteStale = SqlSchema.findAll({
-  Request: Schema.Struct({ updatedBefore: Schema.Date }),
-  Result: Schema.Struct({ sandboxSessionId: Schema.String }),
-  execute: ({ updatedBefore }) =>
+const deleteOtherSessions = SqlSchema.void({
+  Request: Schema.Struct({ ...OwnerFields, agentId: Schema.String }),
+  execute: ({ userId, sandboxSessionId, agentId }) =>
     Database.use((db) =>
       db
         .delete(sandboxFirewall)
-        .where(lt(sandboxFirewall.updatedAt, updatedBefore))
-        .returning({ sandboxSessionId: sandboxFirewall.sandboxSessionId }),
+        .where(
+          and(
+            eq(sandboxFirewall.userId, userId),
+            eq(sandboxFirewall.agentId, agentId),
+            ne(sandboxFirewall.sandboxSessionId, sandboxSessionId),
+          ),
+        ),
     ),
 });
 
@@ -98,16 +109,14 @@ export function readFirewallLaunch(
   return Effect.map(findLaunch(owner), ([row]) => row);
 }
 
-/** The launch given kept for the account's session, in place of any launch kept there before. */
+/** The launch given kept for the account's session, in place of any launch kept there before, and the rows its agent's launches kept for the account's other sessions deleted. */
 export function keepFirewallLaunch(
   owner: FirewallOwner,
   launch: { readonly version: string; readonly agentId: string; readonly sealedEntries: string },
   updatedAt: Date,
 ): FirewallEffect<void> {
-  return upsertLaunch({ ...owner, ...launch, updatedAt });
-}
-
-/** Every row last written before the instant given deleted, answering how many went: sessions that ended long since. */
-export function dropStaleFirewalls(updatedBefore: Date): FirewallEffect<number> {
-  return Effect.map(deleteStale({ updatedBefore }), (rows) => rows.length);
+  return Effect.andThen(
+    deleteOtherSessions({ ...owner, agentId: launch.agentId }),
+    upsertLaunch({ ...owner, ...launch, updatedAt }),
+  );
 }

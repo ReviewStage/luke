@@ -693,7 +693,8 @@ until nothing is changed meanwhile; once nothing names the old version,
 and a day and an hour has passed since, drop it from the list and redeploy.
 The wait is for the swaps a runner's launch keeps at its sandbox's firewall
 (`sandbox_firewall`), sealed under the ring for as long as the launch runs, which the rewrap
-does not move and the sweep drops a day and an hour after its last write. The rewrap
+does not move and no running session holds past a day and an hour after its last write; a row
+older than that is a stopped session's, which nothing reads again. The rewrap
 does not move a workspace's environment variables (`workspace_environment_variable`)
 either, and its counts leave them out: before dropping a version, check that
 `select count(*) from workspace_environment_variable where key_version = <old>`
