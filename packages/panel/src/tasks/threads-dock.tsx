@@ -11,11 +11,11 @@ import { threadsWords } from "./inbox-model.js";
  * threads-dock.tsx -- the line docked over an agent's box while it has posted threads: what waits on the developer, or, quiet, how many there are.
  *
  * The agent's transcript points to its threads rather than drawing them:
- * one row, as the pull request's dock is one, names the next thread waiting,
- * the oldest posted first, and at its end how many wait, in the figure the
- * sidebar's Inbox row, a task's row, and an agent's tab draw
- * (`WaitingCount`); pressing it opens the agent's threads
- * in its card on that thread (`agent-threads.tsx`), or, on a phone, the
+ * one row, as the pull request's dock is one, says Inbox and at its end how
+ * many wait, in the figure the sidebar's Inbox row, a task's row, and an
+ * agent's tab draw (`WaitingCount`); the titles are the threads' own to say.
+ * Pressing it opens the agent's threads on the next waiting, the oldest
+ * posted, in its card on that thread (`agent-threads.tsx`), or, on a phone, the
  * Inbox narrowed to the task on it. Once none waits it stays, quiet, as the
  * one way into them from the card: muted, counting every thread the agent
  * posted, and opening on the latest changed.
@@ -46,7 +46,7 @@ export function ThreadsDock({ threads }: { threads: AgentThreads | undefined }):
     ) : (
       <ListRow
         leading={<InboxIcon aria-hidden="true" />}
-        title={next.title}
+        title={TAB_WORDS.INBOX}
         meta={<WaitingCount count={threads.waiting.length} />}
         onPress={() => threads.onOpen(next)}
       />
