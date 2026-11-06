@@ -30,7 +30,7 @@ import {
   ShellPlaces,
   StatePlace,
 } from "../desktop/desktop-shell.js";
-import { LAZY_FRAME_AT_ONCE } from "../panel-router.js";
+import { LAZY_ROUTE } from "../panel-router.js";
 import { routeAccessNow } from "../route-gates.js";
 
 /** Where a shell under test stands: a place its state says, Settings's list or a page of it, or Admin. */
@@ -66,13 +66,13 @@ export function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
     getParentRoute: () => places,
     path: "/$workspace/admin",
     pendingComponent: AdminRouteLoading,
-    ...LAZY_FRAME_AT_ONCE,
+    ...LAZY_ROUTE,
   }).lazy(() => import("../desktop/admin-route.lazy.js").then((loaded) => loaded.adminLazyRoute));
   const settings = createRoute({
     getParentRoute: () => root,
     path: SHELL_AT.SETTINGS,
     pendingComponent: SettingsRouteLoading,
-    ...LAZY_FRAME_AT_ONCE,
+    ...LAZY_ROUTE,
   }).lazy(() =>
     import("../desktop/settings-route.lazy.js").then((loaded) => loaded.appSettingsLazyRoute),
   );

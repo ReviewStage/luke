@@ -23,14 +23,18 @@
  */
 
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { ReloadState } from "@repo/ui/error-boundary";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  type ErrorComponentProps,
   type RouterHistory,
   RouterProvider,
   redirect,
+  useMatch,
+  useRouter,
 } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useEffect, useMemo, useRef } from "react";
@@ -77,8 +81,39 @@ interface PanelRouterContext {
   readonly access: RouteAccess;
 }
 
-/** How long a lazy route's own frame waits before it stands in for the chunk: not at all, as the `Suspense` it replaces did not. */
-export const LAZY_FRAME_AT_ONCE = { pendingMs: 0, pendingMinMs: 0 } as const;
+/** The window's own reload: its document read again from the start, every chunk among it. */
+function reloadDocument(): void {
+  location.reload();
+}
+
+/**
+ * What a lazy route stands where it failed: `ReloadState`, whose Reload
+ * reloads the window where the route's chunk failed to load, because
+ * Chromium keeps a module whose fetch failed in the document's module map
+ * and answers every later import of it with the same failure, and
+ * otherwise, a route that landed and threw while drawing, draws it again in
+ * place, as `lazy-route.ts` does.
+ */
+function RouteFailed({ reset }: ErrorComponentProps): React.JSX.Element {
+  const router = useRouter();
+  const loadFailed = useMatch({ strict: false, select: (match) => match.status === "error" });
+  const reload = () => {
+    if (loadFailed) {
+      reloadDocument();
+      return;
+    }
+    reset();
+    void router.invalidate();
+  };
+  return <ReloadState onReload={reload} />;
+}
+
+/** A lazy route's options: its own frame stands at once while its chunk loads, as the `Suspense` it replaces did, and `RouteFailed` where it fails. */
+export const LAZY_ROUTE = {
+  pendingMs: 0,
+  pendingMinMs: 0,
+  errorComponent: RouteFailed,
+} as const;
 
 const rootRoute = createRootRouteWithContext<PanelRouterContext>()({ component: App });
 
@@ -253,7 +288,7 @@ const adminRoute = createRoute({
     throw redirect({ to: "/$workspace", params: { workspace: params.workspace }, replace: true });
   },
   pendingComponent: AdminRouteLoading,
-  ...LAZY_FRAME_AT_ONCE,
+  ...LAZY_ROUTE,
 }).lazy(() => import("./desktop/admin-route.lazy.js").then((loaded) => loaded.adminLazyRoute));
 
 const adminIndexRoute = createRoute({ getParentRoute: () => adminRoute, path: "/" });
@@ -282,7 +317,7 @@ const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/$workspace/settings",
   pendingComponent: SettingsRouteLoading,
-  ...LAZY_FRAME_AT_ONCE,
+  ...LAZY_ROUTE,
 }).lazy(() =>
   import("./desktop/settings-route.lazy.js").then((loaded) => loaded.settingsLazyRoute),
 );
@@ -307,7 +342,7 @@ const appSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/app/settings",
   pendingComponent: SettingsRouteLoading,
-  ...LAZY_FRAME_AT_ONCE,
+  ...LAZY_ROUTE,
 }).lazy(() =>
   import("./desktop/settings-route.lazy.js").then((loaded) => loaded.appSettingsLazyRoute),
 );
