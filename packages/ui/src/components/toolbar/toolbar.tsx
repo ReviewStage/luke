@@ -134,9 +134,15 @@ const TITLE = "ui-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-dialog-size font-dialo
 const TITLE_PRESS_HEADING =
   "ui-toolbar-title m-0 min-w-0 text-toolbar-title font-toolbar-title tracking-title";
 
-/** The press itself: words at rest, a light wash on hover alone, as a page's title is in Notion, and no fill while what it opens stands. */
+/**
+ * The press itself: words at rest, a light wash on hover alone, as a page's
+ * title is in Notion, and no fill while what it opens stands. It is laid as
+ * a tab is (`tabs.tsx`): a control high, its mark at a tab's start inset and
+ * icon gap, so a bar that starts at its column's edge (`TOOLBAR_INSET.COLUMN`)
+ * stands its mark and words over the first tab's under it.
+ */
 const TITLE_PRESS =
-  "ui-toolbar-title-press -ml-ui-6 inline-flex max-w-full items-center gap-ui-6 rounded-control bg-transparent px-ui-6 hover:bg-muted";
+  "ui-toolbar-title-press inline-flex h-control max-w-full items-center gap-icon-gap rounded-control bg-transparent px-ui-8 hover:bg-muted [&_svg]:size-control-icon";
 
 /** Where a bar's heading stands its title on one row: the page's own name, its last words. */
 const HEADING_SEAT: TitleSeat = {
@@ -265,6 +271,9 @@ function ToolbarTitle({
   );
 }
 
+/** The box a name holding the page's menu stands in: as wide as its words. */
+const TITLE_MENU = "ui-toolbar-title-menu w-fit min-w-0 max-w-full rounded-control";
+
 /**
  * A name that is no press of its own holding the page's menu on a
  * right-click, a long press, or the menu key and ⇧F10, where one is given
@@ -272,23 +281,35 @@ function ToolbarTitle({
  * as the name's words, so on the desktop's bar, which is otherwise the
  * window's drag handle and would take the right-click, only the name keeps
  * its presses and the rest of the bar still drags the window
- * (`toolbar.css`), and it takes the focus as the menu's button, so the keys
- * reach the menu.
+ * (`toolbar.css`). A name alone takes the focus as the menu's button, so the
+ * keys reach the menu; a trail's crumbs are buttons of their own, which no
+ * button may hold, so there the keys reach it from a crumb.
  */
 function TitleMenu({
   menu,
+  crumbs,
   children,
 }: {
   menu: ToolbarTitleMenu | undefined;
+  /** Whether the name is led by a trail's crumbs (`trail`). */
+  crumbs: boolean;
   children: ReactNode;
 }): React.JSX.Element {
   if (menu === undefined) return <>{children}</>;
+  if (crumbs) {
+    return (
+      // biome-ignore lint/a11y/useSemanticElements: the box groups a trail's crumbs and the page's name, not a form's fields, so it is no `<fieldset>`.
+      <div role="group" className={TITLE_MENU} {...menu.contextMenu} onKeyDown={menu.keyMenu}>
+        {children}
+      </div>
+    );
+  }
   return (
-    // biome-ignore lint/a11y/useSemanticElements: the box holds the page's heading and a trail's crumbs, buttons of their own, which a <button> may not hold.
+    // biome-ignore lint/a11y/useSemanticElements: the box holds the page's heading, which a <button> may not hold.
     <div
       role="button"
       aria-haspopup="menu"
-      className="ui-toolbar-title-menu w-fit min-w-0 max-w-full rounded-control"
+      className={TITLE_MENU}
       tabIndex={0}
       {...menu.contextMenu}
       onKeyDown={menu.keyMenu}
@@ -383,7 +404,10 @@ export function Toolbar({
     >
       {said(lead) ? <div className={LEAD}>{lead}</div> : null}
       <div className="ui-toolbar-heading">
-        <TitleMenu menu={titlePress === undefined ? titleMenu : undefined}>
+        <TitleMenu
+          menu={titlePress === undefined ? titleMenu : undefined}
+          crumbs={trail !== undefined && trail.length > 0}
+        >
           {trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "" ? (
             <ReplayMask>
               <ToolbarTrail trail={trail} title={title} />

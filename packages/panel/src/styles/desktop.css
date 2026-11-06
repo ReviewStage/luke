@@ -556,6 +556,17 @@ body,
   padding-left: 0;
 }
 
+/* While no title bar button stands over its start, the topbar starts on the
+   column's edge, as the agents' tabs under it do, so the task's name, laid
+   as a tab is (`Toolbar`'s title press), stands its mark and words over the
+   first tab's. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell:not([data-sidebar-collapsed="true"])
+  > .desktop-main
+  .task-topbar {
+  --ui-toolbar-start-at: 0px;
+}
+
 /* The task's details stand across the page with no bar of their own, so
    their sheet starts right under the topbar. */
 :where(:root):not([data-ui-room="narrow"])
