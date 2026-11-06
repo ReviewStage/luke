@@ -3,18 +3,18 @@ import { LIST_VARIANT, List, ListRow } from "@repo/ui";
 import { InboxIcon } from "@repo/ui/icons";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import type { ReactNode } from "react";
-import { useCoarsePointer } from "../coarse-pointer.js";
+import { WaitingCount } from "../desktop/task-row-parts.js";
 import { COMPOSER_DOCK_CLASS } from "./agent-composer.js";
-import { NEEDS_YOU, threadsWaitingWords, threadsWords } from "./inbox-model.js";
+import { threadsWords } from "./inbox-model.js";
 
 /**
  * threads-dock.tsx -- the line docked over an agent's box while it has posted threads: what waits on the developer, or, quiet, how many there are.
  *
  * The agent's transcript points to its threads rather than drawing them:
- * one row, as the pull request's dock is one, names the thread waiting,
- * its title and Needs you, or, where several wait, how many and the next
- * one's title, the oldest posted first, the title left out under a finger,
- * where the row has no room for both; pressing it opens the agent's threads
+ * one row, as the pull request's dock is one, names the next thread waiting,
+ * the oldest posted first, and at its end how many wait, in the figure the
+ * sidebar's Inbox row, a task's row, and an agent's tab draw
+ * (`WaitingCount`); pressing it opens the agent's threads
  * in its card on that thread (`agent-threads.tsx`), or, on a phone, the
  * Inbox narrowed to the task on it. Once none waits it stays, quiet, as the
  * one way into them from the card: muted, counting every thread the agent
@@ -32,11 +32,9 @@ export interface AgentThreads {
 
 /** The agent's threads as one row over its box: what waits, else quiet, how many; nothing while it posted none. */
 export function ThreadsDock({ threads }: { threads: AgentThreads | undefined }): ReactNode {
-  const coarse = useCoarsePointer();
   const latest = threads?.posted[0];
   if (threads === undefined || latest === undefined) return null;
   const next = threads.waiting[0];
-  const many = threads.waiting.length > 1;
   const row =
     next === undefined ? (
       <ListRow
@@ -48,8 +46,8 @@ export function ThreadsDock({ threads }: { threads: AgentThreads | undefined }):
     ) : (
       <ListRow
         leading={<InboxIcon aria-hidden="true" />}
-        title={many ? threadsWaitingWords(threads.waiting.length) : next.title}
-        meta={many ? (coarse ? undefined : next.title) : NEEDS_YOU.LABEL}
+        title={next.title}
+        meta={<WaitingCount count={threads.waiting.length} />}
         onPress={() => threads.onOpen(next)}
       />
     );
