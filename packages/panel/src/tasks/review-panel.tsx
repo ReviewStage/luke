@@ -1,5 +1,8 @@
 import {
   AnchoredPopover,
+  BLOCK_LIST_ELEMENT,
+  BlockList,
+  BlockListItem,
   BUTTON_VARIANT,
   Button,
   CornerCount,
@@ -11,6 +14,7 @@ import { GLYPH, MessageSquarePlusIcon } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { type ReactNode, useId, useRef } from "react";
 import { CommentEditor } from "./comment-editor.js";
+import { PENDING_WORDS } from "./pending-comments.js";
 import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 
 /**
@@ -52,6 +56,12 @@ export const REVIEW_PANEL_WORDS = {
   pending: (count: number) => `${count} pending ${count === 1 ? "comment" : "comments"}`,
 } as const;
 
+/** One pending comment the panel lists, each drawn as its review draws it, with its own acts. */
+export interface PendingItem {
+  readonly key: string;
+  readonly comment: ReactNode;
+}
+
 /** The width the panel asks for, stage-cli's own; the side panel may narrow it. */
 const PANEL_WIDTH = 480;
 
@@ -87,7 +97,7 @@ function ReviewPanel({
   count,
   draft,
   sending,
-  pendingList,
+  pending,
   choices,
   note,
   onDiscard,
@@ -100,7 +110,7 @@ function ReviewPanel({
   count: number;
   draft: ReviewDraft;
   sending: boolean;
-  pendingList: ReactNode;
+  pending: readonly PendingItem[];
   choices: ReactNode;
   note: ReactNode;
   onDiscard: (() => void) | undefined;
@@ -122,7 +132,13 @@ function ReviewPanel({
       <p className="m-0 -mt-ui-8 text-muted-foreground">
         <ReplayUnmask>{words.lead(count)}</ReplayUnmask>
       </p>
-      {pendingList}
+      {pending.length === 0 ? null : (
+        <BlockList as={BLOCK_LIST_ELEMENT.OL} label={PENDING_WORDS.PENDING}>
+          {pending.map((item) => (
+            <BlockListItem key={item.key}>{item.comment}</BlockListItem>
+          ))}
+        </BlockList>
+      )}
       <CommentEditor
         label={words.body}
         placeholder={words.placeholder}
@@ -178,7 +194,7 @@ export function ReviewPress({
   onOpen: setOpen,
   draft,
   sending,
-  pendingList,
+  pending = [],
   choices,
   note,
   onDiscard,
@@ -195,8 +211,8 @@ export function ReviewPress({
   draft: Omit<ReviewDraft, "submit">;
   /** Whether the review, or its discard, is on its way, which holds the panel open. */
   sending: boolean;
-  /** The pending comments as the panel lists them; none lists none. */
-  pendingList?: ReactNode;
+  /** The pending comments the panel lists, in order; none lists none. */
+  pending?: readonly PendingItem[] | undefined;
   /** What the review says beside its summary, where the caller asks it. */
   choices?: ReactNode;
   /** Why the last send did not land, under the summary. */
@@ -255,7 +271,7 @@ export function ReviewPress({
           count={count}
           draft={{ ...draft, submit }}
           sending={sending}
-          pendingList={pendingList}
+          pending={pending}
           choices={choices}
           note={note}
           onDiscard={onDiscard}
