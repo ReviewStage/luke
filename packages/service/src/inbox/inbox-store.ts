@@ -378,12 +378,12 @@ function markedUnreadFor(readerId: string): SQL<boolean> {
  * ended the snooze, keep no marker, or a change woke it. Note that a snooze
  * whose time has passed still answers its time, which the reader lists the
  * item by, since it came back then, and that a snooze with no change of its
- * own is weighed by the change the marker reads through, because the
- * release before it snoozed by marking the item read and goes on serving
- * the migrated database for a while.
+ * own stands as the release before it weighed one, while the item is read,
+ * because that release snoozed by marking the item read, ended a snooze by
+ * marking it unread, and goes on serving the migrated database for a while.
  */
 function snoozedUntilFor(readerId: string): SQL<Date | null> {
-  return sql<Date | null>`(select ${READ.snoozedUntil} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId} and coalesce(${READ.snoozedThrough}, ${READ.readThrough}) >= ${ITEM_UPDATED_AT})`;
+  return sql<Date | null>`(select ${READ.snoozedUntil} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId} and coalesce(${READ.snoozedThrough} >= ${ITEM_UPDATED_AT}, not ${READ.markedUnread} and ${READ.readThrough} >= ${ITEM_UPDATED_AT}))`;
 }
 
 /** `snoozedUntilFor` in epoch milliseconds, as the wire carries an instant; null where the reader did not snooze the item. */

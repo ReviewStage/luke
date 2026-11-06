@@ -4,8 +4,8 @@ DROP TRIGGER IF EXISTS "app_sync_write" ON "inbox_item_read";
 --> statement-breakpoint
 ALTER TABLE "inbox_item_read" ADD COLUMN "snoozed_through" timestamp with time zone;
 --> statement-breakpoint
--- A snooze standing was written over the change it read through, which a later read could only have moved by ending it.
-UPDATE "inbox_item_read" SET "snoozed_through" = "read_through" WHERE "snoozed_until" IS NOT NULL;
+-- A snooze standing was written over the change it read through, which a later read could only have moved by ending it; one its member marked unread since had ended then, so it comes due now, read state left as it is.
+UPDATE "inbox_item_read" SET "snoozed_through" = "read_through", "snoozed_until" = CASE WHEN "marked_unread" AND "snoozed_until" > now() THEN now() ELSE "snoozed_until" END WHERE "snoozed_until" IS NOT NULL;
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION "app_sync_inbox_item_read"() RETURNS trigger LANGUAGE plpgsql AS $app_sync$
 DECLARE
