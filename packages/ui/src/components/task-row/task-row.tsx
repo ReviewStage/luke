@@ -1,5 +1,6 @@
 import {
   type ComponentPropsWithRef,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
@@ -201,6 +202,51 @@ const CELL =
  */
 const CELL_LEAST = { REST: "min-w-0", UNDER_MORE: "min-w-ui-24" } as const;
 
+/**
+ * The room past its words a cell's own marks take, in characters of the
+ * cell's type, where its row is placed out of its list's grid
+ * (`taskRowFit`): a count's ring and its badge's sides, the waiting mark,
+ * and the repository's picture; and the characters the time the row was
+ * updated says at most ("11mo ago").
+ */
+const FIT_CHARS = {
+  SUB_TASKS_MARKS: 5,
+  WAITING_MARKS: 3,
+  REPOSITORY_MARKS: 4,
+  UPDATED: 8,
+} as const;
+
+/** The repository's column's widest, in characters, as `COLUMN_WIDTH` holds it. */
+const REPOSITORY_MOST_CHARS = 22;
+
+/** A pull request's chip past its number: its compact pill's sides and its edge, its mark, and the gap between them (`Chip`), and a character's room more, since the number is set in the chip's own weight. */
+const PULL_REQUEST_CHIP_MARKS =
+  "(2 * var(--ui-space-8) + var(--ui-space-12) + var(--ui-space-4) + 1ch)";
+
+/**
+ * How wide each cell whose words differ from row to row stands at least,
+ * where its row is placed out of its list's grid, read from what the list
+ * sets on its element (`taskRowFit`): the key in its own monospaced type,
+ * so a character of it is one `ch`, a cell of words by its characters, the
+ * pull requests by their chips, and the agents' mark by its seat, which
+ * stands empty on a task with none. A cell not named here draws the same
+ * marks on every row.
+ */
+const CELL_FIT: Partial<Record<TaskRowCell, CSSProperties>> = {
+  [TASK_ROW_CELL.KEY]: {
+    fontFamily: "var(--ui-font-mono)",
+    minWidth: "calc(var(--ui-task-row-key-chars, 0) * 1ch)",
+  },
+  [TASK_ROW_CELL.PULL_REQUESTS]: {
+    minWidth: `calc(var(--ui-task-row-pull-requests, 0) * (${PULL_REQUEST_CHIP_MARKS} + var(--ui-task-row-pull-request-chars, 0) * 1ch) + max(0, var(--ui-task-row-pull-requests, 0) - 1) * var(--ui-item-gap))`,
+  },
+  [TASK_ROW_CELL.SUB_TASKS]: { minWidth: "calc(var(--ui-task-row-sub-task-chars, 0) * 1ch)" },
+  [TASK_ROW_CELL.WAITING]: { minWidth: "calc(var(--ui-task-row-waiting-chars, 0) * 1ch)" },
+  [TASK_ROW_CELL.REPOSITORY]: { minWidth: "calc(var(--ui-task-row-repository-chars, 0) * 1ch)" },
+  [TASK_ROW_CELL.AGENTS]: { minWidth: "var(--ui-space-16)" },
+  [TASK_ROW_CELL.UPDATED]: { minWidth: `${FIT_CHARS.UPDATED}ch` },
+};
+
 /** A cell over the row's press where it holds anything, and the press's own where it stands empty. */
 const OVER_WHERE_FILLED =
   "pointer-events-none not-empty:pointer-events-auto not-empty:relative not-empty:z-1";
@@ -248,14 +294,32 @@ const MORE = "ui-task-row-more z-1 flex items-center";
  * keeping a gutter at its start for its box (`SELECT_BOX_PLACE.GUTTER`), as
  * Linear's list does, so every row's name lines up whether or not it shows one.
  */
-const ROW_FRAME =
-  "ui-task-row relative col-span-full grid min-h-tasks-list-row grid-cols-subgrid items-center rounded-control py-ui-2 text-foreground [transition:transform_var(--ui-duration-fast)_var(--ui-spring-fast),background-color_var(--ui-duration-hover)_var(--ui-motion-exit),opacity_var(--ui-duration-quick)_var(--ui-motion-exit)] data-[menu-open=true]:bg-muted data-[menu-open=true]:shadow-menu-open-edge hover:bg-muted";
+const ROW_BOX =
+  "ui-task-row relative col-span-full grid min-h-tasks-list-row items-center rounded-control py-ui-2 text-foreground [transition:transform_var(--ui-duration-fast)_var(--ui-spring-fast),background-color_var(--ui-duration-hover)_var(--ui-motion-exit),opacity_var(--ui-duration-quick)_var(--ui-motion-exit)] data-[menu-open=true]:bg-muted data-[menu-open=true]:shadow-menu-open-edge hover:bg-muted";
+
+/** A row standing in its list's grid: a subgrid of the list's columns. */
+const ROW_FRAME = `${ROW_BOX} grid-cols-subgrid`;
+
+/**
+ * A row placed absolutely in a run drawing only the rows near the view
+ * (`VirtualRows`): no subgrid, since a box placed absolutely is no item of
+ * the grid it stands in, so it lays out the list's columns itself
+ * (`--tasks-list-columns`), at the gap the list stands them at.
+ */
+const PLACED_FRAME = `${ROW_BOX} grid-cols-tasks-list gap-x-block-gap`;
 
 /** A task's row by the room it keeps at its edges: its gutter at its start for its box, or its first cell at its inset. */
 const ROW = {
   [TASK_ROW_EDGES.LIST]: `${ROW_FRAME} px-row-inset ps-select-gutter`,
   [TASK_ROW_EDGES.UNCHOSEN]: `${ROW_FRAME} px-row-inset`,
   [TASK_ROW_EDGES.BARE]: `${ROW_FRAME} px-row-inset`,
+} as const satisfies Record<TaskRowEdges, string>;
+
+/** A row placed in a run drawing only the rows near the view, by the room it keeps at its edges, as `ROW`. */
+const PLACED_ROW = {
+  [TASK_ROW_EDGES.LIST]: `${PLACED_FRAME} px-row-inset ps-select-gutter`,
+  [TASK_ROW_EDGES.UNCHOSEN]: `${PLACED_FRAME} px-row-inset`,
+  [TASK_ROW_EDGES.BARE]: `${PLACED_FRAME} px-row-inset`,
 } as const satisfies Record<TaskRowEdges, string>;
 
 /** A draft's row, raised as a card, its hairline taken out of its inset so its cells stand on the rows' lines. */
@@ -315,15 +379,19 @@ function cellUnderMore(cells: readonly TaskRowCell[]): TaskRowCell | undefined {
 function RowCell({
   cell,
   underMore,
+  placed,
   children,
 }: {
   cell: TaskRowCell;
   underMore: TaskRowCell | undefined;
+  /** Whether its row is placed out of its list's grid, where the cell stands as wide as the list says its column does (`taskRowFit`). */
+  placed: boolean;
   children: ReactNode;
 }): React.JSX.Element {
   const after = LEADING.includes(cell) ? "" : ` ${AFTER}`;
   return (
     <span
+      style={placed ? CELL_FIT[cell] : undefined}
       className={`${CELL} ${cell === underMore ? CELL_LEAST.UNDER_MORE : CELL_LEAST.REST} ${CELL_PLACE[cell]}${after}`}
       data-cell={cell}
       data-under-more={cell === underMore ? "true" : undefined}
@@ -338,15 +406,17 @@ function RowCells({
   cells,
   content,
   underMore,
+  placed = false,
 }: {
   cells: readonly TaskRowCell[];
   content: Partial<Record<TaskRowCell, ReactNode>>;
   underMore: TaskRowCell | undefined;
+  placed?: boolean;
 }): React.JSX.Element {
   return (
     <>
       {inOrder(cells).map((cell) => (
-        <RowCell key={cell} cell={cell} underMore={underMore}>
+        <RowCell key={cell} cell={cell} underMore={underMore} placed={placed}>
           {content[cell]}
         </RowCell>
       ))}
@@ -357,9 +427,14 @@ function RowCells({
 /** A row's item: one line of its list's grid, keeping the room its edges ask for. */
 function RowItem({
   edges,
+  placed = false,
   ...item
-}: Omit<ComponentPropsWithRef<"li">, "className"> & { edges: TaskRowEdges }): React.JSX.Element {
-  return <li {...item} className={ROW[edges]} />;
+}: Omit<ComponentPropsWithRef<"li">, "className"> & {
+  edges: TaskRowEdges;
+  /** Whether it stands placed in a run drawing only the rows near the view, out of its list's grid. */
+  placed?: boolean;
+}): React.JSX.Element {
+  return <li {...item} className={placed ? PLACED_ROW[edges] : ROW[edges]} />;
 }
 
 /** The name's cell, the one the row's press stands in, in by a nest for each level the row stands at. */
@@ -383,6 +458,60 @@ function NameCell({
       {children}
     </span>
   );
+}
+
+/** What a task's row says in the cells whose words differ from row to row, as its list reads them for `taskRowFit`. */
+export interface TaskRowWords {
+  readonly key?: string | undefined;
+  /** Each open pull request's number as its chip says it ("#42"). */
+  readonly pullRequests?: readonly string[] | undefined;
+  /** Its finished sub-tasks of all of them ("1/3"). */
+  readonly subTasks?: string | undefined;
+  readonly waiting?: string | undefined;
+  readonly repository?: string | undefined;
+}
+
+/** The most characters any of `words` holds; none where none holds any. */
+function mostChars(words: Iterable<string | undefined>): number {
+  let most = 0;
+  for (const each of words) most = Math.max(most, each?.length ?? 0);
+  return most;
+}
+
+/** The characters a cell's column stands, its marks' room after its words, where any row says anything there. */
+function withMarks(chars: number, marks: number): number {
+  return chars === 0 ? 0 : chars + marks;
+}
+
+/**
+ * How wide the columns of a list of task rows stand where its rows are
+ * placed out of its grid (`VirtualRows`), as custom properties for the
+ * element its rows stand in: a row placed so lays the list's columns out
+ * on its own, and a column sized by its row's own words would stand at a
+ * width of its own on each row, so each cell whose words differ stands as
+ * wide as the widest the list's tasks say there (`CELL_FIT`), read from
+ * every task it lists rather than from the rows drawn, so the columns
+ * line up down the list and stand still as it scrolls.
+ */
+export function taskRowFit(rows: readonly TaskRowWords[]): CSSProperties {
+  const pullRequests = rows.map((row) => row.pullRequests ?? []);
+  return cssCustomProperties({
+    "--ui-task-row-key-chars": mostChars(rows.map((row) => row.key)),
+    "--ui-task-row-pull-requests": Math.max(0, ...pullRequests.map((each) => each.length)),
+    "--ui-task-row-pull-request-chars": mostChars(pullRequests.flat()),
+    "--ui-task-row-sub-task-chars": withMarks(
+      mostChars(rows.map((row) => row.subTasks)),
+      FIT_CHARS.SUB_TASKS_MARKS,
+    ),
+    "--ui-task-row-waiting-chars": withMarks(
+      mostChars(rows.map((row) => row.waiting)),
+      FIT_CHARS.WAITING_MARKS,
+    ),
+    "--ui-task-row-repository-chars": withMarks(
+      Math.min(mostChars(rows.map((row) => row.repository)), REPOSITORY_MOST_CHARS),
+      FIT_CHARS.REPOSITORY_MARKS,
+    ),
+  });
 }
 
 /**
@@ -539,6 +668,7 @@ export function TaskRow({
       ref={itemRef}
       {...placed}
       edges={edges}
+      placed={place !== undefined}
       data-task-id={taskId}
       {...motionKey(taskId)}
       {...rowMenu.props}
@@ -569,7 +699,12 @@ export function TaskRow({
           </span>
         )}
       </NameCell>
-      <RowCells cells={cells} content={content} underMore={underMore} />
+      <RowCells
+        cells={cells}
+        content={content}
+        underMore={underMore}
+        placed={place !== undefined}
+      />
       <span className={MORE} data-cell="more">
         {rowMenu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
       </span>

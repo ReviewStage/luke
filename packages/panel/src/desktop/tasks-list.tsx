@@ -24,6 +24,7 @@ import {
   readingWords,
   TERM,
 } from "@repo/features/words";
+import { taskKey } from "@repo/features/workspace-key";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   AVATAR_SIZE,
@@ -62,6 +63,7 @@ import {
   TEXT_VARIANT,
   Text,
   taskRowColumns,
+  taskRowFit,
   useLeaving,
   useMinute,
   useRovingKeys,
@@ -120,6 +122,7 @@ import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
+import { pullRequestNumberLabel } from "../tasks/agent-model.js";
 import { newTaskAction } from "../tasks/inbox-list.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -136,7 +139,7 @@ import { type DraftParts, type QuickAddLine, QuickAddLines, useQuickAdd } from "
 import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { type OpenedTask, openedTaskOf, type TaskRowTab, useTaskRowTab } from "./task-actions.js";
-import { TaskListRow } from "./task-list-row.js";
+import { openPullRequests, TaskListRow } from "./task-list-row.js";
 import { CreatorFace, useStandingDoor, WaitingCount } from "./task-row-parts.js";
 import {
   assigneeFor,
@@ -1009,6 +1012,28 @@ export function TasksList({
     group.tasks.map((task) => ({ repository: task.repository })),
   );
   const workspaceName = tasks.workspace?.name ?? "";
+  // What every task listed says in the cells whose words differ row to row, which its columns stand as wide as (`taskRowFit`).
+  const fit = taskRowFit(
+    groups.flatMap((group) =>
+      group.tasks.map((task) => {
+        const subTasks = subTaskCounts.get(task.id);
+        const waiting = waitingOn.get(task.id) ?? 0;
+        return {
+          key: task.number === undefined ? undefined : taskKey(workspaceName, task.number),
+          pullRequests: openPullRequests(task).map(pullRequestNumberLabel),
+          subTasks:
+            subTasks === undefined || subTasks.total === 0
+              ? undefined
+              : `${subTasks.finished}/${subTasks.total}`,
+          waiting: waiting === 0 ? undefined : String(waiting),
+          repository:
+            task.repository === null
+              ? NO_REPOSITORY
+              : repositoryLabel(task.repository, repositories),
+        };
+      }),
+    ),
+  );
   // The tab as it stands, which an Undo pressed or a refusal answered renders after its act reads.
   const latest = useRef(tasks);
   latest.current = tasks;
@@ -1107,9 +1132,10 @@ export function TasksList({
             className="tasks-list grid grid-cols-tasks-list gap-x-block-gap gap-y-section-gap pb-ui-24"
             data-row-drop-scope=""
             {...motionRows()}
-            style={cssCustomProperties({
-              "--tasks-list-columns": taskRowColumns(properties, more),
-            })}
+            style={{
+              ...fit,
+              ...cssCustomProperties({ "--tasks-list-columns": taskRowColumns(properties, more) }),
+            }}
           >
             {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
             {groups.every((group) => group.tasks.length === 0) ? (
