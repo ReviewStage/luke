@@ -108,6 +108,7 @@ import { useInviteDialog } from "./invite-dialog.js";
 import { replayMaskedError } from "./marks.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
+import { refusalToast, rowWrite } from "./row-write.js";
 import { shownWorkspace } from "./settings-rows.js";
 import { AddSlackChannel, SlackBotChannelRows } from "./slack-bot-channels.js";
 import { SwitchRow } from "./switch-row.js";
@@ -309,6 +310,11 @@ const SLACK_MARK = (
  * words, which main makes `WORKSPACE_NOT_PERMITTED_REFUSAL` where the
  * account's role is why, and the act's own sentence otherwise.
  */
+/** A write whose answer only says it was kept, so its error alone refuses it. */
+function answeredAll(): undefined {
+  return undefined;
+}
+
 function refusedWith(refused: Error): ActionResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused.message };
 }
@@ -1509,9 +1515,10 @@ function ManagedSlackBot({
  * press, and a refusal puts it back.
  */
 function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.JSX.Element | null {
-  const { mutateAsync: sendWorkspaceSlackBotNotifications } = useMutation(
-    actMutation(ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS),
-  );
+  const mutation = useMutation({
+    ...actMutation(ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS),
+    onSettled: refusalToast(answeredAll),
+  });
   const on = useAccountPreferences().data?.slackNotifications;
   if (on === undefined) return null;
   return (
@@ -1520,12 +1527,11 @@ function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.
       labelReplayUnmasked
       checked={on}
       changed={!on}
-      onChange={(notifications) =>
-        sendWorkspaceSlackBotNotifications({ workspaceId, notifications }).then(
-          () => ACCEPTED,
-          refusedWith,
-        )
-      }
+      write={rowWrite(mutation, {
+        ask: (notifications: boolean) => ({ workspaceId, notifications }),
+        refused: answeredAll,
+        drawn: (asked) => asked.notifications,
+      })}
     />
   );
 }

@@ -36,13 +36,14 @@ afterEach(() => {
   motion.restore();
 });
 
-/** An autosave that has landed `start` writes, and a button that lands one more. */
+/** An autosave that has landed `start` writes, a button that lands one more, and one that falls back to none, as a refused write does. */
 function Autosave({ start }: { start: number }): React.JSX.Element {
   const [saves, setSaves] = useState(start);
   return createElement(
     "div",
     null,
     createElement("button", { type: "button", onClick: () => setSaves(saves + 1) }, "Write"),
+    createElement("button", { type: "button", onClick: () => setSaves(0) }, "Refuse"),
     createElement(SavedTick, { saves }),
   );
 }
@@ -68,8 +69,10 @@ const land = (page: HTMLElement) => act(() => page.querySelector("button")?.clic
 /** The tick's motion ending, its exit last. */
 const end = () => act(() => motion.finish());
 
-test("a tick says nothing for writes that landed before it watched", () => {
+test("a tick says nothing for writes that landed before it watched, nor for a count that falls back", () => {
   const page = render(3);
+  assert.equal(shown(page), "");
+  act(() => page.querySelectorAll("button")[1]?.click());
   assert.equal(shown(page), "");
   assert.equal(said(), "");
 });
