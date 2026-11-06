@@ -3202,7 +3202,12 @@ test("an archived agent opens in a tab of its task's column, which stays once it
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount({ shown: true, tasks: withAgents([archived]) });
   await settle();
-  const agentTabs = () => tab.control().mainTabs.tabs.filter((each) => isAgentTab(each));
+  const agentTabs = () =>
+    tab
+      .control()
+      .mainTabs.tabs.filter(
+        (each) => typeof each !== "string" && each.kind === STRIP_TAB_KIND.AGENT,
+      );
   assert.deepEqual(agentTabs(), [], "an archived agent's tab stands only once opened");
 
   act(() => tab.control().onShowAgent(TASK.id, AGENT_ID));
