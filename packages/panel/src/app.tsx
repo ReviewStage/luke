@@ -36,7 +36,6 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "./act.js";
 import { actMutation } from "./act-mutations.js";
 import { appBridge } from "./app-bridge.js";
 import {
@@ -228,8 +227,6 @@ export function App(): React.JSX.Element {
 }
 
 function AppWindow(): React.JSX.Element {
-  // Note that `act` stays for the tasks' reads (`useTasksTab`) and the reads below, which the act-port reads leaf moves.
-  const { act } = useAct();
   const { mutateAsync: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
   const { mutateAsync: sendSignOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
   const { mutateAsync: sendDeleteAccount } = useMutation(actMutation(ACT_KIND.ACCOUNT_DELETE));
@@ -402,7 +399,6 @@ function AppWindow(): React.JSX.Element {
   const stage = useStageRoom();
   const room = stage.room;
   const tasks = useTasksTab({
-    acts: { act },
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
