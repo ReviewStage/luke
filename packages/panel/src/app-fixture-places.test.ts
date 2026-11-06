@@ -25,9 +25,8 @@ import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { stateWith } from "./testing/app-state.js";
-import { onRegistry, writeAppState } from "./testing/copy-feedback.js";
+import { onRegistry, readAppState } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
-import { appStateFirstRead } from "./use-app-state.js";
 
 /**
  * app-fixture-places.test.ts -- a fixture run, which main hands signed out
@@ -112,10 +111,9 @@ async function settle(): Promise<void> {
 function drawWindow(profile: string): Effect.Effect<void> {
   return Effect.gen(function* () {
     handFixtureRun(profile);
-    const state = yield* Effect.orDie(appStateFirstRead);
+    // The document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
+    yield* Effect.promise(readAppState);
     yield* Effect.promise(loadTasksFixture);
-    // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
-    writeAppState(state);
     root = createRoot(document.body.appendChild(document.createElement("div")));
     act(() => root?.render(onRegistry(rendererRegistry, windowRouter().drawn())));
     yield* Effect.promise(settle);
