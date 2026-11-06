@@ -4,7 +4,7 @@ import type {
   InferContractRouterInputs,
   InferContractRouterOutputs,
 } from "@orpc/contract";
-import { accountActsContract } from "./account.js";
+import { ACCOUNT_ACTS, accountActsContract } from "./account.js";
 import { ACCOUNT_ASK_ACTS, accountAskActsContract } from "./account-asks.js";
 import { agentInboxActsContract } from "./agent-inbox.js";
 import { agentActsContract } from "./agents.js";
@@ -20,7 +20,7 @@ import { macShellActsContract } from "./mac-shells.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
 import { portForwardActsContract } from "./port-forwards.js";
 import { pushesContract } from "./pushes.js";
-import { settingsActsContract } from "./settings.js";
+import { SETTINGS_ACTS, settingsActsContract } from "./settings.js";
 import { tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
 import { updateActsContract } from "./updates.js";
@@ -42,6 +42,7 @@ export {
   type MacCommandAnswer,
   type MacCommandDecision,
 } from "../mac-command-ask.js";
+export { ACCOUNT_ACTS } from "./account.js";
 export { ACCOUNT_ASK_ACTS } from "./account-asks.js";
 export { ACT_ERROR } from "./base.js";
 export { CLI_INSTALL_OUTCOME, type CliInstallAnswer } from "./cli.js";
@@ -89,12 +90,14 @@ export {
   type PushName,
   type PushPayload,
 } from "./pushes.js";
-export type { SettingUpdatePayload } from "./settings.js";
+export { SETTINGS_ACTS, type SettingUpdatePayload } from "./settings.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
 
 /** Every act declared once (`declared-act.ts`), one domain's spread each, in alphabetical order: what the host's composers answer directly. */
 export const HOST_ACTS = {
+  ...ACCOUNT_ACTS,
   ...ACCOUNT_ASK_ACTS,
+  ...SETTINGS_ACTS,
 };
 
 /** Every domain's procedures, one spread each, in alphabetical order. */

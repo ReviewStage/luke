@@ -3,24 +3,14 @@ import { it } from "@effect/vitest";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { INBOX_REPLY, type InboxAnswers } from "@repo/features/inbox-wire";
 import { TASK_PRIORITY, TASK_STATUS } from "@repo/features/task-wire";
-import {
-  carried,
-  GATEWAY_ERROR,
-  GATEWAY_METHOD,
-  type GatewayCallResult,
-  type GatewayClient,
-  type GatewayMethod,
-} from "@repo/gateway";
-import { APP_SETTING_SCHEMA, THEME } from "@repo/settings";
+import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from "@repo/gateway";
 import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import type { AppSettings } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@repo/wire";
 import { Effect } from "effect";
 import { createHostOperator } from "./host-operator.js";
-import { recordingReporter } from "./testing/recording-reporter.js";
 
 const SETTINGS: AppSettings = appSettingsWire(settingsView());
-const REPORTER = "panel-1";
 /** A task's agents run on the member's Studio. */
 const ON_STUDIO = {
   machine: AGENT_MACHINE.DEVICE,
@@ -52,29 +42,6 @@ function recordingClient() {
 function operatorOver(client: GatewayClient) {
   return createHostOperator({ client, report: () => undefined });
 }
-
-it.effect("a setting's value travels as the method's value field", () =>
-  Effect.gen(function* () {
-    const { client, requests } = recordingClient();
-    const operator = operatorOver(client);
-
-    const result = yield* operator.updateSetting(
-      APP_SETTING_SCHEMA.theme.field,
-      THEME.DARK,
-      REPORTER,
-    );
-
-    assert.equal(result.status, ACTION_RESULT_STATUS.ACCEPTED);
-    assert.equal(requests.length, 1);
-    const [request] = requests;
-    assert.equal(request?.method, GATEWAY_METHOD.SETTINGS_UPDATE);
-    assert.deepEqual(request?.params, {
-      field: APP_SETTING_SCHEMA.theme.field,
-      value: THEME.DARK,
-      reporter: REPORTER,
-    });
-  }),
-);
 
 it.effect(
   "a plan's start carries the workspace it was started in, its brief, a start without planning says so, and one naming an agent or a device to run on carries it, to the host; a start naming none carries no such field",
@@ -236,29 +203,4 @@ it.effect(
         ],
       );
     }),
-);
-
-it.effect(
-  "a host's refusal is not reported to Sentry, where the handler that died behind it already was; an answer this build cannot read is",
-  () => {
-    const sentry = recordingReporter();
-    return Effect.gen(function* () {
-      const answering = (answer: GatewayCallResult) =>
-        operatorOver({
-          call: () => Effect.succeed(answer),
-          on: () => () => undefined,
-        }).updateSetting(APP_SETTING_SCHEMA.theme.field, THEME.DARK, REPORTER);
-      // The router's own boundary, which every act's call through the operator runs under.
-      const asked = (answer: GatewayCallResult) =>
-        Effect.exit(Effect.withErrorReporting(answering(answer), { defectsOnly: true }));
-      yield* asked({
-        ok: false,
-        error: { code: GATEWAY_ERROR.INTERNAL, message: "board is undefined" },
-      });
-      yield* asked({ ok: true, result: carried({ status: "sideways" }) });
-      assert.deepEqual(sentry.reported, [
-        `${GATEWAY_METHOD.SETTINGS_UPDATE} answered a shape this client cannot read`,
-      ]);
-    }).pipe(Effect.provide(sentry.layer));
-  },
 );

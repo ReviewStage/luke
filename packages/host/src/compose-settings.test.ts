@@ -3,14 +3,9 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@repo/features";
 import { PRODUCT_EVENT, PRODUCT_PLATFORM } from "@repo/features/analytics";
-import {
-  GATEWAY_CLIENT_ROLE,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayEventKind,
-} from "@repo/gateway";
+import { GATEWAY_EVENT, type GatewayEventKind } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
-import { SETTINGS_RESET_SCOPE, THEME } from "@repo/settings";
+import { THEME } from "@repo/settings";
 import { isRecord, type WireValue } from "@repo/wire";
 import { ConfigProvider, Effect, Layer, Queue, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -98,9 +93,6 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { settings, sent, service } = yield* sendingSettings(false);
-      const update = settings.methods[GATEWAY_METHOD.SETTINGS_UPDATE];
-      assert.ok(update, "the concern answers a settings write");
-      const context = { client: { clientId: "panel", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
       const countAndFlush = Effect.andThen(
         Effect.sync(() => {
           settings.recordProductEvent(PRODUCT_EVENT.APP_LAUNCH, { app_version: "1.0.0" });
@@ -111,11 +103,11 @@ it.effect(
       yield* countAndFlush;
       assert.equal(sent().length, 0, "a run from source sent a count by default");
 
-      yield* update({ field: "usageData", value: true }, context);
+      yield* Effect.orDie(settings.acts.SETTING_UPDATE({ field: "usageData", value: true }));
       yield* countAndFlush;
       assert.equal(sent().length, 1, "the count made once usage data was on was not sent");
 
-      yield* update({ field: "usageData", value: false }, context);
+      yield* Effect.orDie(settings.acts.SETTING_UPDATE({ field: "usageData", value: false }));
       yield* countAndFlush;
       assert.equal(sent().length, 1, "a count was sent after usage data was turned off");
     }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer])),
@@ -196,31 +188,6 @@ it.effect(
           : undefined;
       assert.equal(sentTheme, THEME.DARK);
       assert.equal((yield* reader.settings.store.snapshot()).stored.theme, THEME.DARK);
-    }).pipe(
-      Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
-      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
-    ),
-);
-
-it.effect(
-  "a reset whose kept fields name anything but settings is refused, and the group stands as it was",
-  () =>
-    Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("settings-reset-");
-      const { settings } = yield* tabOver(stateRoot, Layer.empty);
-      yield* settings.store.set("theme", THEME.DARK);
-      const reset = settings.methods[GATEWAY_METHOD.SETTINGS_RESET];
-      assert.ok(reset, "the concern answers a reset");
-      const context = { client: { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
-
-      for (const kept of [["zoom", "teleport"], "zoom"]) {
-        const refused: { readonly message: string } = yield* Effect.flip(
-          reset({ scope: SETTINGS_RESET_SCOPE.APPEARANCE, kept }, context),
-        );
-        assert.equal(refused.message, "kept must name settings");
-      }
-
-      assert.equal((yield* settings.store.snapshot()).stored.theme, THEME.DARK);
     }).pipe(
       Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
       Effect.provide([NodeFileSystem.layer, NodePath.layer]),

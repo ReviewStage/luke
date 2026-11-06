@@ -572,7 +572,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const assembly: HostAssembly = {
       gateway: service.gateway,
       // Note that each declared act is answered by the one composer whose domain it is, so the table is spread rather than folded.
-      acts: { ...agents.acts },
+      acts: { ...account.acts, ...agents.acts, ...settings.acts },
       nodes: kernel.nodes,
       concerns: new Set(Object.values(HOST_CONCERN).filter(running)),
       startOrder: HOST_START_ORDER.filter(running).map((name) => concerns[name]),
