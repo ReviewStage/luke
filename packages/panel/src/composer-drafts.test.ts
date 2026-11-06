@@ -27,6 +27,7 @@ import {
   DRAFT_PLACE,
   type DraftControl,
   type DraftWriter,
+  heldLines,
   keptLines,
   useDraft,
   useDraftsOwner,
@@ -401,6 +402,27 @@ test("lines a window keeps for its account outlast a reload, but for what storag
   assert.deepEqual(lines.store.state, [{ id: "held-1", words: "Say who it goes to.", files: [] }]);
   signedIn({ id: "account-grace", email: "grace@acme.test" });
   assert.deepEqual(lines.store.state, []);
+});
+
+test("lines a window holds for an account are drawn for no other signing in to it, and wait for their writer", () => {
+  const lines = heldLines<{ readonly id: string }>();
+  const ada = { id: "account-ada", email: "ada@acme.test" };
+  const Owner = ({ account }: { readonly account: typeof ada }) => {
+    useDraftsOwner(account);
+    return null;
+  };
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const signIn = (account: typeof ada) =>
+    act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Owner, { account }))));
+
+  signIn(ada);
+  lines.set(() => [{ id: "refused-1" }]);
+  signIn({ id: "account-grace", email: "grace@acme.test" });
+  assert.deepEqual(lines.store.state, []);
+
+  signIn(ada);
+  assert.deepEqual(lines.store.state, [{ id: "refused-1" }]);
 });
 
 test("a window that read kept lines before another let them go never writes them back as it adds its own", () => {
