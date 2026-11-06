@@ -103,7 +103,7 @@ import {
   KEY_REFUSAL,
   PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
-import { AGENT_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
+import { AGENT_TAG, SANDBOX_NAME, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
@@ -1575,7 +1575,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox on the same drive, with no CLI session to resume",
+    "a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox under the same name on the same drive, with no CLI session to resume",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1604,6 +1604,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const fresh = api.sandboxes[1];
         assert.ok(fresh !== undefined);
         assert.equal(fresh.status, "running");
+        assert.equal(fresh.name, expired.name);
         assert.equal(fresh.tags[SESSION_TAG], opened.sessionId);
         // The drive outlives the expired sandbox, so what the agent left on it is there again.
         assert.deepEqual(fresh.mounts, expired.mounts);
@@ -1648,17 +1649,20 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const refused = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
 
         assert.deepEqual(refused, { outcome: EVE_SEND_OUTCOME.FAILED, status: 503 });
-        assert.equal(expired.deleted, false);
+        // The replacement took the expired sandbox's place under the session's name, and stands.
+        const replacement = api.sandboxes[1];
+        assert.ok(replacement !== undefined);
+        assert.deepEqual([expired.deleted, replacement.deleted], [true, false]);
         api.hooks.runExit = undefined;
         const retried = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
         assert.equal(retried.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(expired.deleted, true);
-        assert.equal(api.sandboxes.at(-1)?.status, "running");
+        assert.equal(api.sandboxes.length, 2);
+        assert.equal(replacement.status, "running");
       }),
   );
 
   it.effect(
-    "an expired sandbox whose delete failed stands beside its replacement, which later messages and the launch's END still reach",
+    "an expired sandbox opened before getOrCreate whose delete failed stands beside its replacement, which later messages and the launch's END still reach",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1677,6 +1681,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const [expired] = api.sandboxes;
         assert.ok(expired !== undefined);
         expired.snapshotExpired = true;
+        // A sandbox opened before `getOrCreate` is named by a UUID, so its replacement stands under the session's own name.
+        expired.name = `${SANDBOX_NAME}${randomUUID()}`;
         api.failDelete.remaining = 1;
 
         const replaced = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
@@ -2431,7 +2437,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a launch Vercel refused after the open answered logs the call, its status, and Vercel's error, and no secret, deletes its sandbox, and reads as the agent's failed turn",
+    "a launch Vercel refused after the open answered logs the call, its status, and Vercel's error, and no secret, and reads as the agent's failed turn",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2466,7 +2472,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         for (const secret of [PLAN_TOKEN, bearer, fixtureToken()]) {
           assert.equal(written.includes(secret), false);
         }
-        assert.ok(api.sandboxes.every((sandbox) => sandbox.deleted));
         assert.deepEqual(yield* newestTurn(agent), {
           status: TURN_STATUS.FAILED,
           failure: AGENT_FAILURE.SANDBOX,
@@ -2673,29 +2678,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const ownPolicies = api.policies.filter((each) => each.session === own?.currentSessionId);
         assert.ok(JSON.stringify(ownPolicies.at(-1)?.policy).includes(writeHeader));
       }),
-  );
-
-  it.effect("an agent whose forked checkout would not refresh leaves no sandbox and no drive", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const api = runnerSandboxApi();
-      const { userId, agent, sessions } = yield* repositoryAgent(api, ownInstallation());
-      const kept = keptAfterResponse();
-      yield* sessions.open(message(agent, "Fix the relay.")).pipe(Effect.provide(kept.layer));
-      yield* kept.run;
-      yield* kept.run;
-      api.hooks.runExit = (args) => (args.join(" ").includes("git fetch --quiet origin") ? 128 : 0);
-      const refused = yield* anotherAgent(userId, agent);
-
-      const opened = yield* sessions.open(message(refused, "Go.")).pipe(Effect.provide(kept.layer));
-      yield* kept.run;
-
-      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-      assert.equal((yield* newestTurn(refused)).status, TURN_STATUS.FAILED);
-      assert.equal(sandboxOfAgent(api, refused), undefined);
-      assert.equal(api.drives.has(agentDriveName(opened.sessionId)), false);
-      assert.equal(baseDrives(api).length, 1);
-    }),
   );
 
   it.effect(

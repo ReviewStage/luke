@@ -255,8 +255,7 @@ export interface AgentMachineService {
   /**
    * The agent's place opened under the session, its repository checked out
    * there where it has one, and handed to `use`; a place `use` fails in is
-   * thrown away again, since no conversation records the session that would
-   * find it.
+   * left standing for the session's next message.
    */
   readonly open: <A, E, R, B, EB, RB>(
     ask: MachineOpen<B, EB, RB>,

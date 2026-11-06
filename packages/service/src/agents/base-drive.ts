@@ -37,7 +37,6 @@ import {
   snapshotRecordOf,
 } from "./repository-shell.js";
 import {
-  NAME_TAKEN,
   type OpenedSandbox,
   SandboxUnavailable,
   type VercelSandboxApi,
@@ -155,8 +154,6 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
       env: {},
       mounts: { [BASE_DRIVE.MOUNT_PATH]: name },
       persistent: false,
-      // Note that a name another fill holds is refused, because it is this fill's lock.
-      whenNameTaken: NAME_TAKEN.REFUSE,
     })
     .pipe(
       Effect.map(Option.some),

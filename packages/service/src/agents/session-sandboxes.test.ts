@@ -17,12 +17,7 @@ import {
 import { AGENT_DRIVE, agentDriveName } from "./agent-drive.js";
 import { CODER } from "./coder-host/bounds.js";
 import { SessionSandboxes, sessionSandboxesLayer } from "./session-sandboxes.js";
-import {
-  NAME_TAKEN,
-  SANDBOX_CALL,
-  SandboxUnavailable,
-  vercelSandboxApi,
-} from "./vercel-sandbox-api.js";
+import { SANDBOX_CALL, SandboxUnavailable, vercelSandboxApi } from "./vercel-sandbox-api.js";
 
 /**
  * A session's sandboxes stopped through `@vercel/sandbox`, as the deployment
@@ -147,7 +142,6 @@ it.effect(
         keepLastSnapshots: { count: 1, deleteEvicted: true },
         env: {},
         mounts: { [AGENT_DRIVE.MOUNT_PATH]: drive },
-        whenNameTaken: NAME_TAKEN.REFUSE,
       });
 
       const deleteFor = Effect.flatMap(SessionSandboxes, (sandboxes) =>
