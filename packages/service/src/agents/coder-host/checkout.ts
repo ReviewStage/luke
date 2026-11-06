@@ -3,6 +3,8 @@ import { readAccountPreferences } from "@repo/database/models/account-store";
 import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import {
   type Agent,
+  hasRepository,
+  readAgent,
   settleAgentAuthor,
   type WithRepository,
 } from "@repo/database/models/agent-store";
@@ -45,7 +47,7 @@ import {
   SHALLOW_CLONE_DEPTH,
   setCheckoutIdentity,
 } from "../repository-shell.js";
-import { FIREWALL_SLOT, githubEntry, type RepositoryCredential } from "../sandbox-firewall.js";
+import type { FirewallSources, RepositoryCredential } from "../sandbox-firewall.js";
 import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
@@ -66,8 +68,8 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * the fetch of the rest of the history alone, since a branch and a pull
  * request are cut from it; the commit identity is set; and the token is
  * handed back for the authored file to set at the firewall for the
- * session's own commands, in the shape `githubEntry` gives it
- * (`../sandbox-firewall.ts`), which is where `gh` and `git push` reach
+ * session's own commands, minted afresh at every write after
+ * (`agentFirewallSources`, `../sandbox-firewall.ts`), which is where `gh` and `git push` reach
  * GitHub; it never enters the sandbox's filesystem or environment. An installation token is good for an hour, so
  * the host mints another on the same terms when the session's step hook
  * finds the one standing old. No developer's sign-in token ever stands at
@@ -366,6 +368,58 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
     };
   },
 );
+
+/**
+ * The agent's repository credential minted afresh, as `agentRepositoryToken`
+ * mints it, for a firewall write to carry (`../sandbox-firewall.ts`); none
+ * for an agent with no repository.
+ */
+export const agentFirewallSources = /* @__PURE__ */ Effect.fn("web/agentFirewallSources")(
+  function* (
+    target: ConversationTarget,
+    agent: Agent,
+  ): Effect.fn.Return<FirewallSources, CheckoutRefused, CheckoutServices> {
+    if (!hasRepository(agent)) return {};
+    const { token, fullName, access } = yield* agentRepositoryToken(target, agent);
+    return { github: { token, fullName, access } };
+  },
+);
+
+/**
+ * The same for the account's agent named, read afresh, for a firewall write
+ * made apart from the agent's own calls, as a launch's end or a sweep makes
+ * one; none where no agent is named or the account reaches it no longer.
+ */
+export const firewallSourcesOfAgent = /* @__PURE__ */ Effect.fn("web/firewallSourcesOfAgent")(
+  function* (
+    userId: string,
+    agentId: string | undefined,
+  ): Effect.fn.Return<FirewallSources, CheckoutRefused | StoreFailure, CheckoutServices> {
+    if (agentId === undefined) return {};
+    const agent = yield* readAgent(userId, agentId);
+    if (Option.isNone(agent)) return {};
+    const target = { userId, conversationId: agent.value.conversationId };
+    return yield* agentFirewallSources(target, agent.value);
+  },
+);
+
+/**
+ * The same for a write that takes an ended launch's swaps off a place a
+ * Terminal keeps up: none where the credential could not be minted, said in
+ * the log, because the ended runner's credentials must come off whether or
+ * not the shell goes on reaching GitHub.
+ */
+export const firewallSourcesAfterLaunch = (userId: string, agentId: string | undefined) =>
+  firewallSourcesOfAgent(userId, agentId).pipe(
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(
+          `a held sandbox's repository credential was not minted as its launch ended: ${failure._tag}`,
+        ),
+        {} satisfies FirewallSources,
+      ),
+    ),
+  );
 
 /** The one write token for every repository the agent works in, its own first, as `agentRepositoryToken` mints it for an agent in several, answering the repository at the place given among them. */
 const agentRepositoriesToken = Effect.fnUntraced(function* (
@@ -707,7 +761,7 @@ export const deepenCheckoutWith = /* @__PURE__ */ Effect.fn("web/deepenCheckoutW
   }
   // The token is revealed only into the firewall rules set for GitHub.
   yield* firewall
-    .set(FIREWALL_SLOT.GITHUB, githubEntry(plan.credential))
+    .write({ github: plan.credential })
     .pipe(
       Effect.mapError(() => new CheckoutRefused({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED })),
     );

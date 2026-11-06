@@ -177,14 +177,17 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onAutomationsChanged((held) => {
         state.update(held);
       }),
-      gateway.host.onPlanCommentsChanged((held) => {
-        state.update({ [LIVE_READ.PLAN_COMMENTS]: held });
+      gateway.host.onDescriptionCommentsChanged((held) => {
+        state.update({ [LIVE_READ.DESCRIPTION_COMMENTS]: held });
       }),
       gateway.host.onHistoriesChanged((held) => {
         state.update({ [LIVE_READ.HISTORY]: held });
       }),
-      gateway.host.onPlanDocumentsChanged((held) => {
-        state.update({ [LIVE_READ.PLAN_DOCUMENT]: held });
+      gateway.host.onDescriptionDocumentsChanged((held) => {
+        state.update({ [LIVE_READ.DESCRIPTION_DOCUMENT]: held });
+      }),
+      gateway.host.onPortForwardingChanged((portForwarding) => {
+        state.update({ portForwarding });
       }),
       // The host's own answer about recording stands the halt down: it is the
       // account transition the halt was waiting on.

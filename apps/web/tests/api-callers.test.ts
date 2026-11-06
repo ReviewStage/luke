@@ -32,10 +32,10 @@ test("a client path resolves to an exception's rewrite first, then a hosted proc
       "const id = 'x';",
       "export const paths = [",
       `  \`/api/agents/${HOLE}/pictures/${HOLE}\`,`,
-      `  \`/api/plans/${HOLE}/edit\`,`,
+      `  \`/api/plans/${HOLE}/description\`,`,
       '  "/api/terminal/sessions",',
       '  "/api/nope",',
-      `  \`/api/plans/${HOLE}/edit/more\`,`,
+      `  \`/api/plans/${HOLE}/description/more\`,`,
       "];",
       "",
     ].join("\n"),
@@ -48,9 +48,9 @@ test("a client path resolves to an exception's rewrite first, then a hosted proc
     RESOLUTION.REWRITE,
     "/api/agents/([^/]+)/pictures/([^/]+)",
   ]);
-  assert.deepEqual(resolution.get("/api/plans/{…}/edit"), [
+  assert.deepEqual(resolution.get("/api/plans/{…}/description"), [
     RESOLUTION.PROCEDURE,
-    "/api/plans/{id}/edit",
+    "/api/plans/{id}/description",
   ]);
   assert.deepEqual(resolution.get("/api/models"), [RESOLUTION.PROCEDURE, "/api/models"]);
   assert.deepEqual(resolution.get("/api/terminal/sessions"), [
@@ -61,7 +61,7 @@ test("a client path resolves to an exception's rewrite first, then a hosted proc
     report.refused.map((refusal) => [refusal.display, refusal.reason]),
     [
       ["/api/nope", "no-route"],
-      ["/api/plans/{…}/edit/more", "no-route"],
+      ["/api/plans/{…}/description/more", "no-route"],
     ],
   );
 });

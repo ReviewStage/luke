@@ -4,11 +4,13 @@ import assert from "node:assert/strict";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOST_PAIRING_CALL_FAILURE, type HostPairingView } from "@repo/features/host-pairing-view";
 import { ACT_KIND } from "@repo/host/acts";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { HostConnectDialog } from "./host-connect-dialog.js";
 
 /**
@@ -60,13 +62,20 @@ async function opened(): Promise<string[]> {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(HostConnectDialog, {
-        code: CODE,
-        onClose: () => told.push("closed"),
-      }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(HostConnectDialog, {
+          code: CODE,
+          onClose: () => told.push("closed"),
+        }),
+      ),
     ),
   );
   await settle();
+  // Note that the pairing lands through a query, so the dialog is read once it no longer reads it.
+  await vi.waitFor(() =>
+    assert.equal((document.body.textContent ?? "").includes("Reading the code"), false),
+  );
   return told;
 }
 
@@ -82,7 +91,11 @@ test("Connect approves the code the link named, once the box it names is shown, 
   const told = await opened();
 
   const text = document.body.textContent ?? "";
-  assert.ok(text.includes("Connect fra-03 (Linux server · 203.0.113.7) to your account?"), text);
+  assert.ok(text.includes("Connect fra-03?"), text);
+  assert.ok(
+    text.includes("Linux server · x64 · 203.0.113.7"),
+    "the box is shown as it named itself",
+  );
   assert.ok(text.includes("BCDF-GHJK"), "the code is shown as the box shows it");
   assert.deepEqual(approved, [], "nothing is approved before Connect is pressed");
 
@@ -104,6 +117,8 @@ test("a code no pairing has, or one held after too many such codes, says so and 
   ] as const) {
     fakeActPort({ [ACT_KIND.HOSTS_PAIRING_READ]: () => Promise.resolve(refusal) });
     await opened();
+    // Note that the code read last stands while it is read again, so the refusal is read once it is this one's.
+    await vi.waitFor(() => assert.equal((document.body.textContent ?? "").includes(says), true));
 
     const text = document.body.textContent ?? "";
     assert.ok(text.includes(says), text);

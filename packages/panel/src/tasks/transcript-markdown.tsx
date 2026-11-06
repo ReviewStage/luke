@@ -3,16 +3,11 @@ import { ACT_KIND, COLORED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@rep
 import { CODE_CARD_TITLE, CODE_ROW, CodeCard, type CodeRow } from "@repo/ui";
 import { SUGGESTED_CHANGE_LANGUAGE } from "@repo/ui/github-html";
 import type { MarkdownComponents, MarkdownNodeProps } from "@repo/ui/markdown";
-import {
-  type ComponentProps,
-  createContext,
-  type ReactNode,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
-import { type ActHandle, useAct } from "../act.js";
+import { queryOptions, useQuery } from "@tanstack/react-query";
+import { type ComponentProps, createContext, type ReactNode, useContext, useMemo } from "react";
+import { askAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 
 /**
@@ -103,58 +98,32 @@ const FENCE_OPENING = /^ {0,3}(`{3,}|~{3,})/u;
 /** The quote marks a line inside a quote opens on. */
 const QUOTE_MARKS = /^[\s>]*/u;
 
-/** How many colored blocks the window holds before forgetting the oldest. */
-const COLORINGS_HELD = 200;
-
-/** One block's coloring: main's lines once they land, and the ask that brings them. */
-interface Coloring {
-  lines: CodeLines | undefined;
-  readonly asked: Promise<CodeLines | undefined>;
+/**
+ * A block's coloring, asked of main the first time it is wanted and held for
+ * the window's life while drawn, since a block's colors never change; one let
+ * go of no longer drawn is forgotten after Query's garbage-collection time.
+ * Note that a refusal draws the block plain and is held as one, so it is not
+ * asked again.
+ */
+function coloringQueryOptions(language: string, code: string) {
+  return queryOptions({
+    queryKey: [QUERY_ROOT.CODE_COLORING, language, code],
+    queryFn: (): Promise<CodeLines | null> =>
+      askAct(ACT_KIND.TASKS_COLOR_CODE, { language, code }).catch(() => null),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
 }
-
-/** The colorings asked for, by language and then by code, oldest first. */
-const colorings = new Map<string, Map<string, Coloring>>();
-let coloringCount = 0;
 
 /**
- * The markdown a transcript's words were drawn from, which a block reads to
- * tell whether its closing fence has arrived; Streamdown hands a component
- * the block's place in it but not the words.
+ * The last line written inside a fenced block of a transcript's words still
+ * waiting for its closing fence, or none where every fence closed, which a
+ * block reads to tell whether it is the one still streaming. Note that it
+ * is a line rather than the words, because Streamdown hands a component its
+ * place in its own block alone, and because a value that stands still while
+ * the words after the last block stream draws no block again.
  */
-const MarkdownSource = createContext("");
-
-/** Forgets the oldest coloring, so a long session's window holds a bounded number. */
-function forgetOldest(): void {
-  const [language, blocks] = colorings.entries().next().value ?? [];
-  const oldest = blocks?.keys().next().value;
-  if (language === undefined || blocks === undefined || oldest === undefined) return;
-  blocks.delete(oldest);
-  if (blocks.size === 0) colorings.delete(language);
-  coloringCount -= 1;
-}
-
-/** A block's coloring, asked of main the first time it is wanted and held after. */
-function coloringOf(act: ActHandle["act"], language: string, code: string): Coloring {
-  const held = colorings.get(language)?.get(code);
-  if (held !== undefined) return held;
-  if (coloringCount >= COLORINGS_HELD) forgetOldest();
-  const coloring: Coloring = {
-    lines: undefined,
-    // Note that a refusal draws the block plain and is held as one, so it is not asked again.
-    asked: act(ACT_KIND.TASKS_COLOR_CODE, { language, code }).then(
-      (lines) => {
-        coloring.lines = lines;
-        return lines;
-      },
-      () => undefined,
-    ),
-  };
-  const blocks = colorings.get(language) ?? new Map<string, Coloring>();
-  blocks.set(code, coloring);
-  colorings.set(language, blocks);
-  coloringCount += 1;
-  return coloring;
-}
+const OpenFenceTail = createContext<string | undefined>(undefined);
 
 /** Whether main is asked to color a block at all: a named language, and code within the bound. */
 function colorable(language: string, code: string): boolean {
@@ -166,19 +135,32 @@ function colorable(language: string, code: string): boolean {
   );
 }
 
+/** Whether `line` closes a fence opened with `marker`: the opening's character at least as long, alone but for the quote marks of a block inside a quote. */
+function closesFence(line: string, marker: string): boolean {
+  const bare = line.replace(QUOTE_MARKS, "").trim();
+  return bare.length >= marker.length && [...bare].every((character) => character === marker[0]);
+}
+
 /**
- * Whether a fenced block's markdown still waits for its closing fence: a
- * fence of the opening's character at least as long, alone on the last
- * line but for the quote marks of a block inside a quote. An indented
- * block has no fence to wait for.
+ * The last line written inside a fenced block that still waits for its
+ * closing fence at the end of `markdown`, empty for one with no line yet, or
+ * none where every fence closed. Only the last block can still be open,
+ * since a fence left open runs to the end of the words.
  */
-function fenceStillOpen(markdown: string): boolean {
-  const marker = FENCE_OPENING.exec(markdown)?.[1];
-  if (marker === undefined) return false;
-  const lines = markdown.trimEnd().split("\n");
-  const last = lines.length > 1 ? lines.at(-1)?.replace(QUOTE_MARKS, "").trim() : undefined;
-  if (last === undefined || last.length < marker.length) return true;
-  return [...last].some((character) => character !== marker[0]);
+function openFenceTail(markdown: string): string | undefined {
+  let marker: string | undefined;
+  let last: string | undefined;
+  for (const line of markdown.trimEnd().split("\n")) {
+    if (marker === undefined) {
+      marker = FENCE_OPENING.exec(line.replace(QUOTE_MARKS, ""))?.[1];
+      last = "";
+    } else if (closesFence(line, marker)) {
+      marker = undefined;
+    } else {
+      last = line;
+    }
+  }
+  return marker === undefined ? undefined : last;
 }
 
 /** A fenced block's code: the text its element holds, as the markdown wrote it. */
@@ -191,23 +173,9 @@ function blockText(node: MarkdownNodeProps["node"]): string {
  * while the block streams, or for a block not colored at all.
  */
 function useColoredLines(language: string, code: string, whole: boolean): CodeLines | undefined {
-  const { act } = useAct();
   const asking = whole && colorable(language, code);
-  const [answered, setAnswered] = useState<{ language: string; code: string; lines: CodeLines }>();
-  useEffect(() => {
-    if (!asking) return undefined;
-    let shown = true;
-    void coloringOf(act, language, code).asked.then((lines) => {
-      if (shown && lines !== undefined) setAnswered({ language, code, lines });
-    });
-    return () => {
-      shown = false;
-    };
-  }, [act, asking, language, code]);
-  if (!asking) return undefined;
-  const held = colorings.get(language)?.get(code)?.lines;
-  if (held !== undefined) return held;
-  return answered?.language === language && answered.code === code ? answered.lines : undefined;
+  const coloring = useQuery({ ...coloringQueryOptions(language, code), enabled: asking });
+  return asking ? (coloring.data ?? undefined) : undefined;
 }
 
 /**
@@ -267,13 +235,11 @@ function TranscriptCodeBlock({
   className,
   node,
 }: ComponentProps<"code"> & MarkdownNodeProps): ReactNode {
-  const markdown = useContext(MarkdownSource);
+  const openTail = useContext(OpenFenceTail);
   const language = LANGUAGE_CLASS.exec(className ?? "")?.[1] ?? "";
   const code = blockText(node).replace(/\n$/u, "");
-  const start = node?.position?.start.offset;
-  const end = node?.position?.end.offset;
-  const whole =
-    start === undefined || end === undefined || !fenceStillOpen(markdown.slice(start, end));
+  // Note that the block still open is the one the words end on, so its last line ends them.
+  const whole = openTail === undefined || !openTail.endsWith(code.split("\n").at(-1) ?? "");
   const suggesting = language === SUGGESTION.LANGUAGE || language === SUGGESTED_CHANGE_LANGUAGE;
   // Note that a suggestion names no language of its own to color it in.
   const lines = useColoredLines(language, code, whole && !suggesting);
@@ -316,7 +282,7 @@ export const TRANSCRIPT_CODE_AND_TABLE_COMPONENTS: MarkdownComponents = {
   td: ({ children, style }) => <td style={style}>{children}</td>,
 };
 
-/** The markdown a transcript's words are drawn from, handed to the blocks inside them. */
+/** The markdown a transcript's words are drawn from, read for the block still waiting for its closing fence and handed to the blocks inside them. */
 export function TranscriptMarkdownSource({
   markdown,
   children,
@@ -324,5 +290,6 @@ export function TranscriptMarkdownSource({
   markdown: string;
   children: ReactNode;
 }): ReactNode {
-  return <MarkdownSource.Provider value={markdown}>{children}</MarkdownSource.Provider>;
+  const openTail = useMemo(() => openFenceTail(markdown), [markdown]);
+  return <OpenFenceTail.Provider value={openTail}>{children}</OpenFenceTail.Provider>;
 }

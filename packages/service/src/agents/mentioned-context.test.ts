@@ -64,39 +64,41 @@ const section = (heading: string) =>
     PLACE,
   );
 
-test("a section the words mention is handed as it stands, under the part's heading", () => {
-  const part = mentionedContext(`Do what ${section("Rollout")} says.`, TASK);
+test("a section the words mention is handed as it stands, under the part's heading, and nothing of it to an agent whose starter has Descriptions off", () => {
+  const words = `Do what ${section("Rollout")} says.`;
+  const part = mentionedContext(words, TASK);
 
   assert.equal(
     part,
-    `${MENTIONED_HEADING}\n\nThe plan's section "Rollout":\n\n## Rollout\n\nStore first, then the desktop.`,
+    `${MENTIONED_HEADING}\n\nThe description's section "Rollout":\n\n## Rollout\n\nStore first, then the desktop.`,
   );
+  assert.equal(mentionedContext(words, TASK, undefined, undefined, false), undefined);
 });
 
-test("the whole plan the words mention is handed as an agent started on it is", () => {
+test("the whole description the words mention is handed as an agent started on it is", () => {
   const part = mentionedContext(
     `Read ${mentionMarkdown({ kind: MENTION_KIND.TASK, taskId: TASK.id }, TASK.name, PLACE)} first.`,
     TASK,
   );
 
-  assert.match(part ?? "", /The whole plan:\n\n# Teammate invitations\n\n## Goal/u);
+  assert.match(part ?? "", /The whole description:\n\n# Teammate invitations\n\n## Goal/u);
   assert.match(part ?? "", /Store first, then the desktop\.$/u);
 });
 
-test("a section the plan no longer holds is named as gone", () => {
+test("a section the description no longer holds is named as gone", () => {
   const part = mentionedContext(`See ${section("Old flow")}.`, TASK);
 
-  assert.match(part ?? "", /The section "Old flow": no longer in the plan\./u);
+  assert.match(part ?? "", /The section "Old flow": no longer in the description\./u);
 });
 
 test("a section mentioned in the form written before the link was settled is handed as one in the settled form is", () => {
   const part = mentionedContext(`Do what [@Rollout](luke://plan/${TASK.id}#Rollout) says.`, TASK);
 
   assert.equal(part, mentionedContext(`Do what ${section("Rollout")} says.`, TASK));
-  assert.match(part ?? "", /The plan's section "Rollout":/u);
+  assert.match(part ?? "", /The description's section "Rollout":/u);
 });
 
-test("a heading the plan bears twice is handed by which of them the anchor names", () => {
+test("a heading the description bears twice is handed by which of them the anchor names", () => {
   const task: Task = {
     ...TASK,
     document: { body: "## Notes\n\nfirst\n\n## Notes\n\nsecond", assumptions: [] },
@@ -137,7 +139,7 @@ test("another task a link names by its number, by itself or by a section, is han
 test("a section mentioned twice is handed once", () => {
   const part = mentionedContext(`${section("Goal")} and again ${section("Goal")}.`, TASK);
 
-  assert.equal(part?.split('The plan\'s section "Goal"').length, 2);
+  assert.equal(part?.split('The description\'s section "Goal"').length, 2);
 });
 
 test("a long section is cut on a line, saying how much was left out, and a full part names what it left out", () => {
@@ -231,7 +233,7 @@ test("however long the headings of what is left out, the part stays inside its b
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, `${part.length} characters`);
 });
 
-test("a plan cut short names every section past the cut, one whose heading earlier words quote included", () => {
+test("a description cut short names every section past the cut, one whose heading earlier words quote included", () => {
   const filler = Array.from({ length: 700 }, (_, at) => `- line ${at} of the context`).join("\n");
   const task: Task = {
     ...TASK,
@@ -247,7 +249,7 @@ test("a plan cut short names every section past the cut, one whose heading earli
       task,
     ) ?? "";
 
-  assert.match(part, /The whole plan, cut short/u);
+  assert.match(part, /The whole description, cut short/u);
   assert.match(part, /Its other sections: Rollout\./u);
 });
 
@@ -292,12 +294,12 @@ test("a section too long for the room left is passed over, and a shorter one aft
 
   const part = mentionedContext(words, crowded) ?? "";
 
-  assert.match(part, /The plan's section "Small"/u);
+  assert.match(part, /The description's section "Small"/u);
   assert.match(part, /1 more mention of the plan left out/u);
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS);
 });
 
-test("a cut plan with many long headings past the cut is still handed, its list of them bounded", () => {
+test("a cut description with many long headings past the cut is still handed, its list of them bounded", () => {
   const sections = Array.from(
     { length: 60 },
     (_, at) => `## ${"Long heading ".repeat(70)}${at}\n\n${"w".repeat(400)}`,
@@ -310,7 +312,7 @@ test("a cut plan with many long headings past the cut is still handed, its list 
       task,
     ) ?? "";
 
-  assert.match(part, /The whole plan, cut short/u);
+  assert.match(part, /The whole description, cut short/u);
   assert.match(part, /and \d+ more\./u);
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, `${part.length} characters`);
 });
@@ -340,7 +342,7 @@ test("a server or a tool the words mention is handed as one note naming its conn
   const tool = words.indexOf(
     "The developer pointed you at the tool `list_issues` of the Linear MCP server (connection `linear`)",
   );
-  const rollout = words.indexOf('The plan\'s section "Rollout":');
+  const rollout = words.indexOf('The description\'s section "Rollout":');
   assert.ok(server > 0 && server < tool && tool < rollout, words);
   assert.equal(words.split("The developer pointed you at").length - 1, 2, words);
 });
@@ -374,7 +376,7 @@ test("an agent with no plan is handed a server's note, and nothing for a mention
   const part = mentionedContext(`Use ${LINEAR} for ${section("Rollout")}.`, undefined) ?? "";
 
   assert.equal(part.split("The developer pointed you at").length - 1, 1, part);
-  assert.ok(!part.includes("The plan's section"), part);
+  assert.ok(!part.includes("The description's section"), part);
 });
 
 const ISSUE_URL = "https://linear.app/acme/issue/ACME-142/fix-the-thing";
@@ -627,7 +629,7 @@ const bareSection = (heading: string) =>
 
 test("a section's bare address in the words is handed the section as it stands, written alone, as its own label, or between angle brackets", () => {
   const address = bareSection("Rollout");
-  const handed = `${MENTIONED_HEADING}\n\nThe plan's section "Rollout":\n\n## Rollout\n\nStore first, then the desktop.`;
+  const handed = `${MENTIONED_HEADING}\n\nThe description's section "Rollout":\n\n## Rollout\n\nStore first, then the desktop.`;
 
   for (const words of [
     `Do what ${address} says.`,
@@ -649,7 +651,7 @@ test("a gone section's bare address is named by its anchor, and a page's, an age
 
   assert.match(
     mentionedContext(words, TASK) ?? "",
-    /The section "old-flow": no longer in the plan\./u,
+    /The section "old-flow": no longer in the description\./u,
   );
   assert.deepEqual(mentionedIds(words, TASK), {
     pages: [PAGE_ID],

@@ -47,7 +47,7 @@ interface SampleTab {
 }
 
 const SAMPLE_TABS: readonly SampleTab[] = [
-  { id: "plan", icon: <DocumentIcon />, label: "Plan" },
+  { id: "description", icon: <DocumentIcon />, label: "Description" },
   {
     id: "inbox",
     icon: <FolderIcon />,
@@ -70,7 +70,7 @@ const FRAME_TABS: readonly SampleTab[] = [
     label: "Refresh tokens before they expire",
     anchored: true,
   },
-  ...SAMPLE_TABS.filter((tab) => tab.id !== "plan"),
+  ...SAMPLE_TABS.filter((tab) => tab.id !== "description"),
 ];
 
 /** The tabs in their order now, the one at `from` taken to `to`, counted after the anchored tabs, which never move. */
@@ -158,7 +158,12 @@ function Cards(): React.JSX.Element {
   const [chosen, setChosen] = useState(1);
   const [picked, setPicked] = useState<string | undefined>(undefined);
   const cards = [
-    { icon: <DocumentIcon />, label: "Fix token refresh", detail: "Plan · Code", still: STILL },
+    {
+      icon: <DocumentIcon />,
+      label: "Fix token refresh",
+      detail: "Description · Code",
+      still: STILL,
+    },
     { icon: <FolderIcon />, label: "Inbox", detail: undefined, still: undefined },
     {
       icon: <DocumentIcon />,

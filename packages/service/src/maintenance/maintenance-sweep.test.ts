@@ -4,7 +4,6 @@ import { noDatabase } from "@repo/database/testing/no-database";
 import { Effect, Exit, Redacted } from "effect";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
-import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import {
   handleMaintenanceSweep,
@@ -12,33 +11,12 @@ import {
   SWEEP_FAILED,
 } from "./maintenance-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
-import type { SandboxRetentionSweepOutcome } from "./sandbox-retention-sweep.js";
-import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
 /** What the sweep over the queued sessions' sandboxes answers. */
 const SANDBOXED: SessionSandboxSweepOutcome = { deleted: 4, pending: 1 };
-/** What the sweep over the lapsed terminal leases answers. */
-const TERMINALS: TerminalLeaseSweepOutcome = { stopped: 2, released: 1, pending: 0 };
 /** What the sweep over the running native sandboxes answers. */
-const NATIVE: NativeSandboxSweepOutcome = {
-  stopped: 1,
-  retired: 0,
-  held: 1,
-  failed: 0,
-  deferred: 0,
-  lost: 0,
-};
-/** What the sweep over the running eve sandboxes answers. */
-const EVE: EveSandboxSweepOutcome = { stopped: 2, held: 0, failed: 1, deferred: 0, unmapped: 3 };
-/** What the bound on the stopped sandboxes' snapshot retention answers. */
-const RETAINED: SandboxRetentionSweepOutcome = {
-  applied: 3,
-  skipped: 1,
-  failed: 0,
-  deferred: 2,
-  lost: 0,
-};
+const NATIVE: NativeSandboxSweepOutcome = { lost: 1 };
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function sweepRequest(
@@ -58,17 +36,12 @@ interface Recorded {
   deviceLeases: number[];
   deviceWarmRunners: number[];
   sandboxed: number[];
-  terminals: number[];
   native: number[];
-  eve: number[];
-  retention: number[];
   wakeups: number[];
   withdrawnLines: number[];
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
-  imageTemplates: number[];
-  repositorySnapshots: number[];
   hostPairings: number[];
   syncLog: number[];
   staleFirewalls: number[];
@@ -82,17 +55,12 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     deviceLeases: [],
     deviceWarmRunners: [],
     sandboxed: [],
-    terminals: [],
     native: [],
-    eve: [],
-    retention: [],
     wakeups: [],
     withdrawnLines: [],
     automated: [],
     pictures: [],
     tokenPullRequests: [],
-    imageTemplates: [],
-    repositorySnapshots: [],
     hostPairings: [],
     syncLog: [],
     staleFirewalls: [],
@@ -127,25 +95,10 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.sandboxed.push(now);
         return SANDBOXED;
       }),
-    sweepTerminalLeases: (now) =>
-      Effect.sync(() => {
-        recorded.terminals.push(now);
-        return TERMINALS;
-      }),
     sweepNativeSandboxes: (now) =>
       Effect.sync(() => {
         recorded.native.push(now);
         return NATIVE;
-      }),
-    sweepEveSandboxes: (now) =>
-      Effect.sync(() => {
-        recorded.eve.push(now);
-        return EVE;
-      }),
-    sweepSandboxRetention: (now) =>
-      Effect.sync(() => {
-        recorded.retention.push(now);
-        return RETAINED;
       }),
     sweepNativeWakeups: (now) =>
       Effect.sync(() => {
@@ -171,16 +124,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.tokenPullRequests.push(now);
         return { polled: 2, told: 1 };
-      }),
-    sweepImageTemplates: (now) =>
-      Effect.sync(() => {
-        recorded.imageTemplates.push(now);
-        return { current: "ready" as const, deleted: 1 };
-      }),
-    sweepRepositorySnapshots: (now) =>
-      Effect.sync(() => {
-        recorded.repositorySnapshots.push(now);
-        return { listed: 3, deleted: 1 };
       }),
     sweepAgentQueues: () => Effect.succeed(0),
     sweepHostPairings: (now) =>
@@ -228,17 +171,12 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       deviceLeases: [],
       deviceWarmRunners: [],
       sandboxed: [],
-      terminals: [],
       native: [],
-      eve: [],
-      retention: [],
       wakeups: [],
       withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
-      imageTemplates: [],
-      repositorySnapshots: [],
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
@@ -263,17 +201,12 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       deviceLeases: [],
       deviceWarmRunners: [],
       sandboxed: [],
-      terminals: [],
       native: [],
-      eve: [],
-      retention: [],
       wakeups: [],
       withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
-      imageTemplates: [],
-      repositorySnapshots: [],
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
@@ -285,17 +218,12 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       deviceLeases: [],
       deviceWarmRunners: [],
       sandboxed: [],
-      terminals: [],
       native: [],
-      eve: [],
-      retention: [],
       wakeups: [],
       withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
-      imageTemplates: [],
-      repositorySnapshots: [],
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
@@ -305,27 +233,22 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
 );
 
 it.effect(
-  "an authorized sweep runs every sweep at one instant, the lapsed terminal leases, the unsaved pictures, and the sync log among them, and answers what each did",
+  "an authorized sweep runs every sweep at one instant, the unsaved pictures, and the sync log among them, and answers what each did",
   () =>
     Effect.gen(function* () {
       const { options, recorded } = sweepOptions();
       const answer = yield* sweep(options);
 
       assert.equal(answer.status, 200);
-      assert.deepEqual(answer.body.terminals, TERMINALS);
       assert.deepEqual(answer.body.nativeSandboxes, NATIVE);
-      assert.deepEqual(answer.body.eveSandboxes, EVE);
-      assert.deepEqual(answer.body.sandboxRetention, RETAINED);
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
-      assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
-      assert.deepEqual(answer.body.repositorySnapshots, { listed: 3, deleted: 1 });
       assert.equal(answer.body.syncLog, 5);
       assert.equal(answer.body.staleFirewalls, 7);
       assert.deepEqual(answer.body.codexPlanSwaps, { renewed: 2, failed: 0 });
-      const [instant] = recorded.terminals;
+      const [instant] = recorded.purged;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
         purged: [instant],
@@ -333,17 +256,12 @@ it.effect(
         deviceLeases: [instant],
         deviceWarmRunners: [instant],
         sandboxed: [instant],
-        terminals: [instant],
         native: [instant],
-        eve: [instant],
-        retention: [instant],
         wakeups: [instant],
         withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],
-        imageTemplates: [instant],
-        repositorySnapshots: [instant],
         hostPairings: [instant],
         syncLog: [instant],
         staleFirewalls: [instant],
@@ -377,9 +295,6 @@ it.effect(
       assert.deepEqual(answer.body.abandoned, SWEEP_FAILED);
       assert.deepEqual(answer.body.automations, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
-      assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
-      assert.equal(recorded.imageTemplates.length, 1);
-      assert.equal(recorded.repositorySnapshots.length, 1);
       assert.equal(recorded.hostPairings.length, 1);
       assert.equal(recorded.syncLog.length, 1);
       assert.equal(recorded.staleFirewalls.length, 1);

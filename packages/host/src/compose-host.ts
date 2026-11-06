@@ -2,6 +2,7 @@ import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import {
   HostedAdminClient,
   HostedAgentClient,
+  HostedAgentPortsClient,
   HostedAutomationClient,
   HostedDeviceAgentClient,
   HostedGitHubConnectionClient,
@@ -31,10 +32,11 @@ import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
 import { composeAgents } from "./compose-agents.js";
 import { composeAutomations } from "./compose-automations.js";
-import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
+import { composeMirrors } from "./compose-mirrors.js";
+import { composePortForwards, type PortForwardsComposer } from "./compose-port-forwards.js";
 import { composeSettings } from "./compose-settings.js";
 import { composeTasks } from "./compose-tasks.js";
 import { composeTerminals, type TerminalsComposer } from "./compose-terminals.js";
@@ -47,9 +49,10 @@ import {
   AccountSource,
   type AppIdentity,
   type Environment,
+  LoopbackListener,
+  MirrorPlatform,
   Reporter,
   ShutdownSignal,
-  SignInConsent,
   TerminalSocket,
   type ThisMacHost,
 } from "./effect/seams.js";
@@ -84,6 +87,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.INSTALLED_SKILLS,
   HOST_CONCERN.MAC_COMMANDS,
   HOST_CONCERN.THIS_MAC_HOST,
+  HOST_CONCERN.MIRRORS,
 ];
 
 /** What every assembly asks for, whichever platform concerns it was built with. */
@@ -104,7 +108,11 @@ interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
   [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: ChildProcessSpawner.ChildProcessSpawner | ThisMacHost;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
-  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
+  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: LoopbackListener | TerminalSocket;
+  [HOST_PLATFORM_CONCERN.MIRRORS]:
+    | ChildProcessSpawner.ChildProcessSpawner
+    | TerminalSocket
+    | MirrorPlatform;
 }
 
 /**
@@ -260,6 +268,17 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         ),
       }),
     );
+    /** An agent as the task list holds it now, on a plan or with none; none where it lists no such agent. */
+    const agentListed = (agentId: string) => {
+      const { taskAgents = [], tasklessAgents = [] } = tasks.snapshot();
+      const onTask = taskAgents.find((agent) => agent.id === agentId);
+      if (onTask !== undefined) return onTask;
+      const taskless = tasklessAgents.find((agent) => agent.id === agentId);
+      if (taskless === undefined) return undefined;
+      // Note that an agent no automation started names none, which a summary leaves out rather than nulls.
+      const { automationId, ...agent } = taskless;
+      return automationId === null ? agent : { ...agent, automationId };
+    };
     const agents = yield* served(
       composeAgents({
         kernel,
@@ -277,16 +296,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         listed: tasks.listed,
         pullRequestListings: tasks.pullRequestListings,
         pool,
-        agentListed: (agentId) => {
-          const { taskAgents = [], tasklessAgents = [] } = tasks.snapshot();
-          const onTask = taskAgents.find((agent) => agent.id === agentId);
-          if (onTask !== undefined) return onTask;
-          const taskless = tasklessAgents.find((agent) => agent.id === agentId);
-          if (taskless === undefined) return undefined;
-          // Note that an agent no automation started names none, which a summary leaves out rather than nulls.
-          const { automationId, ...agent } = taskless;
-          return automationId === null ? agent : { ...agent, automationId };
-        },
+        agentListed,
         repositoriesMoved: tasks.repositoriesMoved,
       }),
     );
@@ -382,17 +392,30 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           )
         : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
-    const chatGptSignIn = platform.has(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN)
+    const mirrors = platform.has(HOST_PLATFORM_CONCERN.MIRRORS)
+      ? yield* composeMirrors({
+          kernel,
+          account,
+          openSocket: yield* TerminalSocket,
+          platform: yield* MirrorPlatform,
+          agentListed,
+          listings: tasks.pullRequestListings,
+        })
+      : unavailableConcern(HOST_PLATFORM_CONCERN.MIRRORS);
+    const portForwards: PortForwardsComposer = platform.has(HOST_PLATFORM_CONCERN.PORT_FORWARDS)
       ? yield* served(
-          composeChatGptSignIn({
+          composePortForwards({
             kernel,
             account,
-            client: agentClient,
-            openConsent: (yield* SignInConsent).open,
-            keysAnswered: agents.keysAnswered,
+            client: new HostedAgentPortsClient({
+              serviceBaseUrl: kernel.hostedServiceBaseUrl,
+              credential: account.credential,
+            }),
+            openSocket: yield* TerminalSocket,
+            listen: yield* LoopbackListener,
           }),
         )
-      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
+      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.PORT_FORWARDS), reset: Effect.void };
 
     /**
      * The signed-in account's store opened where none stands: only where the
@@ -460,7 +483,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* automations.reset;
       yield* installedSkills.reset;
       yield* terminals.reset;
-      yield* chatGptSignIn.reset;
+      yield* portForwards.reset;
       yield* settings.emitSettings();
     });
 
@@ -488,7 +511,8 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.THIS_MAC_HOST]: thisMacHost,
       [HOST_CONCERN.TERMINALS]: terminals,
-      [HOST_CONCERN.CHATGPT_SIGN_IN]: chatGptSignIn,
+      [HOST_CONCERN.PORT_FORWARDS]: portForwards,
+      [HOST_CONCERN.MIRRORS]: mirrors,
     } satisfies Readonly<Record<HostConcern, Composer>>;
     // Note that the platform concerns are the only ones a host may leave out.
     const running = (name: HostConcern) => !isPlatformConcern(name) || platform.has(name);

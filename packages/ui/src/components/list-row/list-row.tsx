@@ -15,6 +15,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useMemo,
   useRef,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
@@ -36,7 +37,13 @@ import {
   selectionRoot,
   useListSelection,
 } from "../selection/list-selection.js";
-import type { VirtualRowPlace } from "../virtual-rows/virtual-rows.js";
+import {
+  reachInRun,
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+} from "../virtual-rows/virtual-rows.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 export type { ListRowMenu } from "../row-menu/row-menu.js";
@@ -462,6 +469,26 @@ function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
 }
 
+/** The run a long `List` draws its rows in, only those near the view (`VirtualRows`). */
+export interface ListRun {
+  /** The element that scrolls, which the rows stand in. */
+  readonly scroller: RefObject<HTMLElement | null>;
+  /** A box whose resizing moves where the list stands in its scroller. */
+  readonly shiftedBy?: RefObject<HTMLElement | null> | undefined;
+  /** Each row's key, in order. */
+  readonly keys: readonly string[];
+  /** The height a row is taken to have before it is measured, in pixels. */
+  readonly estimate: number;
+  /** The room between two rows, in pixels: none unless said. */
+  readonly gap?: number | undefined;
+  /** How many rows past each edge of the view are drawn, every row while a find bar stands open. */
+  readonly overscan?: number | undefined;
+  /** What the caller asks of the run, such as bringing a row in. */
+  readonly handle?: RefObject<VirtualRowsHandle | null> | undefined;
+  /** Draws the row at an index, a `ListRow` wearing `place`. */
+  readonly row: (index: number, place: VirtualRowPlace) => ReactNode;
+}
+
 /**
  * A list of `ListRow`s, named by `label` for a reader moving between lists.
  * One whose rows a finger opens (`fingerTall`) stands each a finger's press
@@ -483,6 +510,14 @@ function said(words: ReactNode): boolean {
  * and Esc none, while a plain press still opens its row. Each row takes
  * part by its key (`selectKey`), and one chosen is filled and described as
  * selected. A list not asked chooses nothing.
+ *
+ * A long list draws only the rows near the view (`run`): its rows are a
+ * run of `VirtualRows` in the caller's scroller, each `ListRow` wearing its
+ * place, and the run's block is the list itself, so the list's sheet
+ * reaches its rows as its children. A key walking past the rows drawn goes
+ * on to the row it reaches in the whole list, brought in where it is not
+ * drawn, the row holding the keyboard stays drawn wherever the list is
+ * scrolled, and a choice reaches the rows left undrawn.
  */
 export function List({
   id,
@@ -494,6 +529,7 @@ export function List({
   joinsWalk = false,
   selection,
   onPointerDown,
+  run,
   children,
 }: {
   /** The id of the list, which a `SelectionBar` over it names to hand it the focus back. */
@@ -510,17 +546,72 @@ export function List({
   /** Which rows are chosen and what hears the next set, where the list chooses rows at all. */
   selection?: ListSelection | undefined;
   /** A press on the list, as a drag that puts its rows in another order hears it (the panel's `useRowDrag`). */
-  onPointerDown?: PointerEventHandler<HTMLUListElement> | undefined;
-  children: ReactNode;
+  onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  /** The run its rows are drawn in, drawing only those near the view, in place of `children`. */
+  run?: ListRun | undefined;
+  /** The rows, where the list draws every one. */
+  children?: ReactNode;
 }): React.JSX.Element {
-  const roving = useRovingKeys<HTMLUListElement>();
-  const chooser = useListSelection(selection);
+  const own = useRef<VirtualRowsHandle>(null);
+  const handle = run?.handle ?? own;
+  const keys = run?.keys;
+  const bringIn = useCallback(
+    (key: string, then: () => void) => handle.current?.bringIn(key, then) ?? false,
+    [handle],
+  );
+  // Note that a key reaching past the rows drawn goes on to the row it reaches, brought in where it is not drawn.
+  const roving = useRovingKeys<HTMLElement>({
+    reach: keys === undefined ? undefined : reachInRun(handle),
+  });
+  const order = useMemo(() => (keys === undefined ? undefined : [keys]), [keys]);
+  const chooser = useListSelection(selection, order, keys === undefined ? undefined : bringIn);
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!chooser.onKeyDown(event) && !joinsWalk) roving.onKeyDown(event);
+  };
+  const contexts = (rows: ReactNode) => (
+    <ListVariantContext.Provider value={variant}>
+      <ListDensityContext.Provider value={density}>
+        <ListSelectionContext.Provider value={chooser.selecting}>
+          {rows}
+        </ListSelectionContext.Provider>
+      </ListDensityContext.Provider>
+    </ListVariantContext.Provider>
+  );
+  if (run !== undefined) {
+    return contexts(
+      <VirtualRows
+        scroller={run.scroller}
+        shiftedBy={run.shiftedBy}
+        keys={run.keys}
+        estimate={run.estimate}
+        gap={run.gap ?? 0}
+        overscan={run.overscan}
+        anchor={VIRTUAL_ROWS_ANCHOR.START}
+        listItems
+        moves={moves}
+        holdsFocus
+        className={LIST_CLASS}
+        aria-label={label}
+        onPointerDown={onPointerDown}
+        handle={handle}
+        block={{
+          ...(joinsWalk ? {} : roving),
+          id,
+          onKeyDown,
+          ...selectionRoot(),
+          "data-variant": variant,
+          "data-density": density,
+          "data-finger-tall": fingerTall ? "true" : undefined,
+        }}
+      >
+        {run.row}
+      </VirtualRows>,
+    );
+  }
   return (
     <ul
       {...(joinsWalk ? {} : roving)}
-      onKeyDown={(event) => {
-        if (!chooser.onKeyDown(event) && !joinsWalk) roving.onKeyDown(event);
-      }}
+      onKeyDown={onKeyDown}
       id={id}
       className={LIST_CLASS}
       {...selectionRoot()}
@@ -531,13 +622,7 @@ export function List({
       onPointerDown={onPointerDown}
       {...(moves ? motionRows() : {})}
     >
-      <ListVariantContext.Provider value={variant}>
-        <ListDensityContext.Provider value={density}>
-          <ListSelectionContext.Provider value={chooser.selecting}>
-            {children}
-          </ListSelectionContext.Provider>
-        </ListDensityContext.Provider>
-      </ListVariantContext.Provider>
+      {contexts(children)}
     </ul>
   );
 }
@@ -973,7 +1058,8 @@ export function ListRow({
         data-depth={depth === 0 ? undefined : depth}
         onKeyDown={rowMenu.onKeyDown}
         {...withContextMenu(rowMenu.doors, {})}
-        style={rowProperties(depth)}
+        // Note that the row stands where its run places it (`VirtualRows`), its depth's own property beside that.
+        style={{ ...place?.style, ...rowProperties(depth) }}
       >
         {row}
       </li>

@@ -94,6 +94,7 @@ import { CircleAlertIcon, ICON_SIZE } from "@repo/ui/icons";
 import { matchIntegration, shownTools } from "@repo/ui/integration-search";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import {
   cloneElement,
   createContext,
@@ -595,6 +596,8 @@ function ServersPopover({
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  // The run a server's tools are drawn in, which brings in the highlighted tool where it is not drawn.
+  const toolRun = useRef<VirtualRowsHandle>(null);
   const moving = useRef<HTMLDivElement>(null);
   const rowsId = useId();
   const rows = useServerRows(statuses, servers.disabled);
@@ -679,6 +682,7 @@ function ServersPopover({
     else field.current?.focus();
   }, [page?.connection, tool, onWorkspace, onRunOnMac, takesFocus]);
 
+  const highlightedTool = page === undefined ? undefined : pageTools[pageAt]?.name;
   useLayoutEffect(() => {
     if (tool !== undefined || onRunOnMac) return;
     const highlighted = onWorkspace
@@ -686,8 +690,12 @@ function ServersPopover({
       : page === undefined
         ? `${rowsId}-${at}`
         : `${rowsId}-tool-${pageAt}`;
-    keepInView(list.current, document.getElementById(highlighted));
-  }, [at, page, pageAt, tool, rowsId, onWorkspace, onRunOnMac, workspaceAt]);
+    const row = document.getElementById(highlighted);
+    // Note that a tool scrolled out of the rows drawn has no row to keep in view, so it is brought in.
+    if (row === null && !onWorkspace && highlightedTool !== undefined) {
+      toolRun.current?.bringIn(highlightedTool);
+    } else keepInView(list.current, row);
+  }, [at, page, pageAt, highlightedTool, tool, rowsId, onWorkspace, onRunOnMac, workspaceAt]);
 
   /** A grant begun from the row: the browser opens, and the row waits on the window's return to read it. */
   const connect = (server: string) => {
@@ -1142,6 +1150,8 @@ function ServersPopover({
             <div className="agent-servers-list p-menu-inset">
               {pageTools.length === 0 ? <ServersNote words={PAGE.NONE} /> : null}
               <IntegrationToolList
+                scroller={list}
+                handle={toolRun}
                 server={row.name}
                 tools={pageTools}
                 tokens={pageTokens}
@@ -1254,8 +1264,7 @@ function ServersPopover({
 
   /** `run_on_mac`'s page over the app's: back, its name, whether it is on, what it does, and where it is off, why, and the fix where there is one. */
   const runOnMacPage = (reason: RunOnMacReason | undefined) => {
-    const detail =
-      reason === undefined ? undefined : runOnMacDetail(reason, workspace.answer?.runOnMac);
+    const detail = reason === undefined ? undefined : runOnMacDetail(reason);
     return (
       <div className="agent-servers-tool-page flex min-h-0 flex-col">
         <div className={SERVER_PAGE_HEAD_CLASS}>

@@ -5,13 +5,15 @@ import { countWords, TERM } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { STATUS_TONE } from "@repo/ui";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { type ActHandle, firstRefusal, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
+import { firstRefusal, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { afterPaint } from "../after-paint.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { acknowledgedOnOpen, type InboxListed, isUnread } from "./inbox-model.js";
-import { type InboxSnoozer, snoozeWords } from "./inbox-snooze.js";
+import { type InboxReminder, remindWords } from "./inbox-remind.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /**
@@ -58,8 +60,8 @@ export interface InboxReadMarks {
   readonly onMarkAll: (items: readonly InboxItem[]) => void;
   /** Marks every item given that is unread as read, each on its own, as a task's are marked, the rest of the workspace's left as they are. */
   readonly onMarkEach: (items: readonly InboxItem[]) => void;
-  /** Snoozes one item until an instant, which marks it read, offering Undo, or ends its snooze where none is given; a refusal is toasted. */
-  readonly onSnooze: InboxSnoozer;
+  /** Sets one item's reminder for an instant, offering Undo, or cancels it where none is given, leaving whether it is read alone; a refusal is toasted. */
+  readonly onRemind: InboxReminder;
 }
 
 /** What one toast says of read marks given to several items: how many the service took, and how many not. */
@@ -70,24 +72,25 @@ export function markedNote(unread: boolean, landed: number, refused: number): st
   return refused === 0 ? kept : `${kept}, ${refused} could not be`;
 }
 
-/** What a toast says of a snooze, or the end of one, that the service did not take. */
-const SNOOZE_REFUSED = {
-  SNOOZE: "Could not snooze the item",
-  UNSNOOZE: "Could not unsnooze the item",
+/** What a toast says of a reminder set, or canceled, that the service did not take. */
+const REMIND_REFUSED = {
+  SET: "Could not set the reminder",
+  CANCEL: "Could not cancel the reminder",
 } as const;
 
 /** What a mark the act channel refused hears, as the service not answering. */
 const unreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
 
-/** The Inbox's read marks, sent through `act`; every item marked read in `workspaceId` where the Inbox lists one. */
+/** The Inbox's read marks, each sent on its act's mutation; every item marked read in `workspaceId` where the Inbox lists one. */
 export function useInboxReadMarks({
-  act,
   workspaceId,
 }: {
-  act: ActHandle["act"];
   workspaceId: string | undefined;
 }): InboxReadMarks {
   const toast = useToast();
+  const { mutateAsync: sendReadState } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_READ_STATE));
+  const { mutateAsync: sendReadAll } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_READ_ALL));
+  const { mutateAsync: sendRemind } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_REMIND));
   const refused = useCallback(
     (words: string, cause: unknown, about: FailureAbout) =>
       toast({
@@ -101,7 +104,7 @@ export function useInboxReadMarks({
   );
   const onMark = useCallback(
     (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<Kept> =>
-      act(ACT_KIND.AGENTS_INBOX_READ_STATE, { itemId: item.id, unread })
+      sendReadState({ itemId: item.id, unread })
         .catch(unreached)
         .then((answer) => {
           if (!("failure" in answer)) return KEPT;
@@ -110,13 +113,13 @@ export function useInboxReadMarks({
           }
           return notKept(answer);
         }),
-    [act, workspaceId, refused],
+    [sendReadState, workspaceId, refused],
   );
   const onMarkAll = useCallback(
     (items: readonly InboxItem[]) => {
       const itemIds = items.filter(isUnread).map((item) => item.id);
       if (itemIds.length === 0) return;
-      act(ACT_KIND.AGENTS_INBOX_READ_ALL, {
+      sendReadAll({
         ...(workspaceId === undefined ? undefined : { workspaceId }),
         itemIds,
       })
@@ -126,7 +129,7 @@ export function useInboxReadMarks({
             refused(markedNote(false, 0, itemIds.length), answer, { workspaceId });
         });
     },
-    [act, workspaceId, refused],
+    [sendReadAll, workspaceId, refused],
   );
   // Note that each item's mark goes on its own, there being no act marking several but the workspace's whole, and one toast answers them all.
   const onMarkEach = useCallback(
@@ -145,14 +148,14 @@ export function useInboxReadMarks({
     },
     [onMark, workspaceId, refused],
   );
-  // Note that a snooze reaches the reader alone and is undone by ending it, so it asks nothing and offers Undo, as the panel's other such acts do.
-  const onSnooze = useCallback(
+  // Note that a reminder reaches the reader alone and is undone by canceling it, so it asks nothing and offers Undo, as the panel's other such acts do.
+  const onRemind = useCallback(
     (item: InboxItem, until: number | null): void => {
-      void act(ACT_KIND.AGENTS_INBOX_SNOOZE, { itemId: item.id, until })
+      void sendRemind({ itemId: item.id, until })
         .catch(unreached)
         .then((answer) => {
           if ("failure" in answer) {
-            refused(until === null ? SNOOZE_REFUSED.UNSNOOZE : SNOOZE_REFUSED.SNOOZE, answer, {
+            refused(until === null ? REMIND_REFUSED.CANCEL : REMIND_REFUSED.SET, answer, {
               inboxItemId: item.id,
               workspaceId,
             });
@@ -160,21 +163,19 @@ export function useInboxReadMarks({
           }
           if (until !== null) {
             toast({
-              // Note that snoozing marked the item read, so Undo marks an item that was unread unread again.
-              ...undoToast(`Snoozed until ${snoozeWords(until, Date.now())}`, () => {
-                onSnooze(item, null);
-                if (isUnread(item)) void onMark(item, true);
-              }),
+              ...undoToast(`Reminder set for ${remindWords(until, Date.now())}`, () =>
+                onRemind(item, null),
+              ),
               replayUnmasked: true,
             });
           }
         });
     },
-    [act, workspaceId, refused, toast, onMark],
+    [sendRemind, workspaceId, refused, toast],
   );
   return useMemo(
-    () => ({ onMark, onMarkAll, onMarkEach, onSnooze }),
-    [onMark, onMarkAll, onMarkEach, onSnooze],
+    () => ({ onMark, onMarkAll, onMarkEach, onRemind }),
+    [onMark, onMarkAll, onMarkEach, onRemind],
   );
 }
 

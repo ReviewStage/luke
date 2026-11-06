@@ -28,8 +28,8 @@
  * agent tools key a start or a message on, is the key the store holds for the
  * agent's conversation, the tool, and the input within a window
  * (`call-key.ts`), so the call a harness retries after a timeout starts or
- * sends once, as eve's run again does; and the turn's count of plan notes is
- * kept on the running turn's row in the store (`runTurnCappedEditPlan`), so
+ * sends once, as eve's run again does; and the turn's count of description notes is
+ * kept on the running turn's row in the store (`runTurnCappedEditDescription`), so
  * the cap holds per turn as eve's does. The list is narrowed per agent as
  * eve narrows its own (`offeredWorkspaceMcpTool`), `save_memory` and `search_memory` by its
  * starter's Memory among it, and a tool left out is still refused by its
@@ -39,8 +39,8 @@
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import {
   type Agent,
-  reserveTurnPlanNotes,
-  settleTurnPlanNotes,
+  reserveTurnDescriptionNotes,
+  settleTurnDescriptionNotes,
 } from "@repo/database/models/agent-store";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { INBOX_TOOL } from "@repo/features/inbox-wire";
@@ -98,7 +98,7 @@ import {
   type AgentDoorSeams,
   type AgentToolCall,
   runAgentComment,
-  runAgentEditPlan,
+  runAgentEditDescription,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
   runAgentShowImage,
@@ -110,11 +110,11 @@ import { INBOX_TOOLS } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import {
-  EDIT_PLAN_TOOL,
-  PLAN_EDIT_REFUSAL,
-  planEditRejected,
+  EDIT_DESCRIPTION_TOOL,
+  DESCRIPTION_EDIT_REFUSAL,
+  descriptionEditRejected,
   requestedNotes,
-} from "../coder-host/plan-edit.js";
+} from "../coder-host/description-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
 import {
@@ -213,7 +213,7 @@ function agentTool(spec: ToolSpec & { readonly name: AgentToolCall["tool"] }) {
   );
 }
 
-/** A tool of the plan's comment threads, run through the comment door. */
+/** A tool of the description's comment threads, run through the comment door. */
 function commentTool(spec: ToolSpec & { readonly name: CommentToolName }) {
   return entry(spec, (admitted, input) => runAgentComment(admitted, spec.name, input));
 }
@@ -289,7 +289,7 @@ function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValu
 }
 
 /**
- * One `edit_plan` call under the turn's cap: its notes reserved against the
+ * One `edit_description` call under the turn's cap: its notes reserved against the
  * conversation's running turn in the store, the count before them handed to
  * the door as eve hands its session's, and the reservation settled to what
  * was taken once the door answers. A call that asks for notes before the
@@ -306,7 +306,7 @@ function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValu
  * the notes are saved by then and a retry would take them twice, so the
  * turn only counts the reservation whole.
  */
-function runTurnCappedEditPlan(
+function runTurnCappedEditDescription(
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
   sandbox: InboxSandboxDoor,
@@ -314,27 +314,29 @@ function runTurnCappedEditPlan(
   const { userId, conversationId } = admitted.target;
   const requested = requestedNotes(input);
   return Effect.acquireUseRelease(
-    reserveTurnPlanNotes(userId, conversationId, requested),
+    reserveTurnDescriptionNotes(userId, conversationId, requested),
     (turn) => {
       if (Option.isSome(turn)) {
-        return runAgentEditPlan(admitted, input, turn.value.taken - requested, sandbox);
+        return runAgentEditDescription(admitted, input, turn.value.taken - requested, sandbox);
       }
       return requested > 0
-        ? Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.NO_TURN))
-        : runAgentEditPlan(admitted, input, 0, sandbox);
+        ? Effect.succeed(descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.NO_TURN))
+        : runAgentEditDescription(admitted, input, 0, sandbox);
     },
     (turn, exit) => {
       if (Option.isNone(turn)) return Effect.void;
       const answer = Exit.isSuccess(exit) ? exit.value : undefined;
       const saved = answer?.status === ACTION_RESULT_STATUS.ACCEPTED ? answer.taken : 0;
-      return settleTurnPlanNotes(userId, turn.value.turnId, requested, saved).pipe(
+      return settleTurnDescriptionNotes(userId, turn.value.turnId, requested, saved).pipe(
         Effect.tapError(logStoreFailure),
         Effect.ignore,
       );
     },
   ).pipe(
     Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
+    Effect.catch(() =>
+      Effect.succeed(descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.UNAVAILABLE)),
+    ),
   );
 }
 
@@ -353,10 +355,10 @@ export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Ma
   entry(INBOX_TOOLS.WITHDRAW, (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
   ),
-  // The pull request, the plan, and pages and pictures.
+  // The pull request, the description, and pages and pictures.
   entry(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input)),
-  entry(EDIT_PLAN_TOOL, (admitted, input, { sandbox }) =>
-    runTurnCappedEditPlan(admitted, input, sandbox),
+  entry(EDIT_DESCRIPTION_TOOL, (admitted, input, { sandbox }) =>
+    runTurnCappedEditDescription(admitted, input, sandbox),
   ),
   entry(
     LOOK_AT_PICTURE_TOOL,
@@ -394,7 +396,7 @@ export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Ma
   // The workspace's shared memory.
   agentTool(SAVE_MEMORY_TOOL),
   agentTool(SEARCH_MEMORY_TOOL),
-  // The plan's comments.
+  // The description's comments.
   commentTool(READ_COMMENTS_TOOL),
   commentTool(REPLY_TO_COMMENT_TOOL),
   commentTool(UPDATE_COMMENT_TOOL),
@@ -410,19 +412,26 @@ export type WorkspaceMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 /** The workspace's shared memory, offered only where the agent's starter turned Memory on. */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
 
-/** The tools eve offers some agents and not others: each one some agent's repository, machine, outside words, or starter's Memory withholds. */
+/** The description's notes and pictures, offered only where the agent's starter has Task descriptions on (`descriptionsOnFor`). */
+const DESCRIPTION_TOOLS: readonly string[] = [
+  CODER_TOOL.EDIT_DESCRIPTION,
+  CODER_TOOL.LOOK_AT_PICTURE,
+];
+
+/** The tools eve offers some agents and not others: each one some agent's repository, machine, or starter's Memory or Task descriptions withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
+  ...DESCRIPTION_TOOLS,
   ...repositoryToolsOf({ repository: "any" }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
-  ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }, { heardFromAnotherAccount: false }),
+  ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }),
 ]);
 
 /**
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
- * repository, where it runs, and, beside its row, whether anyone but its starter has put words into it and whether
- * its starter has Memory on (`beside`), the same rules eve's tool files read
+ * repository, where it runs, and, beside its row, whether its starter has
+ * Memory and Task descriptions on (`beside`), the same rules eve's tool files read
  * at each turn. Note that a harness reads the list as its launch begins, so
  * an agent is narrowed launch by launch, as eve's is turn by turn, and that
  * a tool left off the list still runs when called, so each narrowed tool's
@@ -434,9 +443,10 @@ export function offeredWorkspaceMcpTool(
 ): (name: string) => boolean {
   const offered: ReadonlySet<string> = new Set<string>([
     ...(beside.memoryOn ? MEMORY_TOOLS : []),
+    ...(beside.descriptionsOn ? DESCRIPTION_TOOLS : []),
     ...repositoryToolsOf(agent),
     ...machineToolsOf(agent),
-    ...macToolsOf(agent, beside),
+    ...macToolsOf(agent),
   ]);
   return (name) => !NARROWED_TOOLS.has(name) || offered.has(name);
 }

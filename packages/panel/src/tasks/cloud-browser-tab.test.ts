@@ -16,8 +16,11 @@ import {
   type TasksBrowserTabOpenParams,
 } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
 import { COMMAND_KEY } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import type { WireBoundaryInput } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -25,11 +28,12 @@ import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { browserTabsQuery } from "../live-reads.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { handHostReads, holdBrowserTabs } from "../testing/app-state.js";
+import { handHostReads, holdBrowserTabs, registryWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { onPhone } from "../testing/phone-tab.js";
@@ -42,7 +46,6 @@ import {
 } from "./cloud-browser-tabs.js";
 import {
   type OpenTask,
-  SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   type SidePanelControl,
   useSidePanel,
@@ -99,7 +102,7 @@ function draw(element: React.ReactElement): { rerender: (next: React.ReactElemen
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   act(() => root.render(onRegistry(registry, element)));
   return { rerender: (next) => act(() => root.render(onRegistry(registry, next))) };
 }
@@ -137,11 +140,7 @@ test("a listed cloud Browser tab stands in the strip only once opened in this wi
   assert.notDeepEqual(current().tab, { cloudBrowser: TAB });
 
   panel.rerender(createElement(Probe, { listed: [] }));
-  assert.equal(
-    current().tab,
-    SIDE_PANEL_TAB.COMMENTS,
-    "a tab the service no longer lists gives way",
-  );
+  assert.equal(current().tab, undefined, "a tab the service no longer lists gives way");
 });
 
 test("a cloud Browser tab's pane spins while it waits for the page, draws it once a frame arrives, and takes the tab over and hands it back", async () => {
@@ -434,28 +433,35 @@ test("a tab the member opened here is listed before the service lists it, and le
   };
   const lay = holdBrowserTabs(handHostReads({}).deliverBrowserTabs, () => [LISTED]);
   let read: readonly AgentBrowserTab[] | undefined;
+  let listed: readonly AgentBrowserTab[] | undefined;
   function Probe() {
     read = useCloudBrowserTabs({ taskId: TASK }, true);
+    listed = useQuery({ ...browserTabsQuery({ taskId: TASK }), enabled: false }).data;
     return null;
   }
 
   noteOpenedCloudTab({ taskId: TASK }, opened);
   draw(createElement(Probe));
   await settle();
-  assert.deepEqual(
-    read?.map((tab) => tab.id),
-    [TAB, OTHER_TAB],
-    "listed beside what the service listed, before it lists it",
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      read?.map((tab) => tab.id),
+      [TAB, OTHER_TAB],
+      "listed beside what the service listed, before it lists it",
+    ),
   );
 
   // The service lists it, and later its agent's browser closes it: it goes, as any listed tab would.
   act(() => lay({ taskId: TASK }, [LISTED, opened]));
-  await settle();
+  // Note that each list reaches the tabs' query one notify tick later, so the one listing the tab lands before the next.
+  await vi.waitFor(() => assert.equal(listed?.length, 2));
   act(() => lay({ taskId: TASK }, [LISTED]));
   await settle();
-  assert.deepEqual(
-    read?.map((tab) => tab.id),
-    [TAB],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      read?.map((tab) => tab.id),
+      [TAB],
+    ),
   );
 });
 
@@ -520,10 +526,13 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
 
   await pressEnter();
   assert.deepEqual(asked, [{ agentId: AGENT_ID, address: "http://localhost:3000/" }]);
-  assert.equal(
-    document.querySelector(".cloud-browser-standing [role='alert']")?.textContent,
-    "Invite expiry hasn't opened its sandbox yet. Try again once it has started working.",
-    "a refusal is an alert, said once",
+  // Note that the refusal is drawn once the open's mutation hears it, a few steps after the press.
+  await vi.waitFor(() =>
+    assert.equal(
+      document.querySelector(".cloud-browser-standing [role='alert']")?.textContent,
+      "Invite expiry hasn't opened its sandbox yet. Try again once it has started working.",
+      "a refusal is an alert, said once",
+    ),
   );
   assert.equal(announcedAsAlert(), "", "the window's own alert does not say it again");
   assert.ok(

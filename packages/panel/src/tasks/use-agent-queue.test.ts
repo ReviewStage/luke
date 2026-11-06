@@ -9,13 +9,14 @@ import {
   QUEUE_CHANGE,
 } from "@repo/features/agent-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { PICTURE_STATE, pictureNow } from "@repo/ui/picture-cache";
+import { PICTURE_STATE } from "@repo/ui/picture-read";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { pictureNow } from "../picture-query.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import { useAgentPictureDoor } from "./agent-pictures.js";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer.js";
 import {
@@ -225,7 +226,7 @@ test("a message queued with an image names the id its bytes stand under for the 
   await settle();
   const ready = (id: string | undefined) => {
     assert.ok(id !== undefined, "the file names an id");
-    const state = pictureNow("agent-1", id);
+    const state = pictureNow(testQueryClientNow(), "agent-1", id);
     return state.kind === PICTURE_STATE.READY ? state.url : state.kind;
   };
   const url = `data:${SHOT.mediaType};base64,${SHOT.data}`;

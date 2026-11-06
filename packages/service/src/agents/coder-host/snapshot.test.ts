@@ -22,7 +22,6 @@ import {
 } from "../../testing/source-sandbox.js";
 import type { RepositoryCredential } from "../sandbox-firewall.js";
 import { vercelSandboxApi } from "../vercel-sandbox-api.js";
-import { CODER } from "./bounds.js";
 import { SNAPSHOT, SNAPSHOT_MISS, type SnapshotOutcome, snapshotSource } from "./snapshot.js";
 
 /**
@@ -258,7 +257,7 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
   );
 
   it.effect(
-    "a stopped sandbox is woken for the copy, which runs in the woken session, and stopped again",
+    "a stopped sandbox is woken for the copy, which runs in the woken session, and stopped again with the installation token taken off first",
     (t) =>
       Effect.gen(function* () {
         const source = yield* checkoutFor(t);
@@ -274,6 +273,11 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
           [sandbox.state.status, sandbox.stops],
           ["stopped", [SOURCE_SANDBOX.WOKEN]],
         );
+        // A stopped sandbox keeps its policy and a resume wears it again, so the stop leaves it open.
+        assert.deepEqual(sandbox.policies, [
+          { session: SOURCE_SANDBOX.WOKEN, hosts: ["*", "github.com", "api.github.com"] },
+          { session: SOURCE_SANDBOX.WOKEN, hosts: [] },
+        ]);
       }),
   );
 
@@ -287,41 +291,6 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
 
         assert.ok(outcome.copied);
         assert.deepEqual([sandbox.state.status, sandbox.stops], ["running", []]);
-      }),
-  );
-
-  it.effect(
-    "a stopped sandbox opened before the timeout was shortened has it lowered ahead of its wake, so a woken session kept up lives the timeout",
-    (t) =>
-      Effect.gen(function* () {
-        const sandbox = sourceSandbox(yield* checkoutFor(t), "stopped");
-        const order: string[] = [];
-        const updates: unknown[] = [];
-        // As Vercel lists a sandbox opened before the cap: its configured timeout a day.
-        const respond = async (url: string, init: RequestInit): Promise<Response> => {
-          const parsed = new URL(url);
-          if (init.method === "PATCH") {
-            order.push("lowered");
-            updates.push(JSON.parse(String(init.body)));
-            return Response.json({ sandbox: { name: parsed.pathname.split("/").at(-1) } });
-          }
-          if (parsed.searchParams.get("resume") === "true") order.push("woken");
-          const answered = await answerOf(sandbox, url, init);
-          if (parsed.pathname !== "/api/v2/sandboxes") return answered;
-          const listed: { sandboxes: object[] } = await answered.json();
-          return Response.json({
-            sandboxes: listed.sandboxes.map((each) => ({
-              ...each,
-              timeout: CODER.SANDBOX_MAX_LIFETIME_MS,
-            })),
-          });
-        };
-
-        const outcome = yield* copyOver(respond, Effect.succeed(true));
-
-        assert.ok(outcome.copied);
-        assert.deepEqual(order.slice(0, 2), ["lowered", "woken"]);
-        assert.deepEqual(updates, [{ timeout: CODER.SANDBOX_TIMEOUT_MS }]);
       }),
   );
 

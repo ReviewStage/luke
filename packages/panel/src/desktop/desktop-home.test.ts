@@ -17,7 +17,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -113,19 +113,24 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Home over Acme with `items` waiting on `RETRIES`, read by Dean, with `overrides`; each task and item it opens recorded. */
+/** Home over Acme with `items` waiting on `RETRIES`, read by Dean, with `overrides`, their feed refused where `refused` says; each task and item it opens recorded. */
 function mount(
   overrides: Partial<TasksControl> = {},
   items: readonly InboxItem[] = [RETRY_429],
   room: ShellRoom = SHELL_ROOM.WIDE,
+  refused = false,
 ) {
   const opened: { tasks: string[]; items: InboxChoice[] } = { tasks: [], items: [] };
-  handInboxItems({
-    rows: {
-      [INBOX_SCOPE_KIND.PLAN]: items.length === 0 ? {} : { [RETRIES.id]: items },
-      [INBOX_SCOPE_KIND.AGENT]: {},
-    },
-  });
+  handInboxItems(
+    refused
+      ? { failed: true }
+      : {
+          rows: {
+            [INBOX_SCOPE_KIND.PLAN]: items.length === 0 ? {} : { [RETRIES.id]: items },
+            [INBOX_SCOPE_KIND.AGENT]: {},
+          },
+        },
+  );
   const holding: Pick<TasksControl, "inbox" | "inboxTasks"> =
     items.length === 0
       ? { inbox: [], inboxTasks: [] }
@@ -195,10 +200,13 @@ test("Home greets the reader by first name over New task's composer, the items w
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
   assert.ok(page.querySelector(".home-composer .new-task-composer"), "New task's composer stands");
-  assert.deepEqual(sections(page), {
-    Inbox: [RETRY_429.title],
-    Recent: [CACHE.name, RETRIES.name, DASHBOARD.name],
-  });
+  // Note that the Inbox's items stand once the account's feed reaches its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(sections(page), {
+      Inbox: [RETRY_429.title],
+      Recent: [CACHE.name, RETRIES.name, DASHBOARD.name],
+    }),
+  );
 
   act(() => row(page, CACHE.name).click());
   act(() => row(page, RETRY_429.title).click());
@@ -246,10 +254,16 @@ test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async (
   assert.ok(document.activeElement === first, "↑ goes back to the Inbox's item");
 });
 
-test("nothing waiting says so in the Inbox's words, and a list that could not be read says so under Recent", async () => {
+test("nothing waiting draws no Inbox section, but an Inbox that could not be read says so, and a list that could not be read says so under Recent", async () => {
+  // Note that the feed that could not be read comes first, since the test's one client keeps a feed that answered, as the window does.
+  const unread = mount({}, [RETRY_429], SHELL_ROOM.WIDE, true);
+  await vi.waitFor(() =>
+    assert.match(unread.page.textContent ?? "", /Some inbox items could not be read\./u),
+  );
+  act(() => root?.unmount());
+
   const quiet = mount({}, []);
-  await settle();
-  assert.match(quiet.page.textContent ?? "", /Nothing needs you/u);
+  await vi.waitFor(() => assert.deepEqual(Object.keys(sections(quiet.page)), ["Recent"]));
   act(() => root?.unmount());
 
   const refused = mount({ listRead: false, listFailed: true }, []);

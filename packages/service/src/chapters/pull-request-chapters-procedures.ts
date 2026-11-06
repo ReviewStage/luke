@@ -23,10 +23,8 @@
  * title, description, and commit messages, claims the
  * generation for its head, and tells the chapters in one model call on
  * the API key the member who pressed it saved, never ours
- * (`chapters-generator.ts`), on the Claude model they chose on Generate
- * (Haiku where they never chose, or where what they stored is no model this
- * build offers), or OpenAI's of its tier where they saved only an OpenAI
- * key, then answers as the read does. A member who saved no API key, as one
+ * (`chapters-generator.ts`), on Claude Haiku, or OpenAI's model of its tier
+ * where they saved only an OpenAI key, then answers as the read does. A member who saved no API key, as one
  * on a subscription alone, is answered `generatable: false` and their
  * Generate is refused as unavailable. A claim another request holds answers as generating, without reading the
  * diff or asking the model; a head pushed while the diff is read is answered
@@ -44,13 +42,11 @@
  * on a minted token and answers as the agent's read does, asking GitHub for
  * nothing more and starting no model call. The Generate reads the pull
  * request by its number, not found where the repository holds none under
- * it, and is then the agent's Generate, on the presser's own key and choice
- * of model. Neither runs but on the caller's ask: no read of a pull request
+ * it, and is then the agent's Generate, on the presser's own key. Neither runs but on the caller's ask: no read of a pull request
  * by its repository, nor its opening, generates chapters.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { readAccountPreferences } from "@repo/database/models/account-store";
 import { type Agent, hasRepository } from "@repo/database/models/agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
@@ -68,7 +64,7 @@ import {
   PULL_REQUEST_CHAPTERS_STATUS,
   type PullRequestChaptersFailure,
 } from "@repo/database/pull-request-chapters-vocabulary";
-import { CHAPTERS_MODEL_DEFAULT, type ChaptersModelId } from "@repo/features/chapters-model-choice";
+import { CHAPTERS_MODEL, type ChaptersModelId } from "@repo/features/chapters-model-choice";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { chapterSchema } from "@repo/features/pull-request-chapters";
 import {
@@ -284,14 +280,12 @@ const ownKeyFor = (userId: string) =>
     );
   });
 
-/** The model named, on the member's own API key, Anthropic's first, or none where they saved none. */
-const modelOf = (
-  seams: PullRequestChaptersProcedureSeams,
-  userId: string,
-  modelId: ChaptersModelId,
-) =>
+/** Haiku, which every Generate runs on, on the member's own API key, Anthropic's first, or none where they saved none. */
+const modelOf = (seams: PullRequestChaptersProcedureSeams, userId: string) =>
   Effect.map(ownKeyFor(userId), (own) =>
-    own === undefined ? undefined : (seams.chaptersModel ?? chaptersModelOf)(own, modelId),
+    own === undefined
+      ? undefined
+      : (seams.chaptersModel ?? chaptersModelOf)(own, CHAPTERS_MODEL.HAIKU),
   );
 
 /**
@@ -300,7 +294,7 @@ const modelOf = (
  * workspace and repository the chapters are kept under, once a token minted
  * for the repository confirms the workspace still reaches it, none for an
  * agent with no repository; and whether the reader can generate chapters at
- * all, on a key of their own, which their choice of model never changes.
+ * all, on a key of their own.
  */
 export const agentChaptersAdmission = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -311,13 +305,6 @@ export const agentChaptersAdmission = /* @__PURE__ */ Effect.fnUntraced(function
   });
   return { kept, generatable: own !== undefined };
 });
-
-/** The model the member chose on Generate, Haiku where they never chose (the store reads one no build offers as Haiku too). */
-const chosenModelOf = (userId: string) =>
-  Effect.map(
-    hostedStoreOrUnavailable(readAccountPreferences(userId)),
-    (row) => row?.chaptersModel ?? CHAPTERS_MODEL_DEFAULT,
-  );
 
 /** What a generation's counted event carries but its length: how it came out, and how many chapters and hunks it told. */
 interface GenerationCounts {
@@ -488,8 +475,8 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
 
     generate: signedIn.generate.effect(function* ({ input, context }) {
       const agent = yield* reachedAgent(context.userId, input.params.id);
-      // The model is the presser's own choice, while the chapters it tells are the workspace's.
-      const model = yield* modelOf(seams, context.userId, yield* chosenModelOf(context.userId));
+      // The model runs on the presser's own key, while the chapters it tells are the workspace's.
+      const model = yield* modelOf(seams, context.userId);
       if (model === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       const subject = yield* subjectOf(published, context.userId, agent, input.query?.number);
       if (Option.isNone(subject)) return { pullRequest: null };
@@ -499,7 +486,7 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
     repositoryRead: signedIn.repositoryRead.effect(function* ({ input, context }) {
       const { subject } = yield* reachedRepository(context.userId, input);
       // Whether the reader can generate at all, as the agent's read asks it.
-      const model = yield* modelOf(seams, context.userId, CHAPTERS_MODEL_DEFAULT);
+      const model = yield* modelOf(seams, context.userId);
       return yield* answerOf(subject, input.number, model !== undefined);
     }),
 
@@ -510,7 +497,7 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
         input.query,
         pullRequestByNumber,
       );
-      const model = yield* modelOf(seams, context.userId, yield* chosenModelOf(context.userId));
+      const model = yield* modelOf(seams, context.userId);
       if (model === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* generatedFor(context.userId, model, {
         repository: subject.repository,

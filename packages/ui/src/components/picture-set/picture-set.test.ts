@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { PictureSet, PictureSetTile, PictureStandIn } from "../../index.js";
-import { PICTURE_STATE } from "../../picture-cache.js";
+import { PICTURE_STATE } from "../../picture-read.js";
 import { recordedFailure } from "../../testing/reported-failure.js";
 
 /** The failure beneath a picture whose read did not land. */

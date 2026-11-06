@@ -89,7 +89,7 @@ import { CURSOR_START } from "./transcript.js";
  * as they stand when the Start reads them, so what the source wrote after
  * the press stays out of it. The source's first
  * message is its brief and is not replayed: the new agent is handed the
- * plan as it stands now, or the source's prompt with the text files
+ * description as it stands now, or the source's prompt with the text files
  * attached to it and the images kept beside its conversation (`filesOf`),
  * an automation run's prompt as it was handed, without the
  * replay or note the source's own first message carried. A note the source
@@ -788,7 +788,7 @@ export interface StartFrom {
   readonly source: Agent;
   /** The agents the source's work came down through, the source first, read back while one made no branch of its own (`lineageOf`); whose context the replay is bounded by is read from the first that measured one. */
   readonly lineage: readonly Agent[];
-  /** The source's prompt as the new agent's prompt; none where the source was handed the plan, which the new agent is handed as it stands now. */
+  /** The source's prompt as the new agent's prompt; none where the source was handed the description, which the new agent is handed as it stands now. */
   readonly prompt: string | undefined;
   readonly attachments: readonly AgentAttachment[];
   /** Every step the replay could hand on, oldest first, its chain's carried ahead of its own, before any bound; and how many there were. */
@@ -1127,11 +1127,11 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (own === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   // Note that the source's first row, a line, is its first message, which its note was a part of.
   const opened = records[0]?.message.role === MESSAGE_ROLE.USER ? records[0].placedAt : undefined;
-  const handed = briefOf(source.prompt ?? source.planSnapshot ?? "", opened);
+  const handed = briefOf(source.prompt ?? source.descriptionSnapshot ?? "", opened);
   const mine = handed.note === undefined ? own : [handed.note, ...own];
   const carried = handed.carried?.steps ?? [];
   const totalSteps = (handed.carried?.totalSteps ?? 0) + mine.length;
-  // A source handed the plan carries files only where its own note did, so its first message is read either way.
+  // A source handed the description carries files only where its own note did, so its first message is read either way.
   const files = yield* hostedStoreOrUnavailable(filesOf(source, records[0], noteFiles));
   const forked = from.messageId !== undefined;
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.

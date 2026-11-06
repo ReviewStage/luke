@@ -623,18 +623,19 @@ the hint, and the status; it is replaced whole by a save, deleted by a
 removal, and cascades with the account. `packages/database/src/models/provider-key-store.ts`
 reads and writes the rows and never sees a key in the clear.
 
-A ChatGPT sign-in (`chatgpt_oauth`, `src/accounts/chatgpt-credentials.ts`)
-is a row of the same table, saved by the desktop on
-`PUT /api/account/chatgpt/credentials` after it signs in under the account's
-host id (`GET /api/account/chatgpt/host`, minted once into
-`account_chatgpt_host` and kept across sign-outs). Its seal holds the access,
-refresh and ID tokens, the issued client and the account's subject, bound to
-the kind; `access_expires_at` beside it says when a renewal is due. A
-renewal runs under the row's lock across OpenAI's token endpoint, so
-renewals of one sign-in are serialized as OpenAI asks, and replaces the
-tokens, the expiry and the scopes together. Removing it revokes its refresh
-token at OpenAI first and answers `revocationUnconfirmed` where OpenAI did
-not confirm.
+A ChatGPT plan (`chatgpt_oauth`, `src/accounts/chatgpt-credentials.ts`)
+is a row of the same table, kept by the service as Codex's device-code
+login connects (`POST /api/account/chatgpt/device`, then its `poll`,
+`src/accounts/chatgpt-device-login.ts`). Its seal holds the access, refresh
+and ID tokens, Codex's client and the account's subject, bound to the kind;
+`access_expires_at` beside it says when a renewal is due. A renewal runs
+under the row's lock across OpenAI's token endpoint, so renewals of one plan
+are serialized, and replaces the tokens and the expiry together. Removing
+it revokes its refresh token at OpenAI first and answers
+`revocationUnconfirmed` where OpenAI did not confirm. A row the retired
+third-party Sign in with ChatGPT sealed can no longer renew: it is removed
+as it is opened, without asking OpenAI anything, and the plan reads as not
+connected.
 
 The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
 `HostedEnvironment`: comma-separated `<version>:<base64 of 32 random
@@ -668,8 +669,8 @@ by `src/github/github-token-procedures.ts`) the same way, and answers counts: th
 moved, already current, changed meanwhile, and unreadable. Run it again
 until nothing is changed meanwhile; once nothing names the old version,
 and a day and an hour has passed since, drop it from the list and redeploy.
-The wait is for what stands at a sandbox's firewall (`sandbox_firewall`),
-sealed under the ring for as long as its session runs, which the rewrap
+The wait is for the swaps a runner's launch keeps at its sandbox's firewall
+(`sandbox_firewall`), sealed under the ring for as long as the launch runs, which the rewrap
 does not move and the sweep drops a day and an hour after its last write. A row counted unreadable reads
 `unreadable` to its account, which is told to replace it. It is not a
 migration, since a migration holds no key and runs before the deployment
@@ -914,7 +915,7 @@ project's directory:
 ```
 vercel link
 vercel connect create mcp.executor.sh --name executor          # Executor; corrected below
-vercel connect create mcp.linear.app --name linear             # Linear; prints the connector UID
+vercel connect create linear --name vespin                     # Linear, Connect's managed connector; scoped below
 vercel connect create mcp.notion.com --name notion             # Notion
 vercel connect create mcp.sentry.dev --name sentry             # Sentry
 vercel connect create mcp.stripe.com --name stripe             # Stripe; asks for its scope below
@@ -938,14 +939,20 @@ rest by their server's address. Vercel's MCP server accepts only the clients
 Vercel has reviewed, which is why it is created through Connect's own Vercel
 target rather than by address. A connector created this way asks for no
 scopes, and the provider grants its own default, which is enough for
-Linear, Notion, Sentry, Granola, and Vercel. Mercury grants a write scope,
+Notion, Sentry, Granola, and Vercel. Mercury grants a write scope,
 and a refresh token (`offline_access`), only when asked; Y Combinator's
 server asks for `mcp:access` and Stripe's for `mcp`; and PostHog's and
 Supabase's granular scopes are better asked for in full than left to a
 default. Those five connectors
 ask for every scope their server publishes (`scopes_supported` in its
 `/.well-known/oauth-protected-resource`), set on the connector's
-`data.userAuthorization.scopes`. Resend's resource publishes none, and its
+`data.userAuthorization.scopes`, less the ones that administer the account
+rather than work in it: PostHog's `access_control:write`,
+`organization:write`, `account:write`, `user:write`, `integration:write`, and
+`llm_provider_key:read`, and Supabase's `secrets:read`, which would hand an
+agent a project's API keys, its service role key among them. A token keeps
+the scopes it was granted, so a narrowed connector reaches a member only
+when they connect again. Resend's resource publishes none, and its
 authorization server (`https://api.resend.com`) publishes `full_access`
 beside the narrower `emails:send`, so its connector asks for `full_access`
 alone:
@@ -980,6 +987,21 @@ client ID metadata document support; should the client Connect registers
 fail there, a public client is registered by hand at
 `https://access.stripe.com/mcp/oauth2/register` and the connector PATCHed to
 it, as Granola's is below.
+
+**Linear's connector.** Linear is Connect's managed Linear connector,
+created by its catalog name, which registers a Linear OAuth application
+named Vespin in the team's Linear workspace and is what Linear's consent page
+names. Its tokens are Linear API tokens, which Linear's MCP server takes as
+its own. Its user scopes are `read` and `write` alone, the two that server
+publishes, and never `admin`, which would let an agent administer the
+member's Linear workspace; `write` covers `issues:create` and
+`comments:create`. They are set on the connector's `data.userScopes`, and its
+`data.appScopes` (the application acting as itself) serve no integration:
+
+```
+# ~/linear-scopes.json: {"data":{"userScopes":["read","write"]}}
+vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/linear-scopes.json
+```
 
 **Neon's connector.** Neon's registration endpoint refuses a client that
 does not name its `response_types`, which Connect's registration leaves
@@ -1267,20 +1289,20 @@ its hash (`workspace-mcp/bearer.ts`), and runs each call as the agent's starter
 through the shared doors (`src/agents/coder-host/agent-doors.ts`): Claude
 Code sees them as `mcp__workspace__<tool>`, Codex as the `workspace` server. Its shell,
 files, search, and page reads are the harness's own. Among Vespin's tools,
-`edit_plan` (`src/agents/coder-host/plan-edit.ts`) takes notes
-(`@repo/features/plan-notes`'s `planNotesSchema`)
-into the plan of the task the call names, the agent's own or any other of
-its workspace, through the plan's one write (`plan-notes.ts`): an open
+`edit_description` (`src/agents/coder-host/description-edit.ts`) takes notes
+(`@repo/features/description-notes`'s `descriptionNotesSchema`)
+into the description of the task the call names, the agent's own or any other of
+its workspace, through the description's one write (`description-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
 corrected in the code, a decision it made. The save is journaled on the task's
 row (`task.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and the "recent edits by agents" every agent on the task
 is handed say what the row says now, and a turn may take only so many
-notes. Every agent is offered `edit_plan`, `show_page`, `look_at_picture`,
+notes. Every agent is offered `edit_description`, `show_page`, `look_at_picture`,
 and the comment tools, one on no task among them, as an automation's run
-starts one: its pages stand on the agent itself, a look names its plan by
-the picture's address, and every `edit_plan` and comment call names its
+starts one: its pages stand on the agent itself, a look names its description by
+the picture's address, and every `edit_description` and comment call names its
 task, any of its workspace.
 Beside them stand
 the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent on
@@ -1313,9 +1335,9 @@ mention of a page points the agent at; `list_tasks`, the workspace's
 open tasks, and its archived ones too where asked, each with the sidebar
 section the agent's starter keeps it in, and those sections; `read_task`
 and `create_task` (`src/agents/task-tools.ts`), which read one task of the
-workspace with its plan and its brief, and
+workspace with its description and its brief, and
 make one for the starter, on the repository named or the agent's own,
-confirmed through the workspace's installation, with a brief and a plan to
+confirmed through the workspace's installation, with a brief and a description to
 start from and no agent on it, under an id drawn from the call's key
 (`src/agents/called-id.ts`), so a call run again makes one, which
 `start_agent` then starts on by its id;
@@ -1352,7 +1374,7 @@ choice it lists is one `start_agent` takes. A list, a read, or a start of an age
 `show_page`, and `read_page` answer each thing's mention ready to write, `[@name](link)` under
 the workspace's slug (`src/agents/written-mentions.ts`), and the agent's
 instructions show it the mention of every kind it names, under its own
-task's link, so its replies, Inbox items, and plan notes draw them as chips.
+task's link, so its replies, Inbox items, and description notes draw them as chips.
 A line from another agent hands the agent it reaches no MCP server it
 mentions, since an agent's servers are its developer's to switch.
 `gh` and `git` run through the shell, authenticated at the firewall.
@@ -1401,10 +1423,14 @@ model, or the other provider's balanced model. An account that saved no API
 key, as one on a plan alone, has its replays carried without a summary.
 
 The sandbox is one Vercel Sandbox per agent
-(`src/agents/machine/vercel-machine.ts`), opened from Vespin's own template
-of the agent's image (`src/agents/native-sandbox-template.ts`, prepared with
-the code tooling, pnpm, and Python beside the image's Node and git), and kept
-alive while the runner reports. As it opens, the agent's repository is
+(`src/agents/machine/vercel-machine.ts`), booted from the agents' custom image
+(`apps/web/agent-image/Dockerfile`: Node, git, pnpm, Python, Playwright's
+Chromium, Claude Code, Codex, `gh`, and the runner itself), which CI pushes
+to the project's registry before the deploy that names it, and kept alive
+while the runner reports. The runner starts as the SDK's own `agent` user
+(`createUser`, `asUser`), whose environment the SDK writes on `sudo`'s
+command line, so the placeholders in it are readable there by any process in
+the sandbox while it runs. As it opens, the agent's repository is
 checked out at its default branch, from the workspace's snapshot of the
 repository where one stands or by a whole clone through the firewall-scoped
 clone of `repository-shell.ts` (`cloneRepository`), on a token
@@ -1451,12 +1477,12 @@ Sync. The runner is retired when its turn goes idle, and its end takes the
 credential off the firewall and stops the sandbox, unless a Terminal holds
 it. The instructions (`src/agents/coder-host/instructions.ts`, worded for the
 harness and handed to it at every launch) tell the agent to read `AGENTS.md`
-and `CLAUDE.md` first, reread the code the plan names and say where it no
+and `CLAUDE.md` first, reread the code the description names and say where it no
 longer fits, run the repository's checks, work on an `agent/<slug>` branch and
 never push the default branch, and decide on a pull request and its draft
-state itself; the plan is the session's first message, or for an agent started
-on a developer's prompt, the prompt is, the agent is never handed the plan,
-and the instructions are worded for a prompt in the plan's place. The service
+state itself; the description is the session's first message, or for an agent started
+on a developer's prompt, the prompt is, the agent is never handed the description,
+and the instructions are worded for a prompt in the description's place. The service
 needs `PROVIDER_KEY_ENCRYPTION_KEYS`, under which each account's own keys are
 sealed, `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
 credentials, and names agents by a model only where it holds
@@ -1518,9 +1544,11 @@ as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
 over the settings it holds.
 
-`chaptersModel` is the Claude model Generate chapters runs on, one of
-`@repo/features/chapters-model-choice`'s fixed set, Claude Haiku 5.5 until
-the account chooses; any other value is `invalid-request`.
+`chaptersModel` is the Claude model an earlier desktop let the account pick
+for Generate chapters, one of `@repo/features/chapters-model-choice`'s fixed
+set, Claude Haiku 5.5 until it chose; any other value is `invalid-request`.
+It is kept for the builds that still write it, but Generate no longer reads
+it: every Generate runs on Haiku.
 
 `experiments` is the last part: each experiment the account turned on or
 back off in Settings › Experimental, keyed by `@repo/settings`'s
@@ -1588,8 +1616,8 @@ the answer), holds the answer to the diff, asks once more for any hunk it left
 out, and closes the story with "Other changes": the files a reader reads past,
 those with no hunk, and whatever is still outside. The model is a seam: the
 route hands in `chaptersModelOf(own, modelId)` on the API key the member who
-pressed Generate saved (`ownKeyOf`), the Claude model they chose on an
-Anthropic key and OpenAI's of its tier on an OpenAI key alone, never Vespin's
+pressed Generate saved (`ownKeyOf`), Claude Haiku on an Anthropic key and
+OpenAI's model of its tier on an OpenAI key alone, never Vespin's
 key; a member who saved none reads `generatable: false`. A test hands in a
 scripted one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
 call, the whole run is bounded by `CHAPTERS_BOUNDS.TIMEOUT`, and a failure is
@@ -1805,15 +1833,15 @@ asked of GitHub; it refuses a task whose repository the installation of
 the task's workspace no longer reaches, read at the start rather than when
 the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the
-task's plan as the Markdown Copy puts on the clipboard
-(`@repo/features/plan-markdown`); then
+task's description as the Markdown Copy puts on the clipboard
+(`@repo/features/description-markdown`); then
 makes the agent and its conversation
 (`createAgent`), and opens the agent's session on its harness under the
 developer's own bearer with the snapshot as the first message of a typed
 turn. A Start
 naming a prompt (`task`), the developer's own words bounded as a message is, opens the
 session with the prompt as that first message instead: the agent is never
-handed the plan, its row keeps the prompt and no snapshot, and it still works
+handed the description, its row keeps the prompt and no snapshot, and it still works
 in the task's repository under the same checks; a session that
 did not open discards the agent again (`discardAgent`) and answers
 `unavailable`, so a retry starts afresh. A retry under the same key answers
@@ -1850,7 +1878,7 @@ migration drops them.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, status, `brief` (`plan` or `task`, what it was handed first, so its
-tab draws a plan as the plan's card and a prompt as the developer's message),
+tab draws a description as the description's card and a prompt as the developer's message),
 and `turnId`, the newest turn the status is read from
 (null before the first), so a reader keying an agent's run by agent and
 turn sees the run a message opens as its own (`src/agents/coder-host/status.ts`):
@@ -1934,7 +1962,7 @@ gated as the member's read of the agent is (`agentVisibleTo`), its task's
 reach among it, so an agent they cannot see is neither pinned nor unpinned:
 a pin is the account's own row of `agent_pin`, as a task's is of
 `plan_pin`, kept from the first pin's instant and gone with the agent or the
-account; the plan list's `planlessAgents` answer it as `pinnedAt` only where
+account; the task list's `planlessAgents` answer it as `pinnedAt` only where
 the reader holds one, and its live follow carries the reader's pins of
 agents on a task as `taskAgentPins`.
 `POST /api/agents/{id}/stop` is the harness's cancel of the turn under way, a
@@ -2296,8 +2324,8 @@ reaches the route because the grouped function's dispatcher reads its own
 path override from `route-path` (`apps/web/server/function-dispatch.ts`): it once
 read `path`, and every File tab read was answered 404.
 
-`GET /api/plans/{id}/revisions` reads the plan's history for the Mac's
-version history (`packages/database/src/models/plan-revisions.ts`): fifty revisions a page,
+`GET /api/plans/{id}/revisions` reads the description's history for the Mac's
+version history (`packages/database/src/models/description-revisions.ts`): fifty revisions a page,
 newest first, each its writer as the "Edited by" line names it, when it
 began and last moved, how many changes it made, and for a restore the
 revision it brought back; `?before=<seq>` reads the page before that
@@ -2306,15 +2334,15 @@ before while one stands. `GET /api/plans/{id}/revisions/{seq}` reads one
 revision's content and the content before it, null for the first, each
 formatted under the task's name as it stands now, so a rename since is no
 difference between them. `POST /api/plans/{id}/revisions/{seq}/restore`
-puts that revision's text back through the plan's one
-locked save (`src/tasks/plan-notes.ts`'s `restoreRevision`), kept as a
-revision of the developer's naming the one restored, and answers the plan.
+puts that revision's text back through the description's one
+locked save (`src/tasks/description-notes.ts`'s `restoreRevision`), kept as a
+revision of the developer's naming the one restored, and answers the description.
 It takes no body and no base: what it replaced is the revision before it,
 so a restore over a save that landed meanwhile is undone by restoring that.
 Every member of the task's workspace reads the history any of them wrote;
 a task of a workspace the account is not in reads as an empty history and
 restores as `not-found`. `packages/features/src/task-wire.ts` declares the answers
-(`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
+(`descriptionRevisionsAnswerSchema`, `descriptionRevisionAnswerSchema`).
 
 A task's repository is `task.repository` (migration `20260930133000_plan_repository`), the full name
 `owner/name` as GitHub spells it, or null for a task with none, which is
@@ -2347,17 +2375,17 @@ is `other-workspace`, naming that workspace, since an installation stands
 for one workspace alone and moving the task there is what reaches the repository:
 a task a personal workspace held before #2524 is left that way.
 
-A plan's text has one write, `src/tasks/plan-notes.ts`, and three
+A description's text has one write, `src/tasks/description-notes.ts`, and three
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
 whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what others wrote meanwhile
 where it can be, and answered as a conflict with the text as it stands and
-the plan's last edit, naming who wrote it, with nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
+the description's last edit, naming who wrote it, with nothing saved, where it cannot (`packages/features/src/description-edit.ts`); a
 restore above is the second. An agent's
-`edit_plan` (`src/agents/coder-host/plan-edit.ts`), the third, answers with notes
-(`packages/features/src/plan-notes.ts`): a point added under a heading, a
+`edit_description` (`src/agents/coder-host/description-edit.ts`), the third, answers with notes
+(`packages/features/src/description-notes.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
-text as it stands, passing over a note that names a phrase the plan does not
+text as it stands, passing over a note that names a phrase the description does not
 hold, and saves it under a binding of account and task the service built
 rather than anything the model sends, answering the document as saved or
 why nothing was: a text past its bound,
@@ -2553,7 +2581,7 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will. `MaintenanceSweeps`
-(`src/maintenance/maintenance-sweep.ts`) runs eighteen sweeps in turn and
+(`src/maintenance/maintenance-sweep.ts`) runs seventeen sweeps in turn and
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 
@@ -2569,10 +2597,9 @@ the rest still run, and any failure fails the cron's check-in. In order:
 - `deviceLeases` and `deviceWarmRunners`: launches taken back from Macs
   that stopped beating within their lease, and local runners left warm past
   their device's window.
-- `sandboxes`, `terminals`, `nativeSandboxes`, `eveSandboxes`, and
-  `sandboxRetention`: the Vercel Sandboxes queued for deletion deleted, and
-  agents' sandboxes stopped once no run and no terminal holds them, their
-  snapshot retention bounded.
+- `sandboxes` and `nativeSandboxes`: the Vercel Sandboxes queued for
+  deletion deleted, and native agents' turns whose runner died mid-turn
+  settled as failed. An idle sandbox stops on Vercel's own timeout.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.
 - `withdrawnLines`: withdrawn lines no turn took within an agent's turn
@@ -2581,14 +2608,11 @@ the rest still run, and any failure fails the cron's check-in. In order:
   ("Automations" below), at most twenty-five a sweep, and the runs still
   queued from the last hour acted on, at most twelve a sweep and four at
   once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
-- `purgedPictures`: plan pictures uploaded a day ago that no save named.
+- `purgedPictures`: description pictures uploaded a day ago that no save named.
 - `tokenPullRequests`: the open pull requests of agents on a member's own
   GitHub token, which no webhook reaches, read on that token, their reviews,
   comments, and checks among them, and the agent woken with what changed
   (`src/github/token-pull-request-sweep.ts`).
-- `imageTemplates` and `repositorySnapshots`: the native agents' image
-  template moved on, and workspaces' repository snapshots past their age
-  deleted.
 - `agentQueues`: unpaused queues of idle agents handed on.
 - `hostPairings`: lapsed host pairings, and approved hosts that never
   collected their secret, deleted.

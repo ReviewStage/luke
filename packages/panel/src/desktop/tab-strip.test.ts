@@ -67,7 +67,7 @@ function MenuStrip(): ReactNode {
         label,
         selected: at === 0,
         onSelect: ignore,
-        groups: [[{ label: "Close", onSelect: ignore }]],
+        groups: () => [[{ label: "Close", onSelect: ignore }]],
       }),
     ),
   });

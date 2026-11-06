@@ -26,8 +26,8 @@ import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
   type ComposerQuote,
-  type PlanEditorModule,
-} from "../plan-editor/contract.js";
+  type DescriptionEditorModule,
+} from "../description-editor/contract.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
@@ -193,7 +193,7 @@ interface AnswerField {
   readonly editor: RefObject<ComposerEditorHandle | undefined>;
   readonly room: RefObject<HTMLDivElement | null>;
   /** The editor's bundle, once it has loaded; none while it loads or where it could not. */
-  readonly module: PlanEditorModule | undefined;
+  readonly module: DescriptionEditorModule | undefined;
   /** Whether the editor's bundle could not be loaded. */
   readonly failed: boolean;
   /** Reads the editor's bundle again, the way on from a load that failed. */
@@ -231,9 +231,9 @@ function useAnswerField({
 }): AnswerField {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
-  const { planEditor } = useSideBundles();
-  const bundle = useAtomValue(planEditor);
-  const reload = useAtomRefresh(planEditor);
+  const { descriptionEditor } = useSideBundles();
+  const bundle = useAtomValue(descriptionEditor);
+  const reload = useAtomRefresh(descriptionEditor);
   const pickers = useComposerPickers({
     editor,
     room,

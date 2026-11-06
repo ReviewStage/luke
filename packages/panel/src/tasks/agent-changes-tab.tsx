@@ -10,9 +10,7 @@ import { imageTypeOfPath } from "@repo/features/github-image";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@repo/features/task-wire";
 import { REFRESH_FAILED_WORDS } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import {
-  ANNOUNCE,
   BUTTON_SIZE,
   Button,
   Checkbox,
@@ -32,15 +30,10 @@ import {
   SpinnerRegion,
   Stack,
   TabNotice,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
   TextButton,
   Tooltip,
-  useAnnounce,
 } from "@repo/ui";
 import {
-  CheckIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   CodeIcon,
@@ -49,6 +42,7 @@ import {
   ImageIcon,
   UnfoldVerticalIcon,
 } from "@repo/ui/icons";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   type ComponentProps,
   type ReactNode,
@@ -59,7 +53,6 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useDraft } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -76,6 +69,7 @@ import {
 import { failureShown, unreadShown } from "../failure-report.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { useRegained } from "../use-regained.js";
+import { agentChangesQueryOptions, ChangesFailed } from "./agent-reads.js";
 import {
   type ChangesList,
   FileHead,
@@ -149,6 +143,7 @@ import { useOpenFileTab } from "./open-file-tab.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
 import type { PullRequestSource } from "./pull-request-source.js";
 import { PullRequestWriteNote, type ReadAgain } from "./pull-request-writes.js";
+import { refusedAnswer, taskFileQueryOptions } from "./repository-reads.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
@@ -178,8 +173,7 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  * under a header of its own that folds it, names it, with the letter of
  * what became of it and the lines it adds and removes, and stays at the top
  * while its lines scroll by; a file with no hunks says why under its header.
- * Its bar leads with how many of the files the member marked viewed
- * (`ViewedCount`), then the pull request's files on GitHub, the diff
+ * Its bar holds the pull request's files on GitHub, the diff
  * settings, every one stage-cli offers in a popover (`view-settings.tsx`),
  * Collapse all or Expand all, the ⋯ (the pull request's patch copied or
  * saved, and the changes read again), and the tree's toggle, which shows
@@ -222,119 +216,6 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
 /** A read that threw rather than answered, drawn as any other failed read. */
 const UNANSWERED: AgentChangesAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
-
-/**
- * One agent's read as last answered, none before the first read lands;
- * whether a read is out; and the door that reads it again, settling once
- * its answer lands. The read is
- * asked as the tab first comes on screen and again the moment the agent
- * ends, since that is when what it published settles; every ask is
- * numbered, so only the latest one's answer is drawn, and a read that threw
- * rather than answered lands as `unanswered`. One that failed, or is still
- * out, is asked again as the app reaches the service again while the tab
- * shows it (`useRegained`), since one out then may have been sent while the
- * connection was gone. The Changes and Pull request tabs read through it alike.
- */
-export function useAgentRead<A extends object>(
-  agentId: string,
-  shown: boolean,
-  ended: boolean,
-  read: (agentId: string) => Promise<A>,
-  unanswered: A,
-) {
-  const [answer, setAnswer] = useState<A | undefined>(undefined);
-  const [out, setOut] = useState(false);
-  const latest = useRef({ read, unanswered });
-  latest.current = { read, unanswered };
-  const asked = useRef(0);
-  // The agent's standing the last read on its own was asked for.
-  const readFor = useRef<boolean | undefined>(undefined);
-
-  const ask = useCallback((): Promise<void> => {
-    asked.current += 1;
-    const ask = asked.current;
-    setOut(true);
-    const settle = (next: A) => {
-      if (ask !== asked.current) return;
-      setOut(false);
-      setAnswer(next);
-    };
-    return latest.current.read(agentId).then(settle, () => settle(latest.current.unanswered));
-  }, [agentId]);
-
-  useEffect(() => {
-    if (!shown || readFor.current === ended) return;
-    readFor.current = ended;
-    ask();
-  }, [shown, ended, ask]);
-  useRegained(() => {
-    if (shown && (out || (answer !== undefined && "failure" in answer))) ask();
-  });
-
-  return { answer, out, ask };
-}
-
-/**
- * How many of the files drawn the member marked viewed, leading the bar as
- * stage-cli's Files tab counts them: "3 / 12 files viewed" by the same marks
- * the headers' boxes, V, and the tree draw, so a box ticked counts at once
- * and one GitHub refuses counts again as it goes back; "All 12 files viewed"
- * with a check, quietly in the palette's green, once every one is; and only
- * how many files there are while no marks are read (no sign-in, a read
- * refused, or still reading), rather than a count the marks cannot vouch
- * for. A read that stopped short of every file is never all viewed, since
- * the files it left out are not. It is words, not a control, and a change is
- * read out politely.
- */
-function ViewedCount({
-  files,
-  viewed,
-  truncated,
-}: {
-  files: readonly AgentChangedFile[];
-  /** Whether a file is marked viewed; none while the marks are not read. */
-  viewed: ((path: string) => boolean) | undefined;
-  /** Whether the read stopped short of every file of the pull request. */
-  truncated: boolean;
-}): React.JSX.Element {
-  const { words, complete } = viewedOf(files, viewed, truncated);
-  useAnnounce(ANNOUNCE.POLITE, words);
-  return (
-    // A check and the palette's green once every file is viewed; quiet, cut short at its end where the bar is narrow.
-    <p
-      className="files-viewed m-0 flex min-w-0 flex-initial items-center gap-tight-gap whitespace-nowrap text-muted-foreground data-complete:text-complete [&>svg]:size-control-icon [&>svg]:flex-none"
-      data-complete={complete ? "" : undefined}
-    >
-      {complete ? <CheckIcon aria-hidden="true" /> : null}
-      <Text
-        as={TEXT_ELEMENT.SPAN}
-        variant={TEXT_VARIANT.INHERIT}
-        truncate
-        className="files-viewed-words"
-      >
-        {words}
-      </Text>
-    </p>
-  );
-}
-
-/** How many of the files are viewed, in the bar's words (`ViewedCount`), and whether every one is. */
-function viewedOf(
-  files: readonly AgentChangedFile[],
-  viewed: ((path: string) => boolean) | undefined,
-  truncated: boolean,
-): { readonly words: string; readonly complete: boolean } {
-  const count = files.length;
-  const seen = viewed === undefined ? undefined : files.filter((file) => viewed(file.path)).length;
-  const complete = seen === count && !truncated;
-  const words =
-    seen === undefined
-      ? LIST_WORDS.filesOf(count)
-      : complete
-        ? LIST_WORDS.allViewed(count)
-        : LIST_WORDS.viewedOf(seen, count);
-  return { words, complete };
-}
 
 /** What the bar's ⋯ says. */
 const CHANGES_MENU_WORDS = {
@@ -1515,7 +1396,7 @@ function useFileTexts(
   } | null,
   files: readonly AgentChangedFile[],
 ): FileTexts {
-  const { act } = useAct();
+  const queryClient = useQueryClient();
   const [refusals, setRefusals] = useState<{
     readonly of: unknown;
     readonly refused: ReadonlyMap<string, ExpansionRefusal>;
@@ -1545,18 +1426,25 @@ function useFileTexts(
         refused: new Map(was.of === pullRequest ? was.refused : NONE_REFUSED).set(path, why),
       }));
     const rawAt = (ref: string, path: string): Promise<RawRead> =>
-      act(ACT_KIND.TASKS_FILE, { taskId, path, firstLine: 1, lastLine: 1, raw: true, ref }).then(
-        (answer) =>
-          "text" in answer
-            ? { text: answer.text.text }
-            : {
-                refused:
-                  "refusal" in answer
-                    ? expansionRefusalOf(answer.refusal)
-                    : EXPANSION_REFUSAL.UNAVAILABLE,
-              },
-        () => ({ refused: EXPANSION_REFUSAL.UNAVAILABLE }),
-      );
+      queryClient
+        .fetchQuery(
+          taskFileQueryOptions({ taskId }, { path, firstLine: 1, lastLine: 1, raw: true, ref }),
+        )
+        .then(
+          (answer) =>
+            "text" in answer
+              ? { text: answer.text.text }
+              : { refused: EXPANSION_REFUSAL.UNAVAILABLE },
+          (error: unknown) => {
+            const refused = refusedAnswer(error);
+            return {
+              refused:
+                "refusal" in refused
+                  ? expansionRefusalOf(refused.refusal)
+                  : EXPANSION_REFUSAL.UNAVAILABLE,
+            };
+          },
+        );
     const textsAt = async (file: AgentChangedFile): Promise<TextsRead> => {
       if (!tooLargeToDiff(file)) {
         const after = await rawAt(headSha, file.path);
@@ -1593,7 +1481,7 @@ function useFileTexts(
       kept.set(path, reading);
       return reading;
     };
-  }, [act, taskId, repository, pullRequest, files, baseSha, drawable]);
+  }, [queryClient, taskId, repository, pullRequest, files, baseSha, drawable]);
   // Note that a file a chapter cut down to some of its hunks is not the answer's own, and offers no gap, because its text before cannot be turned back from the hunks it kept.
   const own = useMemo(() => new Set(pullRequest?.files), [pullRequest]);
   const whole = useCallback((file: AgentChangedFile) => own.has(file), [own]);
@@ -1777,29 +1665,41 @@ export interface ChangesReads {
 
 /**
  * The agent's changes and the member's viewed marks on them, read as the
- * view first comes on screen (`shown`), and again as the agent ends, as
- * `useAgentRead` reads; the marks with each answer of the changes, so the
- * two describe the same push.
+ * view first comes on screen (`shown`), again as the agent ends, on Refresh,
+ * and as the app reaches the service again after one failed or went out;
+ * the marks with each answer of the changes, so the two describe the same
+ * push.
  */
 export function useChangesReads(
   agentId: string,
   source: PullRequestSource,
   shown: boolean,
 ): ChangesReads {
-  const {
-    answer: latest,
-    out,
-    ask,
-  } = useAgentRead(agentId, shown, source.ended, source.readChanges, UNANSWERED);
-  // Note that a good answer stands over a failure after it, because a read that fails
-  // again must not take the files drawn away; the count follows what is drawn.
-  const good = useRef<
-    { readonly agentId: string; readonly answer: AgentChangesAnswerView } | undefined
-  >(undefined);
-  if (latest !== undefined && !("failure" in latest)) good.current = { agentId, answer: latest };
-  const standing = good.current?.agentId === agentId ? good.current.answer : undefined;
-  const answer = standing ?? latest;
-  const refreshFailed = standing !== undefined && latest !== undefined && "failure" in latest;
+  // Note that the query is read on the tab's own asks alone, as the docs' lazy query is, so it reads when the tab
+  // first shows and as the agent ends, never because another surface drew the same changes.
+  const changes = useQuery({ ...agentChangesQueryOptions(agentId, source.number), enabled: false });
+  const { refetch, isFetching: out, data: good, error } = changes;
+  const ask = useCallback(() => void refetch(), [refetch]);
+  // The agent's standing the last read on its own was asked for, none before the tab first showed.
+  const readFor = useRef<{ readonly agentId: string; readonly ended: boolean } | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    if (!shown) return;
+    if (readFor.current?.agentId === agentId && readFor.current.ended === source.ended) return;
+    readFor.current = { agentId, ended: source.ended };
+    ask();
+  }, [shown, agentId, source.ended, ask]);
+  // A read that failed, or is still out and may have been sent while the connection was gone, is asked again.
+  const failure =
+    error instanceof ChangesFailed ? error.answer : error === null ? undefined : UNANSWERED;
+  useRegained(() => {
+    if (shown && (out || failure !== undefined)) ask();
+  });
+  // Note that a good answer stands over a failure after it, as the cache keeps it beside the error, because a
+  // read that fails again must not take the files drawn away; the count follows what is drawn.
+  const answer: AgentChangesAnswerView | undefined = good ?? failure;
+  const refreshFailed = good !== undefined && failure !== undefined;
   const reads = useRef<{ readonly of: unknown; readonly count: number }>({
     of: undefined,
     count: 0,
@@ -1826,9 +1726,8 @@ export interface FileReveal {
  * A bar of the host's that draws the view's tools in place of its own
  * (`FileViewBar`), as a chapter's header does: its diff settings and Collapse
  * all, drawn into `tools`, and the tree's toggle, drawn into `end`, at the
- * bar's very end past its ⋯, as every tab's bar stands it; the view's count of files
- * viewed, its pull request on GitHub, and its ⋯ over the whole pull request
- * left to the host, and no strip standing in the closed tree's place.
+ * bar's very end past its ⋯, as every tab's bar stands it; the view's pull
+ * request on GitHub and its ⋯ over the whole pull request left to the host, and no strip standing in the closed tree's place.
  */
 export interface ChangesBarHost {
   /** The box in the host's bar the tools are drawn into; none until it is drawn. */
@@ -1947,8 +1846,8 @@ export function AgentChangesTab({
   };
   const changesMenu = useChangesMenu({ pullRequest });
   const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy });
-  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown, the count of files viewed said under Show files;
-  // a host's own bar says its count, and offers nothing that acts on the whole pull request.
+  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown;
+  // a host's own bar offers nothing that acts on the whole pull request.
   const phone = usePhoneRoom();
   const url = pullRequest?.url;
   useTabActions(
@@ -1956,11 +1855,7 @@ export function AgentChangesTab({
       ? host === undefined
         ? [
             [
-              paneToggleAction(
-                room,
-                undefined,
-                viewedOf(changed.files, list.viewed, pullRequest?.truncated === true).words,
-              ),
+              paneToggleAction(room),
               {
                 ...gitHubAction(() => appPlatform().openGitHub(`${url}/files`)),
                 label: OPEN_FILES_ON_GITHUB,
@@ -2047,13 +1942,6 @@ export function AgentChangesTab({
         </>
       ) : (
         <FileViewBar
-          lead={
-            <ViewedCount
-              files={changed.files}
-              viewed={list.viewed}
-              truncated={pullRequest.truncated}
-            />
-          }
           github={{
             href: `${pullRequest.url}/files`,
             open: (url) => appPlatform().openGitHub(url),

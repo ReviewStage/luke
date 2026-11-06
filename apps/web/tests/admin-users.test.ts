@@ -5,7 +5,7 @@ import { UsersScreen } from "@repo/panel/admin/screens/users";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-users.test.ts -- the roster names itself and its search before its
@@ -81,7 +81,9 @@ async function openUsers(body: AdminUserList | undefined): Promise<HTMLElement> 
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     body === undefined ? new Promise(() => undefined) : Promise.resolve(answer(body)),
   );
-  return mount();
+  const page = await mount();
+  if (body !== undefined) await readLanded(page);
+  return page;
 }
 
 /** The roster's page with its first read held until the returned `land` answers it with `body`. */
@@ -99,6 +101,7 @@ async function openUsersAnsweredLater(): Promise<{
     page,
     land: async (body) => {
       await act(async () => resolve(answer(body)));
+      await readLanded(page);
     },
   };
 }

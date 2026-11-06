@@ -12,6 +12,7 @@ import {
 } from "@repo/features/browser-agent-actions";
 import {
   BROWSER_CURSOR_BEAT,
+  BROWSER_RECORDING_POINTER_MARK,
   type BrowserCursor,
   runBrowserActions,
 } from "@repo/features/browser-agent-cdp";
@@ -931,6 +932,38 @@ it.effect("while someone watches, a click waits the cursor's beat after its move
     assert.deepEqual(clicked.steps, [{ action: "click", status: "done", tab: "page-shop" }]);
     assert.ok(pressed());
   }),
+);
+
+it.effect(
+  "on a page drawing a recording's pointer, a click moves it there and waits the beat before it presses, though no one watches",
+  () =>
+    Effect.gen(function* () {
+      const { peer, sent } = yield* browser(
+        (command) =>
+          command.method === "Runtime.evaluate" &&
+          String(command.params.expression).includes(BROWSER_RECORDING_POINTER_MARK)
+            ? { result: { result: { type: "boolean", value: true } } }
+            : undefined,
+        [{ targetId: "page-shop", url: "https://shop.example/", title: "Shop" }],
+      );
+      const { cursor } = cursorInto(sent, false);
+      const mouse = () =>
+        sent
+          .filter((command) => command.method === "Input.dispatchMouseEvent")
+          .map((command) => String(command.params.type));
+
+      const clicking = yield* Effect.forkChild(
+        run(peer, [{ action: BROWSER_AGENT_ACTION.CLICK, tab: "page-shop", x: 40, y: 60 }], cursor),
+      );
+      yield* TestClock.adjust(Duration.subtract(BROWSER_CURSOR_BEAT, Duration.millis(1)));
+      const beforeBeat = mouse();
+      yield* TestClock.adjust(Duration.millis(1));
+      const clicked = yield* Fiber.join(clicking);
+
+      assert.deepEqual(beforeBeat, ["mouseMoved"]);
+      assert.deepEqual(clicked.steps, [{ action: "click", status: "done", tab: "page-shop" }]);
+      assert.deepEqual(mouse(), ["mouseMoved", "mousePressed", "mouseReleased"]);
+    }),
 );
 
 /**

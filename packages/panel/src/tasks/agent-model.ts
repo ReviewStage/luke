@@ -78,7 +78,7 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@repo/features/repository-reach-wire";
-import { type PlanEditor, TASK_MODE, type TaskMode } from "@repo/features/task-wire";
+import { type DescriptionEditor, TASK_MODE, type TaskMode } from "@repo/features/task-wire";
 import { dayAndTimeText } from "@repo/features/time-format";
 import {
   ROW_PART,
@@ -208,7 +208,7 @@ export function agentPayerLine(
  * mend the reader's own key.
  */
 export function teammateStarter(
-  startedBy: PlanEditor | undefined,
+  startedBy: DescriptionEditor | undefined,
   readerId: string | undefined,
 ): string | undefined {
   return teammateRef(startedBy, readerId)?.name;
@@ -216,9 +216,9 @@ export function teammateStarter(
 
 /** The teammate who started an agent, as the wire names them, for a card to draw; none where `teammateStarter` names nobody. */
 export function teammateRef(
-  startedBy: PlanEditor | undefined,
+  startedBy: DescriptionEditor | undefined,
   readerId: string | undefined,
-): PlanEditor | undefined {
+): DescriptionEditor | undefined {
   if (startedBy === undefined || readerId === undefined || startedBy.userId === readerId) {
     return undefined;
   }
@@ -232,7 +232,7 @@ export function teammateRef(
  * own as it always has, for the reason `teammateStarter` gives.
  */
 export function macOwnerOf(
-  startedBy: PlanEditor | undefined,
+  startedBy: DescriptionEditor | undefined,
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
   former?: readonly FormerMember[] | undefined,
@@ -534,9 +534,6 @@ const SHARED_FAILURE_NOTE = {
   [AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [AGENT_CALL_FAILURE.AGENT_NOT_READY]: "The agent is still starting. Try again in a moment.",
   [AGENT_CALL_FAILURE.NOT_PERMITTED]: "Only the member who started this agent can do this.",
-  // Said where the service could not wait on the image past its answer.
-  [AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING]:
-    "The agent's image is taking too long to prepare. Try again in a few minutes.",
   [AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent cannot be reached from here yet.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
     "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
@@ -686,7 +683,6 @@ export function chooseFailureNote(failure: AgentCallFailure): string {
     case AGENT_CALL_FAILURE.AGENT_RETIRED:
     case AGENT_CALL_FAILURE.DEVICE_REMOVED:
     case AGENT_CALL_FAILURE.NOT_PERMITTED:
-    case AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
     case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
     case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
@@ -1217,7 +1213,6 @@ function startFailureWords(failure: AgentCallFailure): string {
     case AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case AGENT_CALL_FAILURE.NOT_PERMITTED:
-    case AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
     case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
     case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
@@ -1342,7 +1337,6 @@ export function messageFailureWords(failure: AgentCallFailure): string {
     case AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case AGENT_CALL_FAILURE.NOT_PERMITTED:
-    case AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
     case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
     case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:

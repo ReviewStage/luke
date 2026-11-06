@@ -40,11 +40,10 @@ import type { Agent } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import type { AgentMachineKind } from "@repo/features/agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect } from "effect";
-import type { AgentSandboxImage } from "../agent-sandbox-image.js";
+import type { AgentImage } from "../coder-host/agent-image.js";
 import type { CheckoutRefused, CheckoutServices } from "../coder-host/checkout.js";
-import type { RunnerBundle } from "../coder-host/runner-bundle.js";
 import type { KeyRefusal, PlanRefusal } from "../eve-host/eve-sessions.js";
-import type { FirewallEntry, FirewallSlot } from "../sandbox-firewall.js";
+import type { FirewallLaunch, FirewallSources } from "../sandbox-firewall.js";
 import { type CommandExit, type SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
 
 /** Where a session runs now, as its machine names it: a Vercel sandbox's running session, or a local agent's id on its Mac. Opaque to every caller but the machine. */
@@ -142,22 +141,27 @@ export const PLACE_RESUME = { GONE: "gone" } as const;
 
 /**
  * A running place's firewall, the account whose agent it is named beside
- * it: an entry set or renewed in its slot, one withdrawn, or every one
- * cleared ahead of a stop, its record kept in the store
- * (`../sandbox-firewall.ts`). A machine with no firewall of ours does
- * nothing.
+ * it: the whole policy written from the sources given and the swaps of the
+ * launch kept for it; a launch's swaps kept ahead of its first write; that
+ * launch let go and the policy written without it; or every credential
+ * cleared ahead of a stop (`../sandbox-firewall.ts`). A machine with no
+ * firewall of ours does nothing.
  */
 interface MachineFirewall {
-  readonly set: (
+  readonly write: (
     place: MachinePlace,
     userId: string,
-    slot: FirewallSlot,
-    entry: FirewallEntry,
+    sources: FirewallSources,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  readonly withdraw: (
+  readonly keepLaunch: (
     place: MachinePlace,
     userId: string,
-    slot: FirewallSlot,
+    launch: FirewallLaunch,
+  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
+  readonly endLaunch: (
+    place: MachinePlace,
+    userId: string,
+    sources: FirewallSources,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
   readonly clear: (
     place: MachinePlace,
@@ -169,8 +173,8 @@ export interface RunnerHandle extends MachinePlace {
   readonly command: string;
 }
 
-/** What a machine's calls reach of the caller's services: the store, GitHub, the image, and the runner's bundle. */
-type MachineServices = CheckoutServices | AgentSandboxImage | RunnerBundle;
+/** What a machine's calls reach of the caller's services: the store, GitHub, and the agents' image. */
+type MachineServices = CheckoutServices | AgentImage;
 
 /**
  * A failure as the log says it: a machine's own words, which name the call
@@ -205,8 +209,6 @@ export interface MachineOpen<B, EB, RB> {
   readonly agent: Agent;
   /** How the log names the agent's harness. */
   readonly harness: string;
-  /** Whether the open waits on a machine image still being prepared, rather than failing at once. */
-  readonly waitOnImage: boolean;
   /** The caller's reads that need no place, run beside the open, whose result `use` is handed. */
   readonly beside: Effect.Effect<B, EB, RB>;
 }

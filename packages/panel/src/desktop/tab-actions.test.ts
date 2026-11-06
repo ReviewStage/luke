@@ -11,8 +11,9 @@ import {
 } from "@repo/features/agent-wire";
 import { pageFrameUrl } from "@repo/features/page-frame";
 import type { Task } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -26,6 +27,7 @@ import {
   handCapabilities,
   handHostReads,
   holdPullRequestParts,
+  registryWith,
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -35,6 +37,7 @@ import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
 // within the test's own ticks.
 import "../tasks/agent-pull-request-tab.js";
+import { openTaskMenu } from "../testing/task-menu.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
@@ -76,7 +79,7 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  handCapabilities(DESKTOP_CAPABILITIES);
+  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.DESCRIPTIONS));
 });
 
 afterEach(() => {
@@ -165,7 +168,7 @@ async function mountEveryTab(
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         // Only the tabs' bars are asked about, so no bundle lands under them.
         onSideBundles(
           unlandedBundles(),
@@ -214,49 +217,39 @@ function rightClickChosen(strip: HTMLElement): string[] {
   return readAndClose();
 }
 
-/** The two columns' bars: the task's column's toolbar, and the side panel's. */
+/** The bars of the task's page: the task's topbar, and under it its column's agents' bar and the side panel's. */
 interface Bars {
+  task: HTMLElement;
   main: HTMLElement;
   side: HTMLElement;
 }
 
-/** The two columns' bars, as the task's page draws them. */
+/** The bars of the task's page, as it draws them. */
 function bars(container: HTMLElement): Bars {
+  const task = container.querySelector<HTMLElement>(".task-topbar .ui-toolbar");
   const main = container.querySelector<HTMLElement>(".desktop-task-main .ui-toolbar");
   const side = container.querySelector<HTMLElement>(".side-panel-bar");
-  assert.ok(main && side, "both columns draw their bars");
-  return { main, side };
+  assert.ok(task && main && side, "the page draws its bars");
+  return { task, main, side };
 }
 
-/** The buttons standing in a bar's ⋯ slot. */
-function slotButtons(bar: HTMLElement): HTMLButtonElement[] {
-  const slot = bar.querySelector(".toolbar-tab-actions");
-  assert.ok(slot, "the bar keeps its ⋯ slot");
-  return [...slot.querySelectorAll<HTMLButtonElement>("button")];
+/** What the right-click of the chosen tab of `strip` offers on what the tab shows, its own keeping left out. */
+function contentOf(items: readonly string[]): string[] {
+  return items.filter((item) => !TAB_KEEPING.has(item.replace(" (off)", "")));
 }
 
-/** Presses the one ⋯ in a bar's slot and reads what it offers, checking focus comes back to it. */
-function pressBarMore(bar: HTMLElement): string[] {
-  const [more, ...others] = slotButtons(bar);
-  assert.ok(more, "the bar shows a ⋯");
-  assert.equal(others.length, 0, "the bar shows one ⋯");
-  act(() => more.click());
-  const items = readAndClose();
-  assert.equal(document.activeElement, more, "closed by key, the menu hands focus back to the ⋯");
-  return items;
+/** Every ⋯ a bar draws, by its name. */
+function moreButtons(bar: HTMLElement): (string | null)[] {
+  return [...bar.querySelectorAll('button[aria-label$="actions"]')].map((button) =>
+    button.getAttribute("aria-label"),
+  );
 }
 
-test("a subagent's tab puts its right-click's content actions, and none of the tab's keeping, behind its bar's ⋯, and so does an agent's tab in the column's toolbar, whose right-click leads with the tab's keeping and then the agent's one menu", async () => {
+test("a subagent's tab's right-click leads with the tab's keeping and then what it offers on what it shows, and an agent's tab in the column's bar with the agent's one menu", async () => {
   const container = await mountEveryTab({ main: { agent: AGENT.id }, side: SUBAGENT });
   const { main, side } = bars(container);
   const fromRightClick = rightClickChosen(side);
-  const fromMore = pressBarMore(side);
-  assert.deepEqual(fromMore, ["Copy link", "Copy transcript"]);
-  // The same items as the right-click's, less the tab's own keeping, which stays there.
-  assert.deepEqual(
-    fromMore,
-    fromRightClick.filter((item) => !TAB_KEEPING.has(item.replace(" (off)", ""))),
-  );
+  assert.deepEqual(contentOf(fromRightClick), ["Copy link", "Copy transcript"]);
   assert.ok(
     fromRightClick.includes("Close others") || fromRightClick.includes("Close others (off)"),
   );
@@ -274,41 +267,30 @@ test("a subagent's tab puts its right-click's content actions, and none of the t
     "Archive",
     "Permanently delete",
   ]);
-  const agentMore = pressBarMore(main);
-  assert.deepEqual(
-    agentMore,
-    agentItems.filter((item) => !TAB_KEEPING.has(item.replace(" (off)", ""))),
-    "the column's ⋯ offers the agent's items, not the task's",
-  );
-  assert.ok(!agentMore.includes("Mark done"), "none of the task's");
+  assert.ok(!agentItems.includes("Mark done"), "none of the task's");
 });
 
-test("the column's toolbar draws the chosen agent's ⋯ alone, no ⋯ of the task's beside it, and none on the draft's tab", async () => {
-  const cases = [
-    [{ agent: AGENT.id }, [`${AGENT.title} actions`]],
-    [{ draft: "draft-1" }, []],
-  ] as const;
-  for (const [main, labels] of cases) {
-    const container = await mountEveryTab({ main, side: SIDE_PANEL_TAB.INBOX });
-    const toolbar = bars(container).main;
-    assert.deepEqual(
-      [...toolbar.querySelectorAll('button[aria-label$="actions"]')].map((button) =>
-        button.getAttribute("aria-label"),
-      ),
-      labels,
-      `the ⋯ beside ${JSON.stringify(main)}`,
-    );
+test("no bar of the task's page draws a ⋯, over an agent's tab or the draft's: every menu there is a right-click", async () => {
+  for (const main of [{ agent: AGENT.id }, { draft: "draft-1" }] as const) {
+    const container = await mountEveryTab({ main, side: SUBAGENT });
+    const { task, main: agentsBar, side } = bars(container);
+    for (const bar of [task, agentsBar, side]) {
+      assert.deepEqual(moreButtons(bar), [], `no ⋯ beside ${JSON.stringify(main)}`);
+    }
     act(() => roots.pop()?.unmount());
     container.remove();
   }
 });
 
-test("Overview's ⋯ and its right-click offer the task's own document menu, which pins the task rather than the tab, leaves out Mark done and Cancel task, and keeps Change repository, while an agent's ⋯ stays the agent's", async () => {
-  const container = await mountEveryTab({ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX });
-  const { main } = bars(container);
-  const fromMore = pressBarMore(main);
-  assert.deepEqual(fromMore, [
-    "Copy plan",
+test("the task's name's right-click is the task's own document menu, which pins the task, leaves out Mark done and Cancel task, and keeps Change repository, on the task's details and an agent's tab alike, while an agent's tab's right-click stays the agent's", async () => {
+  const taskMenu = (container: HTMLElement) => {
+    openTaskMenu(container);
+    return readAndClose();
+  };
+  const details = await mountEveryTab({ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX });
+  const fromDetails = taskMenu(details);
+  assert.deepEqual(fromDetails, [
+    "Copy description",
     "Copy link",
     "Rename",
     "Version history",
@@ -319,26 +301,19 @@ test("Overview's ⋯ and its right-click offer the task's own document menu, whi
     "Change repository",
     "Permanently delete",
   ]);
-  // The right-click leads with the tab's keeping, which holds no Close nor Pin tab: Overview always stands, and the one Pin is the task's, among its own.
-  const fromRightClick = rightClickChosen(main);
-  const keeping = fromRightClick.slice(0, fromRightClick.indexOf("Copy plan"));
-  assert.ok(
-    !keeping.includes("Close") && !keeping.includes("Pin"),
-    `keeping: ${keeping.join(", ")}`,
-  );
-  assert.deepEqual(fromRightClick.slice(keeping.length), fromMore);
   act(() => roots.pop()?.unmount());
-  container.remove();
+  details.remove();
 
   const agent = await mountEveryTab({ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX });
-  const agentMore = pressBarMore(bars(agent).main);
+  assert.deepEqual(taskMenu(agent), fromDetails, "the same menu over an agent's tab");
+  const agentItems = rightClickChosen(bars(agent).main);
   assert.ok(
-    !agentMore.includes("Copy plan") && !agentMore.includes("Version history"),
-    "the column's ⋯ offers none of the task's items",
+    !agentItems.includes("Copy description") && !agentItems.includes("Version history"),
+    "an agent's tab offers none of the task's items",
   );
 });
 
-test("a tab with no content action shows no ⋯ in its bar, though its right-click still answers, and no tab wears a ⋯ of its own", async () => {
+test("a tab with nothing to offer on what it shows still answers a right-click with its own keeping, and no tab wears a ⋯ of its own", async () => {
   const without: { main: MainTab; side: SidePanelTab }[] = [
     { main: { draft: "draft-1" }, side: { file: "src/invite.ts" } },
     { main: { draft: "draft-1" }, side: { terminal: AGENT.id } },
@@ -348,7 +323,6 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
     const { main, side } = bars(container);
     for (const bar of [main, side]) {
       const label = bar.querySelector('[role="tab"][aria-selected="true"]')?.textContent;
-      assert.deepEqual(slotButtons(bar), [], `the ${label} tab shows no ⋯`);
       assert.ok(rightClickChosen(bar).length > 0, `the ${label} tab answers a right-click`);
     }
     assert.equal(container.querySelector(".ui-tab [aria-haspopup]"), null, "no tab wears a ⋯");
@@ -369,7 +343,7 @@ const PULL_REQUEST: AgentPullRequest = {
   changedFiles: 6,
 };
 
-test("the Pull request tab's bar ⋯ offers Copy link first, then Copy GitHub link, Open on GitHub, and Refresh, which no other tab of the panel offers, and opens the pull request on GitHub", async () => {
+test("the Pull request tab's right-click offers Copy link first, then Copy GitHub link, Open on GitHub, and Refresh, which no other tab of the panel offers, and opens the pull request on GitHub", async () => {
   const opened: string[] = [];
   fakeAppPlatform({
     ...QUIET_PANEL,
@@ -384,22 +358,23 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Copy GitHub li
     published,
   );
   const { side } = bars(container);
-  assert.deepEqual(pressBarMore(side), [
-    "Copy link",
-    "Copy GitHub link",
-    "Open on GitHub",
-    "Refresh",
-  ]);
-  assert.ok(
-    !rightClickChosen(side).some((item) => item === "Open on GitHub" || item === "Refresh"),
-    "a right-click keeps to the tab's own and its link",
+  // Note that the pull request's actions stand once its read reaches its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(contentOf(rightClickChosen(side)), [
+      "Copy link",
+      "Copy GitHub link",
+      "Open on GitHub",
+      "Refresh",
+    ]),
   );
-  const [more] = slotButtons(side);
-  act(() => more?.click());
+  const tab = side.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+  act(() => {
+    tab?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
   const github = [
     ...(openMenu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
   ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent === "Open on GitHub");
-  assert.ok(github, "the ⋯ offers Open on GitHub");
+  assert.ok(github, "the right-click offers Open on GitHub");
   await act(async () => github.click());
   assert.deepEqual(opened, [PULL_REQUEST.url]);
   act(() => roots.pop()?.unmount());
@@ -407,7 +382,7 @@ test("the Pull request tab's bar ⋯ offers Copy link first, then Copy GitHub li
 
   for (const other of [SUBAGENT, { page: PAGE_ID }] as const) {
     const each = await mountEveryTab({ main: { draft: "draft-1" }, side: other }, published);
-    const items = pressBarMore(bars(each).side);
+    const items = rightClickChosen(bars(each).side);
     assert.ok(
       !items.includes("Open on GitHub") && !items.includes("Refresh"),
       `the ${JSON.stringify(other)} tab offers neither Open on GitHub nor Refresh`,
@@ -424,16 +399,15 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or Overview's, the task's own", async () => {
+test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', or a page's", async () => {
   const copied = installClipboard();
   const task = `https://vespin.dev/workspace-personal/task/${TASK.id}`;
   const agent = `https://vespin.dev/workspace-personal/agent/${AGENT.id}`;
-  const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
+  const cases: [{ main: MainTab; side: SidePanelTab }, keyof Bars, string][] = [
     [{ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX }, "main", agent],
     [{ main: { draft: "draft-1" }, side: SUBAGENT }, "side", `${agent}/worker/call-1`],
     [{ main: { draft: "draft-1" }, side: { changes: AGENT.id } }, "side", `${agent}/changes`],
     [{ main: { draft: "draft-1" }, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
-    [{ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX }, "main", task],
   ];
   for (const [chosen, column] of cases) {
     const container = await mountEveryTab(chosen);

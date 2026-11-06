@@ -27,7 +27,7 @@ import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
  */
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
 /** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
@@ -38,7 +38,6 @@ const SETTINGS: SettingsPanelProps = {
     provider: "github",
   },
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: accepted,
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {

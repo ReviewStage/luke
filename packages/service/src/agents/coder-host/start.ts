@@ -73,7 +73,7 @@ import {
 import type { GitHubAccess } from "@repo/features/github-repositories-wire";
 import { agentName, automationRun } from "@repo/features/model-label";
 import { agentFallbackChoice, type ModelChoice } from "@repo/features/models-wire";
-import { planMarkdown } from "@repo/features/plan-markdown";
+import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { TASK_MODE, type Task } from "@repo/features/task-wire";
 import { bothInOrder, causeKind, failureKind } from "@repo/runtime/effect";
 import { EXPERIMENT } from "@repo/settings";
@@ -123,6 +123,7 @@ import {
 } from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import { agentFailureSaid, agentLogIds } from "./agent-log.js";
 import {
   type AccountKeyRows,
@@ -177,10 +178,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * agent and its conversation are made under the ask's key, and a retry
  * carrying the same key is the same agent and opens nothing again; a new
  * agent's eve session opens with the task's document as the Markdown Copy
- * would put on the clipboard, or with the ask's prompt in the plan's place
+ * would put on the clipboard, or with the ask's prompt in the description's place
  * and the files attached to it, which only a prompt carries; a note the
  * ask carries rides after either under a heading of its own, so what the
- * developer said beyond the plan reaches the agent in the same first
+ * developer said beyond the description reaches the agent in the same first
  * message rather than as a second one on its heels. Once eve has taken an
  * agent on a task, the task moves into progress from the backlog or to do
  * and never back (`beginTaskWork`), a move that fails logged rather than
@@ -229,7 +230,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * its automation's own prompt mentions, never those of the webhook body or
  * the GitHub event its prompt carries after it, since whoever wrote those
  * is not the agent's developer.
- * A blank Start, on a task, hands the agent nothing, neither the plan nor
+ * A blank Start, on a task, hands the agent nothing, neither the description nor
  * a prompt, and opens no session: its first words, typed or spoken, open
  * one as they reach it (`steer.ts`), and leaves its task's status where it
  * stands, since no work was handed. It runs on the choice any Start does.
@@ -266,21 +267,21 @@ export type { StartWhere };
 
 /**
  * Where a Start puts the agent and what it is handed: on a plan, handed the
- * plan or a prompt in its place, or in a workspace with no plan, on a
- * repository, handed a prompt, since there is no plan to hand it; in either,
+ * description or a prompt in its place, or in a workspace with no plan, on a
+ * repository, handed a prompt, since there is no description to hand it; in either,
  * another agent of that place's brief and transcript in the prompt's place
  * where it takes over from one, and a note after any of them.
  */
 export type StartPlace = StartWhere & {
-  /** The developer's words in the plan's place; none for the plan, or for a Start from another agent, whose brief stands for them. */
+  /** The developer's words in the description's place; none for the description, or for a Start from another agent, whose brief stands for them. */
   readonly prompt: string | undefined;
-  /** What the developer said for the agent beyond the plan or the prompt; none where they said nothing more. */
+  /** What the developer said for the agent beyond the description or the prompt; none where they said nothing more. */
   readonly note?: string | undefined;
   /** Whose note it is; the developer's unless a coding agent started this one. */
   readonly noteHeading?: StartNoteHeading | undefined;
-  /** Another agent of the same place to take over from, handed its brief and its transcript replayed in place of the plan or a prompt; none for an agent started afresh. */
+  /** Another agent of the same place to take over from, handed its brief and its transcript replayed in place of the description or a prompt; none for an agent started afresh. */
   readonly from?: AgentStartFrom | undefined;
-  /** Whether the agent is handed nothing, neither the plan nor a prompt, its first words coming later; such a Start names no prompt, note, or source. */
+  /** Whether the agent is handed nothing, neither the description nor a prompt, its first words coming later; such a Start names no prompt, note, or source. */
   readonly blank?: boolean | undefined;
   /** What the agent is: a coder unless named, or a pilot where a continue of a task's pilot asks for one. */
   readonly kind?: AgentKind | undefined;
@@ -432,7 +433,7 @@ interface StartLanding {
   readonly startedFrom: StoredStartedFrom | undefined;
 }
 
-/** The agent a Start takes over from as its landing reads it: the source's prompt, the new agent's brief in the plan's place where it was handed one, and how its replay is fitted to the first message it is written into, which `firstMessage` writes for a replay or none. */
+/** The agent a Start takes over from as its landing reads it: the source's prompt, the new agent's brief in the description's place where it was handed one, and how its replay is fitted to the first message it is written into, which `firstMessage` writes for a replay or none. */
 interface ReplayFitter {
   readonly prompt: string | undefined;
   readonly fit: (
@@ -544,7 +545,7 @@ const freshKindOn = Effect.fnUntraced(function* (
   return AGENT_KIND.PILOT;
 });
 
-/** The task read as the account, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
+/** The task read as the account, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, its brief or name in place of its document where the account has Descriptions off, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -568,7 +569,7 @@ const landingOf = Effect.fnUntraced(function* (
       place: {
         taskId: null,
         organizationId: place.organizationId,
-        planSnapshot: null,
+        descriptionSnapshot: null,
         prompt: handed.text,
       },
       startedFrom: handed.startedFrom,
@@ -591,10 +592,15 @@ const landingOf = Effect.fnUntraced(function* (
       repository: task.repository,
       task,
       mover,
-      place: { taskId: place.taskId, planSnapshot: null, prompt: null, kind },
+      place: { taskId: place.taskId, descriptionSnapshot: null, prompt: null, kind },
     };
   }
-  const handed = yield* handedOf(brief ?? planMarkdown(task), place, fitter, noteFiles);
+  // A starter with Descriptions off hands no description: the task's brief in its place, or else its name.
+  const words =
+    brief === undefined && !(yield* descriptionsOnFor(userId, kind))
+      ? (read.value.brief ?? task.name)
+      : brief;
+  const handed = yield* handedOf(words ?? descriptionMarkdown(task), place, fitter, noteFiles);
   return {
     startedFrom: handed.startedFrom,
     workspaceId: task.workspaceId,
@@ -602,9 +608,9 @@ const landingOf = Effect.fnUntraced(function* (
     task,
     mover,
     place:
-      brief === undefined
-        ? { taskId: place.taskId, planSnapshot: handed.text, prompt: null, kind }
-        : { taskId: place.taskId, planSnapshot: null, prompt: handed.text, kind },
+      words === undefined
+        ? { taskId: place.taskId, descriptionSnapshot: handed.text, prompt: null, kind }
+        : { taskId: place.taskId, descriptionSnapshot: null, prompt: handed.text, kind },
   };
 });
 
@@ -1002,7 +1008,7 @@ function openingOf(
     taken === undefined
       ? {
           channel: MESSAGE_CHANNEL.START,
-          brief: brief.prompt === null ? START_LINE_BRIEF.PLAN : START_LINE_BRIEF.PROMPT,
+          brief: brief.prompt === null ? START_LINE_BRIEF.DESCRIPTION : START_LINE_BRIEF.PROMPT,
         }
       : {
           channel: MESSAGE_CHANNEL.START,
@@ -1344,7 +1350,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
         : workspaceRepository(landing.workspaceId, landing.repository, member, landing.mover);
   const branchOf = startBranchOf(userId, ask, from?.source.startBranch ?? null, landing, member);
   const brief = landing.place;
-  // The words a mention is read from: the prompt with any note after it, or a plan start's note
+  // The words a mention is read from: the prompt with any note after it, or a description start's note
   // alone; never the replay of another agent, whose words name what it read, not what to hand on.
   const words = from === undefined ? (brief.prompt ?? ask.note) : wordsOf(from.prompt, ask.note);
   // Note that an automation's run names its own prompt, because the words an outsider wrote beside it
@@ -1353,7 +1359,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
     ask.serverWords ??
     (from === undefined ? words : wordsOf(from.serverWords ?? from.prompt, ask.note));
   // The files of the source's brief that fit, then those the note carries; a fresh start's are its own,
-  // a prompt's or, on the plan, the note's, such as the pictures `start_agent` hands on.
+  // a prompt's or, on the description, the note's, such as the pictures `start_agent` hands on.
   const attachments =
     from === undefined
       ? (ask.attachments ?? [])
@@ -1434,7 +1440,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   const { agent, created, txid } = started.value;
   if (!created) return { agent, created };
   // A blank agent opens no session: its first words open one as they reach it (`steer.ts`).
-  const handed = brief.prompt ?? brief.planSnapshot;
+  const handed = brief.prompt ?? brief.descriptionSnapshot;
   if (handed !== null) {
     // Every line the opening says names the agent, the runtime's own past the answer included. Note
     // that the agent stands from here, so an opening cut short before eve was asked, as a caller's
@@ -1462,7 +1468,15 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
         attachments,
       ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), attachments)));
       const mentioned =
-        words === undefined ? undefined : mentionedContext(words, landing.task, reads);
+        words === undefined
+          ? undefined
+          : mentionedContext(
+              words,
+              landing.task,
+              reads,
+              undefined,
+              yield* descriptionsOnFor(agent.userId, agent.kind),
+            );
       // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
       // who sent it: a native harness's runner names the line back as it takes it (`native-events/`).
       const line = yield* openingLine(

@@ -16,7 +16,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -127,10 +127,12 @@ async function drawn(
         ),
       ),
     );
-  const settle = () =>
-    act(async () => {
+  const settle = async () => {
+    await act(async () => {
       for (let tick = 0; tick < 24; tick += 1) await Promise.resolve();
     });
+    await settleQueries();
+  };
   draw(reveal);
   await settle();
   return {
@@ -205,11 +207,11 @@ test("a link to a message on a later page of a long transcript waits for its pag
   assert.deepEqual(revealed, [2]);
 });
 
-test("a link to the plan an agent was handed, its first message, brings the plan's card into view", async () => {
+test("a link to the description an agent was handed, its first message, brings the description's card into view", async () => {
   const { container, revealed } = await drawn(
     { agentId: AGENT.id, messageId: "task-1", ask: 1 },
     [MESSAGES],
-    { ...AGENT, brief: AGENT_BRIEF.PLAN },
+    { ...AGENT, brief: AGENT_BRIEF.DESCRIPTION },
   );
 
   assert.equal(messageNamed(container, "task-1").hasAttribute("data-landed"), true);

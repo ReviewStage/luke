@@ -21,24 +21,28 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { isWireString, type UnparsedWireValue } from "@repo/wire";
 import { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
-import { type Experiment, type ExperimentChoices, experimentOn } from "./experiments.js";
+import {
+  EXPERIMENT,
+  type Experiment,
+  type ExperimentChoices,
+  experimentOn,
+} from "./experiments.js";
 
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}, {@link MENU_COMMAND_LABELS}, or {@link PALETTE_COMMAND_LABELS}. */
 export const APP_COMMAND = {
   NEW_TASK: "new-task",
-  // Note that copying what the focused pane shows, a plan or an agent's concise transcript, keeps Copy plan's id, because it took Copy plan's place, so a menu bar built before it still reaches it.
-  COPY_CONTENT: "copy-plan",
+  COPY_CONTENT: "copy-content",
   COPY_FULL_TRANSCRIPT: "copy-full-transcript",
   COPY_LINK: "copy-link",
   COMMENT_ON_SELECTION: "comment-on-selection",
   // Note that Mark done keeps Archive's id, because it took Archive's place, so the menu bar's item and any saved use of the id still reach it.
   MARK_TASK_DONE: "archive-plan",
-  // Note that deleting the focused thing, a task or an agent, keeps the task's delete's id, on the same terms as Copy plan's.
+  // Note that deleting the focused thing, a task or an agent, keeps the task's delete's id, because it took the task's delete's place, so the menu bar's item and any saved use of the id still reach it.
   DELETE: "delete-plan",
   VERSION_HISTORY: "version-history",
   OPEN_ON_GITHUB: "open-on-github",
   TOGGLE_READ: "toggle-read",
-  SNOOZE: "snooze",
+  REMIND_ME: "remind-me",
   PIN: "pin",
   OPEN_IN_TASK: "open-in-task",
   PREVIOUS_TASK: "previous-plan",
@@ -404,7 +408,7 @@ export interface AppShortcut {
  * ⌘K for the command palette as Linear, Slack, and
  * Raycast have it, ⌘J for the terminal as VS Code and Cursor have the
  * panel that holds it, ⌥⌘K to mention a File tab's selected lines in the
- * agent's message box, beside the palette's ⌘K, ⌥⌘M to comment on a plan's
+ * agent's message box, beside the palette's ⌘K, ⌥⌘M to comment on a description's
  * words selected as Google Docs has it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
  * found, as every Mac app has them, ⌘+, ⌘−, and ⌘0 to zoom as every
  * browser has them, and ⌘Z and ⇧⌘Z to undo and redo as every Mac app has
@@ -419,11 +423,12 @@ export interface AppShortcut {
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_TASK]: { label: "New task", chord: { key: SHORTCUT_KEY.N } },
-  // Note that a link takes ⇧⌘C, as Arc and Dia copy a page's address, and what the focused pane shows takes ⌥⌘C beside it: the plan where the plan is focused, an agent's concise transcript where its pane or tab is, each menu item saying which (`command-items.tsx` in `@repo/panel`).
+  // Note that a link takes ⇧⌘C, as Arc and Dia copy a page's address, and what the focused pane shows takes ⌥⌘C beside it: the description where the description is focused, an agent's concise transcript where its pane or tab is, each menu item saying which (`command-items.tsx` in `@repo/panel`).
   [APP_COMMAND.COPY_LINK]: { label: "Copy link", chord: { key: SHORTCUT_KEY.C, shift: true } },
   [APP_COMMAND.COPY_CONTENT]: {
-    label: "Copy plan or transcript",
+    label: "Copy transcript",
     chord: { key: SHORTCUT_KEY.C, option: true },
+    renamed: { experiment: EXPERIMENT.DESCRIPTIONS, label: "Copy description or transcript" },
   },
   // Note that the full transcript is the concise copy's chord with Shift, as VS Code's Copy Relative Path is its Copy Path's.
   [APP_COMMAND.COPY_FULL_TRANSCRIPT]: {
@@ -433,15 +438,16 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.COMMENT_ON_SELECTION]: {
     label: "Comment on selection",
     chord: { key: SHORTCUT_KEY.M, option: true },
+    experiment: EXPERIMENT.DESCRIPTIONS,
   },
   // Note that U and P act on the focused sidebar row, and otherwise on what is open, answered only where the press is not typing, as the Inbox's U always has.
   [APP_COMMAND.TOGGLE_READ]: {
     label: "Mark as read or unread",
     chord: { key: SHORTCUT_KEY.U, plain: true },
   },
-  // Note that H snoozes the chosen Inbox item, as Linear's inbox and Superhuman have it.
-  [APP_COMMAND.SNOOZE]: {
-    label: "Snooze",
+  // Note that H sets a reminder on the chosen Inbox item, as Linear's inbox and Superhuman snooze one.
+  [APP_COMMAND.REMIND_ME]: {
+    label: "Remind me",
     chord: { key: SHORTCUT_KEY.H, plain: true },
   },
   [APP_COMMAND.PIN]: {
@@ -452,6 +458,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.VERSION_HISTORY]: {
     label: "Version history",
     chord: { key: SHORTCUT_KEY.H, option: true, shift: true },
+    experiment: EXPERIMENT.DESCRIPTIONS,
   },
   // Note that Open on GitHub takes ⇧⌘O, beside the ⌘O that opens a thing here, because GitHub Desktop's own ⇧⌘G is Find previous.
   [APP_COMMAND.OPEN_ON_GITHUB]: {
@@ -584,6 +591,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.EXIT_VERSION_HISTORY]: {
     label: "Exit version history",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+    experiment: EXPERIMENT.DESCRIPTIONS,
   },
   [APP_COMMAND.HOME]: { label: "Home", chord: { key: SHORTCUT_KEY.H, shift: true } },
   [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
@@ -650,6 +658,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.INSERT_PICTURE]: {
     label: "Insert image",
     chord: { key: SHORTCUT_KEY.I, option: true },
+    experiment: EXPERIMENT.DESCRIPTIONS,
   },
   // Note that ⌃Tab is a desktop app's alone, because a browser keeps it for its own tabs.
   [APP_COMMAND.NEXT_RECENT_TAB]: {
@@ -879,7 +888,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.COPY_FULL_TRANSCRIPT,
       APP_COMMAND.COMMENT_ON_SELECTION,
       APP_COMMAND.TOGGLE_READ,
-      APP_COMMAND.SNOOZE,
+      APP_COMMAND.REMIND_ME,
       APP_COMMAND.PIN,
       APP_COMMAND.VERSION_HISTORY,
       APP_COMMAND.OPEN_ON_GITHUB,
@@ -1198,7 +1207,7 @@ export interface WritingShortcut {
  * chords are TipTap's own, which are Google Docs' for the most part, with two
  * moved off the window's: Strikethrough takes ⇧⌘X, as Google Docs has it,
  * and Code block takes none rather
- * than ⌥⌘C, which copies the plan or a transcript, since ``` makes one as quickly. Bold's ⌘B is
+ * than ⌥⌘C, which copies the description or a transcript, since ``` makes one as quickly. Bold's ⌘B is
  * Toggle sidebar's key too, and is Bold's only while an editor has the caret:
  * an editor stops the chords it answers on their way to the window's keymap
  * (`writing-keys.ts` in `@repo/panel`).

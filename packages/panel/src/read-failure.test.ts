@@ -7,14 +7,18 @@ import {
   type AgentChangesAnswerView,
   INBOX_SCOPE_KIND,
 } from "@repo/features/agent-view";
-import { PLAN_ACTOR, type PlanRevisionLine, type TaskSummary } from "@repo/features/task-wire";
+import {
+  DESCRIPTION_ACTOR,
+  type DescriptionRevisionLine,
+  type TaskSummary,
+} from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { DesktopInbox } from "./desktop/desktop-inbox.js";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop/desktop-version-history.js";
@@ -23,9 +27,14 @@ import { PANEL_TAB } from "./panel-tabs.js";
 import { AgentAuthSection } from "./settings/agent-auth-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { SHELL_ROOM } from "./shell-room.js";
-import { HISTORY_READ } from "./tasks/use-plan-history.js";
+import { HISTORY_READ } from "./tasks/use-description-history.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
-import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "./testing/app-bridge.js";
+import {
+  answeringChanges,
+  fakeActPort,
+  fakeActPortCalls,
+  fakeAppBridge,
+} from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { handHostReads, handInboxItems, handState } from "./testing/app-state.js";
 import { ChangesTabReading } from "./testing/changes-tab.js";
@@ -190,7 +199,8 @@ test("the sidebar's tasks that could not be read again while the app is offline 
   handState({}, { network: { online: false, reachable: true } });
   const page = await mount(sidebarOver(tasksControl({ listFailed: true, tasks: [TASK] })));
   assert.ok(page.textContent?.includes(TASK.name), "the task held still stands");
-  assert.equal(page.querySelector('[role="alert"]'), null);
+  // Note that the window reads as connected until the document saying it is offline reaches its query.
+  await vi.waitFor(() => assert.equal(page.querySelector('[role="alert"]') === null, true));
 });
 
 test("the Inbox's list says its feed could not be read as the sidebar does, and Retry lists what the plan holds", async () => {
@@ -222,11 +232,18 @@ test("the Inbox's list says its feed could not be read as the sidebar does, and 
       }),
     }),
   );
-  const failure = readFailure(page);
+  // Note that the failure, and then the feed read again, stand once they reach the feed's query.
+  const failure = await vi.waitFor(() => readFailure(page));
   assertSaidAlike(failure, "The inbox could not be read.");
   failure.retry();
   await settle();
-  assert.equal(page.querySelector('[role="alert"]'), null, "the read landed, so nothing fails");
+  await vi.waitFor(() =>
+    assert.equal(
+      page.querySelector('[role="alert"]') === null,
+      true,
+      "the read landed, so nothing fails",
+    ),
+  );
 });
 
 test("a side panel tab whose read failed says so alike, and Retry reads them again", async () => {
@@ -235,20 +252,28 @@ test("a side panel tab whose read failed says so alike, and Retry reads them aga
     reads += 1;
     return Promise.resolve(reads === 1 ? UNANSWERED : { pullRequest: null });
   };
+  fakeActPort({ ...fakeActPortCalls(), ...answeringChanges(readChanges) });
   const page = await mount(
     createElement(ChangesTabReading, {
       agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-      control: agentsControl({ readChanges }),
+      control: agentsControl({}),
       shown: true,
       repository: null,
       tree: { open: false, onToggle: ignore },
     }),
   );
+  // Note that the changes land through a query, so the failure is read once it is drawn.
+  await vi.waitFor(() => assert.equal(page.querySelector('[role="alert"]') !== null, true));
   const failure = readFailure(page);
   assertSaidAlike(failure, "The changes could not be read.");
   failure.retry();
-  await settle();
-  assert.equal(page.querySelector('[role="alert"]'), null, "the read landed, so nothing fails");
+  await vi.waitFor(() =>
+    assert.equal(
+      page.querySelector('[role="alert"]') === null,
+      true,
+      "the read landed, so nothing fails",
+    ),
+  );
 });
 
 test("Settings says a page's failed read alike in its card's place, the keys and the workspaces both, and Retry reads again", async () => {
@@ -262,11 +287,18 @@ test("Settings says a page's failed read alike in its card's place, the keys and
     },
   });
   const keys = await mount(createElement(AgentAuthSection, { signedIn: true, onKeys: ignore }));
-  const keysFailure = readFailure(keys);
+  // Note that the failure, and then the keys read again, stand once they reach the keys' query.
+  const keysFailure = await vi.waitFor(() => readFailure(keys));
   assertSaidAlike(keysFailure, "Your keys could not be read.");
   keysFailure.retry();
   await settle();
-  assert.equal(keys.querySelector('[role="alert"]'), null, "the keys were read, so nothing fails");
+  await vi.waitFor(() =>
+    assert.equal(
+      keys.querySelector('[role="alert"]') === null,
+      true,
+      "the keys were read, so nothing fails",
+    ),
+  );
 
   let retried = 0;
   const workspaces = await mount(
@@ -315,19 +347,19 @@ test("an Inbox whose task list could not be read says so, never that nothing nee
   const failure = readFailure(page);
   assertSaidAlike(failure, "The inbox could not be read.");
   assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u);
-  assert.equal(page.querySelector('[role="status"]'), null, "no loading placeholder");
+  assert.equal(page.querySelector('[role="status"]') === null, true, "no loading placeholder");
   failure.retry();
   assert.equal(retried, 1);
 });
 
-const REVISION: PlanRevisionLine = {
+const REVISION: DescriptionRevisionLine = {
   seq: 2,
-  lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: false },
+  lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 20, duringCall: false },
   startedAt: 20,
   changes: 2,
 };
 
-/** The plan's version history whose chosen version could not be read, its sections open where `sections` says. */
+/** The description's version history whose chosen version could not be read, its sections open where `sections` says. */
 async function versionNotRead(sections: boolean, onRetryVersion: () => void): Promise<HTMLElement> {
   const base = tasksControl();
   const history = {
@@ -393,8 +425,8 @@ test("a version history whose version could not be read says so on its page and 
   const version = page.querySelector(".version-page");
   assert.match(sections?.textContent ?? "", /The sections it changed could not be read\./u);
   assert.match(version?.textContent ?? "", /The version could not be read\./u);
-  assert.equal(page.querySelector('[role="status"]'), null, "no placeholder stands");
-  assert.equal(page.querySelector(".ui-skeleton"), null, "no block stands");
+  assert.equal(page.querySelector('[role="status"]') === null, true, "no placeholder stands");
+  assert.equal(page.querySelector(".ui-skeleton") === null, true, "no block stands");
   act(() => retryIn(sections)?.click());
   act(() => retryIn(version)?.click());
   assert.equal(retried, 2, "each Retry reads the version again");

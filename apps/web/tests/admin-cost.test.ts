@@ -5,7 +5,7 @@ import { CostScreen } from "@repo/panel/admin/screens/cost";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-cost.test.ts -- the Cost screen reads its window and scope from the
@@ -116,6 +116,7 @@ async function openCost(
       ),
     );
   });
+  await readLanded(page);
   return page;
 }
 

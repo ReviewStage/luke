@@ -5,15 +5,9 @@ import {
 } from "@repo/features/checkout-identity";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Data, Duration, Effect, type Redacted } from "effect";
-import type { SandboxSession } from "eve/sandbox";
 import type { GitHubTokenAccess } from "../github/github-app.js";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
-import {
-  cloneEntry,
-  FIREWALL_SLOT,
-  type FirewallEntry,
-  type FirewallSlot,
-} from "./sandbox-firewall.js";
+import type { FirewallSources } from "./sandbox-firewall.js";
 import { LINK_SANDBOX_STATE_FOLDER, SANDBOX_STATE_FOLDER } from "./sandbox-state-folder.js";
 import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
@@ -177,33 +171,36 @@ const DEEPEN_SCRIPT = [
 
 /**
  * The firewall of the sandbox session a checkout runs in, bound to the
- * session and its account: an entry set in its slot, or withdrawn, the
- * whole policy composed from what stands (`sandbox-firewall.ts`).
+ * session and its account, and to what stands there beside the checkout's
+ * own: the session's whole policy composed from the sources given with
+ * those, and sent (`sandbox-firewall.ts`).
  */
 export interface RepositoryFirewall {
-  readonly set: (
-    slot: FirewallSlot,
-    entry: FirewallEntry,
-  ) => Effect.Effect<void, SandboxUnavailable>;
-  readonly withdraw: (slot: FirewallSlot) => Effect.Effect<void, SandboxUnavailable>;
+  readonly write: (sources: FirewallSources) => Effect.Effect<void, SandboxUnavailable>;
+}
+
+/** One command run in the sandbox: its line, and where and with what environment it runs. */
+export interface SandboxRunOptions {
+  readonly command: string;
+  readonly workingDirectory?: string;
+  readonly env?: Record<string, string>;
+}
+
+/** What a command answered: its exit code and its two outputs, each cut to the bound. */
+export interface CommandResult {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
 }
 
 /**
  * The sandbox as the shell reaches it: one command run, and, where the
- * provider has a firewall, that firewall. eve's common handle declares no
- * firewall, and a Vercel Sandbox's has one; a sandbox with none cannot
- * carry the checkout's credential and checks nothing out.
+ * provider has a firewall, that firewall; a sandbox with none cannot carry
+ * the checkout's credential and checks nothing out.
  */
 export interface RepositorySandbox {
-  readonly run: SandboxSession["run"];
+  readonly run: (options: SandboxRunOptions) => PromiseLike<CommandResult>;
   readonly firewall?: RepositoryFirewall;
-}
-
-/** What a command answered: its exit code and its two outputs, each cut to the bound. */
-interface CommandResult {
-  readonly exitCode: number;
-  readonly stdout: string;
-  readonly stderr: string;
 }
 
 /** Why the checkout could not be reached or read, as the reason the tool that asked words for the model; a coding agent's checkout answers the same word. */
@@ -251,7 +248,7 @@ function gitRefusal(failed: CommandResult): RepositoryRefusal {
 /** One run in the sandbox as an effect; a run that threw is the sandbox gone, which is the refusal given, with what it threw. */
 export function runInSandbox(
   sandbox: RepositorySandbox,
-  options: Parameters<SandboxSession["run"]>[0],
+  options: SandboxRunOptions,
   refusal: string,
 ) {
   return Effect.tryPromise({
@@ -266,13 +263,12 @@ export function runInSandbox(
 
 /**
  * A run of git's against GitHub with the token at the firewall, for the
- * repository's own git endpoint alone (`cloneEntry`), in a slot of its own,
- * and the refusal for a git that failed. The token stands for the run
- * alone: its slot is withdrawn as the run ends, however it ended, an
- * interrupted run's as it is interrupted, so no later command runs under
- * it, while what else stands at the firewall stays. A withdrawal that
- * failed refuses the checkout, because the session's record would
- * otherwise carry the read token into every later write.
+ * repository's own git endpoint alone, and the refusal for a git that
+ * failed. The token stands for the run alone: the policy is written again
+ * without it as the run ends, however it ended, an interrupted run's as it
+ * is interrupted, so no later command runs under it, while what else stands
+ * at the firewall stays. A write that failed refuses the checkout, because
+ * the policy would otherwise carry the read token on past the run.
  */
 const underCloneCredential = /* @__PURE__ */ Effect.fn("web/underCloneCredential")(function* (
   sandbox: RepositorySandbox,
@@ -291,15 +287,13 @@ const underCloneCredential = /* @__PURE__ */ Effect.fn("web/underCloneCredential
       orElse: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
     }),
   );
-  const withdrawn = firewall.withdraw(FIREWALL_SLOT.GITHUB_CLONE).pipe(Effect.mapError(refused));
-  const ended = yield* firewall
-    .set(FIREWALL_SLOT.GITHUB_CLONE, cloneEntry(fullName, token, access))
-    .pipe(
-      Effect.mapError(refused),
-      Effect.andThen(timed),
-      Effect.onInterrupt(() => Effect.ignore(withdrawn)),
-      Effect.exit,
-    );
+  const withdrawn = firewall.write({}).pipe(Effect.mapError(refused));
+  const ended = yield* firewall.write({ clone: { fullName, token, access } }).pipe(
+    Effect.mapError(refused),
+    Effect.andThen(timed),
+    Effect.onInterrupt(() => Effect.ignore(withdrawn)),
+    Effect.exit,
+  );
   yield* withdrawn;
   const ran = yield* ended;
   if (ran.exitCode !== 0) return yield* gitRefusal(ran);

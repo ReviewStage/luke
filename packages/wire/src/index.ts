@@ -59,6 +59,7 @@ export {
   ASSISTANT_MESSAGE_METADATA,
   type AssistantMessageMetadata,
   type AutomationLineMetadata,
+  COMMENT_LINE_BOUNDS,
   COMPACTION_METADATA,
   type CommentLineMetadata,
   type CompactionMetadata,

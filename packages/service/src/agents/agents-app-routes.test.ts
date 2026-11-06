@@ -10,6 +10,7 @@ import { GITHUB_ACCOUNT_TYPE } from "@repo/database/github-installation-vocabula
 import { readAccountPreferences } from "@repo/database/models/account-store";
 import {
   archiveAgent,
+  createAgent,
   readAgent,
   readAgentByKey,
   renameAgent,
@@ -20,15 +21,15 @@ import { rewindConversation } from "@repo/database/models/conversation-rewind";
 import { registerDevice } from "@repo/database/models/device-store";
 import { childConversationId } from "@repo/database/models/ids";
 import { sentLineStands } from "@repo/database/models/message-reads";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { conversations, messages } from "@repo/database/schemas/storage";
 import { task as taskTable } from "@repo/database/schemas/task";
-import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { CONVERSATION_KIND, CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   DEVICE_LAYOUT,
   fakeWorkspaceSeams,
@@ -50,6 +51,7 @@ import {
   agentNewestAnswerSchema,
   agentOlderAnswerSchema,
   agentPartAnswerSchema,
+  agentWorkspaceListAnswerSchema,
   LOCAL_AGENT_REFUSAL,
   PART_CUT_FIELD,
   TRANSCRIPT_PARTS_QUERY,
@@ -156,11 +158,11 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         // The pages' table is moved aside for the Start alone, so the store's read of the page fails.
         const answered = yield* Effect.ensuring(
           Effect.andThen(
-            sql.unsafe("ALTER TABLE plan_page_version RENAME TO plan_page_version_aside"),
+            sql.unsafe("ALTER TABLE task_page_version RENAME TO task_page_version_aside"),
             ask(startAs(owner, task.id, { idempotencyKey, task: prompt })),
           ),
           Effect.orDie(
-            sql.unsafe("ALTER TABLE plan_page_version_aside RENAME TO plan_page_version"),
+            sql.unsafe("ALTER TABLE task_page_version_aside RENAME TO task_page_version"),
           ),
         );
 
@@ -257,6 +259,51 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "a workspace's list answers a page of its bound with the next page's offset, and that page answers the rest with none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const bound = AGENT_BOUNDS.MAX_WORKSPACE_AGENTS;
+        // One past the bound of agents is written through the store, which takes about two seconds.
+        const made = new Set<string>();
+        for (let each = 0; each <= bound; each += 1) {
+          const started = yield* createAgent(owner, {
+            ...AGENT_DEFAULT_CHOICE,
+            idempotencyKey: randomUUID(),
+            taskId: task.id,
+            descriptionSnapshot: "# Invitations",
+            prompt: null,
+            repository: task.repository,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          });
+          made.add(Option.getOrThrow(started).agent.id);
+        }
+        const page = (offset: number | undefined) => {
+          const url = new URL(WORKSPACE_AGENTS, ORIGIN);
+          url.searchParams.set("workspaceId", task.workspaceId);
+          if (offset !== undefined) url.searchParams.set("offset", String(offset));
+          return Effect.map(
+            ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
+            (answered) =>
+              readAnswer(agentWorkspaceListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        };
+
+        const first = yield* page(undefined);
+        assert.equal(first.agents.length, bound);
+        assert.equal(first.nextOffset, bound);
+        const second = yield* page(bound);
+        assert.equal(second.agents.length, 1);
+        assert.equal(second.nextOffset, undefined);
+        assert.deepEqual(
+          new Set([...first.agents, ...second.agents].map((agent) => agent.id)),
+          made,
+          "the two pages hold every agent once",
+        );
+      }),
+  );
+
+  it.effect(
     "a workspace's list finds the agents whose title or task's name holds the words, whatever their case, a wildcard in them matched as itself",
     () =>
       Effect.gen(function* () {
@@ -290,7 +337,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a Start with no choice runs on the account's default, snapshots the plan as Copy would, and opens the session through its harness acting for the developer with the snapshot first, named by the line it stands as",
+    "a Start with no choice runs on the account's default, snapshots the description as Copy would, and opens the session through its harness acting for the developer with the snapshot first, named by the line it stands as",
     () =>
       Effect.gen(function* () {
         const { owner, task, eve, ask } = yield* openTask();
@@ -310,10 +357,10 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(agent.effort, AGENT_DEFAULT_CHOICE.effort);
         assert.equal(agent.status, AGENT_STATUS.STARTING);
         assert.equal(agent.turnId, null);
-        assert.equal(agent.brief, AGENT_BRIEF.PLAN);
+        assert.equal(agent.brief, AGENT_BRIEF.DESCRIPTION);
         const stored = yield* readAgent(owner, agent.id);
         assert.ok(Option.isSome(stored));
-        assert.equal(stored.value.planSnapshot, SNAPSHOT);
+        assert.equal(stored.value.descriptionSnapshot, SNAPSHOT);
         assert.equal(stored.value.prompt, null);
         assert.equal(stored.value.repository, RELAY_FULL_NAME);
         const lineId = eve.opened[0]?.message.lineId ?? "";
@@ -330,13 +377,13 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           },
         ]);
         assert.equal(yield* sentLineStands(owner, stored.value.conversationId, lineId), true);
-        // The default stands: nothing was chosen.
-        assert.equal(yield* readAccountPreferences(owner), undefined);
+        // The default stands: no agent was chosen.
+        assert.equal((yield* readAccountPreferences(owner))?.agent, undefined);
       }),
   );
 
   it.effect(
-    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session through its harness acting for the developer, reaching the repository on GitHub once for both, and answers the task in progress",
+    "a task's start naming an agent makes the task with an empty description and starts the agent on it with the prompt, opening its session through its harness acting for the developer, reaching the repository on GitHub once for both, and answers the task in progress",
     () =>
       Effect.gen(function* () {
         const { owner, task, eve, installation, github, ask } = yield* openTask();
@@ -829,14 +876,14 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a plan's agents and inbox are read without its plan's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
+    "a plan's agents and inbox are read without its description's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openTask();
         const now = yield* DateTime.nowAsDate;
         // A revision a later build wrote, by a kind of writer this build has no name for.
         yield* Database.use((db) =>
-          db.insert(planRevision).values({
+          db.insert(descriptionRevision).values({
             taskId: task.id,
             seq: 1_000,
             actor: sql`'a-later-writer'`,

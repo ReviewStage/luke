@@ -23,7 +23,7 @@
      the renderer keeps here (`window-zoom.ts`). */
   --zoom: 1;
   /* The margin a comment thread stands in beside the reading width, and the
-     gap between them (`tasks/plan-comments.tsx`, which mirrors both). */
+     gap between them (`tasks/description-comments.tsx`, which mirrors both). */
   --comment-card-width: 288px;
   --comment-margin-gap: var(--ui-space-48);
   --comment-margin-room: calc(var(--comment-margin-gap) + var(--comment-card-width));
@@ -197,7 +197,7 @@ body,
   --agent-composer-field-cap: calc(var(--ui-stage-height) * 0.3);
 }
 
-/* A thread opened over a narrow room's plan spans the column rather than
+/* A thread opened over a narrow room's description spans the column rather than
    standing a margin card's width at its right over the words, so its reply
    box has the column's room. */
 :where(:root)[data-ui-room="narrow"] .desktop-shell .comment-float {
@@ -214,6 +214,24 @@ body,
   bottom: 0;
   left: 0;
   width: var(--ui-space-6);
+}
+
+/* The floating sidebar's title-bar row, claimed back from the drag strips of
+   the work under it (`desktop-shell.tsx`), since the work comes after the
+   sidebar and a later drag region wins: without it a press on Back or
+   Forward drags the window instead. It stands over the work and under the
+   sidebar, so the sidebar still takes every press there. */
+.sidebar-float-claim {
+  position: absolute;
+  z-index: 1;
+  top: var(--sheet-gap);
+  left: var(--sheet-gap);
+  width: var(--sidebar-width);
+  height: calc(var(--desktop-bar-height) - var(--sheet-gap));
+}
+
+[data-ui-profile="desktop"] .sidebar-float-claim {
+  -webkit-app-region: no-drag;
 }
 
 /* Note that the side panel of the Inbox kept hidden between visits (`desktop-shell.tsx`) stands nowhere. */
@@ -519,20 +537,59 @@ body,
   --ui-toolbar-end-at: 0px;
 }
 
-/* On the frame the plan's first tab starts on one line with its sheet's
-   edge below it, as the side panel's does (`.side-panel-bar`); with the
-   sidebar folded it starts past the title bar's buttons, measured from the
-   sheet's edge, a gap in from the window's. A bar further in the column, a
-   task's Inbox tab's, sets its own start. */
+/* A task's page stands its topbar across the work, clear of the title bar's
+   buttons at either end (`main-tabs.tsx`'s `TaskTopbar`), and its column's
+   tabs and its side panel's on one row under it, on the frame: each starts
+   and ends on one line with its sheet's edge below it, however the sidebar
+   stands and whether or not the panel is open. */
 :where(:root):not([data-ui-room="narrow"]) .desktop-shell > .desktop-main .desktop-task-main {
   --ui-toolbar-start-at: 0px;
+  --ui-toolbar-end-at: 0px;
 }
 
 :where(:root):not([data-ui-room="narrow"])
-  .desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-shell
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel
+  > .side-panel-bar {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+/* While no title bar button stands over its start, the topbar starts on the
+   column's edge, as the agents' tabs under it do, so the task's name, laid
+   as a tab is (`Toolbar`'s title press), stands its mark and words over the
+   first tab's. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell:not([data-sidebar-collapsed="true"])
   > .desktop-main
-  .desktop-task-main {
-  --ui-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
+  .task-topbar {
+  --ui-toolbar-start-at: 0px;
+}
+
+/* The task's details stand across the page with no bar of their own, so
+   their sheet starts right under the topbar. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task[data-barless="true"]
+  > .desktop-task-main::before {
+  top: 0;
+}
+
+/* The way back to the agents stays at the details' card's top left, on the
+   card's ground, as the details scroll beneath it. */
+.desktop-task[data-barless="true"] .desktop-document {
+  position: relative;
+}
+
+.task-details-back {
+  position: absolute;
+  z-index: 1;
+  top: var(--ui-space-8);
+  left: var(--ui-space-8);
+  border-radius: var(--ui-control-radius);
+  background: var(--ui-color-ground);
 }
 
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
@@ -631,14 +688,14 @@ body,
   padding: 0;
 }
 
-/* What a transcript opens on, the plan, an automation's prompt, or a
+/* What a transcript opens on, the description, an automation's prompt, or a
    worker's task, stands as a sent message does, at the right over the line
    naming who sent it and when, its card across the message's whole measure,
    so it lines up with a long sent message's left edge rather than a width of
    its own: the measure is the sent message's (`Message`'s `is-user`), and a
    card folded or open spans all of it, the frame around a card whose head
    holds a control beside it among them. */
-.agent-origin > :is([data-origin-plan], [data-replay-card], :has(> [data-replay-card])) {
+.agent-origin > :is([data-origin-description], [data-replay-card], :has(> [data-replay-card])) {
   width: 100%;
 }
 
@@ -676,12 +733,12 @@ body,
 
 /* A unit only one side holds is drawn whole: one written in on the green
    wash's edge, one struck out struck and dimmed, as its words would be. */
-.desktop-document .plan-unit.version-added {
+.desktop-document .description-unit.version-added {
   padding-left: var(--ui-list-inset);
   border-left: 2px solid color-mix(in srgb, var(--ui-color-complete) 70%, transparent);
 }
 
-.desktop-document .plan-unit.version-removed {
+.desktop-document .description-unit.version-removed {
   padding-left: var(--ui-list-inset);
   border-left: 2px solid color-mix(in srgb, var(--ui-color-danger) 60%, transparent);
   color: var(--ui-color-text-muted);
@@ -690,22 +747,22 @@ body,
 }
 
 /* Its column is a `ScrollArea` with nothing scrolling sideways, since
-   nothing in a plan is wider than the column (its code and tables scroll on
+   nothing in a description is wider than the column (its code and tables scroll on
    their own), and a stable gutter, so where macOS draws a bar that takes
    room the column does not shift sideways on the line the app writes that
    first makes it scroll. This is the block inside it. */
-.desktop-document .plan-document-body {
+.desktop-document .description-document-body {
   padding: var(--ui-page-inset);
   /* Room for the last line to scroll clear of what floats over the column's foot. */
   padding-bottom: 140px; /* off-scale */
 }
 
-/* A plan's comment counts and a block's comment button stand in the gutter
+/* A description's comment counts and a block's comment button stand in the gutter
    past the column's end (tasks.css), which the desktop's 48px inset holds.
    The web's 24px holds neither, so its documents end a finger's target and a
    hair either side of it short of the column, whether or not a thread stands
    yet, as the desktop's inset does, so the words never move when the first
-   comment lands, and a plan and its versions keep one width. */
+   comment lands, and a description and its versions keep one width. */
 .desktop-document {
   --comment-gutter: var(--ui-page-inset);
 }
@@ -714,50 +771,50 @@ body,
   --comment-gutter: calc(var(--ui-touch-target) + 2 * var(--ui-space-2));
 }
 
-[data-ui-profile="web"] .desktop-document .plan-document-body {
+[data-ui-profile="web"] .desktop-document .description-document-body {
   padding-right: var(--comment-gutter);
 }
 
 /* Under 480px of room the document gives back half its inset at its start,
    as every page does (`CollectionPage`, `DetailPage`, `SettingsPage`), and
    keeps its end's, which holds the comment gutter, as the web's does. */
-@container plan-document (width < 480px) {
-  .desktop-document .plan-document-body {
+@container description-document (width < 480px) {
+  .desktop-document .description-document-body {
     padding-left: var(--ui-page-inset-narrow);
   }
 }
 
-.desktop-document .plan-body,
-.desktop-document .plan-changed-note,
+.desktop-document .description-body,
+.desktop-document .description-changed-note,
 .desktop-document .version-note {
   max-width: var(--ui-page-measure);
   margin-right: auto;
   margin-left: auto;
 }
 
-.desktop-document .plan-body {
+.desktop-document .description-body {
   color: var(--ui-color-text-body);
   font-size: var(--ui-type-reading-size);
   line-height: var(--ui-type-reading-leading);
 }
 
-/* A plan is a document rather than a message, so its sections breathe: its
+/* A description is a document rather than a message, so its sections breathe: its
    blocks, and the sections of a text drawn inside one block, stand a
    section's gap apart, wherever it is drawn, the side panel's plan tab
    included. Note that the gap is the body's children's rather than
-   `.plan-unit`'s own, because a unit is drawn inside a wrapper where it
+   `.description-unit`'s own, because a unit is drawn inside a wrapper where it
    carries a byline. */
-.desktop-document .plan-body > * + * {
+.desktop-document .description-body > * + * {
   margin-top: 1.5em;
 }
 
 /* A task's key stands tight over its title, and its status and priority
    chips close under it, as one head rather than three blocks. */
-.desktop-document .plan-body > .plan-task-key + * {
+.desktop-document .description-body > .plan-task-key + * {
   margin-top: var(--ui-list-gap);
 }
 
-.desktop-document .plan-body > .plan-task-standing {
+.desktop-document .description-body > .plan-task-standing {
   margin-top: var(--ui-block-gap);
 }
 
@@ -766,9 +823,9 @@ body,
 }
 
 /* Each section is named by a heading with room above it rather than a rule
-   under it; a plan's title is its page's header (`PageHeader`), not a
+   under it; a description's title is its page's header (`PageHeader`), not a
    heading of the text. Note that the headings keep prose's own scale and
-   weight (`@repo/ui`'s prose.css), so a plan's h1, h2 and h3 read as three
+   weight (`@repo/ui`'s prose.css), so a description's h1, h2 and h3 read as three
    steps, as they do in every other note. An h3 that follows a block inside
    a section stands the same room above it, so it never sits on the list or
    paragraph before it; one straight under a heading stays close to it. */
@@ -1116,13 +1173,13 @@ body,
 }
 
 /* Nothing stands below a version, so it needs no room under its last line. */
-.version-page .desktop-document .plan-document-body {
+.version-page .desktop-document .description-document-body {
   padding-bottom: var(--ui-page-inset);
 }
 
 /* The side panel ----------------------------------------------------------- */
 
-/* What the open plan's document keeps beside the side panel: the panel is
+/* What the open description keeps beside the side panel: the panel is
    dragged no wider than the plan's area less this (side-panel.tsx reads it,
    which is why it is registered as a length), and drawn no wider either.
    Beside the open sidebar it is the panel's own least width, so neither pane
@@ -1135,17 +1192,20 @@ body,
 
 /* With the sidebar folded the document's toolbar starts clear of the title
    bar's buttons, so the document keeps that much more, and the plan's tab the
-   same room beside Copy plan and the plan's menu. */
+   same room beside Copy description and the plan's menu. */
 .desktop-shell[data-sidebar-collapsed="true"] .desktop-task {
   --document-reserve: calc(280px + var(--sidebar-toggle-clearance) - var(--column-inset));
 }
 
 /* Hidden, not removed, while the panel fills the window: it keeps its layout
    beneath the panel, and is hidden only once the panel has grown over it. An
-   agent's page and the window's Inbox beside their panel are hidden alike. */
+   agent's page and the window's Inbox beside their panel are hidden alike.
+   Note that its endless loops pause, because a page hidden by `visibility`
+   still asks the window for every frame a loop moves in. */
 .desktop-task-main[hidden],
 .desktop-task > .agent-page[hidden],
 .desktop-task > .page-find[hidden] {
+  --ui-loop-motion: paused;
   visibility: hidden;
   transition: visibility 0s linear var(--ui-duration-pane);
 }

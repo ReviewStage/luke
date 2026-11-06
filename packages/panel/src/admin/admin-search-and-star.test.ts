@@ -3,7 +3,7 @@ import type { AdminUserList, AdminWorkspaceList } from "@repo/features/admin-ans
 import { ADMIN_WORKSPACES_KIND } from "@repo/features/admin-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { rendererRegistry } from "../renderer-runtime.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
@@ -111,6 +111,10 @@ async function draw(
       ),
     ),
   );
+  // Note that the read lands after the act that drew it, as Query tells its observers on a timer of its own.
+  await vi.waitFor(() =>
+    expect(page.querySelector('[role="status"][aria-busy="true"]')).toBeNull(),
+  );
   return page;
 }
 
@@ -181,6 +185,8 @@ test("a star the service refuses goes back and says so in a toast", async () => 
 
   await act(async () => star()?.click());
 
+  await vi.waitFor(() =>
+    expect(document.body.textContent).toContain("The favorite could not be saved. Try again."),
+  );
   expect(star()?.getAttribute("aria-label")).toBe("Favorite Jane Doe");
-  expect(document.body.textContent).toContain("The favorite could not be saved. Try again.");
 });

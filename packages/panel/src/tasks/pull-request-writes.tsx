@@ -54,17 +54,16 @@ import {
   GLYPH,
 } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import {
   createContext,
   type ReactNode,
   useCallback,
   useContext,
   useId,
-  useMemo,
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { confirmFailure, failureShown } from "../failure-report.js";
 import { useGitHubConnection } from "../github-connect.js";
@@ -73,7 +72,7 @@ import { useToast, useWithdrawToast } from "../toast.js";
 import { PULL_REQUEST_STATE_LABEL, queuedLabel, REPOSITORY_UNREACHED_NOTE } from "./agent-model.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
-import { agentPullRequestWrite, usePullRequestSource } from "./pull-request-source.js";
+import { useAgentPullRequestWrite, usePullRequestSource } from "./pull-request-source.js";
 import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
 
 /**
@@ -284,45 +283,43 @@ export function noteOf(
  * (`pull-request-source.ts`), or, drawn outside one, to the agent named.
  */
 export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): PullRequestWrites {
-  const { act } = useAct();
   const number = usePullRequestNumber();
   const source = usePullRequestSource();
-  const own = useMemo(() => agentPullRequestWrite(act, agentId, number), [act, agentId, number]);
+  const own = useAgentPullRequestWrite(agentId, number);
   const send = source?.write ?? own;
-  const [pending, setPending] = useState<PullRequestAction | undefined>(undefined);
-  const [note, setNote] = useState<WriteNote | undefined>(undefined);
-  // Note that the one out is held in a ref as well, because two presses in one frame both read the state from before either.
+  // Note that the change is one mutation through GitHub's answer and the reads it asks again, so it stays pending until they land.
+  const change = useMutation({
+    mutationFn: async (request: PullRequestActionRequest) => {
+      const answer = await send(request).catch(
+        (): AgentPullRequestWriteAnswerView => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+      );
+      // Note that a refusal may still have moved the pull request, so every answer from GitHub reads again,
+      // and the change stays out until that read lands, so the press never draws the pull request as it stood.
+      if (!("failure" in answer)) await Promise.resolve(onWritten()).catch(() => undefined);
+      // Note that the note is made once, so what the press answers and what the tab draws are the same object.
+      return { answer, note: noteOf(answer) };
+    },
+  });
+  const { mutateAsync, reset } = change;
+  // Note that the one out is held in a ref as well, because two presses in one frame both read the mutation from before either.
   const out = useRef(false);
   const write = useCallback(
-    (request: PullRequestActionRequest, onDone?: () => void) => {
-      if (out.current) return Promise.resolve(NOT_SENT);
+    async (request: PullRequestActionRequest, onDone?: () => void) => {
+      if (out.current) return NOT_SENT;
       out.current = true;
-      setPending(request.action);
-      setNote(undefined);
-      return send(request)
-        .catch(
-          (): AgentPullRequestWriteAnswerView => ({
-            failure: AGENT_CALL_FAILURE.UNANSWERED,
-          }),
-        )
-        .then(async (answer) => {
-          // Note that a refusal may still have moved the pull request, so every answer from GitHub reads again,
-          // and the change stays out until that read lands, so the press never draws the pull request as it stood.
-          if (!("failure" in answer)) await Promise.resolve(onWritten()).catch(() => undefined);
-          out.current = false;
-          setPending(undefined);
-          const note = noteOf(answer);
-          setNote(note);
-          if (!("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
-            onDone?.();
-          }
-          return outcomeOf(note);
-        });
+      const { answer, note } = await mutateAsync(request).finally(() => {
+        out.current = false;
+      });
+      if (!("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
+        onDone?.();
+      }
+      return outcomeOf(note);
     },
-    [send, onWritten],
+    [mutateAsync],
   );
-  const dismiss = useCallback(() => setNote(undefined), []);
-  return { pending, note, write, dismiss };
+  const pending = change.isPending ? change.variables.action : undefined;
+  const note = change.data?.note;
+  return { pending, note, write, dismiss: reset };
 }
 
 /** The changes the pill's menu offers: where the pull request stands, never a review. */

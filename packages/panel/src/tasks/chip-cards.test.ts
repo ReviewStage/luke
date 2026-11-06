@@ -53,7 +53,7 @@ import {
   holdPages,
   stateWith,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { ChipCards, type TaskFocus } from "./chip-cards.js";
@@ -160,7 +160,7 @@ const TASK: TaskSummary = {
   repository: "acme/relay",
 };
 
-const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Roll it out\n\nStore first.\n";
+const DESCRIPTION_TEXT = "## Goal\n\nInvite by email.\n\n## Roll it out\n\nStore first.\n";
 
 const SWEEP: AutomationSummary = {
   id: "3f0e6f5c-7d1a-4f6e-9a55-000000000001",
@@ -351,7 +351,7 @@ const PAGE: TaskMentionsValue = {
   taskName: TASK.name,
   workspace: PLACE.workspace,
   repository: PLACE.repository,
-  text: () => PLAN_TEXT,
+  text: () => DESCRIPTION_TEXT,
   doors: {
     holder: { taskId: TASK_ID },
     place: PLACE,
@@ -377,6 +377,8 @@ async function drawn(
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
+  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  writeAppState(state);
   const reads = handHostReads({ items: feed });
   fakeActPort({});
   // Note that a workspace's automations are laid on the document as a card holds them, as the host lays them.
@@ -425,6 +427,10 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the place is drawn as its chip");
   restOn(chip);
   await settle();
+  // Note that a card reading what it names draws its skeleton until the read reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector('.ui-tooltip-card [class*="skeleton"]') === null, true),
+  );
   const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
@@ -494,7 +500,7 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
   assert.equal(sectionCard.card, "data-task-card");
   assert.equal(sectionCard.name, TASK.name);
   assert.equal(sectionCard.focus, "Roll it out");
-  assert.equal((await cardOf(gone)).focus, "Pricing · No longer in the plan");
+  assert.equal((await cardOf(gone)).focus, "Pricing · No longer in the description");
   assert.equal((await cardOf(version)).focus, "Version 4");
 });
 
@@ -674,9 +680,12 @@ test("an Inbox item's labeled chip is called by the item's title, whether it wai
     ].join(" "),
   );
 
-  assert.deepEqual(
-    chipsOf(container).map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
-    ["Keep expired links?", "Rename the invite email?", "Quarantine the flaky test?"],
+  // Note that the feed's items name their chips once they reach its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      chipsOf(container).map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
+      ["Keep expired links?", "Rename the invite email?", "Quarantine the flaky test?"],
+    ),
   );
 });
 
@@ -703,6 +712,10 @@ test("an Inbox item's chip whose feed could not be read keeps the card main's br
 
 test("a member's chip hangs their card", async () => {
   const container = await drawn(`Ask [Sam](${HOME}/person/${SAM}).`);
+  // Note that the chip names the member once the workspace's members reach their query.
+  await vi.waitFor(() =>
+    assert.equal(chipsOf(container)[0]?.textContent?.includes("Sam Okafor"), true),
+  );
 
   const member = await cardOf(chipsOf(container)[0]);
 
@@ -715,6 +728,10 @@ test("an automation's chip is called by its name now, its workspace's automation
   vi.useFakeTimers({ now: CARDS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(`Run by [the sweep](${HOME}/automation/${SWEEP.id}).`);
   const reads = () => automationHolds.length;
+  // Note that the chip says the automation's name once the workspace's automations reach their query.
+  await vi.waitFor(() =>
+    assert.equal(chipsOf(container)[0]?.textContent?.includes("Nightly sweep"), true),
+  );
   const [chip] = chipsOf(container);
   const drawnReads = reads();
   const called = chip?.textContent;

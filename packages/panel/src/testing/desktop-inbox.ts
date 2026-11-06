@@ -92,9 +92,10 @@ import {
   pressInComposer,
   typeInComposer,
 } from "./composer.js";
-import { onRegistry } from "./copy-feedback.js";
+import { onRegistry, settleQueries } from "./copy-feedback.js";
 import { sidebarProps } from "./desktop-sidebar.js";
 import { holdFrames, settleFrames } from "./frames.js";
+import { heardWords } from "./heard-words.js";
 import { restOn } from "./hint-rest.js";
 import { relayout } from "./resize-observer.js";
 import { installScrollIntoView } from "./scroll-into-view.js";
@@ -898,9 +899,31 @@ export function mount(
   return { page: container, asked };
 }
 
-/** Lets every promise settled so far run its continuations, and the frames a paint takes pass (`settleFrames`). */
+/**
+ * Lets every promise settled so far run its continuations, the frames a
+ * paint takes pass (`settleFrames`), and every notification TanStack Query
+ * has queued reach the surfaces observing it (`settleQueries`). The Inbox's
+ * tests act step after step on what each push left, an item chosen, marked,
+ * or answered, so a `vi.waitFor` on one step's outcome alone left the next
+ * step racing the notification after it; waiting out the queue here holds
+ * every step.
+ */
 export async function settle(): Promise<void> {
   await settleFrames();
+  await settleQueries(settleFrames);
+}
+
+/**
+ * Answers every image read the page asks for, as each is asked, until no
+ * picture on it is still being read, as the window's queries ask for an
+ * image a tick after its place is drawn and draw its answer a tick after it lands.
+ */
+export async function landImageReads(page: HTMLElement): Promise<void> {
+  await vi.waitFor(() => {
+    for (const land of world.imageReads.splice(0)) act(() => land());
+    assert.equal(page.querySelector('.picture-block[data-state="reading"]') === null, true);
+  });
+  await settle();
 }
 
 /** A row's title, as its ListRow draws it. */
@@ -925,14 +948,9 @@ export function heardOf(ids: string | null): string {
     .split(" ")
     .filter((id) => id !== "")
     .map((id) => {
-      const copy = document.getElementById(id)?.cloneNode(true);
-      assert.ok(copy instanceof Element, `nothing is drawn as ${id}`);
-      for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
-      for (const apart of copy.querySelectorAll(".ui-visually-hidden")) {
-        apart.before(" ");
-        apart.after(" ");
-      }
-      return (copy.textContent ?? "").replace(/\s+/gu, " ").trim();
+      const named = document.getElementById(id);
+      assert.ok(named !== null, `nothing is drawn as ${id}`);
+      return heardWords(named);
     })
     .join(" ");
 }

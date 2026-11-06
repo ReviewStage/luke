@@ -305,7 +305,7 @@ const ASK: AgentTranscriptMessage = {
   parts: [
     {
       type: "text",
-      text: "Build teammate invitations from the plan: a member invites by email, and the link joins the workspace.",
+      text: "Build teammate invitations from the description: a member invites by email, and the link joins the workspace.",
     },
   ],
   sentAt: STARTED_AT,
@@ -318,7 +318,7 @@ const WORK: AgentTranscriptMessage = {
   parts: [
     {
       type: "text",
-      text: "I'll model an invite as a pending membership, as the plan settled, so removal covers both.",
+      text: "I'll model an invite as a pending membership, as the description settled, so removal covers both.",
     },
     toolPart(
       "read_file",
@@ -867,13 +867,13 @@ const TRANSCRIPT_LENGTH = {
 
 type TranscriptLength = (typeof TRANSCRIPT_LENGTH)[keyof typeof TRANSCRIPT_LENGTH];
 
-/** What one agent profile opens beside the agent: its Pull request tab on a view, with the transcript as long as it says, a file's tab, the page it showed, its Terminal staged one way, or the task's plan, whose comments the tasks fixture answers. */
+/** What one agent profile opens beside the agent: its Pull request tab on a view, with the transcript as long as it says, a file's tab, the page it showed, its Terminal staged one way, or the task's description, whose comments the tasks fixture answers. */
 type AgentStage =
   | { readonly view: PullRequestView; readonly transcript?: TranscriptLength }
   | { readonly file: string }
   | { readonly page: string }
   | { readonly terminal: TerminalStage }
-  | { readonly plan: true };
+  | { readonly description: true };
 
 const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage>([
   [RUN_PROFILE.AGENT_PULL_REQUEST, { view: PULL_REQUEST_VIEW.CONVERSATION }],
@@ -913,8 +913,8 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   ],
   [RUN_PROFILE.AGENT_TERMINAL_UNREACHABLE, { terminal: { kind: TERMINAL_STAGE.REFUSED } }],
   [RUN_PROFILE.AGENT_PAGE, { page: FIXTURE_PAGE.id }],
-  // The plan's threads are the tasks fixture's to hold (`tasks-fixture.ts`); one of them is this agent's.
-  [RUN_PROFILE.TASKS_COMMENTS, { plan: true }],
+  // The description's threads are the tasks fixture's to hold (`tasks-fixture.ts`); one of them is this agent's.
+  [RUN_PROFILE.TASKS_COMMENTS, { description: true }],
 ]);
 
 /** The shell the agent's sandbox holds. */
@@ -1054,7 +1054,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
 export function agentTasksView(profile: string, open: TasksView): TasksView | undefined {
   const taskId = open.activeTaskId;
   if (!AGENT_STAGES.has(profile) || taskId === undefined) return undefined;
-  const agent = agentSummary(taskId, longRun(AGENT_STAGES.get(profile) ?? { plan: true }));
+  const agent = agentSummary(taskId, longRun(AGENT_STAGES.get(profile) ?? { description: true }));
   const agents: TaskSummary["agents"] = {
     total: 1,
     working: 0,
@@ -1100,13 +1100,13 @@ const FIXTURE_AGENT_TAB: MainTab = { agent: FIXTURE_AGENT_ID };
 
 /**
  * The tab the task's column opens on under an agent profile: the agent's,
- * or Overview, where the task's plan stands, under the profile that stages
- * the plan; none under any other profile.
+ * or Overview, where the task's description stands, under the profile that stages
+ * the description; none under any other profile.
  */
 export function agentColumnTab(profile: string): MainTab | undefined {
   const stage = AGENT_STAGES.get(profile);
   if (stage === undefined) return undefined;
-  return "plan" in stage ? MAIN_TAB.OVERVIEW : FIXTURE_AGENT_TAB;
+  return "description" in stage ? MAIN_TAB.OVERVIEW : FIXTURE_AGENT_TAB;
 }
 
 /** Main's held pages with the open task's holding the page its agent showed, one object for each of main's. */
@@ -1231,7 +1231,7 @@ export function agentAppState(state: AppStateSnapshot, taskId: string): AppState
 /**
  * The side panel an agent profile opens with, from the panel the tasks
  * profiles open: the agent's Pull request tab on the profile's view, the
- * file's tab, the page's, or the agent's Terminal, or shut beside the plan;
+ * file's tab, the page's, or the agent's Terminal, or shut beside the description;
  * none under any other profile.
  */
 export function agentSidePanel(
@@ -1261,8 +1261,8 @@ export function agentSidePanel(
     const page = { page: stage.page };
     return { ...panel, tab: page, pages: [page] };
   }
-  // The plan stands in the column's Overview, so the panel beside it is shut (`agentColumnTab`).
-  if ("plan" in stage) return { ...panel, open: false, tab: undefined };
+  // The description stands in the column's Overview, so the panel beside it is shut (`agentColumnTab`).
+  if ("description" in stage) return { ...panel, open: false, tab: undefined };
   const terminal = { terminal: FIXTURE_AGENT_ID };
   return { ...panel, tab: terminal, terminals: [terminal] };
 }

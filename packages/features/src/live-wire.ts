@@ -32,11 +32,11 @@ import { type MacCommand, macCommandSchema } from "./mac-command-wire.js";
 import { type PageLine, pageLineSchema, pageShowerSchema } from "./page-wire.js";
 import { countedNumber } from "./service-wire.js";
 import {
-  PLAN_ACTOR,
-  PLAN_HISTORY_BOUNDS,
-  type PlanRevisionLine,
-  type PlanRevisionsAnswer,
-  planRevisionSeqSchema,
+  DESCRIPTION_ACTOR,
+  DESCRIPTION_HISTORY_BOUNDS,
+  type DescriptionRevisionLine,
+  type DescriptionRevisionsAnswer,
+  descriptionRevisionSeqSchema,
   UNKNOWN_AGENT_LABEL,
 } from "./task-wire.js";
 import { transcriptWindowPartRowSchema, transcriptWindowRowSchema } from "./transcript-window.js";
@@ -339,7 +339,7 @@ function digest(text: string): string {
  * The cursor of a live answer: a digest of what the held read's cursor
  * stamps, each item's id, revision, instant, read state, who it waits
  * on, so its task's assignee changing moves it, whether it asks, and until
- * when it is snoozed, and
+ * when its reminder comes due, and
  * each failed run, so an answer whose cursor is the last one's moved nothing
  * a reader announces or counts, as a held answer's does.
  */
@@ -351,7 +351,7 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     readonly unread?: boolean | undefined;
     readonly waitsOn?: string | undefined;
     readonly asking?: boolean | undefined;
-    readonly snoozedUntil?: number | null | undefined;
+    readonly remindAt?: number | null | undefined;
   }) => [
     item.id,
     item.revision,
@@ -359,7 +359,7 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     item.unread ?? null,
     item.waitsOn ?? null,
     item.asking ?? null,
-    item.snoozedUntil ?? null,
+    item.remindAt ?? null,
   ];
   return digest(
     JSON.stringify([
@@ -424,13 +424,13 @@ export function nextFailedRunExpiry(
 }
 
 /**
- * An open task's plan, pages, calls, and agents' code sealed for following: the
+ * An open task's description, pages, calls, and agents' code sealed for following: the
  * address, and one statement a part, each a mark that moves as its rows do
- * and carries none of their words: the plan's last save (`plan`), and the
+ * and carries none of their words: the description's last save (`plan`), and the
  * pages agents showed (`pages`), the calls about the task (`calls`), and the
  * code its agents showed (`code`), which this build no longer reads, since
  * it holds a task's pages on their own read (`LIVE_READ.PAGES`), but a
- * released desktop still requires. The desktop reads the plan again once its
+ * released desktop still requires. The desktop reads the description again once its
  * mark moves, rather than when a call's activity or end suggests it might have. The
  * service answers `not-found` for a task the account does not reach, and
  * `unavailable` where its deployment's Realtime is misconfigured, which the
@@ -439,7 +439,7 @@ export function nextFailedRunExpiry(
 export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
-    plan: sealedLiveQuerySchema,
+    description: sealedLiveQuerySchema,
     pages: sealedLiveQuerySchema,
     calls: sealedLiveQuerySchema,
     code: sealedLiveQuerySchema,
@@ -448,8 +448,8 @@ export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
 
 export type TaskRecordLiveAnswer = typeof taskRecordLiveAnswerSchema.Type;
 
-/** The task's plan as its row delivers it: when its text was last saved, epoch milliseconds, as the open document's `updatedAt` reads it. */
-const taskPlanLiveRowSchema = EffectSchema.Struct({
+/** The task's description as its row delivers it: when its text was last saved, epoch milliseconds, as the open document's `updatedAt` reads it. */
+const taskDescriptionLiveRowSchema = EffectSchema.Struct({
   taskId: EffectSchema.String,
   savedAt: EffectSchema.Finite,
 });
@@ -466,9 +466,9 @@ const taskCodeLiveRowSchema = EffectSchema.Struct({
   calls: EffectSchema.String,
 });
 
-/** The task's plan, pages, and agents' code as Realtime delivers them, a part's rows each, of which this build compares the plan's alone: none of any for a task the account no longer reaches. */
+/** The task's description, pages, and agents' code as Realtime delivers them, a part's rows each, of which this build compares the description's alone: none of any for a task the account no longer reaches. */
 export const taskRecordLiveRowsSchema = EffectSchema.Struct({
-  plan: EffectSchema.Array(taskPlanLiveRowSchema),
+  description: EffectSchema.Array(taskDescriptionLiveRowSchema),
   pages: EffectSchema.Array(taskPageLiveRowSchema),
   code: EffectSchema.Array(taskCodeLiveRowSchema),
 });
@@ -679,9 +679,12 @@ const inboxLiveFileSchema = EffectSchema.Struct({
   position: EffectSchema.NullOr(countedNumber),
 });
 
+/** An item's fields bar the key a hosted answer still fills for a desktop from before the rename, which a live row carries for that desktop alone. */
+const { snoozedUntil: _beforeRemindAt, ...liveItemFields } = inboxItemSchema.fields;
+
 /** One item as its row delivers it: what an item leaves out where it holds nothing is null. */
 const inboxLiveRowSchema = EffectSchema.Struct({
-  ...inboxItemSchema.fields,
+  ...liveItemFields,
   startedBy: EffectSchema.String,
   startedByName: EffectSchema.NullOr(EffectSchema.String),
   /** Absent from a service before it, as the item's own `waitsOn` is. */
@@ -695,8 +698,8 @@ const inboxLiveRowSchema = EffectSchema.Struct({
   openAskMessageId: EffectSchema.NullOr(EffectSchema.String),
   settledAt: EffectSchema.NullOr(countedNumber),
   unread: EffectSchema.Boolean,
-  /** Null where the reader did not snooze the item; absent from a service before snoozing. */
-  snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
+  /** Null where the reader set no reminder on the item; absent from a service before reminders. */
+  remindAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 
 /** A scope's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
@@ -797,7 +800,8 @@ function inboxItemOfLiveRow(
     closedByName,
     openAskMessageId,
     settledAt,
-    snoozedUntil,
+    markedUnread,
+    remindAt,
     ...item
   } = row;
   const thread = threadOf(threads.get(row.id) ?? [], openAskMessageId);
@@ -824,7 +828,8 @@ function inboxItemOfLiveRow(
       : { closedBy: { userId: closedBy, name: closedByName } }),
     ...(thread.length === 0 ? undefined : { thread: thread.map(message) }),
     ...(settledAt === null ? undefined : { settledAt }),
-    ...(snoozedUntil === undefined || snoozedUntil === null ? undefined : { snoozedUntil }),
+    ...(markedUnread === true ? { markedUnread } : undefined),
+    ...(remindAt === undefined || remindAt === null ? undefined : { remindAt }),
   };
 }
 
@@ -890,9 +895,9 @@ export const LIVE_READ = {
   PULL_REQUEST_VIEWED: "pullRequestViewed",
   /** What the reviewer and label pickers of one agent's Pull request tab offer, its repository's labels, assignable users, and teams, keyed and fetched as `PULL_REQUEST`. */
   REVIEW_OPTIONS: "reviewOptions",
-  /** One task's comments, its plan's own threads or one page's: the service's `taskCommentsLive` query. */
-  PLAN_COMMENTS: "taskComments",
-  /** One task's plan history, by the task: the service's `taskHistoryLive` query for its newest page, then the older pages its version history read past it, held for the windows that show it and a few they showed lately. */
+  /** One task's comments, its description's own threads or one page's: the service's `taskCommentsLive` query. */
+  DESCRIPTION_COMMENTS: "taskComments",
+  /** One task's description history, by the task: the service's `taskHistoryLive` query for its newest page, then the older pages its version history read past it, held for the windows that show it and a few they showed lately. */
   HISTORY: "taskHistory",
   /** One task's cloud Browser tabs, every one of its agents', or one agent's, by what they are listed for: the service's `taskBrowserTabsLive` or `agentBrowserTabsLive` query, by its kind, held for the windows whose side panel lists them and a few they listed lately. */
   BROWSER_TABS: "browserTabs",
@@ -929,12 +934,12 @@ export const LIVE_READ = {
   /** One automation's runs, by the automation: the service's `automationRuns` query, held as the automations are. */
   AUTOMATION_RUNS: "automationRuns",
   /**
-   * One task's plan, by the task, held for the windows that opened it and a
+   * One task's description, by the task, held for the windows that opened it and a
    * few they opened lately. Note that no live query carries its text: the
-   * host follows the task's record (`taskRecordLive`), whose plan mark moves
-   * with each save, and reads the plan again where it moved past the copy held.
+   * host follows the task's record (`taskRecordLive`), whose description mark moves
+   * with each save, and reads the description again where it moved past the copy held.
    */
-  PLAN_DOCUMENT: "planDocument",
+  DESCRIPTION_DOCUMENT: "descriptionDocument",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];
@@ -1006,8 +1011,8 @@ const inboxItemStampRowSchema = EffectSchema.Struct({
   status: inboxItemSchema.fields.status,
   updatedAt: countedNumber,
   unread: EffectSchema.Boolean,
-  /** Until when the reader snoozed the item, which a snooze moves without moving `updatedAt`; null where they did not, absent from a service before snoozing. */
-  snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
+  /** When the reader's reminder on the item comes due, which a reminder moves without moving `updatedAt`; null where they set none, absent from a service before reminders. */
+  remindAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   waitsOn: EffectSchema.String,
   messages: countedNumber,
 });
@@ -1115,7 +1120,7 @@ export function nextBrowserTabLapse(
 }
 
 /**
- * One task's newest page of plan history sealed for following: the address,
+ * One task's newest page of description history sealed for following: the address,
  * and one statement that delivers the newest revisions as the history's
  * held read of its newest page reads them, one past the page among them to
  * say whether an older page stands. The desktop follows it while the task's
@@ -1138,15 +1143,15 @@ export type TaskHistoryLiveAnswer = typeof taskHistoryLiveAnswerSchema.Type;
  * build reads neither.
  */
 const taskHistoryLiveRowSchema = EffectSchema.Struct({
-  seq: planRevisionSeqSchema,
-  actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
+  seq: descriptionRevisionSeqSchema,
+  actor: EffectSchema.Literals(Object.values(DESCRIPTION_ACTOR)),
   editorId: EffectSchema.NullOr(EffectSchema.String),
   editorName: EffectSchema.NullOr(EffectSchema.String),
   agentId: EffectSchema.NullOr(EffectSchema.String),
   agentModel: EffectSchema.NullOr(EffectSchema.String),
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
   changes: countedNumber,
-  restoredFrom: EffectSchema.NullOr(planRevisionSeqSchema),
+  restoredFrom: EffectSchema.NullOr(descriptionRevisionSeqSchema),
   at: countedNumber,
   startedAt: countedNumber,
   restoredAt: EffectSchema.NullOr(countedNumber),
@@ -1160,7 +1165,7 @@ export const taskHistoryLiveRowsSchema = EffectSchema.Struct({
 type TaskHistoryLiveRow = typeof taskHistoryLiveRowSchema.Type;
 
 /** A revision's line as the version history lists it, from its row, a coding agent named as its row names it now. */
-function revisionLineOf(row: TaskHistoryLiveRow): PlanRevisionLine {
+function revisionLineOf(row: TaskHistoryLiveRow): DescriptionRevisionLine {
   return {
     seq: row.seq,
     lastEdit: {
@@ -1168,7 +1173,7 @@ function revisionLineOf(row: TaskHistoryLiveRow): PlanRevisionLine {
       ...(row.editorId === null || row.editorName === null
         ? undefined
         : { by: { userId: row.editorId, name: row.editorName } }),
-      ...(row.actor === PLAN_ACTOR.AGENT
+      ...(row.actor === DESCRIPTION_ACTOR.AGENT
         ? { label: row.agentTitle ?? row.agentModel ?? UNKNOWN_AGENT_LABEL }
         : undefined),
       ...(row.agentId === null ? undefined : { agentId: row.agentId }),
@@ -1191,9 +1196,9 @@ function revisionLineOf(row: TaskHistoryLiveRow): PlanRevisionLine {
  */
 export function revisionsOfLiveRows(
   rows: typeof taskHistoryLiveRowsSchema.Type,
-): PlanRevisionsAnswer {
+): DescriptionRevisionsAnswer {
   const newest = rows.revisions.toSorted((one, other) => other.seq - one.seq);
-  const page = newest.slice(0, PLAN_HISTORY_BOUNDS.PAGE);
+  const page = newest.slice(0, DESCRIPTION_HISTORY_BOUNDS.PAGE);
   const revisions = page.map(revisionLineOf);
   const oldest = page.at(-1);
   return newest.length > page.length && oldest !== undefined

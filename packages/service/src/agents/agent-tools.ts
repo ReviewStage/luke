@@ -2,23 +2,15 @@ import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   type AgentLatestTurn,
-  archiveIdleAgent,
   awaitingLinesOfReached,
   continuationsOf,
-  IDLE_ARCHIVE,
   latestTurnsOfReached,
   type NativeRoute,
   nativeRouteOfReached,
-  pinAgent,
   RUNNING_TURN_STATUSES,
   readAgent,
   readAgentByKey,
-  readAgentRouting,
-  renameAgent,
   taskNamesOf,
-  unarchiveAgentFrom,
-  updateAgentChoice,
-  updateAgentServers,
 } from "@repo/database/models/agent-store";
 import { currentAutomationRun } from "@repo/database/models/automation-store";
 import { type Device, devicesSeenSince } from "@repo/database/models/device-store";
@@ -29,19 +21,16 @@ import {
   type StoredMessageRecord,
   turnStoppedUnderReached,
 } from "@repo/database/models/message-reads";
-import { readPageById } from "@repo/database/models/plan-pages";
+import { readPageById } from "@repo/database/models/task-pages";
 import { lockTasksForBlocks } from "@repo/database/models/task-block-store";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
-  createTaskOnce,
   deleteTask,
   listTasks,
   readTask,
   type StoredTask,
   setTaskParent,
-  type TaskArchivedAgent,
   type TaskChanges,
-  updateTaskCommitted,
 } from "@repo/database/models/task-store";
 import { isWorkspaceMember } from "@repo/database/models/workspace-store";
 import type { StoreWriter } from "@repo/database/models/writer";
@@ -77,11 +66,7 @@ import {
   startBranchSchema,
 } from "@repo/features/agent-wire";
 import { deviceAgentRegisterRequestSchema } from "@repo/features/device-agent-wire";
-import {
-  GITHUB_ACCESS,
-  type GitHubAccess,
-  githubRepositoryFullNameSchema,
-} from "@repo/features/github-repositories-wire";
+import { githubRepositoryFullNameSchema } from "@repo/features/github-repositories-wire";
 import { MENTION_KIND } from "@repo/features/mention-link";
 import { agentName, modelLabel } from "@repo/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@repo/features/models-wire";
@@ -89,7 +74,7 @@ import { PAGE_OWNER, type PageOwner } from "@repo/features/page-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_BOUNDS,
   TASK_PRIORITY,
   TASK_STATUS,
@@ -113,12 +98,9 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
+import { SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
-import {
-  ownAgentWorkspace,
-  taskWorkspace,
-  workspaceRepository,
-} from "../github/workspace-repository.js";
+import { ownAgentWorkspace, taskWorkspace } from "../github/workspace-repository.js";
 import { type HostedRefusal, hostedStoreOrUnavailable } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import {
@@ -127,8 +109,10 @@ import {
   type OfferedModel,
   validateModelChoice,
 } from "../providers/model-catalog.js";
-import { archiveAskedStatus } from "../tasks/archive-settle.js";
-import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
+import { taskChangeAsked, taskChangeSettled, taskChangeWritten } from "../tasks/task-change.js";
+import { createTaskAsked } from "../tasks/task-create-relation.js";
+import { archivedAgent, changedAgent } from "./agent-change.js";
+import { agentStarterName, controlsAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { calledId } from "./called-id.js";
 import { addAgentRepository, addedRepositoryLine } from "./coder-host/agent-repository-add.js";
@@ -140,27 +124,17 @@ import {
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
-import { runnerChoiceApplied } from "./coder-host/runtime-sessions.js";
 import {
   accountModelChoices,
   placeOfAgent,
   type StartWhere,
   startAgent,
 } from "./coder-host/start.js";
-import {
-  agentFailureOf,
-  agentStatusOf,
-  lineAwaitsTurn,
-  startedBlank,
-} from "./coder-host/status.js";
-import {
-  canceledTurn,
-  idleStandingAgents,
-  standingsOf as turnStandingsOf,
-} from "./coder-host/stop.js";
+import { agentFailureOf, agentStatusOf, startedBlank } from "./coder-host/status.js";
+import { stoppedAgent, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { discardedOrLogged } from "./device-discard.js";
 import type { AgentSessions } from "./eve-host/eve-sessions.js";
+import { deploymentSandboxStops } from "./session-sandboxes.js";
 import {
   assigneeIdOf,
   assigneeMentionOf,
@@ -225,7 +199,7 @@ import {
  * tail, to a bound. One agent messages another with `message_agent`
  * (`coder-host/agent-message.ts`). A start takes the one path every other start does
  * (`coder-host/start.ts`), on the caller's own task or another of its workspace, under the
- * same key, so a call run again starts no second agent: the plan as the
+ * same key, so a call run again starts no second agent: the description as the
  * agent's brief, or the prompt in its place, and the note the call carries
  * after either, on the model and effort named or else the member's default,
  * checked against the catalog as the member is offered it, whose choices the
@@ -238,7 +212,7 @@ import {
  * `message_agent`, and its choice leaves the member's default as it stood.
  * A start may name a new task instead, which is made as the member the
  * caller acts for would make it from the sidebar: in the caller's workspace,
- * owned by that member, with an empty plan, on the repository the caller
+ * owned by that member, with an empty description, on the repository the caller
  * works in (the calling agent's own), confirmed through the
  * workspace's installation first; a start that then fails takes the task it
  * made away again, and a call run again answers the agent and task it made.
@@ -251,17 +225,14 @@ import {
  * source's brief, its replay with our summary of what does not fit, a
  * copy of its work, and the note, and takes no prompt and no branch. A read
  * names the message each entry of the tail stands in, which a fork names.
- * An archive takes the rule the Archive agent menu's does for the member
- * the caller acts for: any agent of the workspace that member could
- * archive, a teammate's among them, with the stamp the menu writes, and
- * beside it who archived it, the caller on that member's behalf, and the
- * reason given, which the archived agent's banner shows. Where the menu asks
- * the developer before it stops a working agent, a tool has no one to ask,
- * so only an idle agent is archived, read idle under its conversation's
- * lock, which every turn queued and every message handed over takes; an
- * agent never archives itself, and an unarchive brings back only the
- * archive it read, never one made again since. An archive or an unarchive already standing answers as done, so
- * a call eve runs again does nothing twice.
+ * An archive and every other change of an agent take the one operation the
+ * Archive agent menu and the agent's menu run (`agent-change.ts`) for the
+ * member the caller acts for: any agent of the workspace that member could
+ * archive, a teammate's among them, a turn still running stopped first, with
+ * the stamp the menu writes, and beside it who archived it, the caller on
+ * that member's behalf, and the reason given, which the archived agent's
+ * banner shows; an agent never archives itself. An archive or an unarchive
+ * already standing answers as done.
  * A task's change takes the one path the member's own task menu does
  * (`tasks-procedures.ts`'s PATCH, `task-store.ts`'s `updateTask`), for the member
  * the caller acts for: a new name, a repository confirmed through the
@@ -272,16 +243,14 @@ import {
  * pull request merged, without asking and without stopping the task's
  * agents, and an unarchive puts it back to work (`tasks/archive-settle.ts`);
  * a change already standing answers as done.
- * A stop takes the one path the Stop button's does (`coder-host/stop.ts`):
+ * A stop takes the one path the Stop button's does (`coder-host/stop.ts`'s `stoppedAgent`):
  * eve's cancel of the turn under way, named by eve's own id for it, then the
  * row's stamp, which `list_agents` then reads as canceled. The agent stays
  * as it was, its transcript and branch kept, and a later message starts a
  * new turn. A Stop already standing on a turn still ending answers as done,
  * so a call eve runs again cancels nothing twice; an agent already idle is
- * answered as idle and nothing changes; one whose turn is still coming, a
- * session coming up or a line awaiting the turn it opens, has nothing a Stop
- * can name yet and is refused as such; an archived agent and the caller
- * itself are never stopped.
+ * answered as it stands and nothing changes; the caller itself is never
+ * stopped.
  * A page read finds a page an agent showed on any task of the caller's
  * workspace by the page's id, as the caller's member could open it in the
  * side panel, and answers its HTML cut on a line to a bound, which a
@@ -361,16 +330,15 @@ export const UPDATE_TASK_REFUSAL = {
   PARENT_CYCLE:
     "Not run: that parent is the task itself or one of its sub-tasks, under which the task " +
     "would descend from itself; take that task out from under this one first.",
+  ARCHIVE_NOT_READY:
+    "Not run: an agent of that task is still starting or has a message waiting, so archiving " +
+    "the task would stop a turn no one could name yet; call again in a moment.",
 } as const;
 
 /** Why a stop changed nothing, in words the model can act on. */
 export const STOP_AGENT_REFUSAL = {
   UNREADABLE: `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
   SELF: "Not stopped: that id is your own, and an agent does not stop itself; end your turn by finishing it.",
-  ARCHIVED:
-    "Not stopped: that agent is archived, and an archived agent's turn was stopped as it was archived.",
-  NOT_READY:
-    "Not stopped: that agent's turn is still coming up, so there is no turn to stop yet; call again in a moment.",
   UNAVAILABLE:
     "Not stopped: the service could not reach that agent's session just now. The call may be made again.",
   NATIVE_NOT_HERE:
@@ -395,7 +363,7 @@ const IN_THE_CLOUD_WORDS = JSON.stringify({ machine: AGENT_MACHINE.VERCEL });
 export const START_AGENT_REFUSAL = {
   UNREADABLE:
     "Not started: give a prompt as text of at most " +
-    `${AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the plan, a note ` +
+    `${AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the description, a note ` +
     `bounded the same or none, a title of at most ${AGENT_BOUNDS.MAX_TITLE_CHARS} ` +
     "characters or none, a branch as one git branch name or none, alsoRepositories as at most " +
     `${AGENT_BOUNDS.MAX_ALSO_REPOSITORIES} repositories as owner/name, each with a branch or ` +
@@ -404,7 +372,7 @@ export const START_AGENT_REFUSAL = {
     `${IN_THE_CLOUD_WORDS}, a device of the member's by its name or its id, or none, and images as ` +
     `at most ${AGENT_BOUNDS.MAX_ATTACHMENTS} attachment ids or none.`,
   NO_PROMPT:
-    "Not started: you work on no task, so there is no plan to hand it; give it a prompt, or name " +
+    "Not started: you work on no task, so there is no description to hand it; give it a prompt, or name " +
     `a task by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
   NO_WORKSPACE:
     "Not started: the member you work for is no longer a member of your workspace, so no task " +
@@ -429,8 +397,6 @@ export const START_AGENT_REFUSAL = {
     "Not started: the GitHub installation connected to the workspace does not reach the repository the agent would work in.",
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
-  IMAGE_PREPARING:
-    "Not started: the agent's sandbox image is still being prepared; start it again in a minute or two.",
   PLAN_SIGNED_OUT:
     "Not started: the plan that would pay for it is signed out; its starter signs in again in Settings.",
   PLAN_UNREACHABLE:
@@ -484,19 +450,12 @@ export const LIST_MODELS_REFUSAL = {
   UNREADABLE: `Not listed: name an agent, if any, by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
 } as const;
 
-/** Whether the caller may write to the agent under the plan's policy (`agent-reach.ts`'s `writesToAgent`), its payer read now. */
-const writesAsPlanPolicy = (userId: string, agent: Agent) =>
-  Effect.map(readAgentRouting(userId, agent.id), (routing) =>
-    writesToAgent(userId, agent, Option.isSome(routing) ? routing.value.payer : null),
-  );
-
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.NO_REPOSITORY, START_AGENT_REFUSAL.BRANCH_NO_REPOSITORY],
   [HOSTED_API_ERROR.BRANCH_NOT_FOUND, START_AGENT_REFUSAL.NO_BRANCH],
   [HOSTED_API_ERROR.GITHUB_UNANSWERED, START_AGENT_REFUSAL.GITHUB_UNANSWERED],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_AGENT_REFUSAL.NOT_REACHABLE],
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, START_AGENT_REFUSAL.IMAGE_PREPARING],
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, START_AGENT_REFUSAL.PLAN_SIGNED_OUT],
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, START_AGENT_REFUSAL.PLAN_UNREACHABLE],
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, START_AGENT_REFUSAL.PLAN_LIMIT_REACHED],
@@ -697,7 +656,7 @@ function megabytesOf(bytes: number): string {
   return `${bytes / 1_000_000} MB`;
 }
 
-/** A prompt or a note a start may name: bounded apart from a message, since a brief to a worker on a long plan is quoted whole. */
+/** A prompt or a note a start may name: bounded apart from a message, since a brief to a worker on a long description is quoted whole. */
 const START_PROMPT = Schema.Trim.check(
   Schema.isNonEmpty(),
   Schema.isMaxLength(AGENT_BOUNDS.MAX_START_WORDS_CHARS),
@@ -720,7 +679,7 @@ const START_BRANCH = startBranchSchema;
  * fixed name is, so no generated title ever covers it; without one the
  * agent is named from its first exchange as any is.
  * Note that the note is what lets one start carry everything: without it a
- * start on the plan had no room for what was said beyond the plan, so the
+ * start on the description had no room for what was said beyond the description, so the
  * caller started the agent and then messaged it the rest.
  */
 /**
@@ -758,15 +717,15 @@ const START_AGENT_INPUT = Schema.Struct({
     describeWire(
       START_PROMPT,
       "What the agent should do, typed to it as its first message; the developer's words where " +
-        "they named the job. Leave it out to start the agent on the task's plan itself.",
+        "they named the job. Leave it out to start the agent on the task's description itself.",
     ),
   ),
   note: Schema.optionalKey(
     describeWire(
       START_PROMPT,
       "Everything else the agent should hear as it starts (what to start with, what to watch out " +
-        "for, what to leave alone), handed to it after the plan or the prompt in the same first " +
-        "message; leave it out where there is nothing beyond the plan.",
+        "for, what to leave alone), handed to it after the description or the prompt in the same first " +
+        "message; leave it out where there is nothing beyond the description.",
     ),
   ),
   images: Schema.optionalKey(
@@ -888,7 +847,7 @@ const UPDATE_TASK_INPUT = Schema.Struct({
   name: Schema.optionalKey(
     describeWire(
       Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
-      "Its new name, as the sidebar shows it, which its plan's heading follows.",
+      "Its new name, as the sidebar shows it, which its description's heading follows.",
     ),
   ),
   repository: Schema.optionalKey(
@@ -1003,8 +962,8 @@ export const START_AGENT_TOOL = {
   description:
     "Start a new agent on the task you work on, or on another task of your workspace by " +
     `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer would: ` +
-    "on the task's plan itself with no prompt, or on the prompt given in the " +
-    "plan's place, with the note after either and any pictures images names, which it sees as " +
+    "on the task's description itself with no prompt, or on the prompt given in the " +
+    "description's place, with the note after either and any pictures images names, which it sees as " +
     "images. Start it on the task you work on, taskId left " +
     "out, for any part of that task's work, even one that runs apart from yours, so its " +
     "branch, pull request, and transcript stand under that task; name another task only for " +
@@ -1013,7 +972,7 @@ export const START_AGENT_TOOL = {
     "on no task, taskId left out starts it on a new task made for it, named as its agent is, " +
     "assigned to the member you work for, in the repository you work in or the one repository " +
     "names, and done by itself once its agents finish well; it needs a prompt, since that task " +
-    "has no plan to hand it. " +
+    "has no description to hand it. " +
     "This one call carries everything the agent is told as " +
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
     "the agent it started; message it only when there is something new to say. Its checkout is " +
@@ -1085,7 +1044,7 @@ export const STOP_AGENT_TOOL = {
     "an agent you or the developer started that is going the wrong way, or one the developer " +
     "asked you to stop; never a teammate's agent still in use unless the developer asked for " +
     "it. No " +
-    "agent stops itself, and an archived one is refused. Answers `accepted` with the " +
+    "agent stops itself. Answers `accepted` with the " +
     "agent's status now and whether it was stopped, `stopped` false for an agent already " +
     "idle, which changes nothing, or `rejected` and why. Then say which agent you stopped and why.",
   inputSchema: READ_AGENT_INPUT,
@@ -1132,12 +1091,15 @@ export const UPDATE_AGENT_REFUSAL = {
   UNAVAILABLE_ADD:
     "Not added: the service could not be reached just now. The call may be made again.",
   SELF: "Not archived: that id is your own, and an agent does not archive itself; say you are done, and the developer archives you.",
-  WORKING:
-    "Not archived: that agent is still starting or working, and archiving it would stop a turn no one gets back. " +
-    "Wait until it is idle, or ask the developer, who can stop and archive it. Nothing else asked was changed.",
-  REARCHIVED:
-    "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
-    `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
+  NOT_READY:
+    "Not archived: that agent's turn is still coming up, so there is no turn to stop yet; call " +
+    "again in a moment. Nothing else asked was changed.",
+  NATIVE_NOT_HERE:
+    "Not archived: that agent runs on Claude Code or Codex, which cannot be reached from here " +
+    "to stop its turn yet; a member archives it from the agent's own tab. Nothing else asked was changed.",
+  UNAVAILABLE_ARCHIVE:
+    "Not archived: the service could not reach that agent's session to stop its turn just now. " +
+    "The call may be made again. Nothing else asked was changed.",
 } as const;
 
 /** The lead a refused choice of a change is said under. */
@@ -1251,8 +1213,8 @@ const UPDATE_AGENT_INPUT = Schema.Struct({
       Schema.Boolean,
       "true to archive it, as the developer's Archive agent would: it leaves the sidebar, its " +
         "task's tabs, and every list but the archived ones, takes no message, and is not woken, " +
-        "its transcript, branch, and pull request kept; only an idle agent is archived, never " +
-        "yourself. false to bring an archived one back.",
+        "its transcript, branch, and pull request kept; a turn still running is stopped first, " +
+        "and never yourself. false to bring an archived one back.",
     ),
   ),
   reason: Schema.optionalKey(
@@ -1291,7 +1253,7 @@ export const UPDATE_AGENT_TOOL = {
     "or bring it back, or add a repository it works in beside its own, alone. Name at least " +
     "one change; an archive is checked first, and the rest land together or not at all. Archive an idle helper agent whose work is done, such as one " +
     "whose pull request merged, or one the developer asked you to clean up, with a short reason " +
-    "its archived banner shows beside your name; one still starting or working is refused, and " +
+    "its archived banner shows beside your name; a turn still running is stopped first, and " +
     "no agent archives itself. Change a teammate's agent still in use only where the developer " +
     "asked for it. Answers `accepted` " +
     "with the agent as it then stands, whether archived among " +
@@ -1958,43 +1920,62 @@ function forwarderOf(caller: AgentCaller): ImageForwarder {
 }
 
 /**
- * The task made for the agent a caller on no task starts: untitled, so the
- * agent's title names it as it names any untitled task (`title.ts`),
- * assigned to the member the caller works for, in the repository named or
- * the caller's own, or none, in progress, and with a blank plan, since the
- * prompt is handed to the agent as its first message; marked as made by
- * `start_agent` so it finishes once its agents finished well, with no merge
- * asked (`task-finish.ts`). Note that it is made under an id drawn from the
- * call's key, as the agent is keyed by it, because a call run again must
- * find the task it made rather than make a second. None where the member no
- * longer stands in the caller's workspace.
+ * The task made for the agent a caller on no task starts, through the one
+ * make every door shares (`createTaskAsked`): untitled, so the agent's title
+ * names it as it names any untitled task (`title.ts`), assigned to the
+ * member the caller works for, in the repository named or the caller's own,
+ * or none, in progress, and with a blank description, since the prompt is handed to
+ * the agent as its first message; marked as made by `start_agent` so it
+ * finishes once its agents finished well, with no merge asked
+ * (`task-finish.ts`). Note that it is made under an id drawn from the call's
+ * key, as the agent is keyed by it, because a call run again must find the
+ * task it made rather than make a second. The refusal's words where the
+ * repository is out of reach, or the member no longer stands in the caller's
+ * workspace.
  */
 const startTaskOf = (
   call: AgentCall,
   repository: string | null,
-): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> =>
+): Effect.Effect<Result.Result<string, string>, StoreFailure, AgentToolServices> =>
   Effect.gen(function* () {
     const { caller } = call;
     const userId = callerUserId(caller);
     const id = calledId(userId, call.clientKey);
-    if (Option.isSome(yield* readTask(userId, id))) return id;
+    if (Option.isSome(yield* readTask(userId, id))) return Result.succeed(id);
     const workspace = yield* callerWorkspace(caller);
-    if (Option.isNone(workspace)) return undefined;
+    if (Option.isNone(workspace)) return Result.fail(START_AGENT_REFUSAL.NO_WORKSPACE);
     const calling = callerAgent(caller);
-    yield* createTaskOnce(userId, {
-      id,
-      organizationId: workspace.value,
-      repository,
-      status: TASK_STATUS.IN_PROGRESS,
-      assigneeId: userId,
-      ...(calling === undefined
-        ? undefined
-        : { origin: { actor: PLAN_ACTOR.AGENT, agentId: calling.id } }),
-      madeByStart: true,
-      text: "",
-    });
-    return id;
-  }).pipe(Effect.catchTag("TaskAssigneeNotMember", () => Effect.succeed(undefined)));
+    const made = yield* createTaskAsked(
+      userId,
+      {
+        id,
+        organizationId: workspace.value,
+        repository,
+        status: TASK_STATUS.IN_PROGRESS,
+        assigneeId: userId,
+        ...(calling === undefined
+          ? undefined
+          : { origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: calling.id } }),
+        madeByStart: true,
+        relations: [],
+      },
+      SERVER_TASK_SOURCE.AGENT,
+    );
+    return Result.succeed(made.task.task.id);
+  }).pipe(
+    Effect.catch((failure) => {
+      if (!("_tag" in failure)) return Effect.succeed(Result.fail(startRefusalWords(failure)));
+      switch (failure._tag) {
+        case "SqlError":
+        case "SchemaError":
+        case "EffectDrizzleQueryError":
+          return Effect.fail(failure);
+        // The member gone from the workspace refuses its assignee; no parent or relation is asked, so no other refusal comes.
+        default:
+          return Effect.succeed(Result.fail(START_AGENT_REFUSAL.NO_WORKSPACE));
+      }
+    }),
+  );
 
 /**
  * The task a refused start made for its agent, deleted where no agent
@@ -2136,7 +2117,10 @@ export function runStartAgent(
       const runsOn = yield* runsOnOfStart(userId, asked.success.runsOn);
       if (Result.isFailure(runsOn)) return agentToolRejected(runsOn.failure);
       // Note that the task is made only once the call's input is read whole, so a call refused for it makes none.
-      const made = fresh ? yield* startTaskOf(call, repository) : undefined;
+      const making = fresh ? yield* startTaskOf(call, repository) : undefined;
+      if (making !== undefined && Result.isFailure(making))
+        return agentToolRejected(making.failure);
+      const made = making?.success;
       const onTask = taskId ?? made;
       const place: StartWhere | undefined =
         landing?.success.place ?? (onTask === undefined ? undefined : { taskId: onTask });
@@ -2202,72 +2186,6 @@ function archiverOf(caller: AgentCaller, reason: string | undefined): StoredArch
     ...why,
   };
 }
-
-/**
- * Whether an agent stands idle for an archive: no line awaits its turn, its
- * newest turn is neither queued nor running, a Stop requested of it or not,
- * since a stopped turn still runs until eve ends it, and it is past its
- * start where it has no turn yet.
- */
-const idleForArchive = (agent: Agent) =>
-  Effect.gen(function* () {
-    const turns = yield* latestTurnsOfReached([agent.conversationId]);
-    const awaiting = yield* awaitingLinesOfReached([agent.conversationId]);
-    const now = yield* Clock.currentTimeMillis;
-    const turn = turns.get(agent.conversationId);
-    if (lineAwaitsTurn(turn, { now, awaitingLineAt: awaiting.get(agent.conversationId) })) {
-      return false;
-    }
-    if (turn !== undefined) return !RUNNING_TURN_STATUSES.has(turn.status);
-    return (
-      agentStatusOf(undefined, {
-        createdAt: agent.createdAt,
-        now,
-        blank: startedBlank(agent),
-      }) !== AGENT_STATUS.STARTING
-    );
-  });
-
-/**
- * An agent archived for the caller's member, by the caller and for the reason
- * given, as the Archive agent menu archives it, only while it stands idle,
- * read idle under its conversation's lock, so a turn queued or a message
- * handed over meanwhile waits on the archive and is seen by it; or brought
- * back, only the archive read cleared, so one made again since stands as its
- * maker left it. An archive or an unarchive already standing is no refusal.
- * Answers why nothing was changed, or nothing where the change stands.
- */
-const archiveChange = (
-  caller: AgentCaller,
-  agent: Agent,
-  archived: boolean,
-  reason: string | undefined,
-) =>
-  Effect.gen(function* () {
-    const userId = callerUserId(caller);
-    if (archived) {
-      const outcome = yield* archiveIdleAgent(
-        userId,
-        agent.id,
-        archiverOf(caller, reason),
-        idleForArchive,
-      );
-      if (outcome === IDLE_ARCHIVE.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
-      if (outcome === IDLE_ARCHIVE.WORKING) return UPDATE_AGENT_REFUSAL.WORKING;
-      // A local agent archived now is let go of on its device, as an archive by hand lets it go.
-      // Note that the agent's line is queued under its starter, whoever archived it.
-      if (outcome === IDLE_ARCHIVE.ARCHIVED) {
-        yield* discardedOrLogged({ id: agent.id, userId: agent.userId });
-      }
-      return undefined;
-    }
-    if (agent.archivedAt === null) return undefined;
-    if (yield* unarchiveAgentFrom(userId, agent.id, agent.archivedAt)) return undefined;
-    const now = yield* readAgent(userId, agent.id);
-    return Option.isSome(now) && now.value.archivedAt === null
-      ? undefined
-      : UPDATE_AGENT_REFUSAL.REARCHIVED;
-  });
 
 /**
  * A task's key, where it stands, how much it matters, and who it is assigned
@@ -2376,7 +2294,7 @@ function changesStand(stored: StoredTask, changes: TaskChanges): boolean {
 }
 
 /** A repository's refusal in the model's words: one the installation does not reach, GitHub not answering, or else the service down. */
-function repositoryRefusalWords(refusal: HostedRefusal): string {
+export function repositoryRefusalWords(refusal: HostedRefusal): string {
   if (refusal.error === HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE) {
     return UPDATE_TASK_REFUSAL.NOT_REACHABLE;
   }
@@ -2385,49 +2303,30 @@ function repositoryRefusalWords(refusal: HostedRefusal): string {
     : AGENT_TOOL_REFUSAL.STORE;
 }
 
-/** A repository as a task records it: its name as GitHub spells it, none where it is cleared, and how it was reached. */
-interface RecordedRepository {
-  readonly repository: string | null;
-  readonly githubAccess: GitHubAccess;
+/** A change's refusal in the model's words (`taskChangeAsked`, `taskChangeWritten`): a task gone, an assignee who is no member, a repository its tree holds, an archive whose agents are not ready, or the repository's own. */
+function changeRefusalWords(refusal: HostedRefusal): string {
+  switch (refusal.error) {
+    case HOSTED_API_ERROR.NOT_FOUND:
+      return UPDATE_TASK_REFUSAL.NO_TASK;
+    case HOSTED_API_ERROR.INVALID_REQUEST:
+      return UPDATE_TASK_REFUSAL.NOT_MEMBER;
+    case HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED:
+      return UPDATE_TASK_REFUSAL.TREE_REPOSITORY;
+    case HOSTED_API_ERROR.AGENT_NOT_READY:
+      return UPDATE_TASK_REFUSAL.ARCHIVE_NOT_READY;
+    default:
+      return repositoryRefusalWords(refusal);
+  }
 }
 
 /**
- * A repository confirmed as the menu's PATCH confirms one, through the
- * workspace's installation or else the member's own token, or the refusal's
- * words; none clears it.
- */
-export const reachedRepository = (
-  workspaceId: string,
-  repository: string | null,
-  member: string | undefined,
-) =>
-  repository === null
-    ? Effect.succeed<Result.Result<RecordedRepository, string>>(
-        Result.succeed({ repository: null, githubAccess: GITHUB_ACCESS.APP }),
-      )
-    : Effect.map(
-        Effect.result(workspaceRepository(workspaceId, repository, member)),
-        (reached): Result.Result<RecordedRepository, string> =>
-          Result.isSuccess(reached)
-            ? Result.succeed({
-                repository: reached.success.repository.fullName,
-                githubAccess: reached.success.access,
-              })
-            : Result.fail(repositoryRefusalWords(reached.failure)),
-      );
-
-/**
  * One call of `update_task`: a task of the caller's workspace changed as the
- * member's own menu changes it (`updateTask`, which `tasks-procedures.ts`'s PATCH
- * runs), for the member the caller acts for, its repository confirmed first
- * as the PATCH confirms one, or why not. Note that the task is read first, on
- * that member's standing, both to hold it to the caller's workspace and to
- * tell a change already standing, which the store keeps as it stood; and
- * that the caller never archives the task it works on. A move to Done
- * archives the task's idle agents with it as the caller, for its member, and
- * lets each go on its device; one still at work is archived as its turn ends
- * (`tasks/task-finish.ts`), and the caller, where the task is its own, never
- * is, since it is still answering whoever asked.
+ * app's menu changes it (`tasks/task-change.ts`), for the member the caller
+ * acts for, with its place in the sidebar, its parent, and its blocks in the
+ * same transaction, or why not. Note that the task is read first, on that
+ * member's standing, both to hold it to the caller's workspace and to tell a
+ * change already standing; and that a move to Done archives the task's idle
+ * agents as the caller, which, still answering whoever asked, is never one.
  */
 export function runUpdateTask(
   call: AgentCall,
@@ -2483,37 +2382,18 @@ export function runUpdateTask(
       if (blocking !== undefined && Result.isFailure(blocking)) {
         return agentToolRejected(blocking.failure);
       }
-      // Note that a teammate names a repository on the App alone, never their own token, because a task on a token is its owner's.
-      const owner = read.value.ownerId === userId ? userId : undefined;
-      const repository =
-        changes.repository === undefined
+      // The change itself is confirmed as the app's is (`taskChangeAsked`), an archive stopping the task's agents but the caller.
+      const asked = archived === undefined ? changes : { ...changes, archived };
+      const confirmed =
+        Object.keys(asked).length === 0
           ? undefined
-          : yield* reachedRepository(workspace.value, changes.repository, owner);
-      if (repository !== undefined && Result.isFailure(repository)) {
-        return agentToolRejected(repository.failure);
+          : yield* Effect.result(taskChangeAsked(userId, taskId, asked, callerAgent(caller)?.id));
+      if (confirmed !== undefined && Result.isFailure(confirmed)) {
+        return agentToolRejected(changeRefusalWords(confirmed.failure));
       }
-      // An archive from an older call settles the task, and an unarchive puts it back to work; a status named beside either is the one written.
-      const status =
-        changes.status !== undefined || archived === undefined
-          ? changes.status
-          : yield* archiveAskedStatus(
-              userId,
-              taskId,
-              read.value.task.status ?? TASK_STATUS.TODO,
-              archived,
-            );
-      // A repository is compared as GitHub spells it, which is how the task holds it.
-      const asWritten = {
-        ...changes,
-        ...(status === undefined ? undefined : { status }),
-        ...(repository === undefined
-          ? undefined
-          : {
-              repository: repository.success.repository,
-              githubAccess: repository.success.githubAccess,
-            }),
-      };
-      const stands = changesStand(read.value, asWritten) && (placing?.success.stands ?? true);
+      const stands =
+        changesStand(read.value, confirmed?.success.changes ?? {}) &&
+        (placing?.success.stands ?? true);
       // The tasks the blocks name, and the parent, are locked before the task's change, so the change takes no lock first that another call's writes wait on.
       const locking = [
         ...(blocking === undefined ? [] : tasksOfWrites(blocking.success)),
@@ -2523,91 +2403,68 @@ export function runUpdateTask(
       // refused, its section deleted meanwhile, a parent refused, or a block refused takes the change back with it.
       const writing = Effect.gen(function* () {
         if (locking.length > 0) yield* lockTasksForBlocks(userId, locking);
-        // A move to Done archives the task's idle agents with it, as this agent for its member.
         const updated =
-          Object.keys(asWritten).length === 0
-            ? Option.some({ task: read.value.task, archived: [], statusMoved: false })
-            : yield* updateTaskCommitted(userId, taskId, asWritten, undefined, {
-                archivedBy: archiverOf(caller, undefined),
-                idle: idleStandingAgents,
-              });
-        const task = Option.map(updated, (written) => written.task);
-        if (Option.isSome(task) && placing !== undefined && !placing.success.stands) {
+          confirmed === undefined
+            ? undefined
+            : yield* taskChangeWritten(
+                userId,
+                taskId,
+                confirmed.success,
+                archiverOf(caller, undefined),
+              ).pipe(
+                Effect.mapError(
+                  (refusal) => new TaskChangeRefused({ words: changeRefusalWords(refusal) }),
+                ),
+              );
+        if (updated !== undefined && Option.isNone(updated)) {
+          return yield* new TaskChangeRefused({ words: UPDATE_TASK_REFUSAL.NO_TASK });
+        }
+        if (placing !== undefined && !placing.success.stands) {
           // The sidebar's own write puts it in the section named, or in none, as the developer's drag does.
           const placed = yield* writeTaskSections(userId, {
             kind: TASK_SECTION_WRITE.PLACE,
             taskId,
             sectionId: placing.success.section?.id ?? null,
           });
-          if (Option.isNone(placed)) return yield* Effect.fail(new TaskPlaceRefused());
+          if (Option.isNone(placed)) {
+            return yield* new TaskChangeRefused({ words: UPDATE_TASK_REFUSAL.NO_SECTION });
+          }
         }
         // The parent is written under the store's own rules, and the task answered as it then stands.
         const parented =
-          Option.isSome(task) && parentTaskId !== undefined
-            ? yield* setTaskParent(userId, taskId, parentTaskId)
-            : undefined;
+          parentTaskId === undefined
+            ? undefined
+            : yield* setTaskParent(userId, taskId, parentTaskId);
         if (parented !== undefined && Option.isNone(parented)) {
-          return yield* Effect.fail(new TaskParentGone());
+          return yield* new TaskChangeRefused({ words: UPDATE_TASK_REFUSAL.NO_TASK });
         }
         const blocksChanged =
-          Option.isSome(task) && blocking !== undefined
-            ? yield* writeTaskBlocks(userId, blocking.success)
-            : false;
+          blocking === undefined ? false : yield* writeTaskBlocks(userId, blocking.success);
         return {
-          task: parented === undefined ? task : Option.map(parented, (written) => written.task),
-          parentChanged: parented !== undefined && Option.getOrThrow(parented).txid !== undefined,
+          updated: updated?.value,
+          task: parented?.value.task ?? updated?.value.task ?? read.value.task,
+          parentChanged: parented?.value.txid !== undefined,
           blocksChanged,
-          doneArchived: Option.match(updated, {
-            onNone: () => [],
-            onSome: (written) => written.archived,
-          }),
         };
       });
       const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
         client.withTransaction(writing),
       ).pipe(
-        Effect.map(
-          (
-            written,
-          ): Result.Result<
-            {
-              task: Option.Option<StoredTask["task"]>;
-              parentChanged: boolean;
-              blocksChanged: boolean;
-              doneArchived: readonly TaskArchivedAgent[];
-            },
-            string
-          > => Result.succeed(written),
-        ),
-        Effect.catchTag("TaskAssigneeNotMember", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NOT_MEMBER)),
-        ),
-        Effect.catchTag("TaskPlaceRefused", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
-        ),
-        Effect.catchTag("TaskBlockRefused", ({ words }) => Effect.succeed(Result.fail(words))),
-        Effect.catchTag("TaskTreeRepositoryLocked", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.TREE_REPOSITORY)),
-        ),
-        Effect.catchTag("TaskParentGone", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_TASK)),
-        ),
-        Effect.catchTag("TaskParentUnreached", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_PARENT)),
-        ),
-        Effect.catchTag("TaskParentRepositoryDiffers", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.PARENT_REPOSITORY)),
-        ),
-        Effect.catchTag("TaskParentCycle", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.PARENT_CYCLE)),
-        ),
+        Effect.map((written) => Result.succeed(written)),
+        Effect.catchTags({
+          TaskChangeRefused: ({ words }) => Effect.succeed(Result.fail(words)),
+          TaskBlockRefused: ({ words }) => Effect.succeed(Result.fail(words)),
+          TaskParentUnreached: () => Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_PARENT)),
+          TaskParentRepositoryDiffers: () =>
+            Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.PARENT_REPOSITORY)),
+          TaskParentCycle: () => Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.PARENT_CYCLE)),
+        }),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
-      const { task, parentChanged, blocksChanged, doneArchived } = changed.success;
-      // The agents its Done archived are let go of on their devices once it commits, as an agent's archive lets one go.
-      yield* Effect.forEach(doneArchived, discardedOrLogged, { discard: true });
-      if (Option.isNone(task)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
-      return yield* taskUpdateAnswer(userId, task.value, {
+      const { updated, task, parentChanged, blocksChanged } = changed.success;
+      // The agents its Done archived are let go of once it commits, and a finish counted, as the app's change does.
+      if (updated !== undefined) yield* taskChangeSettled(deploymentSandboxStops, userId, updated);
+      return yield* taskUpdateAnswer(userId, task, {
         already: stands && !parentChanged && !blocksChanged,
         section: placing?.success.section,
         parentNamed: parentTaskId !== undefined,
@@ -2617,14 +2474,18 @@ export function runUpdateTask(
   );
 }
 
-/** A stop's refusal in the model's words: an agent gone meanwhile is none, and anything else is the service down. */
-function stopRefusalWords(refusal: HostedRefusal): string {
-  if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
-  if (refusal.error === HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE) {
-    return STOP_AGENT_REFUSAL.NATIVE_NOT_HERE;
-  }
-  return STOP_AGENT_REFUSAL.UNAVAILABLE;
-}
+/** A stop's refusal in the model's words, naming the agent's starter where only they may stop it: an agent gone meanwhile is none, and anything else is the service down. */
+const stopRefusalWords = (refusal: HostedRefusal, agent: Agent) =>
+  Effect.gen(function* () {
+    if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
+    if (refusal.error === HOSTED_API_ERROR.NOT_PERMITTED) {
+      return `Not stopped: ${yield* agentStarterName(agent)}'s own subscription pays for that agent, so only they and their agents can stop it.`;
+    }
+    if (refusal.error === HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE) {
+      return STOP_AGENT_REFUSAL.NATIVE_NOT_HERE;
+    }
+    return STOP_AGENT_REFUSAL.UNAVAILABLE;
+  });
 
 /** Whether a Stop already stands on the turn, which is still ending. */
 function stopStands(turn: AgentLatestTurn | undefined): boolean {
@@ -2634,30 +2495,26 @@ function stopStands(turn: AgentLatestTurn | undefined): boolean {
 }
 
 /**
- * The agent stopped as the Stop button stops it under the call's key, and
- * where it stands: whether it was stopped, by this call now or when it first
- * ran, by eve taking its cancel, or by a Stop already standing on the turn
- * it stood on as the call began and still stands on, and its status read
- * after. A call run again finds the turn it stopped by its key and cancels
- * nothing, so a turn begun since, by a message the agent took meanwhile,
- * runs on.
+ * The agent stopped by the Stop every surface makes (`stoppedAgent`) under
+ * the call's key, and where it stands: whether it was stopped, by this call
+ * now or when it first ran, by eve taking its cancel, or by a Stop already
+ * standing on the turn it stood on as the call began and still stands on,
+ * and its status read after. A call run again finds the turn it stopped by
+ * its key and cancels nothing, so a turn begun since, by a message the agent
+ * took meanwhile, runs on.
  */
-const stopOf = (
-  eve: AgentSessions,
-  writer: Effect.Effect<StoreWriter>,
-  agent: Agent,
-  key: string,
-  by: string | undefined,
-) =>
+const stopOf = (call: AgentCall, agent: Agent) =>
   Effect.gen(function* () {
+    const { caller, clientKey: key } = call;
     const earlier = yield* hostedStoreOrUnavailable(
       turnStoppedUnderReached(agent.conversationId, key),
     );
     const before = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     // A member's Stop names no agent that made it, as the developer's names none.
+    const by = callerAgent(caller)?.id;
     const canceled = earlier
       ? false
-      : yield* canceledTurn(Effect.succeed(eve), writer, agent, {
+      : yield* stoppedAgent(call.writer, callerUserId(caller), agent, {
           key,
           ...(by === undefined ? undefined : { by }),
         });
@@ -2672,7 +2529,7 @@ const stopOf = (
     return { stopped: earlier || canceled || standing, status };
   });
 
-/** One call of `stop_agent`: the turn under way of an agent of the caller's workspace stopped as a Stop stops it, an idle one answered as idle, or why nothing was stopped. */
+/** One call of `stop_agent`: the turn under way of an agent of the caller's workspace stopped as the app's Stop stops it, an idle one answered as idle, or why nothing was stopped. */
 export function runStopAgent(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -2682,7 +2539,7 @@ export function runStopAgent(
     return Effect.succeed(agentToolRejected(STOP_AGENT_REFUSAL.UNREADABLE));
   }
   const { agentId } = asked.success;
-  const { caller, eve } = call;
+  const { caller } = call;
   if (agentId === callerAgent(caller)?.id) {
     return Effect.succeed(agentToolRejected(STOP_AGENT_REFUSAL.SELF));
   }
@@ -2691,21 +2548,13 @@ export function runStopAgent(
       const found = yield* workspaceAgentOf(caller, agentId);
       if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task } = found.value;
-      if (agent.archivedAt !== null) return agentToolRejected(STOP_AGENT_REFUSAL.ARCHIVED);
-      if (!(yield* writesAsPlanPolicy(callerUserId(caller), agent))) {
-        return agentToolRejected(
-          `Not stopped: ${yield* agentStarterName(agent)}'s own subscription pays for that agent, so only they and their agents can stop it.`,
-        );
+      const stop = yield* Effect.result(stopOf(call, agent));
+      if (Result.isFailure(stop)) {
+        return agentToolRejected(yield* stopRefusalWords(stop.failure, agent));
       }
-      const stop = yield* Effect.result(
-        stopOf(eve, call.writer, agent, call.clientKey, callerAgent(caller)?.id),
-      );
-      if (Result.isFailure(stop)) return agentToolRejected(stopRefusalWords(stop.failure));
       // Note that a Stop already standing on a turn still ending is this call's own run again, or
       // the developer's, and is answered as stopped so a call run again reads as it first did.
       const { stopped, status } = stop.success;
-      const working = status === AGENT_STATUS.STARTING || status === AGENT_STATUS.RUNNING;
-      if (!stopped && working) return agentToolRejected(STOP_AGENT_REFUSAL.NOT_READY);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: {
@@ -2721,65 +2570,33 @@ export function runStopAgent(
   );
 }
 
-/** A change to an agent that found no row to write: the agent left the caller's reach as it was changed. */
-class AgentChangeLost extends Data.TaggedError("AgentChangeLost") {}
+/** A task's change refused inside its transaction, its words for the model: its section or its parent gone meanwhile, or the change refused under the row's lock, which takes every change back. */
+class TaskChangeRefused extends Data.TaggedError("TaskChangeRefused")<{ readonly words: string }> {}
 
-/** A task's place in a section refused inside its change's transaction, its section gone meanwhile, which takes the change back. */
-class TaskPlaceRefused extends Data.TaggedError("TaskPlaceRefused") {}
-
-/** The task a parent write named went out of reach meanwhile, so nothing was written; the call takes back its every change. */
-class TaskParentGone extends Data.TaggedError("TaskParentGone") {}
-
-/** An archive or an unarchive refused inside a change's transaction, its words for the model, which takes every change back. */
-class AgentChangeRefused extends Data.TaggedError("AgentChangeRefused")<{
-  readonly refusal: string;
-}> {}
-
-/** The changes a call asks of an agent, each already read and its choice already the catalog's. */
-interface AgentChanges {
-  readonly title: string | undefined;
-  readonly choice: ModelChoice | undefined;
-  readonly pinned: boolean | undefined;
-  readonly disabledServers: readonly string[] | undefined;
-}
-
-/**
- * Writes every change asked of an agent in one transaction and answers the
- * agent as the last write left it, nothing where none was asked; a write that
- * finds no row fails it, so either every change stands or none does.
- */
-const changedAgent = (userId: string, agentId: string, changes: AgentChanges) =>
-  Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const kept = (changed: Option.Option<Agent>) =>
-          Option.isSome(changed) ? Effect.succeed(changed) : Effect.fail(new AgentChangeLost());
-        const { title, choice, pinned, disabledServers } = changes;
-        let last = Option.none<Agent>();
-        if (title !== undefined) {
-          last = yield* kept(
-            yield* renameAgent(userId, agentId, title.length === 0 ? null : title),
-          );
-        }
-        if (choice !== undefined)
-          last = yield* kept(yield* updateAgentChoice(userId, agentId, choice));
-        if (pinned !== undefined) last = yield* kept(yield* pinAgent(userId, agentId, pinned));
-        if (disabledServers !== undefined) {
-          last = yield* kept(yield* updateAgentServers(userId, agentId, disabledServers));
-        }
-        return last;
-      }),
-    ),
-  );
+/** An archive's refusal in the model's words, naming the agent's starter where only they may stop it: an agent gone meanwhile is none, and anything else is the service down. */
+const archiveRefusalWords = (refusal: HostedRefusal, agent: Agent) =>
+  Effect.gen(function* () {
+    if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
+    if (refusal.error === HOSTED_API_ERROR.AGENT_NOT_READY) return UPDATE_AGENT_REFUSAL.NOT_READY;
+    if (refusal.error === HOSTED_API_ERROR.NOT_PERMITTED) {
+      return `Not archived: ${yield* agentStarterName(agent)}'s own subscription pays for that agent, so only they and their agents can stop and archive it. Nothing else asked was changed.`;
+    }
+    if (refusal.error === HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE) {
+      return UPDATE_AGENT_REFUSAL.NATIVE_NOT_HERE;
+    }
+    return UPDATE_AGENT_REFUSAL.UNAVAILABLE_ARCHIVE;
+  });
 
 /**
  * One call of `update_agent`: an agent of the caller's workspace renamed,
  * moved to another choice the catalog takes, pinned or unpinned for the
- * caller's member, or given another list of servers switched off, each by
- * the store's own write the agent's menu, chip, and composer make. A choice
- * is checked before anything is written, so one refused changes nothing, and
- * every change asked is written in one transaction, so none stands where
- * another failed.
+ * caller's member, given another list of servers switched off, or archived
+ * or brought back, each by the one operation the app's menu runs
+ * (`agent-change.ts`). A choice is checked before anything is written, so
+ * one refused changes nothing; an archive goes first, stopping a turn still
+ * running as the app's does, so one refused changes nothing either; and
+ * every other change asked is written in one transaction, so none stands
+ * where another failed.
  */
 export function runUpdateAgent(
   call: AgentCall,
@@ -2825,39 +2642,32 @@ export function runUpdateAgent(
       }
       // The catalog's own reading of the choice is written, a window the model does not offer apart dropped.
       const choice = accepted === undefined ? undefined : Result.getOrUndefined(accepted);
-      // An archive is checked first, so one refused, its agent working, leaves every change asked unwritten.
-      // The archive and every other change are one transaction: a refused archive writes nothing, and
-      // a change that finds no row takes the archive back with it.
-      const written = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
-        client.withTransaction(
-          Effect.gen(function* () {
-            if (archived !== undefined) {
-              const refusal = yield* archiveChange(caller, found.value.agent, archived, reason);
-              if (refusal !== undefined)
-                return yield* Effect.fail(new AgentChangeRefused({ refusal }));
-            }
-            return yield* changedAgent(userId, agentId, { title, choice, pinned, disabledServers });
-          }),
-        ),
-      ).pipe(
-        Effect.map(
-          (changed): Result.Result<Option.Option<Agent>, string> => Result.succeed(changed),
-        ),
-        Effect.catchTag("AgentChangeLost", () =>
-          Effect.succeed(Result.fail(AGENT_TOOL_REFUSAL.NO_AGENT)),
-        ),
-        Effect.catchTag("AgentChangeRefused", (refused) =>
-          Effect.succeed(Result.fail(refused.refusal)),
-        ),
-      );
-      if (Result.isFailure(written)) return agentToolRejected(written.failure);
-      // A native agent's runner that runs is handed the change now; eve reads the row at its next step.
-      if (choice !== undefined) yield* runnerChoiceApplied(found.value.agent);
-      // The agent as it now stands, its archive among it, which a change left unwritten does not answer.
-      const now = Option.isSome(written.success)
-        ? written.success
-        : yield* readAgent(userId, agentId);
-      const agent = Option.getOrElse(now, () => found.value.agent);
+      let agent = found.value.agent;
+      if (archived !== undefined) {
+        const archive = yield* Effect.result(
+          archivedAgent(
+            deploymentSandboxStops,
+            call.writer,
+            userId,
+            agent,
+            archived,
+            archiverOf(caller, reason),
+          ),
+        );
+        if (Result.isFailure(archive)) {
+          return agentToolRejected(yield* archiveRefusalWords(archive.failure, agent));
+        }
+        if (Option.isNone(archive.success)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
+        agent = archive.success.value.agent;
+      }
+      const written = yield* changedAgent(userId, agent, {
+        title,
+        choice,
+        pinned,
+        disabledServers,
+      });
+      if (Option.isNone(written)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
+      agent = written.value.agent;
       const step = yield* workspaceStepOf(userId, workspaceId);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,

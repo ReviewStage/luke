@@ -3,7 +3,7 @@
 import { SHORTCUT_KEY, WRITING_BLOCK, WRITING_INSERT } from "@repo/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, expect, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { comboboxOptionId } from "../combobox/combobox.js";
 import {
   BLOCK_MENU_GROUP,
@@ -28,13 +28,25 @@ declare global {
 
 const roots: Root[] = [];
 
+/** Stands in for the browser's ResizeObserver, which jsdom lacks, since the list draws its rows through a run that measures them. */
+class StandInResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+
 beforeAll(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
 });
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
 
 /** A row of the owner's own, which no writing action is. */

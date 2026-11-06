@@ -162,7 +162,7 @@ const agentOn = (
       model: harness.model,
       effort: "high",
       repository: "acme/relay",
-      planSnapshot: "# Teammate invitations\n",
+      descriptionSnapshot: "# Teammate invitations\n",
       prompt: null,
       runtime: harness.runtime,
       payer: harness.payer,
@@ -1811,7 +1811,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
-    "an account OpenAI says is not eligible is marked so; a failure that says nothing of the plan, or an agent a key pays for, leaves the row as it stood",
+    "an account OpenAI says is not eligible, or whose plan does not include Codex, is marked so; a failure that says nothing of the plan, or an agent a key pays for, leaves the row as it stood",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -1823,6 +1823,19 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             message:
               'unexpected status 403: {"error":{"code":"subscription_sharing_user_not_eligible"}}',
             codexErrorInfo: null,
+            additionalDetails: null,
+          }),
+        );
+
+        // As Codex says a plan its ChatGPT backend answers `usage_not_included` for: under a limit's word, though none resets.
+        const notIncluded = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
+        yield* signedIn(notIncluded.userId);
+        yield* post(
+          notIncluded.bearer,
+          refusedLaunch(notIncluded.lineId, 0, {
+            message:
+              "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus.",
+            codexErrorInfo: "usageLimitExceeded",
             additionalDetails: null,
           }),
         );
@@ -1854,10 +1867,12 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         assert.deepEqual(
           [
             yield* planRow(ineligible.userId),
+            yield* planRow(notIncluded.userId),
             yield* planRow(unrelated.userId),
             yield* planRow(onKey.userId),
           ],
           [
+            [PROVIDER_KEY_STATUS.INELIGIBLE, null],
             [PROVIDER_KEY_STATUS.INELIGIBLE, null],
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],

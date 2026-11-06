@@ -23,6 +23,8 @@ export const SETTINGS_PAGE = {
   INTEGRATIONS: "integrations",
   /** The outside agents the account lets into its MCP server and how to connect one, each the account's on the service rather than a stored setting. */
   MCP: "mcp",
+  /** The `vespin` command: how to install it, and its sign-in, each the account's on the service rather than a stored setting. */
+  CLI: "cli",
   /** The skills the account installs into the app for its agents, its own and its workspace's, each the service's rather than a stored setting. */
   SKILLS: "skills",
   /** A workspace the account is in: its name and the account's role, its members, and its GitHub repositories, each the service's rather than a stored setting. */

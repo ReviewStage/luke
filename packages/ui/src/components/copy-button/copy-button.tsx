@@ -219,13 +219,13 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
     // Note that the act is called within the press, because a browser's
     // clipboard takes a write only while the press's activation stands, and
     // one that throws before it hands a promise back is a refused copy too.
-    let copying: Promise<void>;
+    let asked: Promise<void>;
     try {
-      copying = copy(text);
+      asked = copy(text);
     } catch (refusal) {
-      copying = Promise.reject(refusal);
+      asked = Promise.reject(refusal);
     }
-    copying.then(
+    asked.then(
       () => answer(COPY_STATE.COPIED),
       () => answer(COPY_STATE.FAILED),
     );

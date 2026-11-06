@@ -21,9 +21,8 @@ import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Layer, Option } from "effect";
-import { AgentSandboxImage } from "../agents/agent-sandbox-image.js";
+import { AgentImage } from "../agents/coder-host/agent-image.js";
 import { claudeCodeSessions } from "../agents/coder-host/claude-code-sessions.js";
-import { RunnerBundle } from "../agents/coder-host/runner-bundle.js";
 import { claimedDeviceAgentLine } from "../agents/device-agent.js";
 import { EVE_SEND_OUTCOME } from "../agents/eve-host/eve-sessions.js";
 import { AgentMachine } from "../agents/machine/agent-machine.js";
@@ -75,7 +74,7 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invitations\n",
+      descriptionSnapshot: "# Invitations\n",
       prompt: null,
       repository,
       machine: AGENT_MACHINE.DEVICE,
@@ -93,16 +92,11 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
     return { userId, deviceId, agent, session };
   });
 
-/** What the sessions reach beside the store and the deployment's environment: the Mac's machine, and no GitHub, image, or bundle, which a Mac's launch in no repository never asks. */
+/** What the sessions reach beside the store and the deployment's environment: the Mac's machine, and no GitHub or image, which a Mac's launch in no repository never asks. */
 const LOCAL_AGENT_SERVICES = Layer.mergeAll(
   Layer.effect(AgentMachine, deviceMachine),
   NO_GITHUB,
-  Layer.succeed(AgentSandboxImage, {
-    snapshotId: Effect.succeed(Option.none()),
-    snapshotGone: () => Effect.void,
-    prepared: Effect.succeed(true),
-  }),
-  Layer.succeed(RunnerBundle, { contents: Effect.succeed(new Uint8Array()) }),
+  Layer.succeed(AgentImage, { reference: Effect.die(new Error("a Mac opens no image")) }),
 );
 
 /**

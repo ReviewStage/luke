@@ -298,18 +298,18 @@ test("an agent on a task starts the agents that help with it on its own task, an
   }
 });
 
-test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {
-  const UPDATING = "## Updating the plan";
+test("every agent on a task is told how to update its description, one handed a prompt told to read it first, and one on no task told of no description", () => {
+  const UPDATING = "## Updating the description";
   const READ_FIRST = `Read it with \`${CODER_TOOL.READ_TASK}\``;
   const told = (brief: AgentBrief, task: OwnTask | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, task);
     return [
       words.includes(UPDATING),
-      words.includes(CODER_TOOL.EDIT_PLAN),
+      words.includes(CODER_TOOL.EDIT_DESCRIPTION),
       words.includes(READ_FIRST),
     ];
   };
-  assert.deepEqual(told(AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
+  assert.deepEqual(told(AGENT_BRIEF.DESCRIPTION, TASK_ADDRESS), [true, true, false]);
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, TASK_ADDRESS), [true, true, true]);
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, null), [false, false, false]);
 });
@@ -319,7 +319,7 @@ test("an agent on a task with no repository names what it decided in its message
   const decided = (repository: string | null, kind: AgentKind) =>
     coderInstructions(
       repository,
-      AGENT_BRIEF.PLAN,
+      AGENT_BRIEF.DESCRIPTION,
       true,
       TASK_ADDRESS,
       undefined,
@@ -356,16 +356,16 @@ test("every agent on a task is told to keep its task's status with update_task, 
   }
 });
 
-test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the plan, or a page, on its task or on itself", () => {
+test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the description, or a page, on its task or on itself", () => {
   const NO_DOCUMENT = "never commit the write-up as a document";
-  const PLAN = `write it into the plan with \`${CODER_TOOL.EDIT_PLAN}\``;
+  const PLAN = `write it into the description with \`${CODER_TOOL.EDIT_DESCRIPTION}\``;
   const PAGE = `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``;
   const told = (brief: AgentBrief, task: OwnTask | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, task);
     assert.ok(words.includes(NO_DOCUMENT), brief);
     return [words.includes(PLAN), words.includes(PAGE)];
   };
-  assert.deepEqual(told(AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true]);
+  assert.deepEqual(told(AGENT_BRIEF.DESCRIPTION, TASK_ADDRESS), [true, true]);
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, TASK_ADDRESS), [false, true]);
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, null), [false, true]);
 });
@@ -588,6 +588,54 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
     assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.SEARCH_MEMORY}\``), brief);
     assert.equal(on.slice(0, start) + on.slice(end), off, brief);
   }
+});
+
+test("with Task descriptions off the instructions say nothing of a description: no edit_description, no description handed with a task's link or read_task, no description to name or write a write-up into, and comments on pages alone", () => {
+  const DESCRIPTION_WORDS = [
+    `\`${CODER_TOOL.EDIT_DESCRIPTION}\``,
+    "## Updating the description",
+    "take that decision into the description",
+    "write it into the description",
+    "what its description said when the message was sent",
+    "its description included",
+    "Your task's description, whose link is",
+    "Keep a mention in the description",
+    "comment threads on a description's text",
+  ];
+  for (const brief of Object.values(AGENT_BRIEF)) {
+    const told = (descriptionsOn: boolean) =>
+      coderInstructions(
+        "Acme/Relay",
+        brief,
+        true,
+        TASK_LINK,
+        undefined,
+        null,
+        false,
+        CODER_HARNESS.CLAUDE_CODE,
+        AGENT_KIND.CODER,
+        false,
+        undefined,
+        [],
+        descriptionsOn,
+      );
+    const on = told(true);
+    const off = told(false);
+    assert.equal(on, coderInstructions("Acme/Relay", brief, true, TASK_LINK), brief);
+    assert.deepEqual(
+      DESCRIPTION_WORDS.filter((words) => off.includes(words)),
+      [],
+      brief,
+    );
+    const comments = off.slice(off.indexOf("## Comments"), off.indexOf("## Handing work"));
+    assert.ok(comments.includes(`\`${CODER_TOOL.REPLY_TO_COMMENT}\``), brief);
+    assert.ok(off.includes(`show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``), brief);
+  }
+  const planned = coderInstructions("Acme/Relay", AGENT_BRIEF.DESCRIPTION, true, TASK_LINK);
+  assert.deepEqual(
+    DESCRIPTION_WORDS.filter((words) => !planned.includes(words)),
+    [],
+  );
 });
 
 /** A pilot's instructions, recorded byte for byte: an agent of kind pilot, handed a prompt, on a task and a repository. */

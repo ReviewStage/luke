@@ -11,11 +11,14 @@ import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
 import { browserLiveActsContract } from "./browser-live.js";
 import { chaptersActsContract } from "./chapters.js";
+import { cliActsContract } from "./cli.js";
 import { installedSkillActsContract } from "./installed-skills.js";
 import { integrationActsContract } from "./integrations.js";
 import type { PortActKind } from "./kinds.js";
 import { macCommandActsContract } from "./mac-commands.js";
+import { macShellActsContract } from "./mac-shells.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
+import { portForwardActsContract } from "./port-forwards.js";
 import { pushesContract } from "./pushes.js";
 import { settingsActsContract } from "./settings.js";
 import { tasksActsContract } from "./tasks.js";
@@ -40,6 +43,7 @@ export {
   type MacCommandDecision,
 } from "../mac-command-ask.js";
 export { ACT_ERROR } from "./base.js";
+export { CLI_INSTALL_OUTCOME, type CliInstallAnswer } from "./cli.js";
 export {
   ACCOUNT_ACT_KIND,
   ACCOUNT_ASK_ACT_KIND,
@@ -48,12 +52,15 @@ export {
   AUTOMATION_ACT_KIND,
   BROWSER_LIVE_ACT_KIND,
   CHAPTERS_ACT_KIND,
+  CLI_ACT_KIND,
   INSTALLED_SKILL_ACT_KIND,
   INTEGRATION_ACT_KIND,
   MAC_COMMAND_ACT_KIND,
+  MAC_SHELL_ACT_KIND,
   MAC_TERMINAL_ACT_KIND,
   PLATFORM_PORT_ACT_KIND,
   type PlatformPortActKind,
+  PORT_FORWARD_ACT_KIND,
   type PortActKind,
   SETTINGS_ACT_KIND,
   TASKS_ACT_KIND,
@@ -84,10 +91,13 @@ export const actContract = {
   ...automationActsContract,
   ...browserLiveActsContract,
   ...chaptersActsContract,
+  ...cliActsContract,
   ...installedSkillActsContract,
   ...integrationActsContract,
   ...macCommandActsContract,
+  ...macShellActsContract,
   ...macTerminalActsContract,
+  ...portForwardActsContract,
   ...settingsActsContract,
   ...tasksActsContract,
   ...terminalActsContract,

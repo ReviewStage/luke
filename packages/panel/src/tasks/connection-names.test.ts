@@ -12,7 +12,7 @@ import {
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { holdIntegrations } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -49,12 +49,18 @@ function statuses(): Record<IntegrationProvider, IntegrationStatus> {
   ) as Record<IntegrationProvider, IntegrationStatus>;
 }
 
-/** What the row of a call of a provider's tool on a connection says it ran on, once the accounts are read. */
-async function serverSaid(
-  connection: string,
+/**
+ * Waits for the rows of calls of a provider's tool, one per connection, drawn
+ * in one tree, to say each ran on its `said`, once the accounts are read.
+ * Note that one Query client holds a test's document across its mounts, so a
+ * test asks first for a name only the read gives, and a name the unread
+ * fallback shares too is asked beside one only the read gives, in the same render.
+ */
+async function serversSay(
+  calls: readonly { connection: string; said: string }[],
   accounts: readonly { connection: string; label?: string }[],
   provider: IntegrationProvider = NOTION,
-): Promise<string | undefined> {
+): Promise<void> {
   holdIntegrations(() => ({
     rows: {
       integrations: statuses(),
@@ -65,28 +71,35 @@ async function serverSaid(
       })),
     },
   }));
-  const view = toolCallView({
-    tool: INTEGRATION_REMOTE_TOOL[provider],
-    input: { remoteTool: "fetch", parentCallId: "wrapper", input: {}, connection },
-    output: undefined,
-  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  function Row() {
+  function Row({ connection }: { connection: string }) {
+    const view = toolCallView({
+      tool: INTEGRATION_REMOTE_TOOL[provider],
+      input: { remoteTool: "fetch", parentCallId: "wrapper", input: {}, connection },
+      output: undefined,
+    });
     return createElement("span", null, useServerName(view));
   }
+  const rows = calls.map(({ connection }) => createElement(Row, { key: connection, connection }));
   await act(async () => {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(ConnectionNames, { needed: true, children: createElement(Row) }),
+        createElement(ConnectionNames, { needed: true, children: rows }),
       ),
     );
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  return container.textContent ?? undefined;
+  const said = () => [...container.querySelectorAll("span")].map((row) => row.textContent);
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      said(),
+      calls.map((call) => call.said),
+    ),
+  );
 }
 
 test("a call on one of two labeled accounts says the account's name as its card does", async () => {
@@ -94,17 +107,17 @@ test("a call on one of two labeled accounts says the account's name as its card 
     { connection: "notion", label: "Personal" },
     { connection: "notion-2", label: "Work" },
   ];
-  assert.equal(await serverSaid("notion-2", accounts), "Notion · Work");
-  assert.equal(await serverSaid("notion", accounts), "Notion · Personal");
+  await serversSay([{ connection: "notion-2", said: "Notion · Work" }], accounts);
+  await serversSay([{ connection: "notion", said: "Notion · Personal" }], accounts);
 });
 
 test("a call on a provider's only account says its label where it carries one and the provider where not, and one the accounts do not hold says what its id gives", async () => {
-  assert.equal(
-    await serverSaid("notion", [{ connection: "notion", label: "Personal" }]),
-    "Notion · Personal",
+  await serversSay(
+    [{ connection: "notion", said: "Notion · Personal" }],
+    [{ connection: "notion", label: "Personal" }],
   );
-  assert.equal(await serverSaid("notion", [{ connection: "notion" }]), "Notion");
-  assert.equal(await serverSaid("notion-2", []), "Notion 2");
+  await serversSay([{ connection: "notion", said: "Notion" }], [{ connection: "notion" }]);
+  await serversSay([{ connection: "notion-2", said: "Notion 2" }], []);
 });
 
 test("a call on a bare linear connection says Linear, since a workspace's own Linear runs under it, while a later account says its name", async () => {
@@ -113,6 +126,12 @@ test("a call on a bare linear connection says Linear, since a workspace's own Li
     { connection: "linear-2", label: "Side" },
   ];
   const linear = INTEGRATION_PROVIDER.LINEAR;
-  assert.equal(await serverSaid("linear", accounts, linear), "Linear");
-  assert.equal(await serverSaid("linear-2", accounts, linear), "Linear · Side");
+  await serversSay(
+    [
+      { connection: "linear-2", said: "Linear · Side" },
+      { connection: "linear", said: "Linear" },
+    ],
+    accounts,
+    linear,
+  );
 });

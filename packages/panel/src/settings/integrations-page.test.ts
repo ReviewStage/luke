@@ -237,6 +237,14 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  // Note that the reads the host lays reach their queries a tick after they land, so the page is read once none still stands out, bar one the test holds.
+  await vi.waitFor(() => {
+    const text = document.body.textContent ?? "";
+    assert.equal(
+      text.includes("Checking…") || (!holdReads && text.includes("Reading the integrations")),
+      false,
+    );
+  });
 }
 
 /**
@@ -280,7 +288,14 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
   );
   act(() => root.render(onRegistry(registry ?? ownRegistry(), page)));
   await settle();
+  // Note that a test holding the read back reads its placeholder, so only a read let through is waited on.
+  if (!holdReads) await vi.waitFor(() => assert.equal(readSettled(container), true));
   return container;
+}
+
+/** Whether the page has drawn where the providers stand, or that it could not read it, rather than its placeholder. */
+function readSettled(page: HTMLElement): boolean {
+  return !(page.textContent ?? "").includes("Reading the integrations");
 }
 
 /** A registry of the page's own, as the window's root provides, so nothing one test's page shared reaches the next. */
@@ -471,7 +486,7 @@ test("a read that never answered says so, and Retry reads it again", async () =>
   );
   await settle();
   assert.equal(integrations.retries(), 1);
-  assert.match(page.textContent ?? "", /No integrations available/u);
+  await vi.waitFor(() => assert.match(page.textContent ?? "", /No integrations available/u));
 });
 
 test("GitHub, granted by the account's own GitHub, offers Connect, which connects it in place and waits on the browser, a disconnected read not failing it, and a Cancel ending it here alone", async () => {
@@ -541,7 +556,7 @@ test("GitHub's Disconnect is the account's GitHub disconnect, which asks first a
   assert.deepEqual(refusedButtons, [], "GitHub stands connected");
   assert.equal(askedBeforeConfirm, 1, "the second Disconnect asked before it disconnected");
   assert.equal(githubDisconnects, 2);
-  assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Connect"]);
+  await vi.waitFor(() => assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Connect"]));
 });
 
 test("GitHub connected but refused by its server shows Reconnect on the row, and keeps the rest of its ⋯", async () => {
@@ -666,8 +681,13 @@ test("a connection whose tools could not be read says so in the attention tint, 
   act(() => retry?.click());
   await settle();
 
+  await vi.waitFor(() =>
+    assert.equal(
+      rowNamed(page, "Linear").querySelector(".ui-settings-row-state")?.textContent,
+      "Connected · 1 tool",
+    ),
+  );
   const mended = rowNamed(page, "Linear");
-  assert.equal(mended.querySelector(".ui-settings-row-state")?.textContent, "Connected · 1 tool");
   assert.deepEqual(rowButtons(mended), []);
 });
 
@@ -725,7 +745,10 @@ test("a sign-out leaves nothing of one account's integrations to the next accoun
     for (const listener of listeners) listener({ ...deliveryOf(next), version: 2 });
   });
   await settle();
-  assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
+  // Note that the page draws the last account's sign-in until the next account reaches its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] }),
+  );
 });
 
 test("a Cancel that lands after the sign-in finished leaves the provider connected", async () => {
@@ -735,7 +758,7 @@ test("a Cancel that lands after the sign-in finished leaves the provider connect
   touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
 
   await pressOnGranola(page, "Cancel");
-  assert.equal(granolaRow(page).line, "Connected · 1 tool");
+  await vi.waitFor(() => assert.equal(granolaRow(page).line, "Connected · 1 tool"));
 });
 
 test("a sign-in canceled on Vercel Connect's own page says so plainly, with Retry", async () => {
@@ -745,10 +768,12 @@ test("a sign-in canceled on Vercel Connect's own page says so plainly, with Retr
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   signInFailures = [{ provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED }];
   await readMoves();
-  assert.deepEqual(granolaRow(page), {
-    line: "You canceled connecting Granola. · Retry",
-    buttons: ["Retry"],
-  });
+  await vi.waitFor(() =>
+    assert.deepEqual(granolaRow(page), {
+      line: "You canceled connecting Granola. · Retry",
+      buttons: ["Retry"],
+    }),
+  );
   // The service names a failure once; the next read leaves the line as it stood.
   await readMoves();
   assert.equal(granolaRow(page).line, "You canceled connecting Granola. · Retry");
@@ -767,10 +792,12 @@ test("a sign-in Connect refused says so, then Connect's own line quoted under it
     },
   ];
   await readMoves();
-  assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected. · Retry\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
-    buttons: ["Retry"],
-  });
+  await vi.waitFor(() =>
+    assert.deepEqual(granolaRow(page), {
+      line: "Granola could not be connected. · Retry\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
+      buttons: ["Retry"],
+    }),
+  );
 
   await pressOnGranola(page, "Retry");
   assert.deepEqual(granolaRow(page), WAITING);
@@ -784,10 +811,12 @@ test("a sign-in the browser came back from without a grant says it could not con
 
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   await readMoves();
-  assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected: the sign-in came back without access. · Retry",
-    buttons: ["Retry"],
-  });
+  await vi.waitFor(() =>
+    assert.deepEqual(granolaRow(page), {
+      line: "Granola could not be connected: the sign-in came back without access. · Retry",
+      buttons: ["Retry"],
+    }),
+  );
 
   await pressOnGranola(page, "Retry");
   assert.deepEqual(granolaRow(page), WAITING);
@@ -811,7 +840,9 @@ it.effect(
 
       touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
       yield* Effect.promise(readMoves);
-      assert.equal(granolaRow(page).line, "Connected · 1 tool");
+      yield* Effect.promise(() =>
+        vi.waitFor(() => assert.equal(granolaRow(page).line, "Connected · 1 tool")),
+      );
     }),
 );
 
@@ -1007,6 +1038,11 @@ test("a query finds an integration by what it is for, keeping its section", asyn
   await searchFor(page, "database");
 
   assert.deepEqual(sections(page), [["Not connected", ["Neon", "Notion", "Supabase"]]]);
+
+  // The line a row says of what it gives agents finds it too.
+  await searchFor(page, "invitations");
+
+  assert.deepEqual(sections(page), [["Not connected", ["Google Calendar"]]]);
 });
 
 test("a query that finds nothing says so, and clearing it brings every row back", async () => {
@@ -1027,7 +1063,7 @@ test("a query that finds nothing says so, and clearing it brings every row back"
   await settle();
 
   assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
-  assert.equal(document.activeElement, searchField(page));
+  assert.equal(document.activeElement === searchField(page), true);
   assert.equal(announcedPolitely(), "", "the words go once the rows are back");
 });
 
@@ -1046,7 +1082,8 @@ test("while where the providers stand is read, the search stands usable above pl
   holdReads = false;
   await readMoves();
 
-  assert.equal(page.querySelector('[role="status"]'), null);
+  await vi.waitFor(() => assert.equal(readSettled(page), true));
+  assert.equal(page.querySelector('[role="status"]') === null, true);
   assert.deepEqual(rowNames(page), ["Linear"]);
 });
 
@@ -1068,17 +1105,17 @@ test("Command-F lands in the page's search, and Escape clears it, then lets go o
     offered = runAppCommand(APP_COMMAND.FIND);
   });
   assert.equal(offered, true);
-  assert.equal(document.activeElement, searchField(page));
+  assert.equal(document.activeElement === searchField(page), true);
 
   await searchFor(page, "deploy");
   pressEscape();
   await settle();
   assert.equal(searchField(page).value, "");
-  assert.equal(document.activeElement, searchField(page));
+  assert.equal(document.activeElement === searchField(page), true);
   assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
 
   pressEscape();
-  assert.notEqual(document.activeElement, searchField(page));
+  assert.equal(document.activeElement !== searchField(page), true);
   window.removeEventListener("keydown", listen);
   assert.deepEqual(reachedWindow, []);
 });
@@ -1247,8 +1284,9 @@ test("Return hands the focus to the held tool's page, and Escape or Left hands i
     for (const back of ["Escape", "ArrowLeft"]) {
       keyAtFocus("Enter");
       assert.equal(
-        document.activeElement,
-        page.querySelector(".integration-tool-detail-body")?.parentElement,
+        document.activeElement ===
+          page.querySelector(".integration-tool-detail-body")?.parentElement,
+        true,
       );
       assert.equal(keyAtFocus(back), true, back);
       assert.equal(toolName(document.activeElement), "get_deployment");
@@ -1328,10 +1366,10 @@ test("a tool its server says nothing of has a page that says so", async () => {
   const page = await mount();
   openRow(page, "Vercel");
 
-  assert.equal(page.querySelector(".ui-list-row-description"), null);
+  assert.equal(page.querySelector(".ui-list-row-description") === null, true);
   assert.equal(page.querySelector(".integration-tool-detail-body")?.textContent, "No description.");
-  assert.equal(page.querySelector(".integration-tool-hints"), null);
-  assert.equal(page.querySelector(".integration-tool-parameters"), null);
+  assert.equal(page.querySelector(".integration-tool-hints") === null, true);
+  assert.equal(page.querySelector(".integration-tool-parameters") === null, true);
 });
 
 test("two accounts at a provider stand as two rows named by their labels, each offering Rename and Add another account", async () => {
@@ -1437,7 +1475,7 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
 
   await choose(rowOf("Acme"), "Rename");
   const opened = field() ?? assert.fail("Rename opens the name's field");
-  assert.equal(document.activeElement, opened);
+  assert.equal(document.activeElement === opened, true);
   assert.equal(opened.value, "Acme");
   press("Escape");
   await settle();
@@ -1454,7 +1492,7 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
   await settle();
   assert.equal(field(), null);
   assert.deepEqual(renames(), [{ provider: notion, connection: "notion", label: "Work" }]);
-  assert.ok(rowOf("Work"), "the row says the new name");
+  await vi.waitFor(() => rowOf("Work"));
 });
 
 test("a refused rename says the account could not be renamed and what to do, in the one failure sentence", async () => {
@@ -1522,11 +1560,12 @@ test("an added account whose first sign-in Connect refused keeps its row with th
     },
   ];
   await readMoves();
-  const added =
+  const addedRow = () =>
     [...page.querySelectorAll(".ui-settings-row")].find(
       (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Account 3",
     ) ?? assert.fail("the refused account keeps its row");
-  assert.match(stateLines(added) ?? "", /access_denied/u);
+  await vi.waitFor(() => assert.match(stateLines(addedRow()) ?? "", /access_denied/u));
+  const added = addedRow();
 
   sent = [];
   act(() =>
@@ -1609,11 +1648,13 @@ test("an added account whose first sign-in is canceled leaves its row, so the ne
   );
   await settle();
 
-  assert.equal(
-    [...page.querySelectorAll('[id$="label"]')].some(
-      (name) => nameOf(name) === "Notion · Account 2",
+  await vi.waitFor(() =>
+    assert.equal(
+      [...page.querySelectorAll('[id$="label"]')].some(
+        (name) => nameOf(name) === "Notion · Account 2",
+      ),
+      false,
     ),
-    false,
   );
 });
 
@@ -1646,7 +1687,9 @@ test("a canceled sign-in that held a provider's last place frees it at once, off
   );
   await settle();
 
-  assert.ok(menuOf(rowOf("Workspace 1")).items.includes("Add another account"));
+  await vi.waitFor(() =>
+    assert.ok(menuOf(rowOf("Workspace 1")).items.includes("Add another account")),
+  );
 });
 
 test("Reopen on an added account still waiting on its first sign-in reopens that account, never adds another", async () => {
@@ -1742,10 +1785,12 @@ test("with motion held still, an integration that connects takes its place and n
     touched.set(INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.CONNECTED);
     await readMoves();
 
-    assert.deepEqual(sections(page), [
-      ["Connected", ["Mercury"]],
-      ["Not connected", ["Granola", "Linear"]],
-    ]);
+    await vi.waitFor(() =>
+      assert.deepEqual(sections(page), [
+        ["Connected", ["Mercury"]],
+        ["Not connected", ["Granola", "Linear"]],
+      ]),
+    );
     assert.deepEqual(
       motions.played.map((each) => each.keyframes),
       [],
@@ -1806,7 +1851,7 @@ test("a row's tools unroll under one chevron that turns, and roll up as it turns
 
     assert.equal(toolsChevron(page, "Linear").dataset.open, "true");
     const box = rowNamed(page, "Linear").closest("[data-motion-key]")?.querySelector(".ui-reveal");
-    assert.notEqual(box?.querySelector(".integration-tools-panel"), null);
+    assert.equal(box?.querySelector(".integration-tools-panel") !== null, true);
     assert.deepEqual(motionsOn(motions, box).at(-1), [
       { clipPath: "inset(0 0 100% 0)" },
       { clipPath: "inset(0)" },
@@ -1845,11 +1890,11 @@ test("with motion held still, a row's tools show at once and fold at once", asyn
     openRow(page, "Linear");
     await settle();
 
-    assert.notEqual(
+    assert.equal(
       rowNamed(page, "Linear")
         .closest("[data-motion-key]")
-        ?.querySelector(".integration-tools-panel"),
-      null,
+        ?.querySelector(".integration-tools-panel") != null,
+      true,
     );
     assert.deepEqual(
       motions.played.map((each) => each.keyframes),
@@ -1862,8 +1907,8 @@ test("with motion held still, a row's tools show at once and fold at once", asyn
     assert.equal(
       rowNamed(page, "Linear")
         .closest("[data-motion-key]")
-        ?.querySelector(".integration-tools-panel"),
-      null,
+        ?.querySelector(".integration-tools-panel") == null,
+      true,
     );
   } finally {
     motions.remove();

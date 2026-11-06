@@ -12,14 +12,15 @@ import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { McpClientsSections } from "./mcp-clients-section.js";
 
 /**
  * mcp-clients-section.test.ts -- Settings › our MCP's connected
  * agents: a revoke that did not finish leaves its row standing with its
  * Disconnect and says so, never that it landed, and one that lands leaves the
- * row saying how long the access the agent already holds lasts. Synthetic
+ * row saying how long the access the agent already holds lasts; and the
+ * `vespin` command, which Settings › CLI signs out, is never listed. Synthetic
  * ids and addresses.
  */
 
@@ -48,6 +49,15 @@ const CLAUDE: McpClient = {
   name: "Claude Code",
   redirectUris: ["http://127.0.0.1:51703/callback"],
   allowedAt: Date.parse("2026-11-01T10:00:00Z"),
+  lastRefreshedAt: null,
+};
+
+/** The `vespin` command's grant, which the read lists beside the outside agents. */
+const VESPIN_CLI: McpClient = {
+  clientId: "vespin-cli",
+  name: "Vespin CLI",
+  redirectUris: ["http://127.0.0.1/callback"],
+  allowedAt: Date.parse("2026-11-02T10:00:00Z"),
   lastRefreshedAt: null,
 };
 
@@ -101,7 +111,7 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
     {
       account: signedInAs({ id: ACCOUNT_ID, email: "dana@app.test", name: "Dana" }).account,
       [LIVE_READ.MCP_CLIENTS]: {
-        [ACCOUNT_ID]: { rows: { serverUrl: SERVER_URL, clients: [CLAUDE] } },
+        [ACCOUNT_ID]: { rows: { serverUrl: SERVER_URL, clients: [CLAUDE, VESPIN_CLI] } },
       },
     },
   );
@@ -120,6 +130,7 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
   });
   // Note that Codex's mark is served under the platform's asset base, which a row may draw.
   fakeAppPlatform(QUIET_PANEL);
+  await writeHandedAppState();
   const registry = AtomRegistry.make();
   registries.push(registry);
   const container = document.createElement("div");
@@ -129,6 +140,7 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
   act(() => root.render(onRegistry(registry, createElement(McpClientsSections))));
   await settle();
   assert.ok(pageText().includes("Goes to an app on this computer"), pageText());
+  assert.ok(!pageText().includes("Vespin CLI"), "the command's sign-in is Settings › CLI's");
 
   await choose("Disconnect");
   await press("Disconnect agent", dialog());
@@ -144,8 +156,8 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
   assert.ok(pageText().includes("Disconnected. Its access ends within 15 minutes."), pageText());
   assert.ok(!pageText().includes("didn't finish"), pageText());
   assert.equal(
-    container.querySelector('button[aria-haspopup="menu"]'),
-    null,
+    container.querySelector('button[aria-haspopup="menu"]') === null,
+    true,
     "a disconnected agent offers no Disconnect",
   );
   assert.deepEqual(asked, [CLAUDE.clientId, CLAUDE.clientId]);

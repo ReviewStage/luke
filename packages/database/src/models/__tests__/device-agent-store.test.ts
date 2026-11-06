@@ -90,7 +90,7 @@ const startAgent = (userId: string, deviceId?: string) =>
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invitations\n",
+      descriptionSnapshot: "# Invitations\n",
       prompt: null,
       repository: null,
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,

@@ -38,7 +38,7 @@ export const endedAt = (agent: Agent, status: RunStatus, at: number, said?: stri
     if (said !== undefined) {
       const answer = new AssistantMessageBuilder();
       answer.stepStart();
-      answer.text("Reading the plan first.");
+      answer.text("Reading the description first.");
       answer.stepStart();
       answer.text(said);
       yield* writer.consume(target, {

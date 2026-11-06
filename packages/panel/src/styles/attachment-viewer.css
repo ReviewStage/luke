@@ -5,7 +5,7 @@
    page does an account's photo (`../admin/sources.css`), takes it alone. */
 
 /* What the place opening the viewer says of the file shown, after its size
-   in the same quiet ink, a plan's picture saying who last edited it: the
+   in the same quiet ink, a description's picture saying who last edited it: the
    size gives it the room the size kept before the header's buttons, and it
    is cut before it reaches them. */
 .attachment-viewer-size:has(+ .attachment-viewer-note) {

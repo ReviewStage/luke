@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@repo/database/core/query";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { PAGE_THEME_VARIABLE, PAGE_WIDE_CLASS } from "@repo/features/page-theme";
 import {
   PAGE_BOUNDS,
@@ -13,7 +13,6 @@ import {
 import { isSecretFile } from "@repo/features/task-wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
-import type { SandboxSession } from "eve/sandbox";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { writtenPageMention } from "../agents/written-mentions.js";
 import {
@@ -46,7 +45,11 @@ import { logStoreFailure } from "../http/store-failure.js";
  */
 
 /** A sandbox as the tool reads a page from it: one file read as a stream of bytes, or nothing where there is no file. */
-type PageSandbox = Pick<SandboxSession, "readFile">;
+interface PageSandbox {
+  readonly readFile: (options: {
+    readonly path: string;
+  }) => PromiseLike<ReadableStream<Uint8Array> | null>;
+}
 
 /** Where a call's page is written: the account and what the page stands on that the service bound, and, for an agent with one, its sandbox, opened on first use, and the checkout a relative path is read from. */
 export interface PageToolBinding {

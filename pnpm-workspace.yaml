@@ -28,6 +28,8 @@ catalog:
   "@orpc/server": 2.0.0-beta.44
   "@modelcontextprotocol/server": 2.4.0
   "@modelcontextprotocol/client": 2.4.0
+  "@vercel/sandbox": 3.9.1
+  "@tanstack/react-router": 1.170.46
 
 # The workspaces that resolve a dependency away from the catalog above, and
 # it is the compiler alone, held to TypeScript 6 because each needs the compiler
@@ -50,13 +52,17 @@ catalogs:
 
 # Every dependency here builds nothing this repository needs: esbuild runs from
 # its platform package, @sentry/cli is only reached with an auth token no check
-# carries, and the other two are transitive Windows and polyfill packages. Listed
-# so an install says so once instead of printing the approval box every time.
+# carries, node-pty's Mac prebuilds are copied out of its package by the
+# desktop's native build (`apps/desktop/scripts/build-native.mjs`) rather than
+# compiled, and the other two are transitive Windows and polyfill packages.
+# Listed so an install says so once instead of printing the approval box every
+# time.
 ignoredBuiltDependencies:
   - "@sentry/cli"
   - core-js
   - electron-winstaller
   - esbuild
+  - node-pty
 
 # The one build this repository runs: `embedded-postgres` ships each
 # platform's Postgres in a package whose install script restores the

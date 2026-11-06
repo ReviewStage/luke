@@ -6,25 +6,27 @@
  * outside an eve tool — a retired session's sandboxes deleted, a sandbox no
  * terminal holds stopped, a developer's resume, a short command for a
  * terminal's list, a terminal's PTY, the GitHub credential at its firewall —
- * it asks here, of the calls that SDK's `APIClient` makes (`@vercel/sandbox`
- * 3.3.0, the copy eve 0.74.0 bundles: re-read `listSandboxes`, `getSandbox`,
- * `deleteSandbox`, `stopSession`, `runCommand`, `openInteractive`,
- * `updateNetworkPolicy`, `getSession`, `extendTimeout`, and `updateSandbox`
- * when it moves; a sandbox's snapshot retention is set by Vercel's documented
- * "Update a sandbox" and checked against its documented "List snapshots"),
- * directly rather than through the SDK,
- * because
- * the SDK bundled into a function fails it as it loads and carries a dozen
- * Node modules these calls never use.
+ * it asks here. A sandbox's delete, and a drive's lookup, create, and delete,
+ * go through `@vercel/sandbox` itself, at the version the catalog pins, which
+ * loads in a function's bundle; a create's drive mounts are sent as that
+ * SDK sends them; the rest
+ * are still the calls that SDK's `APIClient` makes (`@vercel/sandbox` 3.3.0,
+ * the copy eve 0.74.0 bundles: re-read `listSandboxes`, `getSandbox`,
+ * `stopSession`, `runCommand`, `openInteractive`, `updateNetworkPolicy`,
+ * `getSession`, `extendTimeout`, and `updateSandbox` when it moves; a
+ * sandbox's snapshot retention is set by Vercel's documented "Update a
+ * sandbox" and checked against its documented "List snapshots"), made
+ * directly, until each moves onto the SDK.
  *
  * A native harness's sandbox is the one sandbox we open ourselves rather
  * than eve, so its calls are copied from the SDK's 3.8.0 client, the first
- * with stdin on a detached command: the create from a snapshot, a file
- * upload, a detached command started with its stdin held open, a write to
- * that stdin, a command's exit read as it waits for it, its kill, and a sandbox's tags updated;
- * and, for our own template of that sandbox's image
- * (`native-sandbox-template.ts`), a sandbox looked up and listed by name,
- * one created on an image, and a running session snapshotted.
+ * with stdin on a detached command: the create from the agents' image or a
+ * snapshot, a file upload, a detached command started with its stdin held
+ * open, a write to that stdin, a command's exit read as it waits for it, its
+ * kill, and a sandbox's tags updated; and, for a workspace's repository
+ * snapshot (`repository-snapshot.ts`), a sandbox looked up and listed by
+ * name, and a running session snapshotted. Its harness's user is made, and
+ * the runner started as it, through the SDK itself (`createUser`, `asUser`).
  *
  * Every sandbox eve opens carries its session's id as a tag, so a session's
  * sandbox is found by the tag alone; a session has one, so the first page is
@@ -38,7 +40,18 @@
 import { gzipSync } from "node:zlib";
 import { readEither } from "@repo/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
-import { Data, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
+import { APIError, Drive, Sandbox } from "@vercel/sandbox";
+import {
+  Context,
+  Data,
+  Duration,
+  Effect,
+  Option,
+  Redacted,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { EXCESS_KEYS, unparsedWire } from "../core.js";
 import { jsonOf } from "../http/http-effect.js";
@@ -68,11 +81,26 @@ export const OPEN_INTERNET_POLICY = { mode: "allow-all" } as const;
 export const NOT_FOUND_STATUS = 404;
 
 /**
+ * Vercel's error code for a create on an image its registry has not finished
+ * preparing for Sandbox, which its docs say to retry once the preparation
+ * finishes (https://vercel.com/docs/sandbox/concepts/images).
+ */
+export const IMAGE_NOT_READY = "image_not_ready";
+
+/**
  * Vercel's answer for a resume or a create whose snapshot is gone: expired
  * past `CODER.SANDBOX_SNAPSHOTS`'s expiration, or deleted. Vercel's body
  * names it `snapshot_not_found`, as the SDK's own check reads it.
  */
 export const SNAPSHOT_GONE_STATUS = 410;
+
+/**
+ * The code Vercel's body names a snapshot gone by. Note that Vercel answers
+ * 410 for a call to a stopped sandbox too (`sandbox_stopped`), which a resume
+ * mends, and that a body that could not be read names no code, so only a 410
+ * that names this code says the snapshot is gone.
+ */
+const SNAPSHOT_GONE_CODE = "snapshot_not_found";
 
 /**
  * Vercel's answer for a call to a session that is stopping, or being
@@ -134,6 +162,10 @@ export const SANDBOX_CALL = {
   SNAPSHOT_LOOKUP: "snapshot-lookup",
   SNAPSHOT_LIST: "snapshot-list",
   RETENTION: "retention",
+  DRIVE_GET: "drive-get",
+  DRIVE_CREATE: "drive-create",
+  DRIVE_DELETE: "drive-delete",
+  USER: "user",
 } as const;
 
 export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
@@ -169,6 +201,15 @@ export function sessionEnding(failure: { readonly _tag: string }): boolean {
   );
 }
 
+/** Whether a call failed because the snapshot its sandbox resumes or opens from is gone: one no retry mends, the sandbox's saved files lost with it. */
+export function snapshotGone(failure: { readonly _tag: string }): boolean {
+  return (
+    failure instanceof SandboxUnavailable &&
+    failure.status === SNAPSHOT_GONE_STATUS &&
+    failure.code === SNAPSHOT_GONE_CODE
+  );
+}
+
 /** A sandbox as a list or a lookup names it: its name, where it stands, the session it runs while up, and its tags. */
 export interface ListedSandbox {
   readonly name: string;
@@ -181,6 +222,8 @@ export interface ListedSandbox {
   readonly createdAt?: number | undefined;
   /** The timeout each session of the sandbox opens with, which Vercel reapplies at every resume. */
   readonly timeout?: number | undefined;
+  /** When its running session ends, in epoch milliseconds, which an extension moves on. */
+  readonly expiresAt?: number | undefined;
   /** How many of its snapshots Vercel keeps and for how long; null where none was set, which keeps every one. */
   readonly keepLastSnapshots?: SnapshotRetention | null | undefined;
 }
@@ -191,7 +234,7 @@ export interface ListedSandbox {
  * `count` kept, each for `expiration` milliseconds, and the rest deleted
  * at once where `deleteEvicted`, which Vercel defaults to true.
  */
-export interface SnapshotRetention {
+interface SnapshotRetention {
   readonly count: number;
   readonly expiration?: number | undefined;
   readonly deleteEvicted?: boolean | undefined;
@@ -262,17 +305,20 @@ export interface CommandAsk {
  * it needs that user's sudoers entry, which the image keeps; its stdin held
  * open for `writeStdin`. Its `env` is handed to it by the API alone, so a
  * secret in it reaches no argv and no file. Vercel documents that its `sudo`
- * keeps that environment (setting `HOME` to root's), which the image's
- * sudoers must honor (`agent-runtime/sandbox-image.ts`).
+ * keeps that environment (setting `HOME` to root's), as the image's sudoers
+ * does (`apps/web/agent-image/Dockerfile`'s base).
  */
 interface DetachedCommandAsk extends CommandAsk {
   readonly sudo: boolean;
 }
 
-/** A sandbox opened from a snapshot: its name, its tags, how long it may run and how large, and how many of its snapshots Vercel keeps. */
+/** What a sandbox is opened from: an image in the project's registry, or a snapshot. */
+type SandboxSource = { readonly image: string } | { readonly snapshotId: string };
+
+/** A sandbox opened from an image or a snapshot: its name, its tags, how long it may run and how large, and how many of its snapshots Vercel keeps. */
 interface SandboxCreate {
   readonly name: string;
-  readonly snapshotId: string;
+  readonly from: SandboxSource;
   readonly tags: Readonly<Record<string, string>>;
   readonly timeoutMs: number;
   readonly vcpus: number;
@@ -282,15 +328,16 @@ interface SandboxCreate {
     readonly deleteEvicted: boolean;
   };
   readonly env: Readonly<Record<string, string>>;
+  /** The drives mounted read-write, each by its name at the absolute path it is keyed by. */
+  readonly mounts?: Readonly<Record<string, string>>;
+  /** Whether its filesystem is restored at its next session, and snapshotted at each stop for that; so where unsaid. */
+  readonly persistent?: boolean;
 }
 
-/** A persistent sandbox opened on an image rather than a snapshot: a template being prepared. */
-interface ImageSandboxCreate {
+/** A drive as a lookup names it: its name, and the sandbox it is mounted read-write in, where one holds it. */
+interface ListedDrive {
   readonly name: string;
-  readonly image: string;
-  readonly tags: Readonly<Record<string, string>>;
-  readonly timeoutMs: number;
-  readonly vcpus: number;
+  readonly currentSandboxName?: string | undefined;
 }
 
 /** A file written into a sandbox: its absolute path, its bytes, and its mode. */
@@ -305,7 +352,7 @@ export interface SandboxFile {
  * started (when it was created where Vercel names no start), and how long
  * from then it may run, which an extension lengthens.
  */
-export interface SessionLifetime {
+interface SessionLifetime {
   readonly status: string;
   readonly startedAt: number;
   readonly timeoutMs: number;
@@ -371,13 +418,38 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     durationMs: number,
   ) => Effect.Effect<SessionLifetime, SandboxUnavailable>;
-  /** Sets the running sandbox session's network policy whole; every writer of ours goes through `sandbox-firewall.ts`, which composes it from what stands. */
+  /** Sets the running sandbox session's network policy whole; every writer of ours goes through `sandbox-firewall.ts`, which composes it whole from its sources. */
   readonly updateNetworkPolicy: (
     sandboxSessionId: string,
     policy: NetworkPolicy,
   ) => Effect.Effect<void, SandboxUnavailable>;
-  /** Opens a persistent sandbox from the snapshot named, on the open internet; answers it with the session it runs. */
+  /** Opens a sandbox from the image or snapshot named, persistent unless it says not, on the open internet; answers it with the session it runs. */
   readonly create: (ask: SandboxCreate) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
+  /**
+   * Makes the user in the named sandbox as the SDK does (`createUser`), in
+   * the group of the sandbox's default user, who writes what the API writes,
+   * the checkout among it, so the two share it; the folders given, by their
+   * absolute paths in its home, made its own; and that home then closed to
+   * every other user, as Vercel's multi-agent docs suggest for files only
+   * that user should read (https://vercel.com/docs/sandbox/concepts/multi-agent).
+   */
+  readonly createUser: (
+    name: string,
+    username: string,
+    homeFolders: readonly string[],
+  ) => Effect.Effect<void, SandboxUnavailable>;
+  /**
+   * Starts a detached command as the user in the named sandbox, its stdin
+   * held open for `writeStdin`, as the SDK does (`asUser(...).runCommand`),
+   * and answers the command's id. Note that the SDK writes the command's
+   * `env` on `sudo`'s command line, so every process in the sandbox may read
+   * it there for as long as the command runs.
+   */
+  readonly startAsUser: (
+    name: string,
+    username: string,
+    ask: CommandAsk,
+  ) => Effect.Effect<string, SandboxUnavailable>;
   /** The sandbox of that name, as it stands, without resuming it; none where there is no such sandbox. */
   readonly getNamed: (name: string) => Effect.Effect<ListedSandbox | undefined, SandboxUnavailable>;
   /** The project's sandboxes whose names start with the prefix, the first page of them. */
@@ -389,14 +461,6 @@ export interface VercelSandboxApi {
     prefix: string,
     cursor: string | undefined,
   ) => Effect.Effect<SandboxPage, SandboxUnavailable>;
-  /**
-   * Opens a persistent sandbox of that name on the image, on the open
-   * internet. A name already taken is refused with Vercel's 409, which is
-   * what makes the name a lock.
-   */
-  readonly createFromImage: (
-    ask: ImageSandboxCreate,
-  ) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
   /**
    * Snapshots the running session, which stops it, answering the snapshot's
    * id. The snapshot expires `expiresAfter` its last use, or never where that
@@ -481,6 +545,12 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     commandId: string,
   ) => Effect.Effect<void, SandboxUnavailable>;
+  /** The drive under the name; none where there is none. */
+  readonly getDrive: (name: string) => Effect.Effect<ListedDrive | undefined, SandboxUnavailable>;
+  /** The drive under the name, created in the sandboxes' region where there is none. */
+  readonly getOrCreateDrive: (name: string) => Effect.Effect<ListedDrive, SandboxUnavailable>;
+  /** Deletes the drive under the name with all it holds; one already gone is no failure. */
+  readonly deleteDrive: (name: string) => Effect.Effect<void, SandboxUnavailable>;
 }
 
 /** The OIDC token's claims the API is asked under: the project and team it names. */
@@ -494,6 +564,7 @@ const ListedSandboxSchema = Schema.Struct({
   currentSnapshotId: Schema.optional(Schema.String),
   createdAt: Schema.optional(Schema.Number),
   timeout: Schema.optional(Schema.Number),
+  expiresAt: Schema.optional(Schema.Number),
   keepLastSnapshots: Schema.optional(
     Schema.NullOr(
       Schema.Struct({
@@ -739,6 +810,30 @@ function refused(
   });
 }
 
+/**
+ * What `@vercel/sandbox` threw as the failure it is: an `APIError` read as
+ * Vercel's answer is, by its status and its body's text, and anything else
+ * as the cause. Note that the SDK has already tried a 429, a 5xx, and a
+ * failure to connect again twice by then.
+ */
+function sdkFailure(call: SandboxCall, cause: unknown): SandboxUnavailable {
+  if (!(cause instanceof APIError))
+    return new SandboxUnavailable({ call, detail: causeDetail(cause) });
+  return refused(call, { status: cause.response.status, text: cause.text ?? "" });
+}
+
+/** Drives mounted read-write as Vercel's create takes them, as `@vercel/sandbox`'s own `toAPIMounts` sends them. */
+function driveMounts(mounts: Readonly<Record<string, string>>) {
+  return Object.fromEntries(
+    Object.entries(mounts).map(([path, drive]) => [path, { drive, mode: "read-write" }]),
+  );
+}
+
+/** A drive as a lookup answers it. */
+function listedDrive(drive: Drive): ListedDrive {
+  return { name: drive.name, currentSandboxName: drive.currentSandboxName };
+}
+
 /** The call tried again where Vercel answered one of the passing refusals given; any other failure answers at once. */
 function retryingPassing<A>(
   effect: Effect.Effect<A, SandboxUnavailable>,
@@ -835,6 +930,15 @@ function tarOf(files: readonly SandboxFile[]): Uint8Array {
   return gzipSync(Buffer.concat(blocks));
 }
 
+/**
+ * The `fetch` `@vercel/sandbox` sends each request through: the platform's
+ * own, unless a test hands the fake of Vercel it already answers the
+ * `HttpClient` with.
+ */
+export const SandboxFetch = Context.Reference<typeof fetch>("@repo/service/SandboxFetch", {
+  defaultValue: () => globalThis.fetch,
+});
+
 /** How the deployment's own OIDC token is read: the function's in production, a fixed one in a test. */
 export type OidcTokenRead = () => Promise<string>;
 
@@ -907,7 +1011,7 @@ function commandRunOf(text: string): CommandRun | undefined {
 export function vercelSandboxApi(
   readToken: OidcTokenRead,
 ): Effect.Effect<VercelSandboxApi, never, HttpClient.HttpClient> {
-  return Effect.map(HttpClient.HttpClient, (client) => {
+  return Effect.map(Effect.all([HttpClient.HttpClient, SandboxFetch]), ([client, sdkFetch]) => {
     /** The token's headers and claims for the call given, which a failure to read them names. */
     const credentials = (call: SandboxCall) =>
       Effect.gen(function* () {
@@ -919,7 +1023,7 @@ export function vercelSandboxApi(
         if (claims === undefined) {
           return yield* new SandboxUnavailable({ call, detail: "a token naming no project" });
         }
-        return { headers: { authorization: `Bearer ${token}` }, ...claims };
+        return { token, headers: { authorization: `Bearer ${token}` }, ...claims };
       });
 
     /** A URL on the API, under the team the token names and the extra query given. */
@@ -1025,18 +1129,79 @@ export function vercelSandboxApi(
       deleteSandbox: (name) =>
         Effect.gen(function* () {
           const asked = yield* credentials(SANDBOX_CALL.DELETE);
-          const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
-            projectId: asked.projectId,
-            deleteOrphanSnapshots: "true",
-          });
-          const deleted = yield* callApi(
-            client,
-            SANDBOX_CALL.DELETE,
-            HttpClientRequest.delete(url, { headers: asked.headers }),
+          yield* Effect.tryPromise({
+            try: async (signal) => {
+              // Note that the lookup asks no resume, because a sandbox on its way out is never woken to be deleted.
+              const sandbox = await Sandbox.get({
+                name,
+                resume: false,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                fetch: sdkFetch,
+                signal,
+              });
+              await sandbox.delete({ deleteOrphanSnapshots: true, signal });
+            },
+            catch: (cause) => sdkFailure(SANDBOX_CALL.DELETE, cause),
+          }).pipe(
+            Effect.catchIf(
+              (failure) => failure.status === NOT_FOUND_STATUS,
+              () => Effect.void,
+            ),
           );
-          if (!succeeded(deleted.status) && deleted.status !== NOT_FOUND_STATUS) {
-            return yield* refused(SANDBOX_CALL.DELETE, deleted);
-          }
+        }),
+      createUser: (name, username, homeFolders) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.USER);
+          yield* Effect.tryPromise({
+            try: async (signal) => {
+              const sandbox = await Sandbox.get({
+                name,
+                resume: false,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                fetch: sdkFetch,
+                signal,
+              });
+              const user = await sandbox.createUser(username, { signal });
+              const { group } = await sandbox.getDefaultUser({ signal });
+              await sandbox.addUserToGroup(username, group, { signal });
+              for (const folder of homeFolders) await user.mkDir(folder, { signal });
+              const closed = await user.runCommand("chmod", ["700", user.homeDir], { signal });
+              if (closed.exitCode !== 0) throw new Error(`${user.homeDir} could not be closed`);
+            },
+            catch: (cause) => sdkFailure(SANDBOX_CALL.USER, cause),
+          });
+        }),
+      startAsUser: (name, username, ask) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.CMD);
+          return yield* Effect.tryPromise({
+            try: async (signal) => {
+              const sandbox = await Sandbox.get({
+                name,
+                resume: false,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                fetch: sdkFetch,
+                signal,
+              });
+              const command = await sandbox.asUser(username).runCommand({
+                cmd: ask.command,
+                args: [...ask.args],
+                ...(ask.cwd === undefined ? undefined : { cwd: ask.cwd }),
+                ...(ask.env === undefined ? undefined : { env: { ...ask.env } }),
+                detached: true,
+                stdin: true,
+                signal,
+              });
+              return command.cmdId;
+            },
+            catch: (cause) => sdkFailure(SANDBOX_CALL.CMD, cause),
+          });
         }),
       run: (sandboxSessionId, ask) =>
         Effect.gen(function* () {
@@ -1137,15 +1302,18 @@ export function vercelSandboxApi(
             HttpClientRequest.bodyJsonUnsafe({
               projectId: asked.projectId,
               ports: [],
-              source: { type: "snapshot", snapshotId: ask.snapshotId },
+              ...("image" in ask.from
+                ? { image: ask.from.image }
+                : { source: { type: "snapshot", snapshotId: ask.from.snapshotId } }),
               name: ask.name,
-              persistent: true,
+              persistent: ask.persistent ?? true,
               tags: ask.tags,
               timeout: ask.timeoutMs,
               resources: { vcpus: ask.vcpus },
               keepLastSnapshots: ask.keepLastSnapshots,
               env: ask.env,
               networkPolicy: OPEN_INTERNET_POLICY,
+              ...(ask.mounts === undefined ? undefined : { mounts: driveMounts(ask.mounts) }),
             }),
           );
           const created = yield* callApi(client, SANDBOX_CALL.CREATE, request);
@@ -1228,36 +1396,6 @@ export function vercelSandboxApi(
             return yield* refused(SANDBOX_CALL.LIST, listed);
           }
           return page.success.sandboxes;
-        }),
-      createFromImage: (ask) =>
-        Effect.gen(function* () {
-          const asked = yield* credentials(SANDBOX_CALL.CREATE);
-          const url = new URL(SANDBOX_API.CREATE_PATH, SANDBOX_API.ORIGIN);
-          url.searchParams.set("teamId", asked.teamId);
-          const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
-            HttpClientRequest.bodyJsonUnsafe({
-              projectId: asked.projectId,
-              ports: [],
-              image: ask.image,
-              name: ask.name,
-              persistent: true,
-              tags: ask.tags,
-              timeout: ask.timeoutMs,
-              resources: { vcpus: ask.vcpus },
-              networkPolicy: OPEN_INTERNET_POLICY,
-            }),
-          );
-          const created = yield* callApi(client, SANDBOX_CALL.CREATE, request);
-          const read = readCreated(jsonOf(created.text));
-          if (!succeeded(created.status) || Result.isFailure(read)) {
-            return yield* refused(SANDBOX_CALL.CREATE, created);
-          }
-          const { sandbox, session } = read.success;
-          return {
-            ...sandbox,
-            currentSessionId: session.id,
-            status: session.status ?? sandbox.status,
-          };
         }),
       snapshot: (sandboxSessionId, expiresAfter) =>
         Effect.gen(function* () {
@@ -1512,6 +1650,69 @@ export function vercelSandboxApi(
           if (!succeeded(killed.status) && killed.status !== NOT_FOUND_STATUS) {
             return yield* refused(SANDBOX_CALL.KILL, killed);
           }
+        }),
+      getDrive: (name) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.DRIVE_GET);
+          return yield* Effect.tryPromise({
+            try: (signal) =>
+              Drive.get({
+                name,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                fetch: sdkFetch,
+                signal,
+              }),
+            catch: (cause) => sdkFailure(SANDBOX_CALL.DRIVE_GET, cause),
+          }).pipe(
+            Effect.map(listedDrive),
+            Effect.catchIf(
+              (failure) => failure.status === NOT_FOUND_STATUS,
+              () => Effect.succeed(undefined),
+            ),
+          );
+        }),
+      getOrCreateDrive: (name) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.DRIVE_CREATE);
+          // Note that the drive takes Vercel's default region, as every sandbox we create does, since a mount must match it.
+          const drive = yield* Effect.tryPromise({
+            try: (signal) =>
+              Drive.getOrCreate({
+                name,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                fetch: sdkFetch,
+                signal,
+              }),
+            catch: (cause) => sdkFailure(SANDBOX_CALL.DRIVE_CREATE, cause),
+          });
+          return listedDrive(drive);
+        }),
+      deleteDrive: (name) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.DRIVE_DELETE);
+          yield* Effect.tryPromise({
+            try: async (signal) => {
+              const drive = await Drive.get({
+                name,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                fetch: sdkFetch,
+                signal,
+              });
+              await drive.delete({ signal });
+            },
+            catch: (cause) => sdkFailure(SANDBOX_CALL.DRIVE_DELETE, cause),
+          }).pipe(
+            Effect.catchIf(
+              (failure) => failure.status === NOT_FOUND_STATUS,
+              () => Effect.void,
+            ),
+          );
         }),
     };
   });

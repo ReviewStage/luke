@@ -18,7 +18,7 @@ export const PLAN_BODY_LAYOUT = {
   STACK: "stack",
 } as const;
 
-type PlanBodyLayout = (typeof PLAN_BODY_LAYOUT)[keyof typeof PLAN_BODY_LAYOUT];
+type DescriptionBodyLayout = (typeof PLAN_BODY_LAYOUT)[keyof typeof PLAN_BODY_LAYOUT];
 
 /**
  * plan.tsx -- AI Elements' Plan: a plan as a card across the column, its title on the header and the plan itself under it once opened.
@@ -97,7 +97,7 @@ export function PlanTitle({ label, previews = false, children }: TaskTitleProps)
 }
 
 export type TaskContentProps = Omit<ComponentPropsWithoutRef<"div">, "className"> & {
-  layout?: PlanBodyLayout;
+  layout?: DescriptionBodyLayout;
 };
 
 /** The plan itself, drawn only once the card is opened. */

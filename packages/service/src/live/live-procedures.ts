@@ -26,15 +26,15 @@
  * something of the reader's moves; or whole, with that sync id, to a reader
  * that names none, is too far behind, or whose admission to the rows moved.
  *
- * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
+ * `GET /api/live/task-record?id=` answers one task's description, pages, and calls
  * the same way, one statement a part that marks where it stands
  * (`task-record-live.ts`), after the task is read as the account, so one it
  * does not reach is not found, as its own read answers, woken by a write
  * that names the task (`taskRecordLive`), as its pages and its history are.
- * `GET /api/live/task-comments?id=` answers its plan's own comment threads,
+ * `GET /api/live/task-comments?id=` answers its description's own comment threads,
  * or with `&page=` one page's on every version, as three statements, the
  * threads, their entries, and the files their comments carry
- * (`plan-comments-live.ts`), the same way and woken the same way
+ * (`description-comments-live.ts`), the same way and woken the same way
  * (`taskCommentsLive`).
  * `GET /api/live/task-browser-tabs?id=` answers its Browser tabs as one
  * statement, the agent's pointer on each among them, woken by a write that
@@ -217,7 +217,7 @@ import {
   installedSkillsLive,
   integrationStatusesLive,
   macCommandsLive,
-  PLAN_THREADS,
+  DESCRIPTION_THREADS,
   pullRequestChaptersLive,
   sidebarLive,
   taskBrowserTabsLive,
@@ -282,6 +282,26 @@ const LIVE_POLL_HOLD = {
  * which never equals the one over these, so it is still held on all.
  */
 const INBOX_RELEASED_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
+
+/**
+ * The transcript's parts a desktop that follows the window's own rows keeps
+ * of its answer, whose read drops the count of its messages
+ * (`transcript-follow.ts`'s `followedRead`), so the `after` it sends is the
+ * digest over these alone, which never equals the digest over every part.
+ * Its poll is held on these too, or it is answered at once and asks again
+ * every 0.6 s for as long as a window holds the transcript, idle or not; a
+ * reader that keeps every part sends the digest over all of them, which is
+ * still held on all. Note that leaving the count out wakes nothing later,
+ * because a message written or amended is a row past the reader's cursor.
+ */
+const TRANSCRIPT_FOLLOWED_PARTS = [
+  "turns",
+  "conversation",
+  "agent",
+  "workers",
+  "queueRevision",
+  "launch",
+] as const;
 
 /** How many of a read's parts are read at once: under the web pool's five connections, so one poll leaves room for the rest of its instance. */
 const LIVE_PART_CONCURRENCY = 3;
@@ -454,14 +474,24 @@ const queryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
  * Whether a cursor read moved for its reader: its cursor no longer stands,
  * so its cursor parts are answered whole, a cursor part stands at a row past
  * it (its digest is not that of no rows, which a look at its digest alone
- * tells as its rows would), or its other parts moved past `after`.
+ * tells as its rows would), or its other parts moved past `after`: past
+ * the digest over every part, and past the one over the parts a newer
+ * reader keeps (`followedParts`) where it keeps fewer.
  */
-function cursorMoved<Part extends string>(read: ReadParts<Part>, after: string | undefined) {
+function cursorMoved<Part extends string>(
+  read: ReadParts<Part>,
+  after: string | undefined,
+  followedParts: readonly Part[] | undefined,
+) {
   const pastCursor = Object.values<SealedLiveQueryWire>(read.queries).some(
     ({ cursor, digest }) =>
       cursor !== undefined && (cursor.past === undefined || digest !== NO_ROWS_DIGEST),
   );
-  return pastCursor || liveDigestOf(read.queries) !== after;
+  return (
+    pastCursor ||
+    (liveDigestOf(read.queries) !== after &&
+      (followedParts === undefined || liveDigestOn(read.queries, followedParts) !== after))
+  );
 }
 
 /**
@@ -485,6 +515,7 @@ const cursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   asked: { readonly [LIVE_POLL.AFTER]?: string; readonly [LIVE_POLL.CURSOR]?: string },
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
   onWoken?: (heardAt: number) => Effect.Effect<void>,
+  followedParts?: readonly NoInfer<Part>[],
 ) {
   const following = query.cursor;
   const cursor = asked[LIVE_POLL.CURSOR];
@@ -521,7 +552,7 @@ const cursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   return yield* heldParts(
     polled((sealer) => sealer.digest),
     read,
-    (standing) => cursorMoved(standing, after),
+    (standing) => cursorMoved(standing, after, followedParts),
     topics,
     look,
     onWoken,
@@ -555,8 +586,9 @@ export function liveCursorParts<Param extends string, Part extends string>(
   asked: { readonly [LIVE_POLL.AFTER]?: string; readonly [LIVE_POLL.CURSOR]?: string },
   look?: Duration.Duration,
   onWoken?: (heardAt: number) => Effect.Effect<void>,
+  followedParts?: readonly NoInfer<Part>[],
 ) {
-  return cursorParts(query, params, asked, look, onWoken).pipe(
+  return cursorParts(query, params, asked, look, onWoken, followedParts).pipe(
     Effect.withSpan(`web/live/${query.name}`),
   );
 }
@@ -914,7 +946,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     taskComments: signedIn.taskComments.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
-      const pageId = input.page === undefined ? PLAN_THREADS : yield* pathUuid(input.page);
+      const pageId = input.page === undefined ? DESCRIPTION_THREADS : yield* pathUuid(input.page);
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(
@@ -983,6 +1015,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         input,
         LIVE_POLL_HOLD.WATCHED_LOOK,
         countAnswerWait,
+        TRANSCRIPT_FOLLOWED_PARTS,
       );
       yield* countAnswerBytes(answer.queries);
       return answer;

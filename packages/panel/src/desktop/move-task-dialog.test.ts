@@ -13,7 +13,9 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ellipsized } from "../testing/action-label.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { openTaskMenu } from "../testing/task-menu.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
@@ -124,7 +126,7 @@ function openTab(
     workspaces,
     workspace: workspaces.find((workspace) => workspace.id === task.workspaceId),
     onMoveTask,
-    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   });
 }
 
@@ -134,12 +136,13 @@ function openMenu(tasks: TasksControl): void {
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
+    root.render(
+      withQueryClient(
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+      ),
+    ),
   );
-  const more =
-    container.querySelector<HTMLButtonElement>(".desktop-task-main .toolbar-tab-actions button") ??
-    assert.fail("the Plan tab draws the task's ⋯");
-  act(() => more.click());
+  openTaskMenu(container);
 }
 
 function menuLabels(): string[] {
@@ -291,7 +294,11 @@ function openTask(tasks: TasksControl): HTMLElement {
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
+    root.render(
+      withQueryClient(
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+      ),
+    ),
   );
   return container;
 }
@@ -365,9 +372,9 @@ test("a plan whose repository its workspace cannot reach and another of the acco
 
 test("a stranded plan's banner stands over every tab of the plan: an agent's beside the plan, and over the side panel filling the window", () => {
   const tasks = openTab(TASK, [STUDIO, ACME]);
-  const agent = openTask(onTab(tasks, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.PLAN }));
+  const agent = openTask(onTab(tasks, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.DESCRIPTION }));
   const full = openTask(
-    onTab(tasks, undefined, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.PLAN }),
+    onTab(tasks, undefined, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.DESCRIPTION }),
   );
 
   assert.deepEqual(

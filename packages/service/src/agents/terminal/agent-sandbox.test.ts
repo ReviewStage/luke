@@ -11,7 +11,6 @@ import { Effect, Layer, Redacted, Result } from "effect";
 import { afterEach, vi } from "vitest";
 import { LOCAL_AGENT_ENVIRONMENT } from "../../testing/local-agent.js";
 import { sandboxListRefusal } from "../../testing/vercel-sandbox-fake.js";
-import { CODER } from "../coder-host/bounds.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 import { AgentSandbox, agentSandboxLayer, SHELL_REFUSAL } from "./agent-sandbox.js";
 import { TMUX_EXIT } from "./tmux.js";
@@ -77,8 +76,7 @@ function commandStream(exitCode: number, stdout = ""): Response {
 /**
  * Vercel as the scenario has it: the session's sandbox in the status given,
  * tmux holding the shells the list prints, refusing to name a shell it does
- * not hold, a resume that brings the sandbox up under a fresh session, and
- * an update of the sandbox's configuration kept as it was asked.
+ * not hold, and a resume that brings the sandbox up under a fresh session.
  */
 function vercel(
   status: string | undefined,
@@ -86,11 +84,9 @@ function vercel(
   listExit = 0,
   interactiveUrl = "wss://sbx-fixture.vercel.run/ws",
   shellCheckExit: number = TMUX_EXIT.NO_SESSION,
-  timeout?: number,
 ) {
   const asked: Asked[] = [];
   const policies: unknown[] = [];
-  const updates: unknown[] = [];
   const layer = Layer.provide(
     agentSandboxLayer,
     Layer.merge(
@@ -102,7 +98,7 @@ function vercel(
           const body = JSON.parse(await new Response(init.body).text());
           const args: readonly string[] = body.args;
           asked.push({ method, url: parsed, args });
-          // Every command is `setpriv <drop> -- sh -c <script> sh <tmux args>`; the list is the one with none.
+          // Every command is `sh -c <script> sh <tmux args>`; the list is the one with none.
           const scriptAt = args.indexOf("-c") + 1;
           const tmuxArgs = args.slice(scriptAt + 2);
           if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));
@@ -121,10 +117,6 @@ function vercel(
           policies.push(JSON.parse(await new Response(init.body).text()));
           return Response.json({});
         }
-        if (method === "PATCH") {
-          updates.push(JSON.parse(await new Response(init.body).text()));
-          return Response.json({ sandbox: { name: SANDBOX } });
-        }
         if (parsed.searchParams.get("resume") === "true") {
           return Response.json({
             sandbox: { name: SANDBOX, status: "stopped" },
@@ -137,13 +129,13 @@ function vercel(
             sandboxes:
               status === undefined
                 ? []
-                : [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION, timeout }],
+                : [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION }],
           })
         );
       }),
     ),
   );
-  return { layer, asked, policies, updates };
+  return { layer, asked, policies };
 }
 
 /** One field as the list prints it: what tmux printed, newline and all, in base64. */
@@ -157,27 +149,31 @@ afterEach(() => {
 });
 
 it.layer(getTestDB())("a coding agent's sandbox", (it) => {
-  it.effect("a stopped sandbox lists no shells and is never woken by a list or a start", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const api = vercel("stopped");
+  it.effect(
+    "a stopped sandbox lists no shells and no ports, and is never woken by a list or a start",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel("stopped");
 
-      const { listed, started } = yield* Effect.gen(function* () {
-        const sandbox = yield* AgentSandbox;
-        return {
-          listed: yield* sandbox.terminals(SESSION),
-          started: yield* sandbox.start(SESSION, SHELL, undefined),
-        };
-      }).pipe(Effect.provide(api.layer));
+        const { listed, ports, started } = yield* Effect.gen(function* () {
+          const sandbox = yield* AgentSandbox;
+          return {
+            listed: yield* sandbox.terminals(SESSION),
+            ports: yield* sandbox.listeningPorts(SESSION),
+            started: yield* sandbox.start(SESSION, SHELL, undefined),
+          };
+        }).pipe(Effect.provide(api.layer));
 
-      assert.deepEqual(listed, { sandbox: SANDBOX_STATE.STOPPED, terminals: [] });
-      assert.deepEqual(
-        started,
-        Result.fail({ kind: SHELL_REFUSAL.NOT_RUNNING, sandbox: SANDBOX_STATE.STOPPED }),
-      );
-      assert.ok(api.asked.every((call) => call.url.searchParams.get("resume") === null));
-      assert.ok(api.asked.every((call) => !call.url.pathname.endsWith("/cmd")));
-    }),
+        assert.deepEqual(listed, { sandbox: SANDBOX_STATE.STOPPED, terminals: [] });
+        assert.deepEqual(ports, { running: false, ports: [] });
+        assert.deepEqual(
+          started,
+          Result.fail({ kind: SHELL_REFUSAL.NOT_RUNNING, sandbox: SANDBOX_STATE.STOPPED }),
+        );
+        assert.ok(api.asked.every((call) => call.url.searchParams.get("resume") === null));
+        assert.ok(api.asked.every((call) => !call.url.pathname.endsWith("/cmd")));
+      }),
   );
 
   it.effect(
@@ -210,6 +206,43 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
         const run = api.asked.find((call) => call.args !== undefined);
         assert.equal(run?.url.pathname, `/api/v2/sandboxes/sessions/${RUNNING_SESSION}/cmd`);
         assert.deepEqual(unopened, { sandbox: SANDBOX_STATE.STARTING, terminals: [] });
+      }),
+  );
+
+  it.effect(
+    "a running sandbox's ports are the ones its servers listen on, each once, never root's or the browser's, and tables it could not read are an outage",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        // The kernel's tables as `cat` prints them, by hand: the sandbox's init on 23456 as root,
+        // the browser's DevTools on 9333, a dev server on 3000 over both families with a connection
+        // to it, and a server on 5173.
+        const tables = [
+          "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+          "   0: 00000000:5BA0 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 3107 1",
+          "   1: 0100007F:2475 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002        0 4100 1",
+          "   2: 00000000:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002        0 4200 1",
+          "   3: 0100007F:A2D2 0100007F:0BB8 01 00000000:00000000 00:00000000 00000000  1002        0 4300 1",
+          "  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+          "   0: 00000000000000000000000000000000:0BB8 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1002        0 4500 1",
+          "   1: 00000000000000000000000000000000:1435 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1001        0 4600 1",
+        ];
+        const api = vercel("running", tables);
+        const unread = vercel("running", [], 1);
+
+        const ports = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.listeningPorts(SESSION),
+        ).pipe(Effect.provide(api.layer));
+        const outage = yield* Effect.flip(
+          Effect.flatMap(AgentSandbox, (sandbox) => sandbox.listeningPorts(SESSION)).pipe(
+            Effect.provide(unread.layer),
+          ),
+        );
+
+        assert.deepEqual(ports, { running: true, ports: [3000, 5173] });
+        const run = api.asked.find((call) => call.args !== undefined);
+        assert.equal(run?.url.pathname, `/api/v2/sandboxes/sessions/${RUNNING_SESSION}/cmd`);
+        assert.ok(outage instanceof SandboxUnavailable);
       }),
   );
 
@@ -269,30 +302,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
       const woken = api.asked.find((call) => call.url.searchParams.get("resume") === "true");
       assert.equal(woken?.url.pathname, `/api/v2/sandboxes/${SANDBOX}`);
     }),
-  );
-
-  it.effect(
-    "a sandbox opened before the timeout was shortened has it lowered ahead of its resume, so the session the resume opens lives the timeout, and one within it is left",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const resume = (api: ReturnType<typeof vercel>) =>
-          Effect.flatMap(AgentSandbox, (sandbox) => sandbox.resume(SESSION)).pipe(
-            Effect.provide(api.layer),
-          );
-        const old = vercel("stopped", [], 0, undefined, undefined, CODER.SANDBOX_MAX_LIFETIME_MS);
-        const capped = vercel("stopped", [], 0, undefined, undefined, CODER.SANDBOX_TIMEOUT_MS);
-
-        yield* resume(old);
-        yield* resume(capped);
-
-        const lowered = old.asked.findIndex((call) => call.method === "PATCH");
-        const woken = old.asked.findIndex((call) => call.url.searchParams.get("resume") === "true");
-        assert.ok(lowered >= 0 && lowered < woken, "the timeout is lowered before the resume");
-        assert.equal(old.asked[lowered]?.url.pathname, `/api/v2/sandboxes/${SANDBOX}`);
-        assert.deepEqual(old.updates, [{ timeout: CODER.SANDBOX_TIMEOUT_MS }]);
-        assert.ok(capped.asked.every((call) => call.method !== "PATCH"));
-      }),
   );
 
   it.effect("an attach mints the running session's PTY and never wakes a stopped sandbox", () =>

@@ -14,7 +14,7 @@ import { GitHubSetup } from "./setup-github.js";
 /**
  * Setup's GitHub step drawn again, as Back draws it, over a workspace that
  * reaches its repository on a member's token: the token's card stands
- * checked with the done line naming the token. Synthetic throughout.
+ * checked with the done line naming the repository's owner and the token. Synthetic throughout.
  */
 
 const WORKSPACE = "workspace-acme";
@@ -38,7 +38,7 @@ async function settle(): Promise<void> {
   });
 }
 
-test("a workspace reached on the token draws the token's card checked, its done line naming the token", async () => {
+test("a workspace reached on the token draws the token's card checked, its done line naming the owner and the token", async () => {
   holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => ({
     repositories: {
       installed: false,
@@ -68,17 +68,19 @@ test("a workspace reached on the token draws the token's card checked, its done 
     ),
   );
   await settle();
-  const checked =
-    container.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
-    assert.fail("the step checks a route");
-
+  // Note that the step checks the token's card once the repositories it reaches reach their query.
+  await vi.waitFor(() => {
+    const radio =
+      container.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
+      assert.fail("the step checks a route");
+    assert.equal(
+      radio.textContent?.includes("Personal access token"),
+      true,
+      radio.textContent ?? "",
+    );
+  });
   assert.equal(
-    checked.textContent?.includes("Personal access token"),
-    true,
-    checked.textContent ?? "",
-  );
-  assert.equal(
-    container.textContent?.includes("1 repository through your token"),
+    container.textContent?.includes("1 repository on octo through your token"),
     true,
     container.textContent ?? "",
   );

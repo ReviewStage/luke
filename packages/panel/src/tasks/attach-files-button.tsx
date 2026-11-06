@@ -7,7 +7,7 @@ import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 /**
  * attach-files-button.tsx -- the + at a message box's foot: the system's file picker, or, where the box takes more than files, a menu raised over it whose Attachment row opens the picker.
  *
- * The agent box, the Inbox's answer box, and a plan
+ * The agent box, the Inbox's answer box, and a description
  * comment's field each stand the same press at their foot's left, its
  * picker hidden beside it. A box that takes nothing but files opens the
  * picker from the + itself, since a menu of one row would only cost a

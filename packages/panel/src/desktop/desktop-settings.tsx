@@ -4,7 +4,7 @@ import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { Workspace } from "@repo/features/workspace-wire";
-import { type HostCapability, SETTINGS_VIEW_COUNTED_AS } from "@repo/settings";
+import { type HostCapability, NO_EXPERIMENTS, SETTINGS_VIEW_COUNTED_AS } from "@repo/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_VIEW,
@@ -27,6 +27,7 @@ import {
   SettingsPage,
   Stack,
   TEXT_ELEMENT,
+  TEXT_FONT,
   TEXT_VARIANT,
   Text,
   TOOLBAR_LOOK,
@@ -35,13 +36,15 @@ import {
 } from "@repo/ui";
 import { integrationNamed } from "@repo/ui/integration-search";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { SettingsPageLink } from "../open-settings.js";
+import { revealWithin, scrollerOf } from "../scroll-within.js";
 import {
   settingsGroupHeadingOf,
   settingsPageOf,
@@ -52,15 +55,18 @@ import { SettingsPanel, type SettingsPanelProps } from "../settings/settings-pan
 import { settingsRowsInput, shownWorkspace } from "../settings/settings-rows.js";
 import { useSettingsWrites } from "../settings/writes.js";
 import {
+  bestSettingsStop,
   landOnSettingsRow,
-  type SettingsSearchEntry,
   SettingsSearchField,
   SettingsSearchResults,
+  type SettingsSearchStop,
   searchSettings,
-  settingsSearchEntries,
+  settingsSearchCorpus,
+  settingsSearchStopId,
+  settingsSearchStops,
 } from "../settings-search.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { useExperimentChoices } from "../use-app-state.js";
+import { appStateQuery, selectExperimentChoices } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
@@ -87,11 +93,12 @@ export interface SettingsStep {
 }
 
 /**
- * The line under the title of the two pages that connect agents, each
- * naming the other: Integrations holds what the account's own agents use,
- * and the product's MCP lets outside agents use the account, so a reader
- * who landed on one looking for the other is sent across. No other page
- * has one.
+ * The line under the title of the pages that connect something, each
+ * naming the one a reader may have meant: Integrations holds what the
+ * account's own agents use, the product's MCP lets outside agents use the
+ * account, CLI is the `vespin` command an agent with a shell runs, so a
+ * reader who landed on one looking for another is sent across, and Hosts
+ * says what a host is and where it is picked. No other page has one.
  */
 function pageDescription(view: SettingsView): ReactNode {
   switch (view) {
@@ -107,7 +114,25 @@ function pageDescription(view: SettingsView): ReactNode {
         <ReplayUnmask>
           Use {PRODUCT_NAME} from Claude Code, Codex, Cursor, ChatGPT, and other agents. To give
           your {PRODUCT_NAME} agents tools like Linear or Sentry, go to{" "}
-          <SettingsPageLink page={SETTINGS_VIEW.INTEGRATIONS} />.
+          <SettingsPageLink page={SETTINGS_VIEW.INTEGRATIONS} />. For the command line, go to{" "}
+          <SettingsPageLink page={SETTINGS_VIEW.CLI} />.
+        </ReplayUnmask>
+      );
+    case SETTINGS_VIEW.CLI:
+      return (
+        <ReplayUnmask>
+          Use {PRODUCT_NAME} from your terminal and your agents with the{" "}
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
+            {PRODUCT_NAME.toLowerCase()}
+          </Text>{" "}
+          command.
+        </ReplayUnmask>
+      );
+    case SETTINGS_VIEW.HOSTS:
+      return (
+        <ReplayUnmask>
+          Macs and Linux servers of yours that run your agents instead of the cloud. Pick one under
+          a task's Runs on.
         </ReplayUnmask>
       );
     default:
@@ -268,7 +293,10 @@ function PageGroup({
  * A query turns the list into what it found, and only the field changes it:
  * pressing a result opens the page beside the results and leaves them
  * standing, so the next result is one press away, and clearing the field
- * brings the list back. The query lives here, so it lasts as long as Settings
+ * brings the list back. The field's keys walk the results with the caret
+ * left in it, and each step shows its result's page beside them, its row
+ * lit, unless the page stands alone, where a step lights the result and
+ * Return opens it. The query lives here, so it lasts as long as Settings
  * stays open. The Integrations page has a search of its own, for its
  * integrations and their tools, whose query is held here too: a result of
  * the sidebar's that opens one of its rows hands the query down to it where
@@ -313,8 +341,12 @@ export function DesktopSettings({
 }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [integrationsQuery, setIntegrationsQuery] = useState("");
-  const [opened, setOpened] = useState<SettingsSearchEntry>();
-  const experiments = useExperimentChoices();
+  // The result the field's keys or a press last lit, below zero for none.
+  const [active, setActive] = useState(-1);
+  const listId = useId();
+  const page = useRef<HTMLElement>(null);
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   // The pages, or the results of a search, are one Tab stop that ↑↓ walk.
   const roving = useRovingKeys<HTMLDivElement>();
   // The Integrations page's search is the page's, so turning to another page leaves it.
@@ -343,7 +375,8 @@ export function DesktopSettings({
   );
   // Built only while a query stands: an empty field searches nothing.
   const search =
-    rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
+    rows && query !== "" ? searchSettings(settingsSearchCorpus(rows), query) : undefined;
+  const stops = search ? settingsSearchStops(search) : [];
   const open = (view: SettingsView) => {
     appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
       settings_view: SETTINGS_VIEW_COUNTED_AS[view],
@@ -352,7 +385,7 @@ export function DesktopSettings({
   };
   const changeQuery = (next: string) => {
     setQuery(next);
-    setOpened(undefined);
+    setActive(-1);
   };
   // The page the result named opens and the view follows to the row itself.
   // The seek gives itself up after its own frame limit, and sooner when the
@@ -360,8 +393,19 @@ export function DesktopSettings({
   // a page it was not sent to.
   const landing = useRef<() => void>(undefined);
   useEffect(() => () => landing.current?.(), []);
-  const openResult = (entry: SettingsSearchEntry) => {
-    setOpened(entry);
+  // A row's page opens and the view lands on the row, handing it the
+  // keyboard only where it was chosen rather than stepped to; a page's own
+  // result opens it at its top.
+  const showStop = (stop: SettingsSearchStop, keyboard: boolean) => {
+    landing.current?.();
+    landing.current = undefined;
+    const { entry } = stop;
+    if (entry === undefined) {
+      const heading = page.current?.querySelector<HTMLElement>("h1");
+      if (stop.page === settings.view && heading) scrollerOf(heading)?.scrollTo({ top: 0 });
+      settings.onViewChange(stop.page);
+      return;
+    }
     // An integration opens with the query handed down where the page's own
     // search finds it by those words, else with that search cleared, so the
     // row the landing seeks is drawn either way.
@@ -370,13 +414,27 @@ export function DesktopSettings({
       setIntegrationsQuery(integrationNamed(provider, query) ? query : "");
     }
     settings.onViewChange(entry.page);
-    landing.current?.();
-    landing.current = landOnSettingsRow(entry.id);
+    landing.current = landOnSettingsRow(entry.id, keyboard);
   };
-  const first = search?.groups[0]?.items[0];
-  // The opened result stays marked only while its page is the one showing: a
-  // page turned some other way, by Escape, leaves it.
-  const marked = opened?.page === settings.view ? opened.id : undefined;
+  // A key stepped onto a result: it is lit and kept in the list's view, and
+  // its page shown beside the list unless the page would stand in its place.
+  const stepTo = (index: number) => {
+    const stop = stops[index];
+    if (stop === undefined) return;
+    setActive(index);
+    const row = document.getElementById(settingsSearchStopId(listId, index));
+    const lines = row === null ? undefined : scrollerOf(row);
+    if (row !== null && lines !== undefined) revealWithin(lines, row);
+    if (!split.single) showStop(stop, false);
+  };
+  // A result chosen, by Return or a press: the best one where none was stepped to.
+  const choose = (index: number) => {
+    const at = index < 0 && search ? bestSettingsStop(search) : index;
+    const stop = stops[at];
+    if (stop === undefined) return;
+    setActive(at);
+    showStop(stop, true);
+  };
   const edge = useListEdge(sidebar);
   const hidden = hiddenColumns(split.columns, step.listed);
   const screen = useScreenRef(useNarrowFocus(split.columns, step.listed), split.ref);
@@ -404,8 +462,13 @@ export function DesktopSettings({
           onFind={hidden.list ? step.onList : undefined}
           query={query}
           onQueryChange={changeQuery}
-          onSubmit={() => {
-            if (first) openResult(first);
+          results={{
+            count: stops.length,
+            active,
+            listId,
+            activeId: active < 0 ? undefined : settingsSearchStopId(listId, active),
+            onStep: stepTo,
+            onChoose: choose,
           }}
         />
         <LinkWorkspaceProvider value={listed?.slug ?? listed?.id}>
@@ -418,7 +481,13 @@ export function DesktopSettings({
                 {/* Note that the pages' names and the search's results show in a screen recording, because they are the app's own, but for the workspace's name over its group. */}
                 <ReplayUnmask>
                   {search ? (
-                    <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
+                    <SettingsSearchResults
+                      search={search}
+                      listId={listId}
+                      active={active}
+                      shown={settings.view}
+                      onOpen={choose}
+                    />
                   ) : (
                     shownSettingsPageGroups(settings.capabilities, experiments).map(
                       ({ group, pages }) => (
@@ -450,7 +519,12 @@ export function DesktopSettings({
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
-      <section className={`settings-page ${PLACE_PAGE}`} aria-label={title} hidden={hidden.item}>
+      <section
+        ref={page}
+        className={`settings-page ${PLACE_PAGE}`}
+        aria-label={title}
+        hidden={hidden.item}
+      >
         {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
         <SettingsPage
           key={settings.view}

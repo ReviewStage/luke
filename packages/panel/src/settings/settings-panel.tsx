@@ -11,11 +11,11 @@ import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views"
 import type { AppSettingsView } from "@repo/settings/wire";
 import { TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import type { ActionResult } from "@repo/wire";
 import { AccountSection } from "./account-section.js";
 import { AgentComposerSection } from "./agent-composer-section.js";
 import { AgentsPage } from "./agents-page.js";
 import { AppearanceSection } from "./appearance-page.js";
+import { CliPage } from "./cli-page.js";
 import { CommitsSection } from "./commits-section.js";
 import { ExperimentalPage } from "./experimental-page.js";
 import { HostsSection } from "./hosts-section.js";
@@ -46,7 +46,6 @@ export interface SettingsPanelProps {
    * Asks the service to erase the account, resolving to why when it refuses —
    * the row keeps drawing the account it still has, with the answer under it.
    */
-  onDeleteAccount: () => Promise<ActionResult>;
   /**
    * Which settings page is showing. Held by the app rather than here because
    * a shortcut or a button elsewhere in the window turns it.
@@ -71,7 +70,6 @@ export interface SettingsPanelProps {
 export function SettingsPanel({
   account,
   onSignOut,
-  onDeleteAccount,
   view,
   microphone,
   notifications,
@@ -95,11 +93,7 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.ACCOUNT ? (
         signedIn ? (
           <>
-            <AccountSection
-              account={account}
-              onSignOut={onSignOut}
-              onDeleteAccount={onDeleteAccount}
-            />
+            <AccountSection account={account} onSignOut={onSignOut} />
             {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
             {panelView ? <AgentComposerSection view={panelView} writes={writes} /> : null}
             {panelView ? (
@@ -143,6 +137,14 @@ export function SettingsPanel({
 
       {view !== SETTINGS_VIEW.MCP ? null : signedIn ? (
         <McpClientsSections />
+      ) : (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {SIGNED_OUT_WORDS}
+        </Text>
+      )}
+
+      {view !== SETTINGS_VIEW.CLI ? null : signedIn ? (
+        <CliPage />
       ) : (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {SIGNED_OUT_WORDS}

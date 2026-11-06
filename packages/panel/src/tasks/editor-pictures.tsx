@@ -1,5 +1,8 @@
 import { PICTURE_BOUNDS } from "@repo/features/picture-wire";
-import { planAttachmentAddress, planAttachmentOf } from "@repo/features/plan-attachment-link";
+import {
+  descriptionAttachmentAddress,
+  descriptionAttachmentOf,
+} from "@repo/features/description-attachment-link";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { PICTURE_KEEP_FAILURE } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
@@ -22,10 +25,11 @@ import {
   useFilePicker,
 } from "@repo/ui";
 import { CaptionsIcon, GLYPH, Maximize2Icon, TextCursorInputIcon } from "@repo/ui/icons";
-import { keepPictureRead, PICTURE_STATE, usePicture } from "@repo/ui/picture-cache";
+import { PICTURE_STATE, usePicture } from "@repo/ui/picture-read";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { useAppCommand } from "../app-commands.js";
 import { failureShown, pictureUnread } from "../failure-report.js";
 import { encodeImage } from "../feedback-images.js";
@@ -36,34 +40,38 @@ import {
   PICTURE_PENDING_CLASS,
   PictureBlock,
 } from "../picture-block.js";
+import { keepPictureRead, pictureQuery } from "../picture-query.js";
 import type {
   PictureNode,
   PictureNodeDoors,
   PictureTaken,
-  PlanEditorHandle,
-  PlanEditorPictures,
-} from "../plan-editor/contract.js";
+  DescriptionEditorHandle,
+  DescriptionEditorPictures,
+} from "../description-editor/contract.js";
 import { documentScrollerOf } from "./document-frame.js";
-import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures.js";
+import {
+  type DescriptionPicturesDoor,
+  useDescriptionPicturesDoor,
+} from "./description-pictures.js";
 
 /**
- * editor-pictures.tsx -- a plan's pictures in its editor: laid in from a paste, a drop, or Insert image, kept on the service as they wait, and drawn in each picture's node with its tools.
+ * editor-pictures.tsx -- a description's pictures in its editor: laid in from a paste, a drop, or Insert image, kept on the service as they wait, and drawn in each picture's node with its tools.
  *
  * A picture laid in waits on its upload: the Mac re-encodes it to at most
  * `PICTURE_BOUNDS.MAX_BYTES` (`encodeImage`), shows it at once from those
  * bytes at half strength with the window's spinner and "Uploading" where
- * its caption will stand, and keeps it on the plan (`planning.pictureKeep`).
+ * its caption will stand, and keeps it on the description (`planning.pictureKeep`).
  * Kept, the picture takes its address and the text writes its line; until
  * then the text writes nothing of it. A keep that fails says so in the same
  * place, as every failure is said (`@repo/ui`'s `ErrorState`): its sentence, then
- * Retry and Remove. A picture of another plan pasted in is read as that
- * plan's and kept again on this one, so this plan's readers can see it; a
+ * Retry and Remove. A picture of another description pasted in is read as that
+ * description's and kept again on this one, so this description's readers can see it; a
  * video an agent recorded is carried across as it is, and waits as a quiet
  * box, since its bytes draw no picture.
  * Selected, a picture offers its tools: Alt text and Caption, each a field
  * under it, Enlarge, and Delete. They hang above the picture from its left
  * edge, as wide as their own names, so a skinny picture neither squeezes
- * them nor sits under them, unless the plan's scroller would cut them off
+ * them nor sits under them, unless the description's scroller would cut them off
  * there, when they stand inside its top edge; in a column too narrow for
  * their names each is its glyph, named by its tooltip. Insert image (⌥⌘I, ⌘K, the Edit menu)
  * chooses files while the text is edited.
@@ -72,10 +80,10 @@ import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures.js";
 /** What a picture's upload says, and what a failed one says by why. */
 const UPLOAD_WORDS = {
   SENDING: "Uploading",
-  NOT_A_PICTURE: "This file is not a picture a plan can keep.",
-  TOO_MANY: "This plan already holds as many pictures as it can.",
-  TOO_MANY_VIDEOS: "This plan already holds as many videos as it can.",
-  NOT_COPIED: "The picture could not be read from its plan.",
+  NOT_A_PICTURE: "This file is not a picture a description can keep.",
+  TOO_MANY: "This description already holds as many pictures as it can.",
+  TOO_MANY_VIDEOS: "This description already holds as many videos as it can.",
+  NOT_COPIED: "The picture could not be read from its description.",
   FAILED: "The image could not be uploaded.",
 } as const;
 
@@ -98,7 +106,7 @@ type Describing = (typeof DESCRIBING)[keyof typeof DESCRIBING];
 /** The narrowest column a selected picture's tools say their names in; narrower, each is its glyph. */
 const TOOLS_WORDED_PX = 360;
 
-/** The room above a picture, inside the plan's scroller, its tools need to stand above it: their height and their gap. */
+/** The room above a picture, inside the description's scroller, its tools need to stand above it: their height and their gap. */
 const TOOLS_ROOM_PX = 44;
 
 /** One of a selected picture's tools: its name, its glyph, what a press does, and whether it destroys. */
@@ -255,7 +263,7 @@ interface ToolsLayout {
 /**
  * How a selected picture's tools stand, as the window lays the column out:
  * named where the column has room for their names, and above the picture
- * unless the plan's scroller would cut them off there, as it would a
+ * unless the description's scroller would cut them off there, as it would a
  * picture scrolled to its top. A column not laid out measures nothing and
  * keeps them named and above.
  */
@@ -324,14 +332,12 @@ function KeptPicture({
   door,
 }: {
   drawn: DrawnPicture;
-  door: PlanPicturesDoor;
+  door: DescriptionPicturesDoor;
 }): React.JSX.Element {
   const { picture, selected, doors } = drawn;
-  const named = planAttachmentOf(picture.src);
+  const named = descriptionAttachmentOf(picture.src);
   const state = usePicture(
-    named?.taskId ?? "",
-    named?.attachmentId ?? "",
-    door.read,
+    pictureQuery(named?.taskId ?? "", named?.attachmentId ?? "", door.read),
     pictureUnread,
   );
   const [describing, setDescribing] = useState<Describing | undefined>(undefined);
@@ -390,7 +396,7 @@ function KeptPicture({
 
 /** What the editor's pictures hand the document: the editor's doors, the pictures drawn into their nodes, the chooser Insert image opens, and whether one is still being sent. */
 export interface EditorPictures {
-  readonly pictures: PlanEditorPictures | undefined;
+  readonly pictures: DescriptionEditorPictures | undefined;
   readonly drawn: ReactNode;
   /** Whether a picture laid in is still on its way to being kept, which the editor stays open for, since only it can lay in the address that comes back. */
   readonly sending: boolean;
@@ -399,17 +405,18 @@ export interface EditorPictures {
 }
 
 /**
- * The plan's pictures in its editor: drawn into each node, kept as they are
+ * The description's pictures in its editor: drawn into each node, kept as they are
  * laid in, and chosen by Insert image while the text is edited. None where
  * the place names no workspace to address them under, as the template does.
  */
 export function useEditorPictures(
   taskId: string,
   workspace: string | undefined,
-  handle: React.RefObject<PlanEditorHandle | undefined>,
+  handle: React.RefObject<DescriptionEditorHandle | undefined>,
 ): EditorPictures {
-  const { act } = useAct();
-  const door = usePlanPicturesDoor();
+  const { mutateAsync: sendKeep } = useMutation(actMutation(ACT_KIND.TASKS_PICTURE_KEEP));
+  const queryClient = useQueryClient();
+  const door = useDescriptionPicturesDoor();
   const [drawn, setDrawn] = useState<readonly DrawnPicture[]>([]);
   const [uploads, setUploads] = useState<ReadonlyMap<string, Upload>>(new Map());
   const counted = useRef(0);
@@ -429,20 +436,18 @@ export function useEditorPictures(
       settled(taken.upload, { kind: UPLOAD.SENDING, url });
       const failed = (reason: string) =>
         settled(taken.upload, { kind: UPLOAD.FAILED, url, reason, taken });
-      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
-        () => undefined,
-      );
+      const kept = await sendKeep({ planId: taskId, picture: url }).catch(() => undefined);
       if (kept === undefined || "failure" in kept) return failed(keepFailedWords(kept?.failure));
-      keepPictureRead(taskId, kept.id, url);
+      keepPictureRead(queryClient, taskId, kept.id, url);
       handle.current?.settlePicture(
         taken.upload,
-        planAttachmentAddress({ taskId, attachmentId: kept.id }, workspace),
+        descriptionAttachmentAddress({ taskId, attachmentId: kept.id }, workspace),
       );
       settled(taken.upload, undefined);
     },
-    [act, handle, taskId, settled, workspace],
+    [sendKeep, queryClient, handle, taskId, settled, workspace],
   );
-  // Note that a picture of another plan is read as that plan's before it is kept again.
+  // Note that a picture of another description is read as that description's before it is kept again.
   const begin = useCallback(
     async (taken: PictureTaken) => {
       settled(taken.upload, { kind: UPLOAD.SENDING });
@@ -457,26 +462,29 @@ export function useEditorPictures(
         }
         return keep(taken, url);
       }
-      const named = planAttachmentOf(taken.from);
+      const named = descriptionAttachmentOf(taken.from);
+      // Note that a picture the window holds already is copied as it stands, since a picture's query never goes stale.
       const read =
         named === undefined || door === undefined
           ? undefined
-          : await door.read(named.taskId, named.attachmentId).catch(() => undefined);
-      if (read === undefined || "failure" in read) {
+          : await queryClient
+              .fetchQuery(pictureQuery(named.taskId, named.attachmentId, door.read))
+              .catch(() => undefined);
+      if (read?.kind !== PICTURE_STATE.READY) {
         return settled(taken.upload, {
           kind: UPLOAD.FAILED,
           reason: UPLOAD_WORDS.NOT_COPIED,
           taken,
         });
       }
-      return keep(taken, dataUrlOf(read.contentType, read.base64));
+      return keep(taken, read.url);
     },
-    [door, keep, settled],
+    [door, keep, settled, queryClient],
   );
   // Note that the doors handed the editor once read the newest of these as they run.
   const beginning = useRef(begin);
   beginning.current = begin;
-  const pictures = useRef<PlanEditorPictures | undefined>(undefined);
+  const pictures = useRef<DescriptionEditorPictures | undefined>(undefined);
   if (pictures.current === undefined && workspace !== undefined) {
     pictures.current = {
       draw: (element, picture, doors) => {
@@ -495,7 +503,7 @@ export function useEditorPictures(
         for (const each of taken) beginning.current(each);
       },
       copies: (src) => {
-        const named = planAttachmentOf(src);
+        const named = descriptionAttachmentOf(src);
         return named !== undefined && named.taskId !== taskId;
       },
     };

@@ -1,39 +1,38 @@
 /**
- * vercel-machine.ts -- the agent machine over Vercel Sandbox: a sandbox opened from the coding agent's image, the runner launched in it as a detached command, and our doors read through it with every capability dropped.
+ * vercel-machine.ts -- the agent machine over Vercel Sandbox: a sandbox booted from the agents' image, the runner started in it as the SDK's own user for the agent, and our doors read through it.
  *
- * `open` opens a sandbox from the coding agent's image
- * (`../agent-sandbox-image.ts`), waiting while the image is prepared where
- * the caller asks, and checks the agent's repository out into it on eve's
- * terms (`../coder-host/checkout.ts`, the same token at the firewall, but
- * cloned whole, since the history is deepened before the runner starts
- * anyway), or opens it from its workspace's repository snapshot of the same
- * image and fetches only what landed since (`../repository-snapshot.ts`),
- * building that snapshot past the answer where none was ready. The deepen
- * is left to the launch (`finishCheckout`), which runs it beside its own
- * uploads. A sandbox whose use failed is deleted again.
+ * `open` opens a sandbox from the agents' image (`../coder-host/agent-image.ts`),
+ * which carries the runner and every tool the harnesses run, makes the
+ * `agent` user in it as the SDK does, and checks the agent's repository out
+ * into it on eve's terms (`../coder-host/checkout.ts`, the same token at the
+ * firewall, but cloned whole, since the history is deepened before the
+ * runner starts anyway); or opens it from its workspace's repository
+ * snapshot of the same image, whose build made the user already, and
+ * fetches only what landed since (`../repository-snapshot.ts`), building
+ * that snapshot past the answer where none was ready. A create Vercel
+ * answers `image_not_ready` is asked again once the registry has had time to
+ * prepare the image, as Vercel's docs say. The deepen is left to the launch
+ * (`finishCheckout`), which runs it beside its own steps. A sandbox whose use
+ * failed is deleted again.
  *
- * `launchRunner` uploads the runner's bundle (`../coder-host/runner-bundle.ts`)
- * and starts it as a detached command of the sandbox's API as root, which
- * installs the bundle where only root writes, checks its digest, shares the
- * checkout with the `agent` user, and drops to that user with every
- * capability gone (`../sandbox-capabilities.ts`). The harness's credential
- * and the placeholder the firewall swaps for the runner's bearer
- * (`../coder-host/runner-sessions.ts`) are in that command's environment
- * and nowhere else: never in its argv, its config line, a file, or a tag. Its config line is
- * written to its stdin, which carries nothing more: the runner reads every
+ * `launchRunner` readies the sandbox as root, sharing each checkout with the
+ * `agent` user, and then starts the image's runner as that user through the
+ * SDK (`asUser(...).runCommand`), as a detached command whose stdin stays
+ * open. The harness's credential and the placeholder the firewall swaps for
+ * the runner's bearer (`../coder-host/runner-sessions.ts`) are in that
+ * command's environment, which the SDK writes on `sudo`'s command line, so
+ * any process in the sandbox may read them there while the runner runs; in
+ * a sandbox each is a placeholder the firewall swaps, worth nothing outside
+ * it. Neither is ever in its config line, a file, or a tag. Its config line
+ * is written to its stdin, which carries nothing more: the runner reads every
  * later line from the service (`../coder-host/runner-sessions.ts`), so this machine
  * writes no line to it.
  *
  * The doors read the sandbox carrying the agent's session id as its tag, as
  * every agent's sandbox does, and only its running session: nothing is
  * resumed, since the agent calling the tool runs in that sandbox, so a
- * sandbox not up has nothing to read from. A file is read by a command run
- * with every capability dropped, as a Terminal's shell runs, never through
- * Vercel's own file read, which reads as root: the agent names any path,
- * and a model talked into naming `/proc/<runner pid>/environ`, a file under
- * `agent`'s private home, or a link to either in the checkout would
- * otherwise hand its harness's token to a page, a picture, or the inbox.
- * Under the drop such a path reads as no file. A repository's command is
+ * sandbox not up has nothing to read from. A file is read by a command the
+ * sandbox's default user runs. A repository's command is
  * run in the running session and waited on, its environment named by `env`
  * on the command line rather than by the API, as our other commands are
  * run (`../vercel-sandbox-api.ts`).
@@ -41,16 +40,18 @@
  * A place is found again by the session's tag, and its runner by the tags a
  * launch writes beside it: the command, the sandbox session it runs in, and
  * the launch's first event number and fingerprint (`RUNNER_TAG`). The
- * firewall is the sandbox session's network policy, composed whole from
- * what stands at it (`../sandbox-firewall.ts`), a stop is the session's, and a
+ * firewall is the sandbox session's network policy, composed whole at each
+ * write from its sources and the swaps its launch keeps
+ * (`../sandbox-firewall.ts`), a stop is the session's, and a
  * resume opens the sandbox's last snapshot, its timeout lowered first, so
  * the session it opens lives a launch's timeout and not an old sandbox's
  * day; a snapshot expired is a place gone for good.
  */
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   AGENT_USER,
+  CODEX_PIN,
   RUNNER_DIRECTORY,
   SANDBOX_TOOLS_DIRECTORY,
   SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME,
@@ -61,20 +62,18 @@ import { type Agent, hasRepository, type WithRepository } from "@repo/database/m
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { Brand, type Context, Duration, Effect, Layer, Option, Result } from "effect";
+import { Brand, type Context, Duration, Effect, Layer, Option, Result, Schedule } from "effect";
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
-import {
-  AgentSandboxImage,
-  type AgentSandboxImageService,
-  ImagePreparing,
-} from "../agent-sandbox-image.js";
+import { fillBaseDrive } from "../base-drive.js";
+import { AgentImage } from "../coder-host/agent-image.js";
 import { CODER, sandboxVcpus } from "../coder-host/bounds.js";
 import {
   type AgentExtraRead,
   type AgentRepositoryRead,
   agentDeepenPlan,
   agentExtraReads,
+  agentFirewallSources,
   agentRepositoryRead,
   CHECKOUT_DEPTH,
   CheckoutRefused,
@@ -85,7 +84,6 @@ import {
   refreshAgentCheckout,
 } from "../coder-host/checkout.js";
 import { NATIVE_SKILLS_PATH } from "../coder-host/native-skills.js";
-import { RunnerBundle } from "../coder-host/runner-bundle.js";
 import type { RepositoryFirewall, RepositorySandbox } from "../repository-shell.js";
 import {
   buildRepositorySnapshot,
@@ -94,10 +92,13 @@ import {
   type RepositorySnapshotOf,
   readRepositorySnapshot,
 } from "../repository-snapshot.js";
-import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
-import { type FirewallSession, sandboxFirewall } from "../sandbox-firewall.js";
-import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
+  type FirewallSession,
+  type FirewallSources,
+  sandboxFirewall,
+} from "../sandbox-firewall.js";
+import {
+  IMAGE_NOT_READY,
   type ListedSandbox,
   NOT_FOUND_STATUS,
   type OidcTokenRead,
@@ -114,7 +115,6 @@ import {
   type AgentMachineService,
   describeFailure,
   type FoundPlace,
-  LaunchRefused,
   type MachineKept,
   type MachineLayout,
   type MachineLifecycle,
@@ -141,11 +141,8 @@ export const RUNNER_TAG = {
   /**
    * The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what
    * the launch was started with that a warm runner cannot take up later
-   * (`launchFingerprint`), then the mark again and `LINES_READ_MARK`, since
-   * every launch reads its lines from the service. Note that the read mark is
-   * written for a deployment from before this one, which reads a launch
-   * without it as one whose stdin it writes, and is read here by no one:
-   * no launch from before the read still ran as this deployment went out.
+   * (`launchFingerprint`). A tag written before ends in the mark and
+   * `lines`, which the read leaves aside.
    */
   LAUNCH: "agentRunnerLaunch",
 } as const;
@@ -173,11 +170,8 @@ export function runnerTag(
   return tags?.[RUNNER_TAG[tag]] ?? tags?.[RUNNER_TAG_BEFORE_RENAME[tag]];
 }
 
-/** What parts a launch tag's first event number from its fingerprint, and its fingerprint from whether it reads its lines. */
+/** What parts a launch tag's first event number from its fingerprint. */
 const LAUNCH_FINGERPRINT_MARK = "-";
-
-/** What a launch tag's last part reads for a launch that reads its lines from the service. */
-const LINES_READ_MARK = "lines";
 
 /**
  * Where a message's files that the harness takes no block of are written
@@ -211,16 +205,11 @@ export const SANDBOX_NAME = "agent-sandbox-";
  */
 export const SANDBOX_NAME_BEFORE_RENAME = "luke-agent-";
 
-/**
- * Where the launch stands in the sandbox: the bundle as the file API uploads
- * it, as the default user, and where it is installed root's, in the directory
- * the image made root's (`RUNNER_DIRECTORY`), so no Terminal's shell changes
- * what runs as `agent`.
- */
-const RUNNER_PATH = {
-  UPLOAD: "/tmp/agent-runner.mjs",
-  INSTALLED: `${RUNNER_DIRECTORY}/agent-runner.mjs`,
-} as const;
+/** The runner as the image carries it (`apps/web/agent-image/Dockerfile`). */
+const RUNNER_SCRIPT = `${RUNNER_DIRECTORY}/agent-runner.mjs`;
+
+/** The folders the `agent` user's home holds from its making: Codex's `CODEX_HOME`, which Codex refuses to start without. */
+const AGENT_HOME_FOLDERS = [CODEX_PIN.HOME];
 
 /** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
 const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;
@@ -228,7 +217,7 @@ const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const
 /**
  * The link a sandbox made before the product's rename is given on each
  * launch, root's, from our tools' directory to the one its image put them
- * in, so the runner's bundle and the Claude Code binary are found where the
+ * in, so the runner and the Claude Code binary are found where the
  * pins name them. Note that it can go only once Vercel lists no sandbox made
  * before the rename (named `luke-agent-` and a UUID), because a sandbox in
  * steady use resumes from its own snapshot for as long as it lives.
@@ -262,39 +251,31 @@ const SHARE_WAIT = Duration.minutes(2);
 const NOT_SHARED = "the checkouts cloned beside the agent's could not be shared with its runner";
 
 /**
- * The launch, run by bash as root: the uploaded bundle installed where only
- * root writes and checked against the digest we computed, the member's
- * installed skills, where the sandbox's opening uploaded them, moved where
- * only root writes and every user reads (`native-skills.ts`), each checkout
- * marked safe for git and shared with `agent`'s group, the agent's own and
- * those of the repositories it works in beside it at the paths given
- * (`extraCheckoutPaths`), none for an agent in one repository, whose launch
- * is the text it always was, the folder an agent saves what the service
- * reads back in made `agent`'s and readable by the default user the
- * service reads as (`SHARED_FILES_DIRECTORY`), then the runner in
- * place of the shell as `agent`, every capability dropped. `$1` is the
- * digest; the secrets are in the environment the API hands the command, and
- * `exec` hands them on to the runner alone. Note that the checkout's git
- * config is written only where it does not already say so, because a
- * `config.lock` an agent's git left behind when its runner was killed would
- * otherwise fail every relaunch after it.
+ * The launch's readying, run by bash as root through `sudo`, waited on before the runner starts: the
+ * member's installed skills, where the sandbox's opening uploaded them,
+ * moved where only root writes and every user reads (`native-skills.ts`),
+ * each checkout marked safe for git and shared with `agent`'s group, the
+ * agent's own and those of the repositories it works in beside it at the
+ * paths given (`extraCheckoutPaths`), none for an agent in one repository,
+ * and the folder an agent saves what the service reads back in made
+ * `agent`'s and readable by the default user the service reads as
+ * (`SHARED_FILES_DIRECTORY`). Note that the checkout's git config is written
+ * only where it does not already say so, because a `config.lock` an agent's
+ * git left behind when its runner was killed would otherwise fail every
+ * relaunch after it.
  */
-function launchScript(extraCheckouts: readonly string[]): string {
+function readyScript(extraCheckouts: readonly string[]): string {
   return [
     "set -euo pipefail",
     LINK_TOOLS_DIRECTORY,
-    `install -D -o root -g root -m 0444 ${RUNNER_PATH.UPLOAD} ${RUNNER_PATH.INSTALLED}`,
-    `rm -f ${RUNNER_PATH.UPLOAD}`,
-    `echo "$1  ${RUNNER_PATH.INSTALLED}" | sha256sum --check --status`,
     `if [ -d ${NATIVE_SKILLS_PATH.UPLOAD} ]; then rm -rf ${NATIVE_SKILLS_PATH.INSTALLED} && mkdir -p $(dirname ${NATIVE_SKILLS_PATH.INSTALLED}) && mv ${NATIVE_SKILLS_PATH.UPLOAD} ${NATIVE_SKILLS_PATH.INSTALLED} && chown -R root:root ${NATIVE_SKILLS_PATH.INSTALLED} && chmod -R u=rwX,go=rX ${NATIVE_SKILLS_PATH.INSTALLED}; fi`,
     ...[CODER.CHECKOUT_PATH, ...extraCheckouts].flatMap(sharedCheckout),
     `install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0755 ${SHARED_FILES_DIRECTORY}`,
-    `exec ${WITHOUT_CAPABILITIES.COMMAND} --reuid=${AGENT_USER} --regid=${AGENT_USER} --init-groups ${WITHOUT_CAPABILITIES.ARGS.join(" ")} env HOME=/home/${AGENT_USER} USER=${AGENT_USER} LOGNAME=${AGENT_USER} node ${RUNNER_PATH.INSTALLED}`,
   ].join("\n");
 }
 
-/** What `$0` reads as in the launch's shell. */
-const LAUNCH_NAME = "agent-runner";
+/** Why the sandbox could not be readied for the agent's runner. */
+const NOT_READIED = "the sandbox could not be readied for the agent's runner";
 
 /** How the read exits where the path is no regular file the sandbox's user may read. */
 const READ_EXIT = { NO_FILE: 3 } as const;
@@ -312,25 +293,16 @@ const READ_SCRIPT = [
 ].join("\n");
 
 /**
- * How an open past its Start's answer waits on an image still being
- * prepared, a template whose snapshot a create found gone among them: on the
- * template's build to its end (`AgentSandboxImage.prepared`), then asked
- * again at once, and given up where the image is still being prepared after
- * the template's own wait. An open answers preparing before any sandbox
- * stands, so making it again leaves nothing behind. `times` only bounds a
- * template that answers ready yet keeps losing its snapshot. A message's
- * relaunch past its answer retries on it too, its lease let go for each
- * wait (`runner-sessions.ts`'s `send`).
+ * How a create on an image the registry is still preparing is asked again:
+ * every `SPACED`, at most `TIMES` times, as Vercel's docs say to retry once
+ * the preparation finishes. Note that CI pushes each image and waits for
+ * Vercel to prepare it before the deploy that names it lands, so only a
+ * Preview opened as its image is pushed waits here.
  */
-export const IMAGE_READY = {
-  times: 3,
-  while: (failure: { readonly _tag: string }) =>
-    failure instanceof ImagePreparing
-      ? Effect.flatMap(AgentSandboxImage, (image) =>
-          image.prepared.pipe(Effect.orElseSucceed(() => false)),
-        )
-      : Effect.succeed(false),
-};
+const IMAGE_RETRY = {
+  SPACED: Duration.seconds(10),
+  TIMES: 18,
+} as const;
 
 /** Runs one effect on the edge's runtime; the checkout reaches the sandbox through promises (`repository-shell.ts`). */
 export type SandboxRunner = <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
@@ -384,13 +356,10 @@ export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   return { sandboxSessionId, commandId, ...launch };
 }
 
-/** The launch tag's value for the mark given. Note that a launch that reads its lines always has a fingerprint, since both came in after fingerprints, so its read mark never stands in a fingerprint's place. */
+/** The launch tag's value for the mark given. */
 function launchTagOf(mark: RunnerMark): string {
   if (mark.fingerprint === undefined) return String(mark.firstSequence);
-  const parts = [mark.firstSequence, mark.fingerprint];
-  return (mark.linesRead === true ? [...parts, LINES_READ_MARK] : parts).join(
-    LAUNCH_FINGERPRINT_MARK,
-  );
+  return [mark.firstSequence, mark.fingerprint].join(LAUNCH_FINGERPRINT_MARK);
 }
 
 /** The tags a sandbox carries for the record given, beside its session's and its agent's. */
@@ -440,15 +409,9 @@ function foundOf(session: string, sandbox: ListedSandbox): FoundPlace {
     running,
     runner: runnerInSession(session, sandbox),
     launch: taggedLaunch(tags),
-    // SAFETY: the listing is this machine's own to read back in `resume`; no caller reads it.
+    // SAFETY: the listing is this machine's own; no caller reads it.
     kept: sandbox as unknown as MachineKept,
   };
-}
-
-/** The listing a found place was read from, which `foundOf` kept. */
-function listedOf(found: FoundPlace): ListedSandbox {
-  // SAFETY: a place this machine found keeps the listing it was read from (`foundOf`).
-  return found.kept as unknown as ListedSandbox;
 }
 
 /**
@@ -477,16 +440,17 @@ const diedAtStart = (
     );
   });
 
-/** The sandbox session's firewall as the checkout reaches it, bound to the session and its account, over the store the machine was made on. */
+/** The sandbox session's firewall as the checkout reaches it, bound to the session and its account and to what stands beside the checkout's own, over the store the machine was made on. */
 function repositoryFirewallOver(
   api: VercelSandboxApi,
   context: Context.Context<DatabaseServices>,
   session: FirewallSession,
+  beside: FirewallSources,
 ): RepositoryFirewall {
   const firewall = sandboxFirewall(api);
   return {
-    set: (slot, entry) => Effect.provideContext(firewall.set(session, slot, entry), context),
-    withdraw: (slot) => Effect.provideContext(firewall.withdraw(session, slot), context),
+    write: (sources) =>
+      Effect.provideContext(firewall.write(session, { ...beside, ...sources }), context),
   };
 }
 
@@ -514,19 +478,11 @@ function repositorySandboxOver(
   };
 }
 
-/** The read as one command: bash, every capability dropped, the path and bound as its positional arguments. */
+/** The read as one command: bash, the path and bound as its positional arguments. */
 function readFileCommand(path: string, maxBytes: number) {
   return {
-    command: WITHOUT_CAPABILITIES.COMMAND,
-    args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "bash",
-      "-c",
-      READ_SCRIPT,
-      "read-file",
-      path,
-      String(maxBytes),
-    ],
+    command: "bash",
+    args: ["-c", READ_SCRIPT, "read-file", path, String(maxBytes)],
   };
 }
 
@@ -558,17 +514,17 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
       api.updateTags(place.name, recordTags(place.session, place.agentId, record)),
 
     firewall: {
-      set: (place, userId, slot, entry) =>
-        firewall.set({ userId, sandboxSessionId: place.running }, slot, entry),
-      withdraw: (place, userId, slot) =>
-        firewall.withdraw({ userId, sandboxSessionId: place.running }, slot),
+      write: (place, userId, sources) =>
+        firewall.write({ userId, sandboxSessionId: place.running }, sources),
+      keepLaunch: (place, userId, launch) =>
+        firewall.keepLaunch({ userId, sandboxSessionId: place.running }, launch),
+      endLaunch: (place, userId, sources) =>
+        firewall.endLaunch({ userId, sandboxSessionId: place.running }, sources),
       clear: (place) => firewall.clear(place.running),
     },
 
-    // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
     resume: (found) =>
       Effect.gen(function* () {
-        yield* capSandboxTimeout(api, listedOf(found));
         const resumed = yield* Effect.result(api.resume(found.name));
         if (Result.isFailure(resumed)) {
           if (resumed.failure.status === SNAPSHOT_GONE_STATUS) return PLACE_RESUME.GONE;
@@ -606,30 +562,35 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 
 /** The machine over the API given, its checkout run through the edge's runner. */
 export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentMachineService {
-  /** The sandbox session as the checkout reaches it, its firewall the account's given, its record kept in the store given. */
+  /** The sandbox session as the checkout reaches it, its firewall the account's given, with what stands beside the checkout's own, its launch read from the store given. */
   const checkoutOver = (
     context: Context.Context<DatabaseServices>,
     running: string,
     userId: string,
+    beside: FirewallSources = {},
   ) =>
     repositorySandboxOver(
       api,
       running,
       run,
-      repositoryFirewallOver(api, context, { userId, sandboxSessionId: running }),
+      repositoryFirewallOver(api, context, { userId, sandboxSessionId: running }, beside),
     );
 
-  /** The same, its record kept in the caller's store. */
-  const checkoutIn = (running: string, userId: string) =>
+  /** The same, its launch read from the caller's store. */
+  const checkoutIn = (running: string, userId: string, beside: FirewallSources = {}) =>
     Effect.map(Effect.context<DatabaseServices>(), (context) =>
-      checkoutOver(context, running, userId),
+      checkoutOver(context, running, userId, beside),
     );
 
-  /** A new sandbox of the agent's, under the session given, opened from the snapshot named at the size its repository asks for. */
-  const createdFrom = (agent: Agent, sessionId: string, snapshotId: string) =>
+  /** A new sandbox of the agent's, under the session given, opened from the image or snapshot named at the size its repository asks for. */
+  const createdFrom = (
+    agent: Agent,
+    sessionId: string,
+    from: { readonly image: string } | { readonly snapshotId: string },
+  ) =>
     api.create({
       name: `${SANDBOX_NAME}${randomUUID()}`,
-      snapshotId,
+      from,
       tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
       timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
       vcpus: sandboxVcpus(agent.repository),
@@ -659,11 +620,11 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
   const repositorySnapshotOf = (
     agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
-    imageSnapshotId: string,
+    image: string,
   ): Option.Option<RepositorySnapshotOf> =>
     agent.startBranch === null && read.access.kind === GITHUB_ACCESS.APP
       ? Option.some({
-          imageSnapshotId,
+          image,
           workspaceId: read.workspaceId,
           fullName: read.fullName,
           defaultBranch: read.defaultBranch,
@@ -690,6 +651,28 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     });
 
   /**
+   * The workspace's repository's base drive filled past the request's
+   * answer where it has none (`base-drive.ts`), on the same terms as the
+   * repository snapshot's build.
+   */
+  const fillBaseDriveInBackground = (
+    agent: Agent,
+    of: RepositorySnapshotOf,
+    read: AgentRepositoryRead,
+  ) =>
+    Effect.gen(function* () {
+      if (Option.isNone(yield* Effect.serviceOption(AfterResponse))) return;
+      yield* afterResponse(
+        "A base drive's fill",
+        Effect.flatMap(Effect.context<DatabaseServices>(), (context) =>
+          fillBaseDrive(api, of, of.image, read, (running) =>
+            checkoutOver(context, running, agent.userId),
+          ),
+        ),
+      );
+    });
+
+  /**
    * The agent's sandbox opened from its repository snapshot and its
    * checkout brought up to the default branch; none where the snapshot was
    * gone or its checkout would not refresh, the snapshot then forgotten so
@@ -706,7 +689,10 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     read: AgentRepositoryRead,
   ) =>
     Effect.gen(function* () {
-      const opened = yield* Effect.flatMap(createdFrom(agent, sessionId, snapshotId), runningOf);
+      const opened = yield* Effect.flatMap(
+        createdFrom(agent, sessionId, { snapshotId }),
+        runningOf,
+      );
       yield* refreshAgentCheckout(
         agent,
         yield* checkoutIn(opened.running, agent.userId),
@@ -730,25 +716,26 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     );
 
   /**
-   * The agent's sandbox opened from the image, the image prepared again
-   * where its snapshot is gone, because otherwise every launch would fail
-   * on it until someone deleted the template by hand; this launch answers
-   * as preparing meanwhile.
+   * The agent's sandbox opened from the image, asked again while the
+   * registry still prepares it (`IMAGE_RETRY`), and the `agent` user made in
+   * it as the SDK makes one; a sandbox the user could not be made in is
+   * deleted again.
    */
-  const openedFromImage = (
-    image: AgentSandboxImageService,
-    agent: Agent,
-    sessionId: string,
-    snapshotId: string,
-  ) =>
-    createdFrom(agent, sessionId, snapshotId).pipe(
-      Effect.catchIf(
-        (failure) => failure.status === SNAPSHOT_GONE_STATUS,
-        () =>
-          Effect.flatMap(image.snapshotGone(snapshotId), () => Effect.fail(new ImagePreparing())),
-      ),
-      Effect.flatMap(runningOf),
-    );
+  const openedFromImage = (agent: Agent, sessionId: string, image: string) =>
+    Effect.gen(function* () {
+      const opened = yield* createdFrom(agent, sessionId, { image }).pipe(
+        Effect.retry({
+          schedule: Schedule.spaced(IMAGE_RETRY.SPACED),
+          times: IMAGE_RETRY.TIMES,
+          while: (failure) => failure.code === IMAGE_NOT_READY,
+        }),
+        Effect.flatMap(runningOf),
+      );
+      yield* api
+        .createUser(opened.name, AGENT_USER, AGENT_HOME_FOLDERS)
+        .pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+      return opened;
+    });
 
   /**
    * The agent's sandbox with its repository checked out, on the read the
@@ -761,16 +748,16 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * asked about is passed by, and no build is started on it.
    */
   const primaryCheckedOut = (
-    image: AgentSandboxImageService,
     agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
     sessionId: string,
     harness: string,
-    imageSnapshotId: string,
+    image: string,
   ) =>
     Effect.gen(function* () {
-      const of = repositorySnapshotOf(agent, read, imageSnapshotId);
+      const of = repositorySnapshotOf(agent, read, image);
       if (Option.isSome(of)) {
+        yield* fillBaseDriveInBackground(agent, of.value, read);
         const found = yield* readRepositorySnapshot(api, of.value).pipe(Effect.option);
         if (Option.isSome(found) && found.value.state === REPOSITORY_SNAPSHOT_STATE.READY) {
           const fromSnapshot = yield* openedFromRepositorySnapshot(
@@ -786,7 +773,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         // The build reads the snapshot again and leaves one ready or being built be.
         if (Option.isSome(found)) yield* buildInBackground(agent, of.value, read);
       }
-      const opened = yield* openedFromImage(image, agent, sessionId, imageSnapshotId);
+      const opened = yield* openedFromImage(agent, sessionId, image);
       yield* cloneAgentRepository(
         agent,
         yield* checkoutIn(opened.running, agent.userId),
@@ -804,23 +791,15 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * repository clones nothing more.
    */
   const checkedOutSandbox = (
-    image: AgentSandboxImageService,
     agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
     extras: readonly AgentExtraRead[],
     sessionId: string,
     harness: string,
-    imageSnapshotId: string,
+    image: string,
   ) =>
     Effect.gen(function* () {
-      const opened = yield* primaryCheckedOut(
-        image,
-        agent,
-        read,
-        sessionId,
-        harness,
-        imageSnapshotId,
-      );
+      const opened = yield* primaryCheckedOut(agent, read, sessionId, harness, image);
       if (extras.length === 0) return opened;
       yield* cloneAgentExtras(yield* checkoutIn(opened.running, agent.userId), extras).pipe(
         Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))),
@@ -830,9 +809,9 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
 
   /**
    * The agent's sandbox opened from the image, its repository checked out
-   * in it where it has one (`checkedOutSandbox`). The image's snapshot and
-   * the repository are asked at once, since neither waits on the other and
-   * both are asked before any sandbox opens.
+   * in it where it has one (`checkedOutSandbox`). The image's reference and
+   * the repository are read at once, since neither waits on the other and
+   * both are read before any sandbox opens.
    */
   const openedCheckout = (
     target: ConversationTarget,
@@ -841,19 +820,17 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     harness: string,
   ) =>
     Effect.gen(function* () {
-      const image = yield* AgentSandboxImage;
-      const [snapshot, read, extras] = yield* Effect.all(
+      const [image, read, extras] = yield* Effect.all(
         [
-          image.snapshotId,
+          Effect.flatMap(AgentImage, (agentImage) => agentImage.reference),
           hasRepository(agent) ? agentRepositoryRead(target, agent) : Effect.succeed(undefined),
           hasRepository(agent) ? agentExtraReads(target, agent) : Effect.succeed([]),
         ],
         { concurrency: "unbounded" },
       );
-      if (Option.isNone(snapshot)) return yield* new LaunchRefused({ reason: "no snapshot" });
       return hasRepository(agent) && read !== undefined
-        ? yield* checkedOutSandbox(image, agent, read, extras, sessionId, harness, snapshot.value)
-        : yield* openedFromImage(image, agent, sessionId, snapshot.value);
+        ? yield* checkedOutSandbox(agent, read, extras, sessionId, harness, image)
+        : yield* openedFromImage(agent, sessionId, image);
     });
 
   return {
@@ -863,16 +840,13 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
 
     // What the deepen reads of GitHub (`agentDeepenPlan`) is read beside the sandbox's opening and
     // the caller's own reads, and kept as it ended, so a read that failed fails the launch only
-    // once the sandbox it would delete stands, and never cuts its opening short. Where the caller
-    // waits on an image still being prepared (`IMAGE_READY`), only the opening is asked again, so
-    // the reads are made once. Note that a sandbox just opened holds no deepen's record, so none
-    // is looked for.
+    // once the sandbox it would delete stands, and never cuts its opening short. Note that a
+    // sandbox just opened holds no deepen's record, so none is looked for.
     open: (ask, use) =>
       Effect.gen(function* () {
-        const opening = openedCheckout(ask.target, ask.agent, ask.session, ask.harness);
         const [{ name, running }, [deepen, beside]] = yield* Effect.all(
           [
-            ask.waitOnImage ? Effect.retry(opening, IMAGE_READY) : opening,
+            openedCheckout(ask.target, ask.agent, ask.session, ask.harness),
             Effect.all(
               [
                 Effect.exit(
@@ -904,19 +878,21 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(name))));
       }),
 
-    // The bundle's upload and the caller's steps run at once, since none waits on another and the
-    // command waits on them all. The runner is kept in the sandbox's tags before it reads anything,
-    // so a later call finds it. A runner started but never configured is ended, and the caller
-    // undoes what it recorded of it, so the next message relaunches whole rather than writing to a
-    // runner that waits for its config.
+    // The sandbox is readied as root once the caller's steps are done, since the readying shares
+    // the checkout they finish, and the runner is started as `agent` after it. The runner is kept in
+    // the sandbox's tags before it reads anything, so a later call finds it. A runner started but
+    // never configured is ended, and the caller undoes what it recorded of it, so the next message
+    // relaunches whole rather than writing to a runner that waits for its config.
     // Note that a clone run again finds the folder of a checkout already standing and clones nothing,
-    // so only a repository added since the place opened is cloned here.
+    // so only a repository added since the place opened is cloned here. A runner already running
+    // keeps its repository credential through the clone, minted afresh, since each write is whole.
     checkOutExtras: (place, target, agent, shared) =>
       Effect.gen(function* () {
         if (!hasRepository(agent)) return;
         const reads = yield* agentExtraReads(target, agent);
         if (reads.length === 0) return;
-        yield* cloneAgentExtras(yield* checkoutIn(place.running, agent.userId), reads);
+        const beside = shared ? yield* agentFirewallSources(target, agent) : {};
+        yield* cloneAgentExtras(yield* checkoutIn(place.running, agent.userId, beside), reads);
         if (!shared) return;
         const commandId = yield* api.start(place.running, {
           command: "bash",
@@ -930,27 +906,23 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
         const running = place.running;
-        const [digest, ready] = yield* Effect.all(
-          [
-            Effect.gen(function* () {
-              const bundle = yield* (yield* RunnerBundle).contents;
-              yield* api.writeFiles(running, [
-                { path: RUNNER_PATH.UPLOAD, contents: bundle, mode: 0o644 },
-              ]);
-              return createHash("sha256").update(bundle).digest("hex");
-            }),
-            launch.ready,
-          ],
-          { concurrency: "unbounded" },
-        );
-        const commandId = yield* api.start(running, {
-          command: "bash",
-          args: ["-c", launchScript(launch.extraCheckouts ?? []), LAUNCH_NAME, digest],
+        const ready = yield* launch.ready;
+        const readied = yield* api.run(running, {
+          command: "sudo",
+          args: ["-n", "bash", "-c", readyScript(launch.extraCheckouts ?? [])],
+        });
+        if (readied.exitCode !== 0) return yield* new SandboxUnavailable({ detail: NOT_READIED });
+        const commandId = yield* api.startAsUser(launch.name, AGENT_USER, {
+          command: "node",
+          args: [RUNNER_SCRIPT],
           cwd: CODER.CHECKOUT_PATH,
-          // Note that the credential and the bearer ride in the environment alone, which the API's
-          // sudo keeps, as Vercel documents it does, on an image that honors that (`sandbox-image.ts`).
-          env: { ...SANDBOX_ENV, ...launch.env },
-          sudo: true,
+          env: {
+            ...SANDBOX_ENV,
+            HOME: `/home/${AGENT_USER}`,
+            USER: AGENT_USER,
+            LOGNAME: AGENT_USER,
+            ...launch.env,
+          },
         });
         const handle: RunnerHandle = { ...place, command: commandId };
         yield* Effect.gen(function* () {

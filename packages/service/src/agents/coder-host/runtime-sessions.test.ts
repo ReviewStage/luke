@@ -49,7 +49,7 @@ import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
-import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
+import { sealCodexDeviceCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import {
@@ -66,7 +66,6 @@ import {
   openGithubUser,
 } from "../../testing/github-app-fake.js";
 import { PLAN_AGENT_WRITERS, writesToAgent } from "../agent-reach.js";
-import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
 import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
@@ -261,7 +260,7 @@ const agentOn = (owner: string, taskId: string, runtime: "eve" | "claude_code" |
       idempotencyKey: randomUUID(),
       model: runtime === "codex" ? "openai/gpt-5.5" : "anthropic/claude-opus-5.5",
       effort: "high",
-      planSnapshot: "# Invitations\n",
+      descriptionSnapshot: "# Invitations\n",
       prompt: null,
       repository: null,
       runtime,
@@ -447,7 +446,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 idempotencyKey: randomUUID(),
                 model: "anthropic/claude-opus-5.5",
                 effort: "high",
-                planSnapshot: "# Invitations\n",
+                descriptionSnapshot: "# Invitations\n",
                 prompt: null,
                 repository: null,
                 runtime,
@@ -1014,20 +1013,15 @@ const openStarter = (setupToken: boolean, chatGpt: SignIn = "none") =>
         ),
       );
       assert.ok(Result.isSuccess(ring));
-      const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(
-        ring.success,
-        owner,
-        {
-          clientId: "dynamic-client-fixture",
-          accountId: "chatgpt-subject",
-          accessToken: "access-0",
-          refreshToken: "refresh-0",
-          idToken: "id-token-0",
-          expiresInSeconds: 3600,
-          scopes: [CHATGPT_OAUTH.USAGE_SCOPE, "offline_access", "openid"],
-        },
-        new Date(0),
-      );
+      const accessExpiresAt = new Date(3_600_000);
+      const { sealed, hint } = sealCodexDeviceCredentials(ring.success, owner, {
+        accessToken: "access-0",
+        refreshToken: "refresh-0",
+        idToken: "id-token-0",
+        accountId: "chatgpt-subject",
+        chatgptAccountId: undefined,
+        accessExpiresAt,
+      });
       yield* saveProviderKey(
         owner,
         PROVIDER_KEY_PROVIDER.OPENAI,
@@ -1322,7 +1316,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start handed words or the plan on a task with no repository runs in the cloud with no checkout, as one on no task does, and one naming a branch there is refused rather than dropping it",
+      "a Start handed words or the description on a task with no repository runs in the cloud with no checkout, as one on no task does, and one naming a branch there is refused rather than dropping it",
       () =>
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(true);
@@ -1333,9 +1327,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           });
           const { native } = runtimes();
           const words = startOn(task.id, "anthropic/claude-opus-5.5");
-          const plan = { ...startOn(task.id, "anthropic/claude-opus-5.5"), prompt: undefined };
+          const description = {
+            ...startOn(task.id, "anthropic/claude-opus-5.5"),
+            prompt: undefined,
+          };
 
-          for (const ask of [words, plan]) {
+          for (const ask of [words, description]) {
             const started = yield* startAgent(routedSessions(owner), owner, ask).pipe(
               Effect.provide(Layer.mergeAll(CATALOG, environment(), native)),
               Effect.result,
@@ -2219,40 +2216,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             assert.deepEqual(heard(eve), []);
             assert.ok(heard(codex).length > 0, "Codex runs it");
           }
-        }),
-    );
-
-    it.effect(
-      "a Start whose harness's image is still being prepared is refused by name, leaving no agent, so the same Start later starts it",
-      () =>
-        Effect.gen(function* () {
-          const { owner, workspaceId } = yield* openStarter(true);
-          const { eve, claudeCode, native } = runtimes();
-          claudeCode.answers.open = EVE_SEND_OUTCOME.FAILED;
-          claudeCode.answers.status = IMAGE_PREPARING_STATUS;
-          const layers = Layer.mergeAll(
-            githubReaching(INSTALLATIONS).layer,
-            CATALOG,
-            environment(),
-            native,
-          );
-          const ask = startIn(workspaceId, "anthropic/claude-opus-5.5");
-
-          const preparing = yield* Effect.result(
-            startAgent(routedSessions(owner), owner, ask).pipe(Effect.provide(layers)),
-          );
-          assert.ok(Result.isFailure(preparing) && "error" in preparing.failure);
-          assert.equal(preparing.failure.error, HOSTED_REFUSAL.AGENT_IMAGE_PREPARING.error);
-          assert.ok(Option.isNone(yield* readAgentByKey(owner, ask.idempotencyKey)));
-
-          yield* TestClock.adjust("1 minute");
-          claudeCode.answers.open = EVE_SEND_OUTCOME.ACCEPTED;
-          const started = yield* startAgent(routedSessions(owner), owner, ask).pipe(
-            Effect.provide(layers),
-          );
-          assert.equal(started.created, true);
-          assert.deepEqual(heard(claudeCode), ["open", "open"]);
-          assert.deepEqual(eve.calls, []);
         }),
     );
   },

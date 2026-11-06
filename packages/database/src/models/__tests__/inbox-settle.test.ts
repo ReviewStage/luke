@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { INBOX_ASK_STATUS, INBOX_STATUS } from "@repo/features/inbox-wire";
 import { TASK_STATUS } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
@@ -14,7 +14,6 @@ import { inboxMessage } from "../../schemas/inbox-message.js";
 import { getTestDB, openInboxItem, openTaskAgent, openWorkspace } from "../../testing/index.js";
 import {
   archiveAgent,
-  archiveIdleAgent,
   readAgent,
   recordAgentPublished,
   unarchiveAgentFrom,
@@ -211,11 +210,8 @@ const ARCHIVES = [
     unarchive: (userId: string, agentId: string) => archiveAgent(userId, agentId, false),
   },
   {
-    name: "an archive of an idle agent, undone from the archive read",
-    archive: (userId: string, agentId: string) =>
-      archiveIdleAgent(userId, agentId, { by: AGENT_ARCHIVER.MEMBER, userId }, () =>
-        Effect.succeed(true),
-      ),
+    name: "an archive by hand, undone from the archive read",
+    archive: (userId: string, agentId: string) => archiveAgent(userId, agentId, true),
     unarchive: (userId: string, agentId: string) =>
       Effect.flatMap(archivedAtOf(userId, agentId), (archivedAt) =>
         unarchiveAgentFrom(userId, agentId, archivedAt),

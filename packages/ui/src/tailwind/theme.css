@@ -365,6 +365,9 @@
     var(--ui-list-row-depth, 0) *
     (var(--ui-control-icon) + var(--ui-icon-gap))
   );
+  /* A nav item nested under a place (`NavItem`'s `nested`) starts where that
+     place's name does: its row's inset, a glyph, and the glyph's gap. */
+  --spacing-nav-item-nest: calc(var(--ui-row-inset) + var(--ui-control-icon) + var(--ui-icon-gap));
 
   /* The panel's places beside the sidebar (`@repo/panel`: Automations,
      Settings, a version history, the Admin place, the sign-in): the
@@ -1042,16 +1045,16 @@
   --spacing-todos-dock: calc(var(--ui-stage-height) * 0.3);
   --spacing-dictation-clock: 34px; /* off-scale: a clock's widest reading */
   --text-section-inline: var(--ui-type-section-size);
-  /* The plan's document (`plan-body.tsx`): a section's byline, at most a
+  /* The description (`description-body.tsx`): a section's byline, at most a
      face and a short date, and the row it shares with the ⋯, which hangs a
-     step past the column (both measured on `.plan-body`, tasks.css, where the
+     step past the column (both measured on `.description-body`, tasks.css, where the
      heading's room reads them too); the line under "Edited by" that Dismiss
      overhangs; and the still wash of the app's accent on a section changed since
      the last look. */
-  --spacing-plan-byline-room: var(--plan-byline-room);
-  --spacing-plan-unit-row: calc(var(--plan-unit-row-room) + var(--ui-space-6));
-  --spacing-plan-changed-note: 22px; /* off-scale: the line's room, which its button overhangs */
-  --color-plan-changed: color-mix(in srgb, var(--accent) 9%, transparent);
+  --spacing-description-byline-room: var(--description-byline-room);
+  --spacing-description-unit-row: calc(var(--description-unit-row-room) + var(--ui-space-6));
+  --spacing-description-changed-note: 22px; /* off-scale: the line's room, which its button overhangs */
+  --color-description-changed: color-mix(in srgb, var(--accent) 9%, transparent);
   /* A transcript (`ai-elements/`): its column's inset; a reply's reading
      leading; a bubble, the developer's and a received one alike, at most
      enough short of the column that the two sides stand apart, at a large
@@ -1193,7 +1196,7 @@
     auto-fit,
     minmax(min(220px, 100%), 1fr)
   ); /* off-scale: a video's bar, its play, time, scrubber, Expand, and Full screen */
-  /* The plan's comments (`plan-comments.tsx`): the margin past the column
+  /* The description's comments (`description-comments.tsx`): the margin past the column
      its cards stand in at their own width, a reply's line set in under the
      name past the writer's mark, and the quote's edge, struck where its
      words are gone. */

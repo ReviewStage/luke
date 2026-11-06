@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 
-import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
@@ -91,8 +90,10 @@ test("an item an archived agent posted wears the harness that agent ran on, as t
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 
-  assert.ok(
-    container.querySelector(".actor-mark .ui-harness-mark[data-provider='openai']"),
-    "the row wears Codex's mark",
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector(".actor-mark .ui-harness-mark[data-provider='openai']") !== null,
+      "the row wears Codex's mark",
+    ).toBe(true),
   );
 });

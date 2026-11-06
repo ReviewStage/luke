@@ -60,6 +60,9 @@ import {
 import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
 import { modelChoiceSchema, modelProviderSchema, modelsAnswerSchema } from "./models-wire.js";
 import {
+  chatGptDeviceLoginRequestSchema,
+  chatGptDevicePollAnswerSchema,
+  chatGptDeviceStartAnswerSchema,
   PROVIDER_KEY_PROVIDER,
   providerKeyForAgentsRequestSchema,
   providerKeyKindSchema,
@@ -124,8 +127,6 @@ export const AGENT_CALL_FAILURE = {
   DEVICE_REMOVED: "device-removed",
   /** The agent runs on its starter's own GitHub token, so only its starter messages it or starts an agent from it. */
   NOT_PERMITTED: "not-permitted",
-  /** The agent's sandbox image is still being prepared; the same call under its key, a little later, is taken. */
-  AGENT_IMAGE_PREPARING: "agent-image-preparing",
   /** The agent runs on Claude Code or Codex, which this part of the app cannot reach yet. */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again. */
@@ -207,26 +208,57 @@ export type HostDoneAnswerView = typeof hostDoneAnswerViewSchema.Type;
 /** What removing a host names: its id. */
 export const hostIdParamsSchema = hostIdRequestSchema;
 
+/** What turning Run agents on this Mac on or off says: whether it is on, and, turning it off, whether its agents' folders go with it. */
+export const thisMacHostSetParamsSchema = EffectSchema.Struct({
+  on: EffectSchema.Boolean,
+  deleteFolders: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type ThisMacHostSetParams = typeof thisMacHostSetParamsSchema.Type;
+
 /** The account's own provider keys, as the window hears them read, saved, or removed: the keys as they stand, or why there are none. */
 export const providerKeysAnswerViewSchema = EffectSchema.Union([providerKeysAnswerSchema, failed]);
 
 export type ProviderKeysAnswerView = typeof providerKeysAnswerViewSchema.Type;
 
 /**
- * A ChatGPT sign-in, as the window hears it end: the keys as they then
- * stand, the sign-in among their subscriptions; why nothing was kept, in a
- * sentence for the row; that the developer withdrew it; or why there was no
- * answer. Never a token: the sign-in's credentials go from the host to the
- * service and nowhere else.
+ * Codex's device-code login begun, as the window hears it: the code to
+ * enter, where, how often to ask again, and when it lapses; or why there is
+ * none. What claims the sign-in stays on the service.
  */
-export const chatGptSignInAnswerViewSchema = EffectSchema.Union([
-  providerKeysAnswerSchema,
-  EffectSchema.Struct({ refused: EffectSchema.String }),
-  EffectSchema.Struct({ cancelled: EffectSchema.Literal(true) }),
+export const chatGptDeviceStartAnswerViewSchema = EffectSchema.Union([
+  chatGptDeviceStartAnswerSchema,
   failed,
 ]);
 
-export type ChatGptSignInAnswerView = typeof chatGptSignInAnswerViewSchema.Type;
+export type ChatGptDeviceStartAnswerView = typeof chatGptDeviceStartAnswerViewSchema.Type;
+
+/** A device-code login canceled, as the window names it: by the login its start answered. */
+export const chatGptDeviceLoginParamsSchema = chatGptDeviceLoginRequestSchema;
+
+export type ChatGptDeviceLoginParams = typeof chatGptDeviceLoginParamsSchema.Type;
+
+/** No interval the service names is longer; one past it is none of its. */
+const CHATGPT_DEVICE_INTERVAL_MAX_SECONDS = 60;
+
+/** A device-code login waited on, as the window names it: the login its start answered, and how often its start said to ask after it. */
+export const chatGptDeviceWaitParamsSchema = EffectSchema.Struct({
+  ...chatGptDeviceLoginRequestSchema.fields,
+  intervalSeconds: EffectSchema.Int.check(
+    EffectSchema.isGreaterThan(0),
+    EffectSchema.isLessThanOrEqualTo(CHATGPT_DEVICE_INTERVAL_MAX_SECONDS),
+  ),
+});
+
+export type ChatGptDeviceWaitParams = typeof chatGptDeviceWaitParamsSchema.Type;
+
+/** How a device-code login stands, as the window hears a wait or a cancel end: its outcome, a failure's fixed sentence, and the keys once connected; or why there is no answer. */
+export const chatGptDevicePollAnswerViewSchema = EffectSchema.Union([
+  chatGptDevicePollAnswerSchema,
+  failed,
+]);
+
+export type ChatGptDevicePollAnswerView = typeof chatGptDevicePollAnswerViewSchema.Type;
 
 /** Saving a key, as the window asks it: the provider and the key, once. */
 export const providerKeySaveParamsSchema = providerKeySaveRequestSchema;
@@ -745,13 +777,13 @@ export const agentInboxReadStateParamsSchema = EffectSchema.Struct({
 
 export type AgentInboxReadStateParams = typeof agentInboxReadStateParamsSchema.Type;
 
-/** One item snoozed for the account until an instant, in epoch milliseconds, which marks it read, or its snooze ended where `until` is null. */
-export const agentInboxSnoozeParamsSchema = EffectSchema.Struct({
+/** One item's reminder set for the account for an instant, in epoch milliseconds, or canceled where `until` is null; whether it is read stands as it was. */
+export const agentInboxRemindParamsSchema = EffectSchema.Struct({
   itemId: EffectSchema.NonEmptyString,
   until: EffectSchema.NullOr(countedNumber),
 });
 
-export type AgentInboxSnoozeParams = typeof agentInboxSnoozeParamsSchema.Type;
+export type AgentInboxRemindParams = typeof agentInboxRemindParamsSchema.Type;
 
 /** One item marked read or unread, as the window hears it: the item's id and its read state for the account, or why there is no answer. */
 export const agentInboxReadStateViewSchema = EffectSchema.Union([inboxReadStateSchema, failed]);

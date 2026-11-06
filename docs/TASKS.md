@@ -1,8 +1,8 @@
 # Tasks: how a task behaves
 
-A task is a name, one saved plan, and the agents started on it. This file
+A task is a name, one saved description, and the agents started on it. This file
 describes what the window shows and does for one, section by section: the
-list, the plan and how it is edited and kept, the agents, and Copy. Code
+list, the description and how it is edited and kept, the agents, and Copy. Code
 comments cite it by section heading.
 
 ## The Tasks tab
@@ -14,7 +14,7 @@ sidebar, one page at a time:
 ```
  ┌──────────────────────────────────────────────────────────────┐
  │  [ Tasks ]   Settings                                        │
- │  [ Plan ]  Inbox  Comments  +                         [ ⋯ ]  │
+ │  [ Description ]  Inbox  Comments  +                  [ ⋯ ]  │
  │ ──────────────────────────────────────────────────────────── │
  │  acme/relay  ›  ACME-42                                      │
  │  # Teammate invitations                          (scrolls)   │
@@ -53,14 +53,14 @@ on any Settings page leaves Settings.
 
 - Opening a task, from the list or by starting one, makes it the host's one
   **active task**, and every panel's Tasks tab shows it on its document page.
-  It opens on the tab it last showed, or on its Overview, its plan, where
+  It opens on the tab it last showed, or on its Overview, its description, where
   none stands, the column's "+" offering **New agent**.
 - A task stays open while the developer turns to Settings or closes the
   window.
 - A task is left by Back or Escape, by opening another task or page, or by
   a sign-out.
 - Nothing polls. An agent's saves reach the open task through its tab: once
-  the transcript the tab reads shows an `edit_plan` answered, the task is
+  the transcript the tab reads shows an `edit_description` answered, the task is
   read again (`tasks/agent-tab.tsx`).
   The list and the open task are read when a panel shows the Tasks tab; the
   open task again when a task opens, and the list again when one starts or
@@ -87,7 +87,7 @@ on any Settings page leaves Settings.
   remembered on this Mac, and a repository's + (shown on hover or focus)
   opens New task with that repository already chosen. Each row shows the
   task's name and, muted at its end, its last activity, the later of its
-  plan's last save and its agents' last turn ("now", "5m", "3h", "2d", "3w",
+  description's last save and its agents' last turn ("now", "5m", "3h", "2d", "3w",
   then the date), moved on each minute, the full moment on hover. A row
   wears its assignee's face, but in a list of one teammate's tasks, and its
   repository's name where the list is not grouped by repository.
@@ -175,7 +175,7 @@ Dictate, and Start.
    in none: it has no checkout and opens no pull request, and works with what
    it was handed and the MCP servers connected.
 2. **Start**, the round button; Return presses it. It starts the task with
-   an empty plan, Untitled until the agent names it, and the
+   an empty description, Untitled until the agent names it, and the
    agent on the words, the files,
    and the chosen model, in the one start, then opens the task on the
    agent's tab. ⌘Return on an empty box starts a bare task with no agent.
@@ -191,19 +191,19 @@ Dictate, and Start.
   row, the side panel's bar's height exactly (`--desktop-bar-height`, the
   one token both take), so their bottom borders are one line across the
   window.
-- The plan says the rest around its title (`tasks/task-standing.tsx`). Over
+- The description says the rest around its title (`tasks/task-standing.tsx`). Over
   it stands the task's path: its repository, or "Choose a repository" while
   it has none, then its parent task where it has one, then its key. The
   repository's crumb drops the composer's searchable menu, as ⌘K's Change
   repository does: a pick is saved through `PATCH /api/plans/{id}`, and a
   refusal is said under the path. A task can be used without a repository.
   Under the title stand the status, priority, and assignee chips.
-- **The task's menu**, from the ⋯ in the side panel's bar while the Plan tab
+- **The task's menu**, from the ⋯ in the side panel's bar while the Description tab
   is chosen and from that tab's right-click, and from a right-click on the
-  task's row in the sidebar alike (`desktop/task-actions.tsx`): Copy plan
+  task's row in the sidebar alike (`desktop/task-actions.tsx`): Copy description
   (the open task's alone) and Copy link, Rename, Version history, Mark as
   unread, the task's relations, Pin or Unpin, Move to workspace, and
-  Permanently delete, last and red. The Plan tab's menu leaves out the
+  Permanently delete, last and red. The Description tab's menu leaves out the
   task's status, priority, assignee, and repository, which its chips and
   path change; a row's menu, with no chips beside it, holds Status,
   Priority, and Assignee as submenus, and Change repository. Permanently
@@ -211,10 +211,10 @@ Dictate, and Start.
   to delete the open task from any of its tabs. A task is not archived but
   settled: Mark done, on a sidebar row's hover or in the menu bar, sets it
   Done as Status's Done does.
-- **Copy plan** stands in the ⋯ menu, with its chord ⌥⌘C, "Copy plan or
-  transcript", which copies what the focused pane shows: the plan where the
-  plan is focused, an agent's transcript where its tab is. ⇧⌘C is Copy link.
-  Copy plan is always enabled, however much of the plan is written, and
+- **Copy description** stands in the ⋯ menu, with its chord ⌥⌘C, "Copy description or
+  transcript", which copies what the focused pane shows: the description where the
+  description is focused, an agent's transcript where its tab is. ⇧⌘C is Copy link.
+  Copy description is always enabled, however much of the description is written, and
   copies the current document as described in "Copy". It never launches an
   agent and never asks the model anything.
 - The side panel's toggle ("Show panel" / "Hide panel", ⌥⌘B) stands at the
@@ -223,13 +223,13 @@ Dictate, and Start.
 
 ### Document
 
-- Above the text, one muted line says who last edited the plan, from its
+- Above the text, one muted line says who last edited the description, from its
   newest revision ("History" below): "Edited by you · just now", or an agent by its row's name. The time moves on once a minute. A task whose
-  plan nobody has written since it started shows no line. A press on the
-  line opens the plan's version history.
+  description nobody has written since it started shows no line. A press on the
+  line opens the description's version history.
 - Each section says the same of the save that last changed it, in a quiet
   line at the end of its heading's row while the pointer or the keyboard is
-  on the section, read off the plan's revisions (`sectionEdits` on the
+  on the section, read off the description's revisions (`sectionEdits` on the
   wire): the newest of the last fifty revisions that changed the section,
   each held against the one before it; a section none of them changed says
   nothing. A heading renamed with nothing beneath it changed keeps the line
@@ -242,7 +242,7 @@ Dictate, and Start.
   under the "Edited by" line ("Changed since you last looked · 3 sections ·
   Dismiss") until Dismiss or leaving the task (`tasks/use-task-looks.ts`),
   each section known by its heading.
-  A look is the plan opened, whichever of its column's tabs it opens on:
+  A look is the description opened, whichever of its column's tabs it opens on:
   from then on every save while it stays open counts as seen, so an agent's save landing while the task
   is open never lights anything. What is kept is the newest save's instant,
   on the
@@ -263,8 +263,8 @@ Dictate, and Start.
   (`tasks/task-title.tsx`), over its text, the saved `body` rendered as
   Markdown, and nothing else: the text has no title line, its assumptions
   are a section of it, and nothing stands in for a section it leaves empty.
-  The text is cut into sections as the service cuts it (`planSections` in
-  `packages/features/src/plan-document.ts`): what stands before the first
+  The text is cut into sections as the service cuts it (`descriptionSections` in
+  `packages/features/src/description-document.ts`): what stands before the first
   heading, then each `#` or `##` heading with what stands under it, a
   heading inside a code fence being code. The `assumptions` list beside the
   body, always empty now, is not drawn.
@@ -281,15 +281,15 @@ The open task's supporting views stand in a panel at the window's right,
 beside the document, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
-- **Tabs.** `Comments`, the plan's threads. The plan's document is the
-  column's Overview ("Agent tabs" below), and a Plan tab an earlier version
+- **Tabs.** `Comments`, the description's threads. The description's document is the
+  column's Overview ("Agent tabs" below), and a Description tab an earlier version
   kept or pinned opens it there. The task's Inbox tab of old is drawn and
   offered nowhere: a link to a thread, or a call's row naming one, opens it
   in the window's Inbox as it stands, its search, view, and channel kept,
   and ⌘K's Inbox row, the summary's, and a call's row naming no thread open
   the window's Inbox narrowed to the task (`/inbox/plan/<taskId>`). After them stand the workers
   opened from an agent's transcript, then files, pull requests, pages,
-  terminals, and browsers, as the "+" lists them. The plan's versions open in
+  terminals, and browsers, as the "+" lists them. The description's versions open in
   the whole window ("History" below). The agents themselves have tabs
   in the task's column beside the task's own ("Agent tabs" below). A file
   named in place, by a mention, a code block of an Inbox thread, or ⌘K,
@@ -301,7 +301,7 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
   drawn as it is now, and one not on that branch, or not read at all, says so
   in its place. A File tab opened from a code block of an Inbox thread is
   read at the commit the agent named instead. File tabs are kept nowhere.
-  The strip scrolls where its tabs overflow it. Every tab closes, Plan,
+  The strip scrolls where its tabs overflow it. Every tab closes, Description,
   Inbox, and Comments among them, by its ×, Delete, ⌘W, or Close and Close
   others; the "+" opens one again, and closing the last shuts the panel.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
@@ -326,7 +326,7 @@ sidebar does (`desktop/side-panel.tsx`, `tasks/use-side-panel.ts`).
 
 ### Agent tabs
 
-The task's column leads with its Overview, which shows the plan's
+The task's column leads with its Overview, which shows the description's
 document and never closes nor moves. Each agent started on the task has a
 tab of its own after it (`desktop/main-tabs.tsx`, `tasks/use-main-tabs.ts`,
 `tasks/agent-tab.tsx`, `tasks/use-agents.ts`), opened and selected the
@@ -366,7 +366,7 @@ subagent's tab stays in the side panel.
   of the transcript land, and the moment the agent ends
   (`tasks/use-agent-pull-request.ts`).
 - **The transcript.** The agent's stored `UIMessage`s, drawn with the AI
-  Elements components: the plan or prompt it was handed, the developer's
+  Elements components: the description or prompt it was handed, the developer's
   messages, and each of its turns with its text as Markdown, its reasoning
   folded, and each tool call one row.
 - **Live.** While the tab shows and the agent is starting or running, the
@@ -378,7 +378,7 @@ subagent's tab stays in the side panel.
   to completed or failed once, unless the window is focused on that agent's
   tab, with no toast and no notification. The agent's tab reads in semibold
   until it is shown.
-- **Privacy.** Every word is the agent's, the developer's, or the plan's, so
+- **Privacy.** Every word is the agent's, the developer's, or the description's, so
   the tab carries `ph-no-capture`.
 
 ### Settings › Agents
@@ -445,18 +445,18 @@ points to Settings › Skills.
 An agent's transcript is its conversation's rows ("Agent tabs" above),
 drawn with AI Elements, the AI SDK's chat components, copied into
 `packages/panel/src/ai-elements/` and restyled to the panel's tokens. A
-plan card and a reasoning row are closed until opened, so they never stand
+description card and a reasoning row are closed until opened, so they never stand
 in the way of the agent's own words.
 
 ### Agents' notes
 
-An agent writes the task's plan with its `edit_plan` tool
-(`packages/service/src/agents/coder-host/plan-edit.ts`), whose every call
-names the task by its id, so it writes any other plan of its workspace too,
-as a pilot fixes a child task's plan, where it meets something the plan
-does not settle, finds a fact the plan has wrong, or makes a decision the
-plan left open. Its saves go through `saveNotes` (`packages/service/src/tasks/plan-notes.ts`),
-the plan's one write.
+An agent writes the task's description with its `edit_description` tool
+(`packages/service/src/agents/coder-host/description-edit.ts`), whose every call
+names the task by its id, so it writes any other description of its workspace too,
+as a pilot fixes a child task's description, where it meets something the description
+does not settle, finds a fact the description has wrong, or makes a decision the
+description left open. Its saves go through `saveNotes` (`packages/service/src/tasks/description-notes.ts`),
+the description's one write.
 
 An agent's notes are taken the way a person takes notes, never the text
 written out again:
@@ -464,16 +464,16 @@ written out again:
 - `add` puts a new point at the end of a section, under the heading it
   names, or opens that section at the end of the text where it has none.
 - `replace` is the one generic edit: it replaces text copied exactly from
-  the plan, standing once in it, from a phrase to whole sections, headings
+  the description, standing once in it, from a phrase to whole sections, headings
   included, with what it becomes; an empty replacement deletes, and a line
   it leaves empty is taken out.
 
 A note's words may open headings of their own, so the notes can rename,
 split, merge, move, and drop sections, a move being a deletion and a
 replacement or an addition. The notes of one answer save together or not
-at all: one naming text or a heading the plan does not hold exactly
+at all: one naming text or a heading the description does not hold exactly
 once, or one that does not read under the schema, is reported, never guessed
-into another, and saves nothing of the call, whose result hands the plan as it
+into another, and saves nothing of the call, whose result hands the description as it
 then stands.
 
 Each save is written into
@@ -486,16 +486,16 @@ the row says now.
 
 ### Editing
 
-The developer edits the plan whole, in place, with its title
-(`tasks/plan-document-editor.tsx`; the editor is `plan-editor/`,
-its saves `tasks/use-plan-editing.ts` and `@repo/features/plan-edit-model`).
+The developer edits the description whole, in place, with its title
+(`tasks/description-document-editor.tsx`; the editor is `description-editor/`,
+its saves `tasks/use-description-editing.ts` and `@repo/features/description-edit-model`).
 The service lays each save over what others wrote meanwhile
-(`packages/features/src/plan-edit.ts`).
+(`packages/features/src/description-edit.ts`).
 
 - **Opening.** The title and each section are blocks, and nothing on them
   marks them editable. A click into a section's words opens the whole text in
   place, the caret where the click landed. The editor is TipTap, from the editor
-  bundle (`plan-editor.js`), which the panel starts loading as it first paints
+  bundle (`description-editor.js`), which the panel starts loading as it first paints
   and asks for again the first time a block is hovered or selected, and which
   an agent's message box shares (`tasks/composer-field.tsx`); it draws the words exactly as the sections were drawn, so
   nothing moves as it opens; a click before the bundle has loaded keeps the
@@ -517,7 +517,7 @@ The service lays each save over what others wrote meanwhile
 - **Saving.** The editor hands its text over once per pause in the typing,
   and the text saves a second after the developer stops and as the editor
   closes, as the document's base and value (`POST /api/plans/{id}/edit`),
-  through the plan's one write, under the row's lock, as the developer's
+  through the description's one write, under the row's lock, as the developer's
   revision ("History" below). The base is the text the editor opened on,
   then the developer's own last save; one save is out at a time, and the
   editor waits for the last before it goes. A text longer than a document
@@ -544,35 +544,35 @@ The service lays each save over what others wrote meanwhile
   place on each save that lands.
 - **Failures.** A save that fails keeps the words and says why under the
   editor ("Not saved: the service did not answer.", "Not saved: this task no
-  longer exists.", or "Not saved: the plan is too long."), with Retry; it is tried again
+  longer exists.", or "Not saved: the description is too long."), with Retry; it is tried again
   when the developer asks or types on, and the editor stays open until it
   saves. Words not yet saved are sent to their task when the developer
   leaves it or opens another. Unsaved words live in the window's memory
   alone, never on disk.
 - **Undo.** Inside the editor, the editor's own undo. A saved edit is undone
-  from the plan's history.
+  from the description's history.
 - **Recording.** The editor and the title stand under `ph-no-capture`, and
   their words are document text, which the recording masks in any case.
 
 ### History
 
-Every save that changes the plan is kept as a revision
-(`packages/database/src/models/plan-revisions.ts`, table `plan_revision`): the
-plan's text as it stood after it, who wrote it (the
+Every save that changes the description is kept as a revision
+(`packages/database/src/models/description-revisions.ts`, table `description_revision`): the
+description's text as it stood after it, who wrote it (the
 developer, editing the text or restoring the earlier revision `restored_from`
 names; or an agent, by its row), when its first and latest saves were, and
 how many notes it took. It is written in
-the transaction that saves the plan, so the two never disagree. The same
+the transaction that saves the description, so the two never disagree. The same
 writer's saves one after another are one revision, an agent's or the
 developer's, while the revision's latest save is at most ten minutes old, so
 a run of saves is one revision rather than one per pause. Notes that
-change nothing are no revision, and a rename is none. A plan written before
+change nothing are no revision, and a rename is none. A description written before
 history began is found by its first later save, which first records what the
-plan held, at its last save, as the plan's first revision ("earlier"). History
+description held, at its last save, as the description's first revision ("earlier"). History
 starts there: nothing before it is reconstructed. Revisions go when their task
 is deleted, and there is no cap on how many a task keeps.
 
-The plan names its newest revision as its last edit, which the document's
+The description names its newest revision as its last edit, which the document's
 "Edited by" line reads ("Document" above), and each section the writer of the
 save that last changed it: the actor and the agent, kept beside the
 revision by the same locked save, which each section's line reads.
@@ -583,9 +583,9 @@ the way Settings does (`desktop/desktop-version-history.tsx`): a column as
 wide as the sidebar, with Back at its head, "Version history", and the
 revisions newest first, fifty a page
 (`GET /api/plans/{id}/revisions`), each as who wrote it ("You" or an agent by its row), how many changes it
-made, and how long ago; the newest is labeled "Current", and the plan from before
+made, and how long ago; the newest is labeled "Current", and the description from before
 history reads "Earlier". The list is read while the view stands and again
-whenever the plan is edited meanwhile. The chosen revision, the newest when
+whenever the description is edited meanwhile. The chosen revision, the newest when
 the view opens, or, opened from a section's line, the revision that made the
 save it names (the oldest whose latest save is at or after the save's
 moment, older pages read until one shows it, and the newest where one cannot
@@ -602,7 +602,7 @@ current one included, is drawn against the one just before it, which is what
 the row's change count describes: each section only one side holds is drawn
 whole, added or struck, and each section both hold that differs has its
 words written in on a green wash and struck out on a red one, word by word
-with jsdiff (`tasks/plan-history-model.ts`), sections paired by their
+with jsdiff (`tasks/description-history-model.ts`), sections paired by their
 headings, the assumptions among them as the section they are. The first
 version has nothing before it and is drawn with nothing marked. The view is one step of the window's back and forward
 whichever version is chosen, so Back, Escape, and ⌘[ return to the task as
@@ -612,9 +612,9 @@ view on the version and the sections it was left on, and ⌘] goes on to what
 was opened.
 
 Restore this version asks first, in the window's dialog, and then puts the
-revision's text back through the plan's one locked save
+revision's text back through the description's one locked save
 (`POST /api/plans/{id}/revisions/{seq}/restore`, `restoreRevision` in
-`packages/service/src/tasks/plan-notes.ts`). The restore is a revision of the developer's
+`packages/service/src/tasks/description-notes.ts`). The restore is a revision of the developer's
 ("You") naming the one it brought back, "Restored the version from Oct 11,
 2:14 PM"; it joins no revision and none joins it, so a restore is undone by
 restoring the revision before it, and it is allowed while an agent writes. It takes
@@ -623,40 +623,40 @@ before the restore, and restoring it brings it back. A restore that lands
 leaves the version history for the task, whose document the service's answer
 replaces at once, and the window's toast says
 "Version restored" with an Undo, which restores the version that stood
-before it. The newest revision is the plan as it stands, so it offers no
+before it. The newest revision is the description as it stands, so it offers no
 restore.
 
 A save that lands redraws the Tasks tab's document in place
-(`tasks/plan-body.tsx`). A unit of the document is a section as the service
+(`tasks/description-body.tsx`). A unit of the document is a section as the service
 cuts one ("Document" above), known by its heading, so a section joining or
 leaving redraws no other section.
 
-### The plan's text
+### The description's text
 
-A plan is one free Markdown document (`packages/features/src/plan-document.ts`,
+A description is one free Markdown document (`packages/features/src/description-document.ts`,
 the row's `task.document`), with no title line, since the task's name is its
-own, and its assumptions an ordinary section of the text. Every plan starts
+own, and its assumptions an ordinary section of the text. Every description starts
 empty, and its sections are whatever headings the developer and the agents
 write into it.
 
 A section is a `#` or `##` heading and what stands under it up to the next,
 a deeper heading inside it and a heading in a code fence no heading at all,
-known by its heading's words (`planSections`). Who last changed each section
-is read off the plan's revisions by heading (`sectionWritersOf`,
+known by its heading's words (`descriptionSections`). Who last changed each section
+is read off the description's revisions by heading (`sectionWritersOf`,
 `sectionEdits` on the wire), each against the one before it, the first
-against the template plans started as before they started empty, which a
-plan started empty reads the same against, so a heading renamed with nothing
+against the template descriptions started as before they started empty, which a
+description started empty reads the same against, so a heading renamed with nothing
 beneath it changed is the same section under its new words. An agent's notes may land
-anywhere in the text (`applyNotesToText` in `plan-notes.ts`): an addition
+anywhere in the text (`applyNotesToText` in `description-notes.ts`): an addition
 at the end of the one section under its heading, or as a new section at the
 end of the text where the text has none; a replacement names text standing
 once in the whole text, headings and whole sections among it, so a heading
 is renamed, and a section moved or struck, by replacing it, an empty
 replacement deleting; and a note's words may open headings of their own. One answer's notes are taken together or not at all,
-under the plan's lock: where one names a phrase or a heading the text does
+under the description's lock: where one names a phrase or a heading the text does
 not hold exactly once, the developer having rewritten it meanwhile among the
 reasons, nothing is saved, so a move never strikes without placing, and the
-agent's `edit_plan` answers the text as it stands, to retry from. Every plan
+agent's `edit_description` answers the text as it stands, to retry from. Every description
 the fixed template once kept as fields was carried
 over to its text by a one-time backfill, each field's words under its
 heading.
@@ -674,14 +674,14 @@ call where no Mac read lately answers `not-run` at once, in one line the
 agent repeats. The output is not redacted (`PRIVACY.md`, "Commands agents run on
 your Mac").
 
-### From a plan to a pull request
+### From a description to a pull request
 
 A task can be handed to an agent: a cloud session of
 Claude Code or Codex, which checks the task's repository out in a Vercel
-Sandbox of its own, implements the plan given as its first message, runs the
+Sandbox of its own, implements the description given as its first message, runs the
 repository's checks, and decides whether to open a pull request. Started
 instead on a prompt the developer wrote, it is handed that prompt as its first
-message and never the plan, and works in the task's repository the same way.
+message and never the description, and works in the task's repository the same way.
 On a task with no repository it works in an empty folder, with no checkout
 and no repository credential installed in its sandbox, and opens no pull request. How it runs,
 its routes, and what it is told are described in
@@ -721,11 +721,11 @@ is offered the cloud alone. A move that is refused says why in a toast.
 
 ## Copy
 
-The developer chooses `Copy plan` from the ⋯ menu, or presses ⌥⌘C on the
-plan, and the window's toast says "Plan copied". The
+The developer chooses `Copy description` from the ⋯ menu, or presses ⌥⌘C on the
+description, and the window's toast says "Description copied". The
 clipboard holds the current document as readable Markdown: the task's name
 as a `#` title over its document exactly as saved, whose assumptions are a
-section like any other (`packages/features/src/plan-markdown.ts`), here for
+section like any other (`packages/features/src/description-markdown.ts`), here for
 a task named "Teammate invitations":
 
 ```markdown
@@ -742,18 +742,18 @@ a task named "Teammate invitations":
 ```
 
 This is direct formatting of the saved document, not a second model step.
-There is no separate handoff prompt: the plan is what the agent
+There is no separate handoff prompt: the description is what the agent
 reads. The developer pastes it into the agent of their choice, or
 starts an agent on it instead, and an agent of Vespin's own checks the
-repository out in a sandbox, implements the plan, and decides on a pull
-request, watched from its tab in the task's column ("From a plan to a pull
-request" above). When an agent or the developer changes the plan later,
+repository out in a sandbox, implements the description, and decides on a pull
+request, watched from its tab in the task's column ("From a description to a pull
+request" above). When an agent or the developer changes the description later,
 Copy copies the new document.
 
 ## Failures the developer sees
 
-- **Save.** An agent's `edit_plan` whose notes do not all land saves nothing
-  and answers the plan as it stands, for the agent to retry from. The tab
+- **Save.** An agent's `edit_description` whose notes do not all land saves nothing
+  and answers the description as it stands, for the agent to retry from. The tab
   keeps showing the last saved document.
 - **Repository.** A failed or incomplete read is reported to the agent as
   such, so it never describes unread code as read. If access is revoked, the

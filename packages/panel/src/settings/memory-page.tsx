@@ -1,4 +1,3 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -50,6 +49,7 @@ import {
   useConfirmDialog,
   useLeaving,
   useMenu,
+  usePageScroll,
   VisuallyHidden,
 } from "@repo/ui";
 import { ACTOR_KIND, type Actor, actorName, personActor } from "@repo/ui/actor-model";
@@ -57,17 +57,24 @@ import { GLYPH, ListFilterIcon } from "@repo/ui/icons";
 import { markdownTree } from "@repo/ui/markdown-words";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import {
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+} from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { type ReactNode, useCallback, useId, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { type ReactNode, useCallback, useId, useMemo, useRef, useState } from "react";
+import { actMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import { memoriesQuery, memoriesRetryMutation } from "../live-reads.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
  * memory-page.tsx -- Settings › Memory: the facts and conventions the workspace's coding agents kept, found by search and by whose they are, and forgotten one at a time or several at once.
@@ -104,7 +111,11 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * the list the moment it is sent, and back only where the service refused
  * it; several are forgotten one after another, the first refusal stopping
  * the rest, and the memories the reader may not forget are left chosen and
- * said so. The whole page is
+ * said so. The list draws only the memories near the view (`VirtualRows`),
+ * in the page's own scroller, so a workspace's thousand draw as quickly as a
+ * few; ⇧-clicks, ⇧↑↓, and ⌘A reach the memories it leaves undrawn, and the
+ * memory holding the keyboard stays drawn wherever the page is scrolled.
+ * The whole page is
  * kept out of the screen recording, since a memory is members' own words
  * about their work.
  */
@@ -180,8 +191,14 @@ const MEMORY_WORDS = "memory-words [&_a]:pointer-events-auto [&_a]:relative [&_a
 const SEARCH_LINE =
   "memory-search flex items-center gap-control-gap [&>:first-child]:min-w-0 [&>:first-child]:flex-1";
 
-/** The memories' list, a column of rows. */
-const MEMORY_LIST = "memory-list m-0 flex flex-col gap-ui-2 p-0";
+/** The memories' list, a run of rows. */
+const MEMORY_LIST = "memory-list";
+
+/** How tall a memory is taken to stand before it is measured: a name over a line of words, in pixels. */
+const MEMORY_ESTIMATE_PX = 72;
+
+/** The room between two memories, in pixels: the theme's `ui-2`. */
+const MEMORY_GAP_PX = 2;
 
 /** Where the selection bar floats: at the foot of the page, over the rows, as the Tasks list's does. */
 const SELECTION_FOOT =
@@ -247,6 +264,7 @@ function anchorOnly(): void {}
 /** One memory's row: its note, and its ⋯ and right-click. */
 function MemoryRow({
   shown,
+  place,
   found,
   locked,
   chosen,
@@ -254,6 +272,8 @@ function MemoryRow({
   onCopy,
 }: {
   shown: ShownMemory;
+  /** Where the row stands in the run drawing only the rows near the view, which its item wears. */
+  place: VirtualRowPlace;
   /** The words the search asks for, lit where they landed. */
   found: readonly string[];
   /** Whether a forget is out, which every Forget waits out. */
@@ -281,7 +301,7 @@ function MemoryRow({
     ],
   ];
   return (
-    <li className={MEMORY_ROW}>
+    <li {...place} className={MEMORY_ROW}>
       <CardPress
         selectKey={memory.id}
         selectBox={SELECT_BOX_PLACE.GUTTER}
@@ -581,6 +601,14 @@ function MemoryList({
     setKept(new Set());
   };
   const keepers = keepersOf(searched);
+  const { scroller, shiftedBy } = usePageScroll();
+  const run = useRef<VirtualRowsHandle>(null);
+  const keys = useMemo(() => listed.map((each) => each.memory.id), [listed]);
+  const order = useMemo(() => [keys], [keys]);
+  const bringIn = useCallback(
+    (key: string, then: () => void) => run.current?.bringIn(key, then) ?? false,
+    [],
+  );
   return (
     <SettingsSection anchor={SETTINGS_SEARCH_ROW.MEMORY} frame={SETTINGS_SECTION_FRAME.NONE}>
       <Stack gap={GAP.SECTION}>
@@ -602,22 +630,41 @@ function MemoryList({
         {listed.length === 0 ? (
           <NothingShown narrowed={found.length > 0 || kept.size > 0} onClear={clear} />
         ) : (
-          <SelectionRegion id={regionId} selection={{ selected: standing, onChange: setSelected }}>
-            <ul className={MEMORY_LIST}>
-              {listed.map((shown) => (
-                <MemoryRow
-                  key={shown.memory.id}
-                  shown={shown}
-                  found={found}
-                  locked={forgetting}
-                  chosen={
-                    several !== undefined && standing.has(shown.memory.id) ? several : undefined
-                  }
-                  onForget={() => askForget([shown.memory])}
-                  onCopy={() => copyAll([shown.memory])}
-                />
-              ))}
-            </ul>
+          <SelectionRegion
+            id={regionId}
+            selection={{ selected: standing, onChange: setSelected }}
+            order={order}
+            bringIn={bringIn}
+          >
+            <VirtualRows
+              scroller={scroller}
+              shiftedBy={shiftedBy}
+              keys={keys}
+              estimate={MEMORY_ESTIMATE_PX}
+              gap={MEMORY_GAP_PX}
+              anchor={VIRTUAL_ROWS_ANCHOR.START}
+              listItems
+              holdsFocus
+              className={MEMORY_LIST}
+              handle={run}
+            >
+              {(index, place) => {
+                const shown = listed[index];
+                return shown === undefined ? null : (
+                  <MemoryRow
+                    shown={shown}
+                    place={place}
+                    found={found}
+                    locked={forgetting}
+                    chosen={
+                      several !== undefined && standing.has(shown.memory.id) ? several : undefined
+                    }
+                    onForget={() => askForget([shown.memory])}
+                    onCopy={() => copyAll([shown.memory])}
+                  />
+                );
+              }}
+            </VirtualRows>
           </SelectionRegion>
         )}
       </Stack>
@@ -655,10 +702,11 @@ export function MemorySection({
   /** Asks for the workspaces again. */
   onRetryWorkspaces: (() => void) | undefined;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendMemoriesForget } = useMutation(actMutation(ACT_KIND.MEMORIES_FORGET));
   const workspaceId = workspace?.id;
   // The memories as the host holds them, followed live while the page shows them, so a memory an agent keeps meanwhile draws as it lands.
-  const memories = useHostRead(LIVE_READ.MEMORIES, signedIn ? workspaceId : undefined);
+  const memories = useQuery(memoriesQuery(signedIn ? workspaceId : undefined));
+  const retryMemories = useMutation(memoriesRetryMutation());
   /** The forget out now, by the workspace it was asked in, which locks every Forget there until it answers. */
   const [forgetting, setForgetting] = useState<
     { readonly workspaceId: string; readonly id: string } | undefined
@@ -675,7 +723,7 @@ export function MemorySection({
       }
       const out = { workspaceId, id };
       setForgetting(out);
-      return act(ACT_KIND.MEMORIES_FORGET, { workspaceId, id })
+      return sendMemoriesForget({ workspaceId, id })
         .catch(() => undefined)
         .then((answer): ActionResult => {
           setForgetting((current) => (current === out ? undefined : current));
@@ -684,7 +732,7 @@ export function MemorySection({
             : { status: ACTION_RESULT_STATUS.ACCEPTED };
         });
     },
-    [act, workspaceId],
+    [sendMemoriesForget, workspaceId],
   );
 
   // Note that several are forgotten one after another, each sent once the one before answered, and the first refusal stops the rest.
@@ -718,21 +766,21 @@ export function MemorySection({
   }
   return (
     <div className={NO_CAPTURE}>
-      {memories.rows !== undefined ? (
+      {memories.data !== undefined ? (
         // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
         <MemberDirectory workspace={workspace} readerId={readerId}>
           <MemoryList
             readerId={readerId}
-            memories={memories.rows}
+            memories={memories.data}
             forgetting={forgetting?.workspaceId === workspace.id}
             onForget={forgetAll}
           />
         </MemberDirectory>
-      ) : memories.status === HOST_READ_STATUS.FAILED ? (
+      ) : memories.isError ? (
         <SettingsLine>
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.MEMORIES_READ, { workspaceId: workspace.id })}
-            onRetry={memories.retry}
+            onRetry={() => retryMemories.mutate({ workspaceId: workspace.id })}
           >
             {PAGE_LINE.FAILED}
           </ErrorState>

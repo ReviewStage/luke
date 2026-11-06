@@ -274,7 +274,7 @@ const taskArgument = Argument.String("task").pipe(
 const promptFlag = Flag.String("file").pipe(
   Flag.withAlias("F"),
   Flag.optional,
-  Flag.withDescription("The prompt, from a file or - for stdin (default: the task's plan)"),
+  Flag.withDescription("The prompt, from a file or - for stdin (default: the task's description)"),
 );
 
 const startCommand = Command.make(
@@ -346,9 +346,12 @@ const startCommand = Command.make(
       if (wait) yield* endedWith(exit);
     }),
 ).pipe(
-  Command.withDescription("Start an agent on a task, handed its plan or a prompt"),
+  Command.withDescription("Start an agent on a task, handed its description or a prompt"),
   Command.withExamples([
-    { command: "vespin agent start ACME-42", description: "An agent working the task's plan" },
+    {
+      command: "vespin agent start ACME-42",
+      description: "An agent working the task's description",
+    },
     {
       command: "vespin agent start ACME-42 --branch fix/login --cloud",
       description: "An agent in the cloud, on a branch already on GitHub",
@@ -367,26 +370,67 @@ const startCommand = Command.make(
 
 const listCommand = Command.make(
   "list",
-  { task: taskArgument.pipe(Argument.optional) },
-  ({ task }) =>
+  {
+    task: taskArgument.pipe(Argument.optional),
+    offset: Flag.Int("offset").pipe(
+      Flag.filter(
+        (offset) => offset >= 0,
+        () => "--offset is a whole number from 0",
+      ),
+      Flag.optional,
+      Flag.withDescription(
+        "How many of the workspace's agents to pass over: the nextOffset an earlier list printed",
+      ),
+    ),
+  },
+  ({ task, offset }) =>
     Effect.gen(function* () {
+      if (Option.isSome(task) && Option.isSome(offset)) {
+        return yield* new CommandFailed({
+          exit: CLI_EXIT.USAGE,
+          message: "A task's agents come on one page; --offset pages the workspace's.",
+        });
+      }
       const { hosted } = yield* session;
-      const { agents } = Option.isSome(task)
-        ? yield* askService(hosted.agents.listOfTask, { id: yield* resolveTaskId(task.value) })
-        : yield* askService(hosted.agents.listOfWorkspace, {
-            workspaceId: (yield* resolveWorkspace).workspace.id,
-          });
+      const workspace = Option.isSome(task) ? undefined : (yield* resolveWorkspace).workspace;
+      const listed: { agents: readonly AgentSummary[]; nextOffset?: number } =
+        workspace === undefined
+          ? yield* askService(hosted.agents.listOfTask, {
+              id: yield* resolveTaskId(Option.getOrThrow(task)),
+            })
+          : yield* askService(hosted.agents.listOfWorkspace, {
+              workspaceId: workspace.id,
+              ...(Option.isSome(offset) ? { offset: String(offset.value) } : undefined),
+            });
+      const { agents } = listed;
+      // A task's list, and a service before paging, name no next page.
+      const nextOffset = listed.nextOffset ?? null;
       yield* answer({
-        json: agents,
-        lines: agents.length === 0 ? ["No agents."] : agentLines(agents),
+        json: { agents, nextOffset },
+        lines: [
+          ...(agents.length === 0 ? ["No agents."] : agentLines(agents)),
+          ...(nextOffset === null
+            ? []
+            : [
+                "",
+                // The next page names its workspace, so it pages the same list whatever the default.
+                `More agents stand: vespin agent list -w ${workspace?.slug ?? workspace?.id} --offset ${nextOffset}`,
+              ]),
+        ],
         ids: agents.map((agent) => agent.id),
       });
     }),
 ).pipe(
-  Command.withDescription("List a task's agents, or the workspace's, newest first"),
+  Command.withDescription(
+    "List a task's agents, or the workspace's a page at a time, newest first",
+  ),
   Command.withExamples([
     { command: "vespin agent list ACME-42", description: "One task's agents" },
     { command: "vespin agent list -q", description: "The workspace's agents' ids" },
+    {
+      command: "vespin agent list --offset 50",
+      description: "The workspace's next page, from the nextOffset a list printed",
+    },
   ]),
 );
 

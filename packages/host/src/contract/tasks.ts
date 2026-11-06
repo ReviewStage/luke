@@ -235,7 +235,7 @@ export const tasksActsContract = {
     .input(exactInput(tasksFindParamsSchema))
     .output(EffectSchema.flip(tasksFindAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_REVISIONS]: actProcedure(
-    "Could not read that plan's history on this system.",
+    "Could not read that description's history on this system.",
   )
     .input(exactInput(tasksRevisionsParamsSchema))
     .output(EffectSchema.flip(tasksRevisionsAnswerSchema)),
@@ -252,29 +252,29 @@ export const tasksActsContract = {
     .output(EffectSchema.flip(tasksPageSourceAnswerSchema)),
   // Note that the hold's stream carries nothing: the held pages reach the panel on app state, and the stream is the window's hold on them.
   [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actProcedure(
-    "Could not follow that plan's pages on this system.",
+    "Could not follow that task's pages on this system.",
   )
     .input(exactInput(taskPagesFollowSchema))
     .output(eventIterator(type<never>())),
-  // Note that the hold's stream carries nothing: the held plan reaches the panel on app state, and the stream is the window's hold on it.
+  // Note that the hold's stream carries nothing: the held description reaches the panel on app state, and the stream is the window's hold on it.
   [TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW]: actProcedure(
-    "Could not follow that task's plan on this system.",
+    "Could not follow that task's description on this system.",
   )
     .input(exactInput(taskDocumentFollowSchema))
     .output(eventIterator(type<never>())),
   [TASKS_ACT_KIND.TASKS_DOCUMENT_RETRY]: actProcedure(
-    "Could not read that task's plan again on this system.",
+    "Could not read that task's description again on this system.",
   )
     .input(exactInput(taskDocumentFollowSchema))
     .output(EffectSchema.Void),
   // Note that the hold's stream carries nothing: the held history reaches the panel on app state, and the stream is the window's hold on it.
   [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
-    "Could not follow that plan's history on this system.",
+    "Could not follow that description's history on this system.",
   )
     .input(exactInput(taskHistoryFollowSchema))
     .output(eventIterator(type<never>())),
   [TASKS_ACT_KIND.TASKS_HISTORY_RETRY]: actProcedure(
-    "Could not read that plan's history again on this system.",
+    "Could not read that description's history again on this system.",
   )
     .input(exactInput(taskHistoryFollowSchema))
     .output(EffectSchema.Void),

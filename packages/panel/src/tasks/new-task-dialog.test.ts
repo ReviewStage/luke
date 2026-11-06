@@ -33,7 +33,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { OPEN_SETTINGS_LABEL, OpenSettingsProvider } from "../open-settings.js";
+import { OpenSettingsProvider } from "../open-settings.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -58,7 +58,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient, writeHandedAppState } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
@@ -157,6 +157,7 @@ async function mount(
 ) {
   const { list, ...chose } = chooser;
   if (list !== undefined) holdRepositoryLists(handHostReads({}).deliverRepositoryLists, list);
+  await writeHandedAppState();
   const starts: [string, string | null][] = [];
   const agents: (NewTaskAgent | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];
@@ -309,7 +310,7 @@ test("the card, named New task, holds the composer with its words focused, the r
   const head = card.dialog()?.querySelector(".new-task-head");
   const foot = card.dialog()?.querySelector(".ui-composer-foot");
 
-  assert.equal(document.activeElement, card.field());
+  assert.equal(document.activeElement === card.field(), true);
   assert.equal(card.placeholder(), "Describe the task");
   assert.equal(controls.includes("Plan with Vespin first"), false, "no Plan toggle stands");
   for (const each of ["Add files and more", "acme/web", "Start a task with no agent"]) {
@@ -318,16 +319,22 @@ test("the card, named New task, holds the composer with its words focused, the r
   const name = card.dialog()?.getAttribute("aria-labelledby") ?? assert.fail("the card is named");
   assert.equal(document.getElementById(name)?.textContent, "New task");
   assert.equal(head?.querySelector(".repository-chip")?.textContent, "acme/web");
-  assert.equal(foot?.querySelector(".repository-chip"), null, "the foot holds no repository chip");
   assert.equal(
-    document.querySelector('[aria-label^="Workspace"]'),
-    null,
-    "the card offers no workspace picker",
+    foot?.querySelector(".repository-chip") === null,
+    true,
+    "the foot holds no repository chip",
   );
   assert.equal(
-    document.querySelector(".agent-model-chip")?.textContent?.includes("Opus"),
+    document.querySelector('[aria-label^="Workspace"]') === null,
     true,
-    "the model chip names the account's default",
+    "the card offers no workspace picker",
+  );
+  await vi.waitFor(() =>
+    assert.equal(
+      document.querySelector(".agent-model-chip")?.textContent?.includes("Opus"),
+      true,
+      "the model chip names the account's default",
+    ),
   );
 });
 
@@ -510,18 +517,20 @@ test("once a repository is chosen, an @ offers its files, read through the works
   const draw = (recent: readonly string[]) =>
     act(() =>
       root.render(
-        createElement(NewTaskDialog, {
-          newTask: {
-            ...control.newTask,
-            open: true,
-            workspaceId: "workspace-acme",
-            repositoriesIn: () => ({ ...control.repositories, recent }),
-            start: (...asked) => {
-              started.push(asked[3]?.handed);
-              return Promise.resolve(undefined);
+        withQueryClient(
+          createElement(NewTaskDialog, {
+            newTask: {
+              ...control.newTask,
+              open: true,
+              workspaceId: "workspace-acme",
+              repositoriesIn: () => ({ ...control.repositories, recent }),
+              start: (...asked) => {
+                started.push(asked[3]?.handed);
+                return Promise.resolve(undefined);
+              },
             },
-          },
-        }),
+          }),
+        ),
       ),
     );
   // The card opens with no repository, and the words are begun before one is chosen.
@@ -533,10 +542,12 @@ test("once a repository is chosen, an @ offers its files, read through the works
   const focused = document.activeElement === composerEditor(document);
 
   typeInComposer(document, "@roll");
-  await settle();
-  const offered = [...document.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
-    (row) => row.textContent,
-  );
+  const optionLabels = () =>
+    [...document.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
+      (row) => row.textContent,
+    );
+  await vi.waitFor(() => assert.deepEqual(optionLabels(), ["rollout-store.ts"]));
+  const offered = optionLabels();
   pressInComposer(document, "Enter");
   await settle();
   const chips = [...composerEditor(document).querySelectorAll("[data-mention-ref]")];
@@ -675,7 +686,7 @@ test("Escape puts the card away with nothing started, and focus goes back to wha
   const card = await mount();
   await card.key("Escape");
   assert.equal(card.dialog(), null);
-  assert.equal(document.activeElement, card.opener);
+  assert.equal(document.activeElement === card.opener, true);
   assert.deepEqual(card.starts, []);
 });
 
@@ -744,7 +755,7 @@ test("Escape in the repository menu closes the menu and leaves the dialog standi
   );
   assert.ok(search, "the chip's menu opens");
   await card.press("Escape", search);
-  assert.equal(document.querySelector('input[aria-label="Search repositories"]'), null);
+  assert.equal(document.querySelector('input[aria-label="Search repositories"]') === null, true);
   assert.ok(card.dialog(), "the dialog still stands");
 });
 
@@ -825,12 +836,17 @@ test("the workspace first resolving keeps a repository picked before the workspa
   assert.deepEqual(dialog.starts, [["", "alice/private"]]);
 });
 
-/** The lines the repository menu says in its rows' place. */
-function menuNotes(): (string | null)[] {
-  return [...document.querySelectorAll(".ui-combobox-note")].flatMap((note) => {
-    const lines = [...note.querySelectorAll("p")];
-    return lines.length === 0 ? [note.textContent] : lines.map((line) => line.textContent);
-  });
+/** What the GitHub row in the repository menu's list place ends with: its press, or whom a member asks. */
+function githubWay(): string | null | undefined {
+  return document.querySelector(".ui-menu-note-row-end")?.textContent;
+}
+
+/** The button the GitHub row ends with, pressed. */
+function pressWay(buttons: readonly HTMLButtonElement[], words: string): void {
+  const press =
+    buttons.find((button) => button.textContent === words) ??
+    assert.fail(`the menu offers ${words}`);
+  act(() => press.click());
 }
 
 /** The chip's menu opened, and the buttons then drawn anywhere in the document. */
@@ -853,30 +869,28 @@ const NOWHERE_INSTALLED = () =>
     },
   });
 
-test("an owner or admin of a workspace with no GitHub connected is told so and offered Open Settings at that workspace's Integrations", async () => {
+/** Where each of the GitHub row's presses lands: the workspace's GitHub repositories in Settings. */
+const WORKSPACE_GITHUB = {
+  page: SETTINGS_VIEW.WORKSPACE,
+  section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+  workspaceId: "workspace-acme",
+};
+
+test("an owner or admin of a workspace with no GitHub connected is offered Connect on a GitHub row, opening that workspace's GitHub in Settings", async () => {
   const dialog = await mount(undefined, undefined, {
     scope: "workspace-acme",
     list: NOWHERE_INSTALLED,
   });
 
   const buttons = await openChip();
-  const notes = menuNotes();
-  const open =
-    buttons.find((button) => button.textContent === "Open Settings") ??
-    assert.fail("the menu offers to open Settings");
-  act(() => open.click());
+  const way = githubWay();
+  pressWay(buttons, "Connect");
 
-  assert.deepEqual(notes, ["No GitHub is connected to this workspace yet."]);
-  assert.deepEqual(dialog.links, [
-    {
-      page: SETTINGS_VIEW.WORKSPACE,
-      section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
-      workspaceId: "workspace-acme",
-    },
-  ]);
+  assert.equal(way, "Connect");
+  assert.deepEqual(dialog.links, [WORKSPACE_GITHUB]);
 });
 
-test("a member of a workspace with no GitHub connected is told only to ask an owner or admin, with no Open Settings", async () => {
+test("a member of a workspace with no GitHub connected is told only to ask an owner or admin, with nothing to press", async () => {
   await mount(undefined, undefined, {
     scope: "workspace-acme",
     manages: false,
@@ -884,11 +898,10 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
   });
 
   const buttons = await openChip();
-  const notes = menuNotes();
 
-  assert.deepEqual(notes, ["Ask an owner or admin to connect GitHub."]);
+  assert.equal(githubWay(), "Ask an owner or admin to connect");
   assert.equal(
-    buttons.some((button) => ["Open Settings", "Retry"].includes(button.textContent ?? "")),
+    buttons.some((button) => ["Connect", "Retry"].includes(button.textContent ?? "")),
     false,
   );
 });
@@ -910,23 +923,7 @@ const PEOPLE: readonly WorkspaceMember[] = [
   { userId: "u-sam", name: "Sam", email: "sam@acme.test", role: WORKSPACE_ROLE.MEMBER },
 ];
 
-test("a member of a workspace with no GitHub connected is told which owners and admins to ask, and no member is named", async () => {
-  fakeActPort({});
-  handMembers(() => ({ rows: { members: PEOPLE } }));
-  await mount(undefined, undefined, {
-    scope: "workspace-acme",
-    workspaceName: "Acme",
-    manages: false,
-    list: NOWHERE_INSTALLED,
-  });
-
-  await openChip();
-  await settle();
-
-  assert.deepEqual(menuNotes(), ["Ask Dean or Charles to connect GitHub for Acme."]);
-});
-
-test("a member of a workspace whose GitHub reaches no repository is told so and which owners and admins to ask, with no Open Settings", async () => {
+test("a member of a workspace whose GitHub reaches no repository is told which owners and admins to ask, no member named, with nothing to press", async () => {
   fakeActPort({});
   handMembers(() => ({ rows: { members: PEOPLE } }));
   await mount(undefined, undefined, {
@@ -939,83 +936,53 @@ test("a member of a workspace whose GitHub reaches no repository is told so and 
   const buttons = await openChip();
   await settle();
 
-  assert.deepEqual(menuNotes(), [
-    "Vespin cannot see any repository yet.",
-    "Ask Dean or Charles to add a repository to Vespin's GitHub App.",
-  ]);
+  await vi.waitFor(() => assert.equal(githubWay(), "Ask Dean or Charles to choose repositories"));
   assert.equal(
-    buttons.some((button) => button.textContent === OPEN_SETTINGS_LABEL),
+    buttons.some((button) => button.textContent === "Choose repositories"),
     false,
   );
 });
 
-test("an owner of a workspace whose GitHub reaches no repository is offered Open Settings at the workspace's GitHub", async () => {
+test("an owner of a workspace whose GitHub reaches no repository is offered Choose repositories, opening the workspace's GitHub in Settings", async () => {
   const dialog = await mount(undefined, undefined, {
     scope: "workspace-acme",
     connected: true,
     list: NOTHING_REACHED,
   });
 
-  const buttons = await openChip();
-  const notes = menuNotes();
-  const open =
-    buttons.find((button) => button.textContent === OPEN_SETTINGS_LABEL) ??
-    assert.fail("the menu offers to open Settings");
-  act(() => open.click());
+  pressWay(await openChip(), "Choose repositories");
 
-  assert.deepEqual(notes, ["Vespin cannot see any repository yet."]);
-  assert.deepEqual(dialog.links, [
-    {
-      page: SETTINGS_VIEW.WORKSPACE,
-      section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
-      workspaceId: "workspace-acme",
-    },
-  ]);
+  assert.deepEqual(dialog.links, [WORKSPACE_GITHUB]);
 });
 
-/** The notes the chip's menu draws, and whether it offers Open Settings, for a workspace with a GitHub connected whose read finds none installed. */
-async function lapsedMenu(manages: boolean) {
+/** How the GitHub row ends for a workspace with a GitHub connected whose read finds none installed. */
+async function lapsedWay(manages: boolean) {
   await mount(undefined, undefined, {
     scope: "workspace-acme",
-    workspaceName: "Acme",
     connected: true,
     manages,
     list: NOWHERE_INSTALLED,
   });
-  const buttons = await openChip();
-  return {
-    notes: menuNotes(),
-    settings: buttons.some((button) => button.textContent === "Open Settings"),
-  };
+  await openChip();
+  return githubWay();
 }
 
-test("an owner or admin of a workspace whose GitHub was removed or suspended on GitHub is told so, not that none is connected, and offered Open Settings", async () => {
-  assert.deepEqual(await lapsedMenu(true), {
-    notes: ["Acme's GitHub connection was removed or suspended on GitHub."],
-    settings: true,
-  });
+test("an owner or admin of a workspace whose GitHub was removed or suspended on GitHub is offered Reconnect, not Connect", async () => {
+  assert.equal(await lapsedWay(true), "Reconnect");
 });
 
-test("a member of a workspace whose GitHub was removed or suspended on GitHub is told so and to ask an owner or admin to reconnect it", async () => {
-  assert.deepEqual(await lapsedMenu(false), {
-    notes: [
-      "Acme's GitHub connection was removed or suspended on GitHub.",
-      "Ask an owner or admin to reconnect GitHub.",
-    ],
-    settings: false,
-  });
+test("a member of a workspace whose GitHub was removed or suspended on GitHub is told to ask an owner or admin to reconnect it", async () => {
+  assert.equal(await lapsedWay(false), "Ask an owner or admin to reconnect");
 });
 
 test("in a workspace with no GitHub connected, a repository its plans still name is neither offered nor chosen, the chip reads No repository, and a bare start makes the task with none", async () => {
   const dialog = await mount(undefined, undefined, {
     scope: "workspace-personal",
-    workspaceName: "Dean Stratakos",
     recent: ["ReviewStage/luke"],
     list: NOWHERE_INSTALLED,
   });
 
   const buttons = await openChip();
-  const notes = menuNotes();
   const offered = buttons.map((button) => button.textContent);
   const search =
     document.querySelector<HTMLInputElement>('input[aria-label="Search repositories"]') ??
@@ -1023,7 +990,6 @@ test("in a workspace with no GitHub connected, a repository its plans still name
   await dialog.press("Escape", search);
   await dialog.key("Enter", { metaKey: true });
 
-  assert.deepEqual(notes, ["Dean Stratakos has no GitHub connected yet."]);
   assert.equal(
     offered.some((words) => words?.startsWith("luke")),
     false,

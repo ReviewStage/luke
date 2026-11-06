@@ -1,5 +1,4 @@
 import { signedInAccountId } from "@repo/credentials/snapshot";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { MCP_ACCESS_TOKEN_MINUTES, type McpClient } from "@repo/features/mcp-client-wire";
 import {
   cursorInstallUrl,
@@ -9,6 +8,7 @@ import {
   shellLine,
 } from "@repo/features/mcp-connect";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
+import { FIRST_PARTY_OAUTH_CLIENT_ID } from "@repo/features/oauth-client-ids";
 import { oauthRedirectDestination } from "@repo/features/oauth-consent";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -45,14 +45,15 @@ import {
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayWords } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
+import { mcpClientsQuery, mcpClientsRetryMutation } from "../live-reads.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -79,7 +80,9 @@ import { MenuRow } from "./menu-row.js";
  * their own settings, and any other agent by the address alone. An agent
  * that arrives while the page shows, which is how a member comes back from
  * the browser, lights its row and is said to be connected under the step.
- * While the account has none, Connect an agent stands first.
+ * While the account has none, Connect an agent stands first. The `vespin`
+ * command, which the read lists too, is left out of Connected: its sign-in
+ * is Settings › CLI's (`cli-page.tsx`).
  *
  * Each agent is led by its brand's mark, in the picker and on its row, an
  * allowed agent's found by the name it registered under; Other stands in
@@ -273,7 +276,9 @@ function ClientRow({
   arrived: boolean;
   onRevoked: (client: McpClient) => void;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendMcpClientsRevoke } = useMutation(
+    actMutation(ACT_KIND.MCP_CLIENTS_REVOKE),
+  );
   const name = clientName(client);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
 
@@ -283,7 +288,7 @@ function ClientRow({
       reason: `Revoking ${name} didn't finish. Try again.`,
     };
     setRejection(undefined);
-    return act(ACT_KIND.MCP_CLIENTS_REVOKE, { clientId: client.clientId }).then(
+    return sendMcpClientsRevoke({ clientId: client.clientId }).then(
       (answer): ActionResult => {
         if ("failure" in answer) {
           setRejection(refused.reason);
@@ -348,12 +353,15 @@ function ClientRow({
   );
 }
 
-/** The agents the account allowed, and those revoked while the page shows, in the order they were allowed, newest first. */
+/** The agents the account allowed, and those revoked while the page shows, in the order they were allowed, newest first; never the `vespin` command, which Settings › CLI signs out. */
 function shownClients(
   listed: readonly McpClient[],
   revoked: ReadonlyMap<string, McpClient>,
 ): readonly McpClient[] {
-  const standing = listed.filter((client) => !revoked.has(client.clientId));
+  const standing = listed.filter(
+    (client) =>
+      client.clientId !== FIRST_PARTY_OAUTH_CLIENT_ID.CLI && !revoked.has(client.clientId),
+  );
   return [...standing, ...revoked.values()].toSorted(
     (one, other) => (other.allowedAt ?? 0) - (one.allowedAt ?? 0),
   );
@@ -453,8 +461,10 @@ function ConnectSection({
 
 /** The agents allowed and Connect an agent, for the account signed in. */
 export function McpClientsSections(): React.JSX.Element {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
-  const { rows, status, retry } = useHostRead(LIVE_READ.MCP_CLIENTS, accountId);
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
+  const read = useQuery(mcpClientsQuery(accountId));
+  const retry = useMutation(mcpClientsRetryMutation());
+  const rows = read.data;
   // The agents revoked while the page shows, which stand saying so after the read no longer lists them.
   const [revoked, setRevoked] = useState<ReadonlyMap<string, McpClient>>(new Map());
   // The agents the first read listed, so one allowed while the page shows is told apart as just connected.
@@ -463,10 +473,13 @@ export function McpClientsSections(): React.JSX.Element {
     setKnown(new Set(rows.clients.map((client) => client.clientId)));
   }
   if (rows === undefined) {
-    return status === HOST_READ_STATUS.FAILED ? (
+    return read.isError ? (
       <SettingsSection title={SECTION_TITLE.CLIENTS} anchor={SETTINGS_SEARCH_ROW.MCP_CLIENTS}>
         <SettingsLine>
-          <ErrorState failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)} onRetry={retry}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)}
+            onRetry={() => retry.mutate()}
+          >
             {PAGE_LINE.READ_FAILED}
           </ErrorState>
         </SettingsLine>

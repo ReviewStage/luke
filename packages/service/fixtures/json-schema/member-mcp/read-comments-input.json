@@ -5,13 +5,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 36,
-      "description": "The task whose plan's comments to act on, by the id list_tasks answered."
+      "description": "The task whose description's comments to act on, by the id list_tasks answered."
     },
     "page": {
       "type": "string",
       "minLength": 1,
       "maxLength": 36,
-      "description": "One of the task's pages, by the id a mention of it or a link to it names, to read its threads instead of the plan's."
+      "description": "One of the task's pages, by the id a mention of it or a link to it names, to read its threads instead of the description's."
     },
     "status": {
       "type": "string",

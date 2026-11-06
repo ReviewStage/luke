@@ -138,7 +138,7 @@ const WORKSPACE_MENU: Step = { kind: STEP.CLICK, role: "button", name: "Workspac
 const ACCOUNT_MENU: Step = { kind: STEP.CLICK, role: "button", name: "Ada Lovelace", exact: true };
 const YOUR_PROFILE: Step = { kind: STEP.CLICK, role: "menuitem", name: "Your profile" };
 
-// The plan's side panel widened over the task, and the count at the end of the line whose thread holds three comments, which opens it.
+// The description's side panel widened over the task, and the count at the end of the line whose thread holds three comments, which opens it.
 const EXPAND_PANEL: Step = { kind: STEP.CLICK, role: "button", name: "Expand panel" };
 const ANSWERED_THREAD: Step = { kind: STEP.CLICK, role: "button", name: "3 comments" };
 
@@ -252,9 +252,9 @@ export const SCENES: readonly Scene[] = [
     title: "A call's transcript",
     profile: "tasks-transcript",
   },
-  // The plan's comment threads: their marks in the words, one opened from its line's count, and the resolved one in the Comments tab.
+  // The description's comment threads: their marks in the words, one opened from its line's count, and the resolved one in the Comments tab.
   {
-    id: "plan-comments",
+    id: "description-comments",
     place: PLACE.PLAN,
     title: "Comment marks",
     profile: "tasks-comments",
@@ -262,7 +262,7 @@ export const SCENES: readonly Scene[] = [
     phoneSteps: [],
   },
   {
-    id: "plan-comment-thread",
+    id: "description-comment-thread",
     place: PLACE.PLAN,
     title: "An open thread",
     profile: "tasks-comments",
@@ -270,7 +270,7 @@ export const SCENES: readonly Scene[] = [
     phoneSteps: [ANSWERED_THREAD],
   },
   {
-    id: "plan-comments-resolved",
+    id: "description-comments-resolved",
     place: PLACE.PLAN,
     title: "A resolved thread",
     profile: "tasks-comments",

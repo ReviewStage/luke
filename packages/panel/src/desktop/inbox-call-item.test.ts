@@ -27,7 +27,7 @@ import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { handInboxItems } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
   agentsControl,
@@ -166,8 +166,8 @@ async function mount(onOpen: (link: ReadLink) => void): Promise<HTMLElement> {
     sidePanel: {
       ...tasksControl().sidePanel,
       open: true,
-      tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
-      strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+      tabs: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
+      strip: [SIDE_PANEL_TAB.DESCRIPTION, SIDE_PANEL_TAB.INBOX],
       tab: SIDE_PANEL_TAB.INBOX,
     },
     agents: agentsControl({
@@ -196,6 +196,7 @@ async function mount(onOpen: (link: ReadLink) => void): Promise<HTMLElement> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   return container;
 }
 

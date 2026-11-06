@@ -6,17 +6,22 @@
  * rebased onto the link home, so `readShownLink` reads it as the desktop reads a
  * link it is handed, and said once through the bridge's `onShowLink`, which
  * the panel already opens (`app.tsx`). A page reloaded on an entry the
- * browser history saved a step in (`browser-history.ts`) reopens that step
+ * panel saved a step in through the router's history
+ * (`@repo/panel/navigation-history`'s `savesStep`) reopens that step
  * instead, and says nothing here. `/app`, the panel's own path, names no
  * place, so the panel opens where it rests there; so does `/app.html`, the build's
  * file name, which only the dev server answers, the site sending it to
- * `/app`.
+ * `/app`. A tab opened at a link written before the task was a task,
+ * `/<workspace>/plan/…`, is moved onto the address written now,
+ * `/<workspace>/task/…`, before it is read, so the address bar, a reload, and
+ * Copy link name it as every link does now.
  */
 
-import { readShownLink, type ShownLink } from "@repo/features/link-grammar";
+import { currentTaskPath, readShownLink, type ShownLink } from "@repo/features/link-grammar";
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import type { AppBridge } from "@repo/host/bridge";
-import { savedEntry } from "./browser-history";
+import { savesStep } from "@repo/panel/navigation-history";
+import type { RouterHistory } from "@tanstack/react-router";
 import { addressHere, PANEL_PATH } from "./web-address";
 
 /** The paths the panel itself is served at, which name no place. */
@@ -33,25 +38,33 @@ function linkHere(): ShownLink | undefined {
  * page loads, to the first subscriber only, where the entry it loaded on
  * holds no saved step; and to every subscriber, whenever the browser lands
  * on an entry holding none, since only the address says what was there.
+ * Both are read from the tab's router `history`, a landing as the browser's
+ * own move along it, never a write.
  */
-export function withLoadLink(bridge: AppBridge): AppBridge {
-  let loaded = savedEntry() === undefined ? linkHere() : undefined;
+export function withLoadLink(bridge: AppBridge, history: RouterHistory): AppBridge {
+  const opened = addressHere();
+  const current = currentTaskPath(opened);
+  if (current !== opened) {
+    history.replace(current, history.location.state);
+    // Note that the history writes the address bar on its next tick, so the move is flushed now, before anything reads the address.
+    history.flush();
+  }
+  let loaded = savesStep(history.location) ? undefined : linkHere();
   return {
     ...bridge,
     onShowLink: (listener) => {
       const stop = bridge.onShowLink(listener);
-      const landed = (event: PopStateEvent) => {
-        if (savedEntry(event) !== undefined) return;
+      const stopLanding = history.subscribe(({ location, action }) => {
+        if (action.type === "PUSH" || action.type === "REPLACE" || savesStep(location)) return;
         const link = linkHere();
         if (link !== undefined) listener(link);
-      };
-      window.addEventListener("popstate", landed);
+      });
       const waiting = loaded;
       loaded = undefined;
       if (waiting !== undefined) listener(waiting);
       return () => {
         stop();
-        window.removeEventListener("popstate", landed);
+        stopLanding();
       };
     },
   };

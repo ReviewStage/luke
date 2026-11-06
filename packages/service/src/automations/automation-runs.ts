@@ -658,7 +658,7 @@ function runStartWords(automation: Automation, firedAt: Date): string {
  * run alone, named for the automation and when the run fired; or, where the
  * agent it starts takes every later run (`standing`), the automation's
  * standing task, named for the automation alone. Either is assigned to the
- * automation's owner, in its repository, and in progress, its plan blank,
+ * automation's owner, in its repository, and in progress, its description blank,
  * since the run's prompt reaches its agent as its first message. Note that the
  * task is made under an id drawn from the run's, because a run acted on
  * again must find the task it made rather than make a second, that the run

@@ -28,6 +28,7 @@ import {
   Time,
   VisuallyHidden,
 } from "@repo/ui";
+import { FIND_SKIP_ATTRIBUTE } from "@repo/ui/find-skip";
 import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import {
   type ChildTaskCount,
@@ -38,14 +39,16 @@ import {
 import { RENAME_FAILED_NOTE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
+import { useMutation } from "@tanstack/react-query";
 import { type ReactNode, useRef } from "react";
-import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
+import { renameWrite } from "../rename-write.js";
 import { PullRequestCard } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
 import { openerOf } from "../tasks/use-link-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useMarkedUnread } from "../tasks/use-task-looks.js";
+import { TASK_RENAME_SHAPE } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuEntry, rowMenu } from "./action-menu.js";
@@ -202,7 +205,8 @@ export function TaskListRow({
   place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
   const marked = useMarkedUnread(task.id);
-  const rename = useInlineRename(task.id, tasks.onRenameTask);
+  const renaming = useMutation(tasks.renameTask);
+  const rename = useInlineRename(task.id, renameWrite(renaming, TASK_RENAME_SHAPE));
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
   const drawn = (cell: TaskRowCell) => cells.includes(cell);
   const actions = useTaskMenuItems(tasks, task.id, task.name, {

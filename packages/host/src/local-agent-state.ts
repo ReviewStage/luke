@@ -33,6 +33,14 @@ export const ownedAgents = (stateRoot: string) =>
     return yield* fileSystem.readDirectory(path.join(stateRoot, OWNED_FOLDER));
   }).pipe(Effect.orElseSucceed((): readonly string[] => []));
 
+/** No agent kept as one whose folder this machine made, so an uninstall after it leaves every agent's folder as it stands. */
+export const forgetOwnedAgents = (stateRoot: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    yield* fileSystem.remove(path.join(stateRoot, OWNED_FOLDER), { recursive: true, force: true });
+  });
+
 /** The agent given no longer kept as one whose folder this machine made, once its folder is gone. */
 export const forgetOwnedAgent = (stateRoot: string, agentId: string) =>
   Effect.gen(function* () {

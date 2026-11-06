@@ -13,7 +13,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { DesktopTasks } from "../desktop/desktop-tasks.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, handState, holdBrowserTabs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
@@ -87,6 +87,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** The plan drawn with its side panel open on its Comments, answering the tabs it was asked to show. */

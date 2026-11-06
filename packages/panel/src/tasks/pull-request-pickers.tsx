@@ -1,10 +1,10 @@
+import { PULL_REQUEST_PART } from "@repo/features/agent-view";
 import type {
   AgentReviewOptions,
   GitHubPerson,
   PullRequestLabel,
   PullRequestReviewTeam,
 } from "@repo/features/agent-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PULL_REQUEST_ACTION,
   type PullRequestAction,
@@ -16,9 +16,10 @@ import {
   BUTTON_VARIANT,
   Button,
   cssCustomProperties,
-  dropBelowStart,
+  MenuNoteRow,
+  POPOVER_ALIGN,
+  Spinner,
   Tooltip,
-  useMenu,
 } from "@repo/ui";
 import type { Actor } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
@@ -29,13 +30,15 @@ import {
   pendingWithout,
   type SameValue,
 } from "@repo/ui/pending-values";
-import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { useDisclosure } from "@repo/ui/use-disclosure";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { PlusIcon, UsersRoundIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import type { MenuAction } from "../desktop/action-menu.js";
+import { type ActionSearch, ActionSearchMenu } from "../desktop/action-search-menu.js";
+import { pullRequestPartRetryMutation, reviewOptionsQuery } from "../live-reads.js";
 import { usePendingNow } from "../pending-clock.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useNamer } from "./pull-request-people.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
@@ -73,6 +76,9 @@ const PICKER_WORDS = {
   LABELS_BUSY: "Updating labels",
   REVIEWERS_MENU: "Request a review",
   LABELS_MENU: "Labels",
+  LABELS_SEARCH: "Search labels",
+  NO_REVIEWER_MATCH: "No one matches",
+  NO_LABEL_MATCH: "No labels match",
   READING: "Reading the repository…",
   FAILED: "The repository could not be read.",
   RETRY: "Retry",
@@ -112,45 +118,52 @@ export interface ReviewOptions {
 
 /**
  * The agent's repository's labels, assignable users, and teams, held by the
- * host from the moment a picker first asks (`LIVE_READ.REVIEW_OPTIONS`), so a
+ * host from the moment a picker first asks (`reviewOptionsQuery`), so a
  * tab drawn again offers them at once, asked again as a window comes forward
  * and on Retry after a failure.
  */
 export function useReviewOptions(agentId: string): ReviewOptions {
   const [asked, setAsked] = useState<string | undefined>(undefined);
   const [retrying, setRetrying] = useState(false);
-  const held = useHostRead(LIVE_READ.REVIEW_OPTIONS, asked === agentId ? { agentId } : undefined);
-  const answer = held.rows;
+  const held = useQuery(reviewOptionsQuery(asked === agentId ? { agentId } : undefined));
+  const { mutateAsync: retry } = useMutation(pullRequestPartRetryMutation());
+  const answer = held.data;
   const read: OptionsRead =
     asked !== agentId
       ? { kind: OPTIONS.UNASKED }
-      : retrying || (answer === undefined && held.status === HOST_READ_STATUS.LOADING)
+      : retrying || (answer === undefined && held.isPending)
         ? { kind: OPTIONS.READING }
         : answer === undefined || "failure" in answer
           ? { kind: OPTIONS.FAILED }
           : { kind: OPTIONS.LANDED, value: answer };
-  const { retry } = held;
   const ask = useCallback(() => {
     if (asked !== agentId) return setAsked(agentId);
     if (read.kind !== OPTIONS.FAILED) return;
     setRetrying(true);
-    void retry().finally(() => setRetrying(false));
+    void retry({ part: PULL_REQUEST_PART.REVIEW_OPTIONS, agentId })
+      .catch(() => undefined)
+      .finally(() => setRetrying(false));
   }, [agentId, asked, read.kind, retry]);
   return { read, ask };
 }
 
-/** The one item a menu holds while what it would offer is read, or, where it could not be, Retry, which reads it again and leaves the menu standing for what it finds. */
-function standInItem(options: ReviewOptions): MenuAction {
+/**
+ * What a picker says in its list's place until what it offers is read: a
+ * wait, or the failure with a Retry that reads it again; `none` once it is
+ * read and offers nothing; nothing while it offers anything.
+ */
+function optionsNote(options: ReviewOptions, offered: number, none: string): React.ReactNode {
   if (options.read.kind === OPTIONS.FAILED) {
-    return {
-      label: PICKER_WORDS.RETRY,
-      icon: <GLYPH.RETRY aria-hidden="true" />,
-      detail: PICKER_WORDS.FAILED,
-      stays: true,
-      onSelect: options.ask,
-    };
+    return (
+      <MenuNoteRow
+        glyph={<GLYPH.RETRY aria-hidden="true" />}
+        label={PICKER_WORDS.FAILED}
+        end={{ action: PICKER_WORDS.RETRY, onClick: options.ask }}
+      />
+    );
   }
-  return { label: PICKER_WORDS.READING, disabled: true, onSelect: () => undefined };
+  if (options.read.kind !== OPTIONS.LANDED) return <Spinner delay label={PICKER_WORDS.READING} />;
+  return offered === 0 ? none : undefined;
 }
 
 /** What the pull request's read holds of its reviewers asked and its labels, which the picks are drawn over. */
@@ -296,13 +309,17 @@ function LabelDot({ color }: { color: string }): React.JSX.Element {
  * in full for a reader, opening its menu under it.
  */
 function PickerButton({
+  ref,
   label,
   word,
   disabled,
   busy,
   busyLabel,
-  trigger,
+  open,
+  menuId,
+  onPress,
 }: {
+  ref: React.Ref<HTMLButtonElement>;
   label: string;
   /** What it adds, in a word: “Reviewer”, “Label”. */
   word: string;
@@ -310,15 +327,15 @@ function PickerButton({
   /** Whether a change its menu sent is out, and what it is named meanwhile. */
   busy: boolean;
   busyLabel: string;
-  trigger: {
-    readonly "aria-haspopup": "menu";
-    readonly "aria-expanded": boolean;
-    readonly onClick: (event: React.MouseEvent<HTMLElement>) => void;
-  };
+  /** Whether its menu stands, and the menu's id while it does. */
+  open: boolean;
+  menuId: string;
+  onPress: () => void;
 }): React.JSX.Element {
   return (
-    <Tooltip label={label}>
+    <Tooltip label={open ? undefined : label}>
       <Button
+        ref={ref}
         icon={<PlusIcon aria-hidden="true" />}
         // Note that the button is named by the word it draws, since "Edit reviewers" is the hint's and no reader hears a name the screen does not show.
         label={word}
@@ -327,7 +344,10 @@ function PickerButton({
         disabled={disabled}
         busy={busy}
         busyLabel={busyLabel}
-        {...trigger}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={onPress}
       >
         {word}
       </Button>
@@ -337,16 +357,17 @@ function PickerButton({
 
 /**
  * One picker: its press, which reads what the repository offers as it first
- * opens, and the menu of `groups` under it, headed `heading`. It stands
- * disabled while a change is out or the pull request is read again.
+ * opens, and the searchable menu of `search` under it, which draws only the
+ * rows near its view, since a repository's people or labels may run to
+ * hundreds. A pick closes it and hands the keyboard back to the press. It
+ * stands disabled while a change is out or the pull request is read again.
  */
 function OptionsPicker({
   label,
   word,
-  heading,
   busyLabel,
   busyOn,
-  groups,
+  search,
   options,
   writes,
   refreshing,
@@ -354,46 +375,58 @@ function OptionsPicker({
   label: string;
   /** What it adds, in a word: “Reviewer”, “Label”. */
   word: string;
-  heading: string;
   /** What the button is named while a change of its own is out. */
   busyLabel: string;
   /** The changes its menu sends, any of which out makes its button busy. */
   busyOn: readonly PullRequestAction[];
-  groups: readonly (readonly MenuAction[])[];
+  search: ActionSearch;
   options: ReviewOptions;
   writes: PullRequestWrites;
   refreshing: boolean;
 }): React.JSX.Element {
-  const menu = useMenu(true);
+  const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
+  const menuId = useId();
+  const box = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
   const busy = writes.pending !== undefined && busyOn.includes(writes.pending);
+  // Note that we hand focus back to the press, as a native menu returns it to its button, because closing takes the focused menu away with it.
+  const close = () => {
+    setOpen(false);
+    button.current?.focus();
+  };
   return (
-    <>
+    <span className="pull-request-picker relative inline-flex" ref={box}>
       <PickerButton
+        ref={button}
         label={label}
         word={word}
         // Note that a busy button takes no press of its own, so it is left to say so rather than drawn disabled.
         disabled={(writes.pending !== undefined && !busy) || refreshing}
         busy={busy}
         busyLabel={busyLabel}
-        trigger={{
-          ...menu.trigger(dropBelowStart),
-          onClick: (event: React.MouseEvent<HTMLElement>) => {
-            options.ask();
-            menu.trigger(dropBelowStart).onClick(event);
-          },
+        open={open}
+        menuId={menuId}
+        onPress={() => {
+          if (!open) options.ask();
+          setOpen(!open);
         }}
       />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          replayUnmasked
-          label={heading}
-          heading={<ReplayUnmask>{heading}</ReplayUnmask>}
-          menu={menu.drawn}
-          groups={groups}
-          onClose={menu.close}
+      {drawn.mounted ? (
+        <ActionSearchMenu
+          id={menuId}
+          search={search}
+          place={{ align: POPOVER_ALIGN.START }}
+          leaving={drawn.leaving}
+          menuRef={drawn.ref}
+          onDone={close}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && box.current?.contains(left))) setOpen(false);
+          }}
         />
-      )}
-    </>
+      ) : null}
+    </span>
   );
 }
 
@@ -422,14 +455,21 @@ export function ReviewerPicker({
   const asked = new Set(picks.requested.map((person) => person.login));
   const askedTeams = new Set(picks.requestedTeams.map((team) => team.slug));
   const name = useNamer();
+  const actions = reviewerActions(options, author, asked, askedTeams, picks, name);
   return (
     <OptionsPicker
       label={PICKER_WORDS.REVIEWERS}
       word={PICKER_WORDS.REVIEWER}
-      heading={PICKER_WORDS.REVIEWERS_MENU}
       busyLabel={PICKER_WORDS.REVIEWERS_BUSY}
       busyOn={REVIEWER_ACTIONS}
-      groups={reviewerGroups(options, author, asked, askedTeams, picks, writes, name)}
+      search={{
+        label: PICKER_WORDS.REVIEWERS_MENU,
+        placeholder: PICKER_WORDS.REVIEWERS_MENU,
+        noMatch: PICKER_WORDS.NO_REVIEWER_MATCH,
+        actions,
+        note: optionsNote(options, actions.length, PICKER_WORDS.NO_REVIEWERS),
+        replayUnmasked: true,
+      }}
       options={options}
       writes={writes}
       refreshing={refreshing}
@@ -437,19 +477,17 @@ export function ReviewerPicker({
   );
 }
 
-/** The reviewer picker's groups: the teams, then the people by their GitHub face and card, each checked while asked; a stand-in while what they offer is read. */
-function reviewerGroups(
+/** The reviewer picker's actions: the teams, then the people by their GitHub face and card, each checked while asked; none until what they offer is read. */
+function reviewerActions(
   options: ReviewOptions,
   author: string | undefined,
   asked: ReadonlySet<string>,
   askedTeams: ReadonlySet<string>,
   picks: PullRequestPicks,
-  writes: PullRequestWrites,
   name: (person: GitHubPerson) => Actor,
-): readonly (readonly MenuAction[])[] {
+): readonly MenuAction[] {
   const { read } = options;
-  if (read.kind !== OPTIONS.LANDED) return [[standInItem(options)]];
-  const busy = writes.pending !== undefined;
+  if (read.kind !== OPTIONS.LANDED) return [];
   const teams = read.value.teams.map((team): MenuAction => {
     const on = askedTeams.has(team.slug);
     return {
@@ -458,7 +496,6 @@ function reviewerGroups(
       icon: <UsersRoundIcon aria-hidden="true" />,
       detail: PICKER_WORDS.TEAM,
       checked: on,
-      disabled: busy,
       onSelect: () => picks.pickTeam(team, !on),
     };
   });
@@ -473,14 +510,10 @@ function reviewerGroups(
         icon: <ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />,
         card: actorCard(actor),
         checked: on,
-        disabled: busy,
         onSelect: () => picks.pickPerson(user, !on),
       };
     });
-  const groups = [teams, people].filter((group) => group.length > 0);
-  return groups.length === 0
-    ? [[{ label: PICKER_WORDS.NO_REVIEWERS, disabled: true, onSelect: () => undefined }]]
-    : groups;
+  return [...teams, ...people];
 }
 
 /**
@@ -502,14 +535,21 @@ export function LabelPicker({
   refreshing: boolean;
 }): React.JSX.Element {
   const on = new Set(picks.labels.map((label) => label.name));
+  const actions = labelActions(options, on, picks);
   return (
     <OptionsPicker
       label={PICKER_WORDS.LABELS}
       word={PICKER_WORDS.LABEL}
-      heading={PICKER_WORDS.LABELS_MENU}
       busyLabel={PICKER_WORDS.LABELS_BUSY}
       busyOn={LABEL_ACTIONS}
-      groups={[labelItems(options, on, picks, writes)]}
+      search={{
+        label: PICKER_WORDS.LABELS_MENU,
+        placeholder: PICKER_WORDS.LABELS_SEARCH,
+        noMatch: PICKER_WORDS.NO_LABEL_MATCH,
+        actions,
+        note: optionsNote(options, actions.length, PICKER_WORDS.NO_LABELS),
+        replayUnmasked: true,
+      }}
       options={options}
       writes={writes}
       refreshing={refreshing}
@@ -517,18 +557,14 @@ export function LabelPicker({
   );
 }
 
-/** The label picker's items, each checked while on; a stand-in while what it offers is read. */
-function labelItems(
+/** The label picker's actions, each checked while on; none until what it offers is read. */
+function labelActions(
   options: ReviewOptions,
   on: ReadonlySet<string>,
   picks: PullRequestPicks,
-  writes: PullRequestWrites,
 ): readonly MenuAction[] {
   const { read } = options;
-  if (read.kind !== OPTIONS.LANDED) return [standInItem(options)];
-  if (read.value.labels.length === 0) {
-    return [{ label: PICKER_WORDS.NO_LABELS, disabled: true, onSelect: () => undefined }];
-  }
+  if (read.kind !== OPTIONS.LANDED) return [];
   return read.value.labels.map((label): MenuAction => {
     const labeled = on.has(label.name);
     return {
@@ -536,7 +572,6 @@ function labelItems(
       replayMasked: true,
       icon: <LabelDot color={label.color} />,
       checked: labeled,
-      disabled: writes.pending !== undefined,
       onSelect: () => picks.pickLabel(label, !labeled),
     };
   });

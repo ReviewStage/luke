@@ -57,13 +57,13 @@ import {
 import type { HttpClient } from "effect/http";
 import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "../../core.js";
 import { jsonOf } from "../../http/http-effect.js";
-import type { RelayFrame, RelaySocket } from "../../terminal/relay.js";
-import { capSandboxTimeout } from "../sandbox-keep-alive.js";
-import { SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
+import type { RelaySocket } from "../../terminal/relay.js";
+import { ptyLinesOf, SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
   deploymentOidcToken,
   SANDBOX_STATUS,
   type SandboxUnavailable,
+  snapshotGone,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
@@ -118,6 +118,8 @@ export const BROWSER_UNREACHABLE = {
   SANDBOX_UNAVAILABLE: "sandbox-unavailable",
   /** The stopped sandbox did not come up within the bound. */
   NOT_RESUMED: "not-resumed",
+  /** The stopped sandbox's snapshot is gone, expired or deleted, so it can never resume. */
+  SNAPSHOT_GONE: "snapshot-gone",
   /** The sandbox's image carries no full Chromium: a snapshot made before it did. */
   NO_CHROMIUM: "no-chromium",
   /** Xvfb or Chromium did not start in the sandbox. */
@@ -133,6 +135,8 @@ const UNREACHABLE_MESSAGE = {
   [BROWSER_UNREACHABLE.NOT_OPENED]: "the agent has not opened its sandbox yet",
   [BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE]: "Vercel Sandbox was unavailable",
   [BROWSER_UNREACHABLE.NOT_RESUMED]: "the agent's sandbox did not resume in time",
+  [BROWSER_UNREACHABLE.SNAPSHOT_GONE]:
+    "the agent's sandbox shut down after being idle, and its next turn starts a fresh one",
   [BROWSER_UNREACHABLE.NO_CHROMIUM]: "the agent's sandbox carries no browser",
   [BROWSER_UNREACHABLE.NOT_STARTED]: "the browser did not start in the agent's sandbox",
   [BROWSER_UNREACHABLE.BRIDGE_FAILED]: "the browser in the agent's sandbox could not be reached",
@@ -229,13 +233,9 @@ const BRIDGE_FAILURE = {
   OUT_OF_TIME: "no attempt came up within the bound",
 } as const;
 
-/** The PTY server's exit frame: the bridge ended. */
-const PtyExitSchema = Schema.Struct({ type: Schema.Literal("exit"), code: Schema.Int });
-
 const readLine = readEither(BridgeLineSchema, { excess: EXCESS_KEYS.DROP });
 const readPages = readEither(PagesSchema, { excess: EXCESS_KEYS.DROP });
 const readCreated = readEither(CreatedSchema, { excess: EXCESS_KEYS.DROP });
-const readPtyExit = readEither(PtyExitSchema, { excess: EXCESS_KEYS.DROP });
 
 const unreachable = (reason: BrowserUnreachableReason, status?: number) =>
   new BrowserUnreachable(status === undefined ? { reason } : { reason, status });
@@ -249,20 +249,6 @@ function bridgeFailed(how: string, word?: string) {
   return Effect.andThen(
     Effect.logWarning(`The browser bridge did not come up: ${how}${said}`),
     Effect.fail(unreachable(BROWSER_UNREACHABLE.BRIDGE_FAILED)),
-  );
-}
-
-/** The PTY's output as the lines the bridge wrote, ending where the bridge exits; a text frame that is not its exit is output sent as text. */
-function linesOf(frames: Stream.Stream<RelayFrame>): Stream.Stream<string> {
-  const decoder = new TextDecoder();
-  return frames.pipe(
-    Stream.takeWhile(
-      (frame) => "bytes" in frame || Result.isFailure(readPtyExit(jsonOf(frame.text))),
-    ),
-    Stream.map((frame) =>
-      "bytes" in frame ? decoder.decode(frame.bytes, { stream: true }) : frame.text,
-    ),
-    Stream.splitLines,
   );
 }
 
@@ -351,7 +337,7 @@ function cdpSessionOver(
     });
 
     yield* Effect.forkScoped(
-      Effect.ensuring(Stream.runForEach(linesOf(socket.frames), dispatch), end),
+      Effect.ensuring(Stream.runForEach(ptyLinesOf(socket.frames), dispatch), end),
     );
     yield* Deferred.await(ready).pipe(
       Effect.timeoutOrElse({
@@ -450,7 +436,7 @@ export function browserSessionOf(session: {
 /** The calls of Vercel Sandbox's API the browser makes: a sandbox found, resumed, run in, and its PTY minted. */
 export type BrowserSandboxApi = Pick<
   VercelSandboxApi,
-  "listTagged" | "resume" | "run" | "openInteractive" | "updateTimeout"
+  "listTagged" | "resume" | "run" | "openInteractive"
 >;
 
 /** The service over the REST calls the API makes and the PTY the sandbox serves. */
@@ -468,11 +454,14 @@ export function agentBrowserOver(
       }
       // Note that each try asks the resume again, which answers a sandbox already coming up as it stands,
       // and that a refusal is tried again too, since a sandbox still stopping may refuse its resume; the
-      // last try's failure is the answer, so an outage still says Vercel was unavailable.
-      // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
-      yield* capSandboxTimeout(api, sandbox);
+      // last try's failure is the answer, so an outage still says Vercel was unavailable. A snapshot
+      // gone is the one refusal answered at once, since no later try finds it again.
       const resumed = api.resume(sandbox.name).pipe(
-        Effect.mapError(sandboxUnavailable),
+        Effect.mapError((error) =>
+          snapshotGone(error)
+            ? unreachable(BROWSER_UNREACHABLE.SNAPSHOT_GONE, error.status)
+            : sandboxUnavailable(error),
+        ),
         Effect.flatMap((found) =>
           found.status === SANDBOX_STATUS.RUNNING && found.currentSessionId !== undefined
             ? Effect.succeed(found.currentSessionId)
@@ -483,6 +472,7 @@ export function agentBrowserOver(
         Effect.retry({
           schedule: Schedule.spaced(AGENT_BROWSER.RESUME_SPACING),
           times: AGENT_BROWSER.RESUME_TRIES,
+          while: (failure) => failure.reason !== BROWSER_UNREACHABLE.SNAPSHOT_GONE,
         }),
       );
     });

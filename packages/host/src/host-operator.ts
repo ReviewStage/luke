@@ -33,8 +33,8 @@ import {
   type AgentInboxReadAllView,
   type AgentInboxReadStateParams,
   type AgentInboxReadStateView,
+  type AgentInboxRemindParams,
   type AgentInboxScope,
-  type AgentInboxSnoozeParams,
   type AgentInboxStartParams,
   type AgentListAnswer,
   type AgentListParams,
@@ -82,8 +82,12 @@ import {
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
   agentTranscriptOlderAnswerSchema,
-  type ChatGptSignInAnswerView,
-  chatGptSignInAnswerViewSchema,
+  type ChatGptDeviceLoginParams,
+  type ChatGptDevicePollAnswerView,
+  type ChatGptDeviceStartAnswerView,
+  type ChatGptDeviceWaitParams,
+  chatGptDevicePollAnswerViewSchema,
+  chatGptDeviceStartAnswerViewSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -102,6 +106,7 @@ import {
   type ProviderKeysAnswerView,
   type PullRequestPartParams,
   providerKeysAnswerViewSchema,
+  type ThisMacHostSetParams,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
 import {
@@ -167,9 +172,12 @@ import {
 } from "@repo/features/mcp-client-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
-  type ChaptersModelAnswerView,
-  type ChaptersModelWriteParams,
-  chaptersModelAnswerViewSchema,
+  type PortForwarding,
+  type PortForwardingAnswer,
+  portForwardingAnswerSchema,
+  portForwardingSchema,
+} from "@repo/features/port-forward-acts";
+import {
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
   type PullRequestChaptersReadParams,
@@ -350,8 +358,8 @@ import type {
   AppMemories,
   AppModels,
   AppPages,
-  AppPlanComments,
-  AppPlanDocuments,
+  AppDescriptionComments,
+  AppDescriptionDocuments,
   AppProviderKeys,
   AppPullRequestParts,
   AppRepositoryLists,
@@ -499,11 +507,11 @@ export interface HostOperator {
   tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
   /** The id of the task a link names by its workspace and its number; or that none was found, or the service did not answer. */
   tasksFind(params: TasksFindParams): Effect.Effect<TasksFindAnswer>;
-  /** A page of a plan's history; or that the service did not answer. */
+  /** A page of a description's history; or that the service did not answer. */
   tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
-  /** One revision of a plan beside the one before it; or that the service did not answer. */
+  /** One revision of a description beside the one before it; or that the service did not answer. */
   tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
-  /** One revision of a plan restored as its content; answers whether the service restored it. */
+  /** One revision of a description restored as its content; answers whether the service restored it. */
   tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
@@ -513,43 +521,43 @@ export interface HostOperator {
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** Every plan's or agent's pages the host holds for the windows, whole, each time any of them moves. */
   onPagesChanged(listener: (held: AppPages) => void): () => void;
-  /** One task's plan held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onPlanDocumentsChanged`. */
+  /** One task's description held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onDescriptionDocumentsChanged`. */
   tasksDocumentFollow(scope: TaskDocumentFollow): Effect.Effect<void>;
-  /** One task's plan let go by the windows: it stays followed among those let go lately until later ones push it out. */
+  /** One task's description let go by the windows: it stays followed among those let go lately until later ones push it out. */
   tasksDocumentUnfollow(scope: TaskDocumentFollow): Effect.Effect<void>;
-  /** One task's held plan read again at once, as Try again asks. */
+  /** One task's held description read again at once, as Try again asks. */
   tasksDocumentRetry(scope: TaskDocumentFollow): Effect.Effect<void>;
-  /** Every task's plan the host holds for the windows, whole, each time any of them moves. */
-  onPlanDocumentsChanged(listener: (held: AppPlanDocuments) => void): () => void;
+  /** Every task's description the host holds for the windows, whole, each time any of them moves. */
+  onDescriptionDocumentsChanged(listener: (held: AppDescriptionDocuments) => void): () => void;
   /** One task's or agent's cloud Browser tabs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onBrowserTabsChanged`. */
   tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
   /** One task's or agent's Browser tabs let go by the windows: they stay followed among those let go lately until later ones push them out. */
   tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
   /** Every task's or agent's Browser tabs the host holds for the windows, whole, each time one moves or a takeover lapses. */
   onBrowserTabsChanged(listener: (held: AppBrowserTabs) => void): () => void;
-  /** One task's plan history held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHistoriesChanged`. */
+  /** One task's description history held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHistoriesChanged`. */
   tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
   /** One task's history let go by the windows: it stays followed among those let go lately until later ones push it out. */
   tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
   /** One task's held history read again at once, as Try again asks. */
   tasksHistoryRetry(scope: TaskHistoryFollow): Effect.Effect<void>;
-  /** Every task's plan history the host holds for the windows, whole, each time any of them moves. */
+  /** Every task's description history the host holds for the windows, whole, each time any of them moves. */
   onHistoriesChanged(listener: (held: AppHistories) => void): () => void;
-  /** One picture of one plan as its bytes in base64, or why there is none. */
+  /** One picture of one description as its bytes in base64, or why there is none. */
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
-  /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
+  /** One picture kept on one description, answering the id its text names it by, or why it was not kept. */
   tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
-  /** One task's plan's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onPlanCommentsChanged`. */
+  /** One task's description's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onDescriptionCommentsChanged`. */
   tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
-  /** One plan's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
+  /** One description's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
   tasksCommentsUnfollow(scope: TasksCommentsFollow): Effect.Effect<void>;
-  /** One held plan's or page's comments read again at once, as Try again asks. */
+  /** One held description's or page's comments read again at once, as Try again asks. */
   tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
-  /** Every plan's or page's comments the host holds for the windows, whole, each time any of them moves. */
-  onPlanCommentsChanged(listener: (held: AppPlanComments) => void): () => void;
-  /** A comment thread started on one task's plan, answered as it stands, or why not. */
+  /** Every description's or page's comments the host holds for the windows, whole, each time any of them moves. */
+  onDescriptionCommentsChanged(listener: (held: AppDescriptionComments) => void): () => void;
+  /** A comment thread started on one task's description, answered as it stands, or why not. */
   tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
-  /** One thing done to one comment thread of one task's plan, answered as it stands, or why not. */
+  /** One thing done to one comment thread of one task's description, answered as it stands, or why not. */
   tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
   /** Where every one of the account's integrations stands, held followed for the windows from now until let go, and a while after; what it holds is heard through `onIntegrationsChanged`. */
   integrationsFollow(): Effect.Effect<void>;
@@ -737,6 +745,8 @@ export interface HostOperator {
   onDevicePresenceChanged(listener: (held: AppDevicePresences) => void): () => void;
   /** One of the account's hosts removed; done, or why not. */
   hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
+  /** Run agents on this Mac turned on or off; done, or why not. Only the desktop's host answers it. */
+  hostsThisMacSet(asked: ThisMacHostSetParams): Effect.Effect<HostDoneAnswerView>;
   /** A box's pending pairing read by the code its link named; the box, or why not. */
   hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
   /** A box's pending pairing approved by its code; the host it made, or why not. */
@@ -820,8 +830,6 @@ export interface HostOperator {
   pullRequestChaptersGenerate(
     params: PullRequestChaptersParams,
   ): Effect.Effect<PullRequestChaptersAnswerView>;
-  /** The account's chapters model drawn over its preferences at once and written to the service; the model as kept, or why it is unchanged. */
-  chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
   installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
   /** A workspace's skills let go by the windows. */
@@ -872,10 +880,12 @@ export interface HostOperator {
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** A connected plan's default for the account's coding agents turned on or off; the keys as they then stand. */
   providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
-  /** A ChatGPT sign-in run through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
-  chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
-  /** The ChatGPT sign-in waiting on the browser, withdrawn. */
-  chatGptSignInCancel(): Effect.Effect<void>;
+  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
+  chatGptDeviceStart(): Effect.Effect<ChatGptDeviceStartAnswerView>;
+  /** A device-code login waited on until it settles or an ask after it goes unanswered; the keys as they then stand once it connected. */
+  chatGptDeviceWait(params: ChatGptDeviceWaitParams): Effect.Effect<ChatGptDevicePollAnswerView>;
+  /** A device-code login withdrawn; how it then stands. */
+  chatGptDeviceCancel(params: ChatGptDeviceLoginParams): Effect.Effect<ChatGptDevicePollAnswerView>;
   /** The member's own GitHub token as its login, hint, and status, never the token, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onGitHubTokenChanged`. */
   githubTokenFollow(): Effect.Effect<void>;
   /** The member's GitHub token let go by the windows. */
@@ -920,7 +930,7 @@ export interface HostOperator {
   agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
   agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
-  agentInboxSnooze(params: AgentInboxSnoozeParams): Effect.Effect<AgentInboxReadStateView>;
+  agentInboxRemind(params: AgentInboxRemindParams): Effect.Effect<AgentInboxReadStateView>;
   /** Where one item the account may read stands, its agent, task, and workspace; or why there is no answer. */
   agentInboxItemHome(params: AgentInboxItemHomeParams): Effect.Effect<AgentInboxItemHomeView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
@@ -1014,6 +1024,13 @@ export interface HostOperator {
   onBrowserLiveMessage(listener: (message: BrowserLiveMessageEvent) => void): () => void;
   /** A live view's socket closed, with its code, by its connection. */
   onBrowserLiveClosed(listener: (closed: BrowserLiveClosedEvent) => void): () => void;
+  /** An agent's forwarding turned on or off, answering how it then stands; nothing where the host refused. */
+  portForwardSet(params: {
+    agentId: string;
+    on: boolean;
+  }): Effect.Effect<PortForwardingAnswer | undefined>;
+  /** The one agent forwarded to this Mac's localhost and how its forwarding stands, or none, each time it moves. */
+  onPortForwardingChanged(listener: (forwarding: PortForwarding) => void): () => void;
 }
 
 /**
@@ -1496,11 +1513,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_UNFOLLOW, commentsFollowParams(scope))),
     tasksCommentsRetry: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_RETRY, commentsFollowParams(scope))),
-    onPlanCommentsChanged: (listener) =>
+    onDescriptionCommentsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.PLAN_COMMENTS_CHANGED,
+        GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED,
         // Note that the held comments are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) => (isRecord(payload) ? answered<AppPlanComments>(payload) : undefined),
+        (payload) => (isRecord(payload) ? answered<AppDescriptionComments>(payload) : undefined),
         listener,
       ),
     tasksCommentStart: (params) =>
@@ -1560,11 +1577,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: scope.taskId })),
     tasksDocumentRetry: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_RETRY, { taskId: scope.taskId })),
-    onPlanDocumentsChanged: (listener) =>
+    onDescriptionDocumentsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.PLAN_DOCUMENTS_CHANGED,
-        // Note that the held plans are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) => (isRecord(payload) ? answered<AppPlanDocuments>(payload) : undefined),
+        GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED,
+        // Note that the held descriptions are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) => (isRecord(payload) ? answered<AppDescriptionDocuments>(payload) : undefined),
         listener,
       ),
     tasksBrowserTabsFollow: (scope) =>
@@ -1587,7 +1604,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onHistoriesChanged: (listener) =>
       on(
         GATEWAY_EVENT.HISTORIES_CHANGED,
-        // Note that the held histories are the host's own, handed over in this process, so they are passed on as built, as the held plans are.
+        // Note that the held histories are the host's own, handed over in this process, so they are passed on as built, as the held descriptions are.
         (payload) => (isRecord(payload) ? answered<AppHistories>(payload) : undefined),
         listener,
       ),
@@ -1986,6 +2003,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.HOSTS_REMOVE, { id }),
         answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
       ),
+    hostsThisMacSet: (asked) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_THIS_MAC_SET, { ...asked }),
+        answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
+      ),
     hostsPairingRead: (code) =>
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_PAIRING_READ, { code }),
@@ -2018,7 +2040,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     // Note that the Start goes on whole, as the act port decoded it against the same schema the
     // Gateway's method reads, because a field copied by name is one a later field is left out of,
-    // as an empty draft's `blank` was, which handed its agent the plan.
+    // as an empty draft's `blank` was, which handed its agent the description.
     agentStart: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_START, params),
@@ -2229,11 +2251,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, pullRequestChaptersRead(params)),
         answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    chaptersModelWrite: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
-        answerOf(chaptersModelAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     installedSkillsFollow: (params) =>
       fire(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW, { workspaceId: params.workspaceId }),
@@ -2340,12 +2357,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    chatGptSignIn: () =>
+    chatGptDeviceStart: () =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN),
-        answerOf(chatGptSignInAnswerViewSchema, AGENT_UNANSWERED),
+        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_START),
+        answerOf(chatGptDeviceStartAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    chatGptSignInCancel: () => fire(client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL)),
+    chatGptDeviceWait: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_WAIT, {
+          loginId: params.loginId,
+          intervalSeconds: params.intervalSeconds,
+        }),
+        answerOf(chatGptDevicePollAnswerViewSchema, AGENT_UNANSWERED),
+      ),
+    chatGptDeviceCancel: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_CANCEL, { loginId: params.loginId }),
+        answerOf(chatGptDevicePollAnswerViewSchema, AGENT_UNANSWERED),
+      ),
     githubTokenFollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW, {})),
     githubTokenUnfollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW, {})),
     githubTokenRetry: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_RETRY, {})),
@@ -2466,9 +2495,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
       ),
-    agentInboxSnooze: (params) =>
+    agentInboxRemind: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_SNOOZE, {
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_REMIND, {
           itemId: params.itemId,
           until: params.until,
         }),
@@ -2736,6 +2765,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.BROWSER_LIVE_CLOSED,
         (payload) => Result.getOrUndefined(readEither(browserLiveClosedEventSchema)(payload)),
         listener,
+      ),
+    portForwardSet: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: params.agentId, on: params.on }),
+        answerOf(portForwardingAnswerSchema, undefined),
+      ),
+    onPortForwardingChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PORT_FORWARDS_CHANGED,
+        (payload) => {
+          const read = readEither(portForwardingSchema)(payload);
+          return Result.isSuccess(read) ? { forwarding: read.success } : undefined;
+        },
+        ({ forwarding }) => listener(forwarding),
       ),
     onSessionReplayChanged: (listener) =>
       on(

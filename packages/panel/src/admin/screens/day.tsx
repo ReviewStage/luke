@@ -8,19 +8,23 @@ import {
   DAY_ACCOUNT_COUNT,
   type DayAccountCount,
 } from "@repo/features/admin-overview-vocabulary";
-import { ADMIN_READ } from "@repo/features/admin-wire";
 import { formatCount } from "@repo/features/number-format";
 import { formatDayHeading } from "@repo/features/time-format";
 import { readFailedWords } from "@repo/features/words";
+import { partialDayKey } from "@repo/ui/daily-series";
 import {
+  createDataTableColumnHelper,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
   DataTable,
-  type DataTableColumn,
-} from "@repo/ui";
-import { partialDayKey } from "@repo/ui/daily-series";
+  type DataTableColumns,
+  DataTableSkeleton,
+} from "@repo/ui/data-table";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminDayQuery, useAdminSignOut } from "../admin-queries.js";
 import { adminReadView } from "../admin-read-view.js";
 import { activityFeatureLabel } from "../charts/activity-chart.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
@@ -28,9 +32,7 @@ import { AdminViewOptions } from "../chrome/controls.js";
 import { DayActivityNote, DayNote, retiredTitle } from "../chrome/notes.js";
 import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
-import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { ADMIN_TAB, dayReadQuery } from "../routing.js";
-import { useAdminRead } from "../use-admin-read.js";
 
 const DAY_ERROR = readFailedWords("this day");
 
@@ -43,7 +45,7 @@ const ACCOUNT_COLUMN = "account";
 /** Each per-account count's column heading, in the order the columns stand. */
 const DAY_ACCOUNT_COUNT_LABEL = {
   [DAY_ACCOUNT_COUNT.TASKS_CREATED]: "Tasks",
-  [DAY_ACCOUNT_COUNT.PLAN_REVISIONS]: "Plan revisions",
+  [DAY_ACCOUNT_COUNT.DESCRIPTION_REVISIONS]: "Description revisions",
   [DAY_ACCOUNT_COUNT.AGENTS_STARTED]: "Agents",
   [DAY_ACCOUNT_COUNT.INBOX_ANSWERED]: "Inbox answered",
   [DAY_ACCOUNT_COUNT.AUTOMATION_RUNS]: "Automation runs",
@@ -78,25 +80,27 @@ function activityStats(stillFilling: boolean): readonly StatSpec<AdminDayDetail>
   ];
 }
 
+const activeAccountColumn = createDataTableColumnHelper<AdminDayActiveAccount>();
+
 /** The live table's columns: who acted, then how many of each kind. */
 function activeAccountColumns(
   onOpen: (id: string) => void,
-): readonly DataTableColumn<AdminDayActiveAccount>[] {
-  return [
-    {
-      key: ACCOUNT_COLUMN,
-      label: "Account",
-      cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
-    },
-    ...Object.values(DAY_ACCOUNT_COUNT).map(
-      (kind): DataTableColumn<AdminDayActiveAccount> => ({
-        key: kind,
-        label: DAY_ACCOUNT_COUNT_LABEL[kind],
-        kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-        cell: (row) => formatCount(row.counts[kind]),
+): DataTableColumns<AdminDayActiveAccount> {
+  return activeAccountColumn.columns([
+    activeAccountColumn.display({
+      id: ACCOUNT_COLUMN,
+      header: "Account",
+      cell: ({ row: { original: row } }) => <AccountCell account={row} onOpen={onOpen} />,
+    }),
+    ...Object.values(DAY_ACCOUNT_COUNT).map((kind) =>
+      activeAccountColumn.display({
+        id: kind,
+        header: DAY_ACCOUNT_COUNT_LABEL[kind],
+        meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+        cell: ({ row: { original: row } }) => formatCount(row.counts[kind]),
       }),
     ),
-  ];
+  ]);
 }
 
 /**
@@ -121,23 +125,23 @@ function hostedStats(stillFilling: boolean): readonly StatSpec<AdminDayDetail>[]
   ];
 }
 
+const dayAccountColumn = createDataTableColumnHelper<AdminDayAccount>();
+
 /** The day's two columns: who called, and how many times. */
-function dayAccountColumns(
-  onOpen: (id: string) => void,
-): readonly DataTableColumn<AdminDayAccount>[] {
-  return [
-    {
-      key: ACCOUNT_COLUMN,
-      label: "Account",
-      cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
-    },
-    {
-      key: "calls",
-      label: "Calls",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => formatCount(row.calls),
-    },
-  ];
+function dayAccountColumns(onOpen: (id: string) => void): DataTableColumns<AdminDayAccount> {
+  return dayAccountColumn.columns([
+    dayAccountColumn.display({
+      id: ACCOUNT_COLUMN,
+      header: "Account",
+      cell: ({ row: { original: row } }) => <AccountCell account={row} onOpen={onOpen} />,
+    }),
+    dayAccountColumn.display({
+      id: "calls",
+      header: "Calls",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: row } }) => formatCount(row.calls),
+    }),
+  ]);
 }
 
 /**
@@ -153,13 +157,14 @@ function ActiveAccountsTable({
   accounts: readonly AdminDayActiveAccount[];
   onOpen: (id: string) => void;
 }): React.JSX.Element {
+  const activeColumns = useMemo(() => activeAccountColumns(onOpen), [onOpen]);
   return (
     <DataTable
       label="Accounts active this day"
-      columns={activeAccountColumns(onOpen)}
+      columns={activeColumns}
       rows={accounts}
-      rowKey={(row) => row.id}
-      empty="No tasks, plan revisions, or agents recorded on this day."
+      getRowId={(row) => row.id}
+      empty="No tasks, description revisions, or agents recorded on this day."
       minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
       onRowPress={(row) => onOpen(row.id)}
     />
@@ -174,12 +179,13 @@ function DayAccountsTable({
   accounts: readonly AdminDayAccount[];
   onOpen: (id: string) => void;
 }): React.JSX.Element {
+  const dayColumns = useMemo(() => dayAccountColumns(onOpen), [onOpen]);
   return (
     <DataTable
       label="Hosted-tier accounts this day"
-      columns={dayAccountColumns(onOpen)}
+      columns={dayColumns}
       rows={accounts}
-      rowKey={(row) => row.id}
+      getRowId={(row) => row.id}
       empty="No hosted-tier calls recorded on this day."
       minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
       onRowPress={(row) => onOpen(row.id)}
@@ -203,6 +209,8 @@ function DaySections({
   detail: AdminDayDetail | undefined;
   onOpenAccount: (id: string) => void;
 }): React.JSX.Element {
+  const dayColumns = useMemo(() => dayAccountColumns(onOpenAccount), [onOpenAccount]);
+  const activeColumns = useMemo(() => activeAccountColumns(onOpenAccount), [onOpenAccount]);
   const stillFilling = partialDayKey([{ day }], detail?.generatedAt ?? Date.now()) !== undefined;
   return (
     <>
@@ -214,7 +222,7 @@ function DaySections({
         {detail === undefined ? (
           <DataTableSkeleton
             label="Accounts active this day"
-            columns={activeAccountColumns(onOpenAccount)}
+            columns={activeColumns}
             rows={ACCOUNT_SKELETON_ROWS}
             minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
             cells={{ [ACCOUNT_COLUMN]: <AccountCellSkeleton /> }}
@@ -244,7 +252,7 @@ function DaySections({
         {detail === undefined ? (
           <DataTableSkeleton
             label="Hosted-tier accounts this day"
-            columns={dayAccountColumns(onOpenAccount)}
+            columns={dayColumns}
             rows={ACCOUNT_SKELETON_ROWS}
             minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
             cells={{ [ACCOUNT_COLUMN]: <AccountCellSkeleton /> }}
@@ -291,20 +299,16 @@ export function DayScreen({
 }): React.JSX.Element {
   const { reads, gate } = useAdminDoors();
   const query = dayReadQuery(day, hideAdmins);
-  const { state, refreshing, reload, withdraw } = useAdminRead(
-    { procedure: ADMIN_READ.DAY, query: query },
-    (signal) => reads.day(query, signal),
-    DAY_ERROR,
-    { keeps: (shown) => shown.day === day },
-  );
-  const signOut = () => void withdraw(onSignOut);
+  const read = useQuery({ ...adminDayQuery(reads, query), enabled: !gate.heldAtGate() });
+  const withdraw = useAdminSignOut(onSignOut);
+  const signOut = () => withdraw.mutate();
   const back: AdminWayBack = { tab: ADMIN_TAB.DASHBOARD, onBack };
   const controls = (
     <AdminViewOptions hideAdmins={hideAdmins} onHideAdminsChange={onHideAdminsChange} />
   );
 
   return adminReadView({
-    read: { state, refreshing, reload },
+    read,
     gate,
     email: account?.email,
     onSignOut: signOut,

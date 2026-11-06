@@ -20,7 +20,7 @@ import { StartingAgentTab, type TranscriptCards } from "./agent-tab.js";
  * starting-agent-tab.test.ts -- the tab of an agent New task is still
  * starting draws the developer's words as its first line and says it is
  * starting, before the service has made the agent, and the column draws a
- * Start on the plan still out as that tab under the press's key. Synthetic
+ * Start on the description still out as that tab under the press's key. Synthetic
  * throughout.
  */
 
@@ -62,7 +62,7 @@ test("an agent still starting draws the words it was started on as its first lin
   assert.match(words, /Starting/u);
 });
 
-test("the column draws a Start still out on the plan as its agent's tab saying it is starting, under the press's key", async () => {
+test("the column draws a Start still out on the description as its agent's tab saying it is starting, under the press's key", async () => {
   fakeAppBridge({});
   const base = agentsControl();
   const agents = agentsControl({

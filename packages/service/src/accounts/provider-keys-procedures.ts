@@ -20,14 +20,15 @@
  * replaces nothing. The answer's `keys` are API keys alone, and the
  * subscriptions stand apart beside them.
  *
- * A ChatGPT sign-in (`chatgpt_oauth`) is the one credential that is not a
- * pasted key: the desktop hands it over on its own route, after signing in
- * under the account's host id, which a route of its own mints once and
- * serves. It is braked and sealed as a key is and never sent to OpenAI on
- * its save, though its ID token is checked against OpenAI's published keys
- * and must name the issued client and the account handed over; removing it revokes its renewable session at OpenAI first
- * (`chatgpt-credentials.ts`), and the answer says where OpenAI did not
- * confirm that.
+ * A ChatGPT plan (`chatgpt_oauth`) is the one credential that is not a
+ * pasted key: the service connects it through Codex's device-code login
+ * (`chatgpt-device-login.ts`), where a start answers the code the account
+ * enters at OpenAI, the panel polls until the login connects or fails, and
+ * a cancel drops it. Removing the plan revokes its renewable session at
+ * OpenAI first (`chatgpt-credentials.ts`), and the answer says where OpenAI
+ * did not confirm that. A plan the retired third-party Sign in with ChatGPT
+ * connected can no longer renew, so it is removed as the keys are read and
+ * answered as not connected.
  *
  * A key that the deployment's ring can no longer open answers unreadable
  * rather than as its stored status, so the account is told to replace it.
@@ -44,6 +45,7 @@
  * key is good is worth hammering with keys that are not the caller's.
  */
 
+import { dropChatGptDeviceLogin } from "@repo/database/models/chatgpt-device-login-store";
 import {
   type KeyRing,
   openProviderKey,
@@ -56,6 +58,10 @@ import {
   setProviderKeyForAgents,
 } from "@repo/database/models/provider-key-store";
 import {
+  CHATGPT_DEVICE_FAILURE_MESSAGE,
+  CHATGPT_DEVICE_LOGIN,
+  type ChatGptDeviceLoginOutcome,
+  type ChatGptDevicePollAnswer,
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
@@ -68,9 +74,13 @@ import {
   SUBSCRIPTION_KIND_PROVIDER,
   type SubscriptionKeySummary,
 } from "@repo/features/provider-key-wire";
-import { Clock, DateTime, Duration, Effect, Redacted, Result } from "effect";
+import { Clock, DateTime, Duration, Effect, Option, Redacted, Result } from "effect";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
-import { hostedStoreOrUnavailable, type UserIdResolver } from "../http/http-effect.js";
+import {
+  HOSTED_REFUSAL,
+  hostedStoreOrUnavailable,
+  type UserIdResolver,
+} from "../http/http-effect.js";
 import { makeRateBrake } from "../http/rate-brake.js";
 import { accountMiddleware, hosted, keyRingMiddleware } from "../orpc/base.js";
 import {
@@ -80,18 +90,28 @@ import {
   providerKeyHint,
 } from "../providers/provider-key-check.js";
 import {
-  CHATGPT_ID_TOKEN,
-  chatGptCredentialsRefusal,
-  chatGptHostId,
   chatGptSigningKeys,
+  dropRetiredChatGptCredentials,
   removeChatGptCredentials,
-  sealChatGptCredentials,
-  verifyChatGptIdToken,
+  retiredChatGptRow,
 } from "./chatgpt-credentials.js";
+import { pollChatGptDeviceLogin, startChatGptDeviceLogin } from "./chatgpt-device-login.js";
 
 const SAVE_BRAKE = {
   windowMs: Duration.toMillis(Duration.hours(1)),
   maxRequestsPerWindow: 10,
+  maxTrackedUsers: 10_000,
+} as const;
+
+/**
+ * A device-code login's polls and cancels, per account: the panel polls
+ * every few seconds for the fifteen minutes a code stands, so they are
+ * braked apart from saves, at what a panel polling as it is told never
+ * reaches.
+ */
+const DEVICE_POLL_BRAKE = {
+  windowMs: Duration.toMillis(Duration.minutes(1)),
+  maxRequestsPerWindow: 30,
   maxTrackedUsers: 10_000,
 } as const;
 
@@ -107,13 +127,22 @@ const SUBSCRIPTION_KINDS = Object.values(PROVIDER_KEY_KIND).filter(
 /** Every Claude setup-token's own prefix, an OAuth token's, which no API key carries. */
 const CLAUDE_SETUP_TOKEN_PREFIX = "sk-ant-oat";
 
-/** The account's credentials of one kind as it is shown them, each one the ring cannot open answered unreadable. */
+/**
+ * The account's credentials of one kind as it is shown them, each one the
+ * ring cannot open answered unreadable, and a ChatGPT plan the retired
+ * third-party sign-in sealed removed and left out.
+ */
 const summariesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   kind: ProviderKeyKind,
   ring: KeyRing,
 ) {
-  const rows = yield* hostedStoreOrUnavailable(listProviderKeyRows(userId, kind));
+  const listed = yield* hostedStoreOrUnavailable(listProviderKeyRows(userId, kind));
+  const retired =
+    kind === PROVIDER_KEY_KIND.CHATGPT_OAUTH &&
+    listed.some((row) => retiredChatGptRow(ring, userId, row));
+  if (retired) yield* hostedStoreOrUnavailable(dropRetiredChatGptCredentials(userId, ring));
+  const rows = retired ? [] : listed;
   const now = yield* Clock.currentTimeMillis;
   return rows.map((row) => {
     const readable = Result.isSuccess(
@@ -158,6 +187,17 @@ const keysAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
+/** A device-code login's outcome as the wire answers it, a failure with its fixed sentence. */
+function deviceAnswerOf(outcome: ChatGptDeviceLoginOutcome): ChatGptDevicePollAnswer {
+  switch (outcome) {
+    case CHATGPT_DEVICE_LOGIN.PENDING:
+    case CHATGPT_DEVICE_LOGIN.CONNECTED:
+      return { outcome };
+    default:
+      return { outcome, message: CHATGPT_DEVICE_FAILURE_MESSAGE[outcome] };
+  }
+}
+
 /** Whether a subscription credential is saved for the provider its kind belongs to and spelled as one of its kind; nothing is asked of the provider. */
 function subscriptionShapeOf(
   provider: ProviderKeyProvider,
@@ -171,7 +211,7 @@ function subscriptionShapeOf(
         ? undefined
         : PROVIDER_KEY_REJECTION.INVALID;
     case PROVIDER_KEY_KIND.CHATGPT_OAUTH:
-      // A ChatGPT sign-in is handed over whole on its own route, never pasted as a key.
+      // A ChatGPT plan is connected through its device-code login, never pasted as a key.
       return PROVIDER_KEY_REJECTION.INVALID;
   }
 }
@@ -179,6 +219,7 @@ function subscriptionShapeOf(
 /** The provider keys' procedures, braked per instance, each to a signed-in caller on a deployment that holds a ring. */
 export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
   const brake = makeRateBrake(SAVE_BRAKE);
+  const pollBrake = makeRateBrake(DEVICE_POLL_BRAKE);
   const signingKeys = chatGptSigningKeys();
   const keyed = hosted.account.use(accountMiddleware(seams.resolveUserId)).use(keyRingMiddleware);
   return {
@@ -235,7 +276,7 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
       return yield* keysAnswer(userId, ring);
     }),
 
-    /** One provider's credential removed, by the provider and the kind the query names; an API key where it names none. A ChatGPT sign-in is revoked at OpenAI first. */
+    /** One provider's credential removed, by the provider and the kind the query names; an API key where it names none. A ChatGPT plan is revoked at OpenAI first. */
     removeProviderKey: keyed.removeProviderKey.effect(function* ({ context, input }) {
       const { userId, ring } = context;
       const kind = input.query.kind ?? PROVIDER_KEY_KIND.API_KEY;
@@ -259,50 +300,44 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
       return yield* keysAnswer(userId, ring);
     }),
 
-    /** The account's ChatGPT host id, minted on its first read and the same on every read after it. */
-    chatGptHost: keyed.chatGptHost.effect(function* ({ context }) {
-      const extAgentHostId = yield* hostedStoreOrUnavailable(chatGptHostId(context.userId));
-      return { extAgentHostId };
+    /** A ChatGPT plan's connection through Codex's device-code login begun, braked with saves: the code to enter and the login to poll; what claims the sign-in stays sealed on the service. */
+    startChatGptDeviceLogin: keyed.startChatGptDeviceLogin.effect(function* ({ context }) {
+      const { userId, ring } = context;
+      if (!(yield* brake.check(userId))) return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
+      const started = yield* hostedStoreOrUnavailable(startChatGptDeviceLogin(userId, ring));
+      if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR);
+      return started.value;
     }),
 
-    /** A ChatGPT sign-in the desktop completed, braked, its ID token checked against OpenAI's published keys, and kept sealed, replacing the one the account held; no credential is sent to OpenAI. */
-    saveChatGptCredentials: keyed.saveChatGptCredentials.effect(function* ({ context, input }) {
+    /** One check of the account's device-code login against OpenAI, braked; once connected, the answer carries the account's keys as they then stand. */
+    pollChatGptDeviceLogin: keyed.pollChatGptDeviceLogin.effect(function* ({ context, input }) {
       const { userId, ring } = context;
-      // Note that nothing of the body is ever logged or answered, because every field but the scopes is a credential or names one.
-      if (!(yield* brake.check(userId))) {
-        return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
+      if (!(yield* pollBrake.check(userId))) {
+        return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
       }
-      const refused = chatGptCredentialsRefusal(input);
-      if (refused !== undefined) return yield* keysAnswer(userId, ring, refused);
-      const checked = yield* verifyChatGptIdToken(input, signingKeys);
-      if (checked === CHATGPT_ID_TOKEN.UNVERIFIED) {
-        return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN);
-      }
-      if (checked === CHATGPT_ID_TOKEN.UNREACHABLE) {
-        return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.UNREACHABLE);
-      }
-      const now = yield* DateTime.nowAsDate;
-      const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(ring, userId, input, now);
-      yield* hostedStoreOrUnavailable(
-        saveProviderKey(
-          userId,
-          PROVIDER_KEY_PROVIDER.OPENAI,
-          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
-          sealed,
-          hint,
-          null,
-          now,
-          accessExpiresAt,
-        ),
+      const polled = yield* hostedStoreOrUnavailable(
+        pollChatGptDeviceLogin({ userId, loginId: input.loginId }, ring, signingKeys),
       );
-      yield* recordServerEvent(
-        SERVER_EVENT.PROVIDER_KEY_CREATE,
-        { userId },
-        {
-          provider: PROVIDER_KEY_PROVIDER.OPENAI,
-        },
-      );
-      return yield* keysAnswer(userId, ring);
+      if (polled.connectedNow) {
+        yield* recordServerEvent(
+          SERVER_EVENT.PROVIDER_KEY_CREATE,
+          { userId },
+          { provider: PROVIDER_KEY_PROVIDER.OPENAI },
+        );
+      }
+      const answered = deviceAnswerOf(polled.outcome);
+      if (polled.outcome !== CHATGPT_DEVICE_LOGIN.CONNECTED) return answered;
+      return { ...answered, keys: yield* keysAnswer(userId, ring) };
+    }),
+
+    /** The account's device-code login dropped, braked with its polls; a plan it already connected stands. */
+    cancelChatGptDeviceLogin: keyed.cancelChatGptDeviceLogin.effect(function* ({ context, input }) {
+      const { userId } = context;
+      if (!(yield* pollBrake.check(userId))) {
+        return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
+      }
+      yield* hostedStoreOrUnavailable(dropChatGptDeviceLogin({ userId, loginId: input.loginId }));
+      return deviceAnswerOf(CHATGPT_DEVICE_LOGIN.CANCELED);
     }),
   };
 }

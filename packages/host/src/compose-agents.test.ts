@@ -27,7 +27,6 @@ import {
   PULL_REQUEST_STATE,
   QUEUE_CHANGE,
 } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { FAILURE_FACT, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_TYPE } from "@repo/features/github-image";
@@ -552,11 +551,6 @@ function fakeService() {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHAPTERS;
       }),
-    writeChaptersModel: (model) =>
-      Effect.sync(() => {
-        asked.push(`chapters-model-write:${model}`);
-        return { model };
-      }),
     overviewPullRequest: (agentId) =>
       Effect.sync(() => {
         asked.push(`overview-pull-request:${agentId}`);
@@ -615,6 +609,9 @@ function fakeService() {
         asked.push(`forAgents:${change.kind}:${String(change.forAgents)}`);
         return { keys: [] };
       }),
+    startChatGptDeviceLogin: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    pollChatGptDeviceLogin: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    cancelChatGptDeviceLogin: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     readGitHubToken: () =>
       Effect.sync(() => {
         asked.push("token");
@@ -651,7 +648,7 @@ function fakeService() {
         return { text: "Run the tests" };
       }),
     taskInboxLive: (taskId, _userId, poll, after) => {
-      if (poll !== true) asked.push(`plan-inbox-live:${taskId}`);
+      if (poll !== true) asked.push(`description-inbox-live:${taskId}`);
       return scopeLive(poll, after);
     },
     agentInboxLive: (agentId, _userId, poll, after) => {
@@ -695,9 +692,9 @@ function fakeService() {
         asked.push(`inbox-unread:${itemId}`);
         return { id: itemId, unread: true, ...committedIn };
       }),
-    snoozeInboxItem: (itemId, until) =>
+    remindInboxItem: (itemId, until) =>
       Effect.sync(() => {
-        asked.push(`inbox-snooze:${itemId}:${until ?? "none"}`);
+        asked.push(`inbox-remind:${itemId}:${until ?? "none"}`);
         return { id: itemId, unread: false, ...committedIn };
       }),
     markInboxRead: (request) =>
@@ -1038,6 +1035,7 @@ function subject(
     sendsNetwork?: boolean;
     accountId?: () => string | undefined;
     listed?: (txid: string | undefined) => Effect.Effect<void>;
+    repositoriesMoved?: Effect.Effect<void>;
     pool?: EntityPool;
   } = {},
 ) {
@@ -1057,6 +1055,9 @@ function subject(
       focus: yield* windowFocus,
       client: service.client,
       ...(options.listed === undefined ? undefined : { listed: options.listed }),
+      ...(options.repositoriesMoved === undefined
+        ? undefined
+        : { repositoriesMoved: options.repositoriesMoved }),
       pool: options.pool ?? (yield* entityPool()),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
@@ -1294,10 +1295,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHAPTERS,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: CHAPTERS_MODEL.OPUS }),
-      { model: CHAPTERS_MODEL.OPUS },
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_GITHUB_IMAGE, {
         agentId: AGENT_ID,
         src: "https://camo.githubusercontent.com/abc",
@@ -1416,7 +1413,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { id: ITEM.id, unread: false },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_SNOOZE, { itemId: ITEM.id, until: 5_000 }),
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_REMIND, { itemId: ITEM.id, until: 5_000 }),
       { id: ITEM.id, unread: false },
     );
     assert.deepEqual(
@@ -1447,7 +1444,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
       `chapters-generate:${AGENT_ID}#11`,
-      `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
       `pull-request-action:${AGENT_ID}#11:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
@@ -1460,7 +1456,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `inbox-start:${AGENT_ID}:Annual plan copy:Draft the annual plan's line too.:start-1`,
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
-      `inbox-snooze:${ITEM.id}:5000`,
+      `inbox-remind:${ITEM.id}:5000`,
       `inbox-read-all:${WORKSPACE_ID}`,
     ]);
   }),
@@ -1599,10 +1595,19 @@ it.effect(
 );
 
 it.effect(
-  "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held, and a save the schema refuses is refused in words that hold no token",
+  "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held once the repository lists moved, and a save the schema refuses is refused in words that hold no token",
   () =>
     Effect.gen(function* () {
-      const { call, asked, githubToken } = yield* subject();
+      // The token the windows held as each write's read of the repository lists landed, a turn after it was asked.
+      const movedUnder: unknown[] = [];
+      let held: () => unknown[] = () => [];
+      const { call, asked, githubToken } = yield* subject({
+        repositoriesMoved: Effect.andThen(
+          Effect.yieldNow,
+          Effect.sync(() => void movedUnder.push(held().at(-1))),
+        ),
+      });
+      held = githubToken;
 
       yield* call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW);
       yield* settled;
@@ -1623,6 +1628,7 @@ it.effect(
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.ok(!JSON.stringify(refused).includes(GITHUB_TOKEN));
       assert.deepEqual(asked, ["token", "save-token:the token", "remove-token"]);
+      assert.deepEqual(movedUnder, [read, afterSave], "each write's lists move before its token");
     }),
 );
 
@@ -2648,7 +2654,7 @@ it.effect(
           },
         ],
       );
-      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
+      assert.deepEqual(asked, [`description-inbox-live:${TASK_ID}`]);
 
       // Let go, the plan stays held among those let go lately, so a change still tells it.
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
@@ -2675,7 +2681,7 @@ it.effect(
 
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
-      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`], "nothing is read from cold");
+      assert.deepEqual(asked, [`description-inbox-live:${TASK_ID}`], "nothing is read from cold");
       assert.deepEqual(heldOf(told, PLAN_SCOPE), { rows: [LIVE_ITEM] });
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
       yield* settled;
@@ -2693,7 +2699,7 @@ it.effect(
       }
       assert.equal(heldOf(told, PLAN_SCOPE), undefined, "the plan is told no more");
       assert.equal(
-        asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length,
+        asked.filter((read) => read === `description-inbox-live:${TASK_ID}`).length,
         1,
         "letting it go reads nothing",
       );
@@ -2701,7 +2707,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
       assert.equal(
-        asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length,
+        asked.filter((read) => read === `description-inbox-live:${TASK_ID}`).length,
         2,
         "held again past the bound, it is read anew",
       );
@@ -2819,7 +2825,7 @@ it.effect(
       yield* open;
       yield* settled;
       assert.equal(live.scope.held(), 1, "the window's hold reads again");
-      assert.equal(asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length, 2);
+      assert.equal(asked.filter((read) => read === `description-inbox-live:${TASK_ID}`).length, 2);
     }),
 );
 

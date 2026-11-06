@@ -14,13 +14,13 @@ import { readMentioned } from "./mentioned-reads.js";
 /**
  * A link naming a task by its number, `/<slug>/task/<number>`, in a
  * message to the task's agent, read at the send as its sender and handed
- * as the plan a link by the task's id hands: only where the sender is a
+ * as the description a link by the task's id hands: only where the sender is a
  * member of the workspace the link names.
  *
  * Synthetic accounts, workspaces, and tasks throughout.
  */
 
-const PLAN = { body: "## Rollout\n\nStore first, then the desktop.", assumptions: [] };
+const DESCRIPTION = { body: "## Rollout\n\nStore first, then the desktop.", assumptions: [] };
 
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
@@ -39,14 +39,14 @@ const slugOf = (organizationId: string) =>
     return row?.slug ?? assert.fail("the workspace was not written");
   });
 
-/** A workspace of the owner's holding one task with a plan, and the words naming that plan's section by the task's number. */
+/** A workspace of the owner's holding one task with a description, and the words naming that description's section by the task's number. */
 const numberedSection = (ownerId: string) =>
   Effect.gen(function* () {
     const workspace = yield* openWorkspace(ownerId);
     const created = yield* createTask(ownerId, { name: "Invites", organizationId: workspace });
     const slug = yield* slugOf(workspace);
     const words = `Follow [@Rollout](${LINK_ORIGIN}/${slug}/task/${created.number}#rollout).`;
-    return { workspace, task: { ...created, document: PLAN }, words };
+    return { workspace, task: { ...created, document: DESCRIPTION }, words };
   });
 
 /** A task of the owner's in a workspace of its own, which the message's agent works on. */
@@ -54,19 +54,24 @@ const agentTask = (ownerId: string) =>
   Effect.gen(function* () {
     const workspace = yield* openWorkspace(ownerId);
     const created = yield* createTask(ownerId, { name: "Billing", organizationId: workspace });
-    return { workspace, task: { ...created, document: PLAN } };
+    return { workspace, task: { ...created, document: DESCRIPTION } };
   });
 
 it.layer(getTestDB())("a task a message names by its number", (it) => {
-  it.effect("is handed as its plan's section where the sender is a member of its workspace", () =>
-    Effect.gen(function* () {
-      const dean = yield* openAccount;
-      const { workspace, task, words } = yield* numberedSection(dean);
+  it.effect(
+    "is handed as its description's section where the sender is a member of its workspace",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const { workspace, task, words } = yield* numberedSection(dean);
 
-      const reads = yield* readMentioned(dean, words, { task, workspaceId: workspace });
+        const reads = yield* readMentioned(dean, words, { task, workspaceId: workspace });
 
-      assert.match(mentionedContext(words, task, reads) ?? "", /Store first, then the desktop\./u);
-    }),
+        assert.match(
+          mentionedContext(words, task, reads) ?? "",
+          /Store first, then the desktop\./u,
+        );
+      }),
   );
 
   it.effect("is handed nothing where the sender is no member of the workspace it names", () =>

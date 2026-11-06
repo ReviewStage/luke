@@ -1,5 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { PLAN_COMMENT_BOUNDS } from "./plan-comment-wire.js";
+import { DESCRIPTION_COMMENT_BOUNDS } from "./description-comment-wire.js";
 
 /**
  * page-pick.ts -- a comment's element in a plan's page as drawn: the pick the page's frame runs when a member comments on one of its elements, and the messages the side panel and the frame pass to drive it.
@@ -92,7 +92,7 @@ export type FrameBox = typeof frameBoxSchema.Type;
 
 const elementPathSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
-  EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS),
+  EffectSchema.isMaxLength(DESCRIPTION_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS),
 );
 
 /** An element picked in the frame, as it posts it: its path, its words, the heading it stands under, and where it stands. */
@@ -100,10 +100,10 @@ const pickedSchema = EffectSchema.Struct({
   path: elementPathSchema,
   quote: EffectSchema.String.check(
     EffectSchema.isPattern(/\S/u),
-    EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS),
+    EffectSchema.isMaxLength(DESCRIPTION_COMMENT_BOUNDS.MAX_QUOTE_CHARS),
   ),
   section: EffectSchema.String.check(
-    EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_SECTION_CHARS),
+    EffectSchema.isMaxLength(DESCRIPTION_COMMENT_BOUNDS.MAX_SECTION_CHARS),
   ),
   box: frameBoxSchema,
   /** Whether the quote is words selected in the element rather than the element as a whole. */
@@ -129,7 +129,7 @@ export const pagePickAnswerSchema = EffectSchema.Union([
     type: EffectSchema.Literal(PAGE_PICK_TYPE),
     marks: EffectSchema.Array(
       EffectSchema.Struct({ path: elementPathSchema, box: EffectSchema.NullOr(frameBoxSchema) }),
-    ).check(EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_THREADS_PER_PLAN)),
+    ).check(EffectSchema.isMaxLength(DESCRIPTION_COMMENT_BOUNDS.MAX_THREADS_PER_DESCRIPTION)),
   }),
   EffectSchema.Struct({
     type: EffectSchema.Literal(PAGE_PICK_TYPE),
@@ -155,9 +155,9 @@ export const pagePickAnswerSchema = EffectSchema.Union([
 export const PAGE_PICK_SCRIPT = `(() => {
   "use strict";
   const TYPE = ${JSON.stringify(PAGE_PICK_TYPE)};
-  const MAX_PATH = ${PLAN_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS};
-  const MAX_QUOTE = ${PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS};
-  const MAX_SECTION = ${PLAN_COMMENT_BOUNDS.MAX_SECTION_CHARS};
+  const MAX_PATH = ${DESCRIPTION_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS};
+  const MAX_QUOTE = ${DESCRIPTION_COMMENT_BOUNDS.MAX_QUOTE_CHARS};
+  const MAX_SECTION = ${DESCRIPTION_COMMENT_BOUNDS.MAX_SECTION_CHARS};
   const MARK = "data-ui-pick";
   const PRESSES = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "auxclick", "contextmenu"];
   const WORDS = "ui-comment-words";

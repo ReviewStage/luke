@@ -19,6 +19,7 @@
  * pressed anything.
  */
 
+import { ORPCError } from "@orpc/client";
 import type { AGENT_CALL_FAILURE, AgentAgentAnswer } from "@repo/features/agent-view";
 import { FAILURE_CONDITION, FAILURE_SURFACE, failureAboutOf } from "@repo/features/shown-failure";
 import { ACT_UNREACHED_WORDS } from "@repo/features/words";
@@ -34,7 +35,6 @@ import type { AppSettingField, AppSettingValue } from "@repo/settings";
 import type { SettingsUpdateResult } from "@repo/settings/wire";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { ORPCError } from "@orpc/client";
 import { useMemo } from "react";
 import { actPort } from "./app-bridge.js";
 import type { ShownFailure } from "./failure-report.js";
@@ -130,6 +130,25 @@ async function performAct<Kind extends PortActKind>(
 }
 
 /**
+ * What a kind's mutation is called with (`act-mutations.ts`): its payload, or
+ * nothing for a kind that carries nothing, as `mutate()` then takes it.
+ */
+export type ActVariables<Kind extends PortActKind> =
+  ActPayload<Kind> extends undefined ? void : ActPayload<Kind>;
+
+/**
+ * An act a mutation sends from its `mutationFn` (`act-mutations.ts`), a
+ * refusal rejected as the sentence it carries, for the mutation's error.
+ */
+export function sendAct<Kind extends PortActKind>(
+  kind: Kind,
+  variables: ActVariables<Kind>,
+): Promise<ActResult<Kind>> {
+  // SAFETY: ActVariables is the kind's payload, or void for a kind that carries none, which the port reads as undefined.
+  return performAct(kind, variables as ActPayload<Kind> | undefined);
+}
+
+/**
  * An act whose answer nothing reads and no person pressed for, quiet
  * whatever comes back.
  */
@@ -145,7 +164,7 @@ export function tellAct<Kind extends PortActKind>(
  * any other failure, an act's or a fault on the way to one, in the one fixed
  * sentence, never its own text.
  */
-function actFailureWords(error: unknown): string {
+export function actFailureWords(error: unknown): string {
   return error instanceof ActRefusal ? error.message : ACT_UNREACHED_WORDS;
 }
 

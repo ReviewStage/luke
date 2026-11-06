@@ -23,7 +23,7 @@ import type { PortActKind } from "@repo/host/contract";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
@@ -31,6 +31,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { ToastHost } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
+import { SKILLS_LINE } from "./skills-model.js";
 import { SkillsPage } from "./skills-page.js";
 
 /**
@@ -319,6 +320,10 @@ async function mountPage(shown = workspace()): Promise<void> {
     ),
   );
   await settle();
+  // Note that the page stands read once the skills the host holds reach their query.
+  await vi.waitFor(() =>
+    assert.equal(document.body.textContent?.includes("Reading your skills"), false),
+  );
 }
 
 async function mountDialog(
@@ -373,9 +378,13 @@ const fieldOf = (label: string) =>
     (each) => each.labels?.[0]?.textContent === label,
   ) ?? assert.fail(`no ${label} field`);
 
+/** Whether the dialog still says it is reading what was pasted. */
+const previewReading = () => (document.body.textContent ?? "").includes(SKILLS_LINE.READING);
+
+/** Pastes `text` into the box and waits for its preview to land. */
 async function paste(text: string): Promise<void> {
   typeInto(document.querySelector("textarea") ?? assert.fail("no box"), text);
-  await settle();
+  await vi.waitFor(() => assert.equal(previewReading(), false));
 }
 
 /** The row a skill's name labels. */
@@ -470,13 +479,16 @@ test("View reads the skill and draws its text as written and every file with its
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_READ), [{ skillId: PR_STYLE.id }]);
   const shown = dialog();
   assert.equal(shown.querySelector("h2")?.textContent, "pr-style");
-  assert.match(shown.querySelector("pre")?.textContent ?? "", /name: pr-style[\s\S]*# PR style/u);
+  // Note that the skill's text lands through a query, so it is read once drawn.
+  await vi.waitFor(() =>
+    assert.match(shown.querySelector("pre")?.textContent ?? "", /name: pr-style[\s\S]*# PR style/u),
+  );
   assert.deepEqual(
     [...shown.querySelectorAll("dt, dd")].map((each) => each.textContent),
     ["SKILL.md", "48 B", "examples/good.md", "2.0 kB"],
   );
   act(() => button("Done", shown).click());
-  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(document.querySelector('[role="dialog"]') === null, true);
 });
 
 test("Delete asks first, red for a personal skill whose files go, then takes it off the page", async () => {
@@ -488,7 +500,9 @@ test("Delete asks first, red for a personal skill whose files go, then takes it 
   act(() => button("Delete skill", question).click());
   await settle();
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_REMOVE), [{ skillId: PR_STYLE.id }]);
-  assert.ok(!(document.body.textContent ?? "").includes("pr-style described"));
+  await vi.waitFor(() =>
+    assert.ok(!(document.body.textContent ?? "").includes("pr-style described")),
+  );
 });
 
 test("Deleting a workspace skill says everyone in the workspace loses it, in the accent", async () => {
@@ -693,7 +707,7 @@ test("a preview the service never answers says it could not be read, and Retry a
   assert.doesNotMatch(text, /Reading/u, "a failed preview is no longer being read");
 
   act(() => button("Retry").click());
-  await settle();
+  await vi.waitFor(() => assert.equal(checkboxOf("web-design-guidelines").checked, true));
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), [
     { workspaceId: "workspace-stage", text: COMMAND },
     { workspaceId: "workspace-stage", text: COMMAND },

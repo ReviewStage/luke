@@ -32,7 +32,7 @@
  * root takes none of them, so such a root adopts its own.
  */
 
-import { askScroll } from "@repo/ui/scroll-asked";
+import { FIND_SKIP_ATTRIBUTE } from "@repo/ui/find-skip";
 
 /** The two highlights every find paints into: each match, and the one it is at, drawn over the rest. */
 const FIND_HIGHLIGHT = {
@@ -79,13 +79,6 @@ const BEFORE_MATCH = "beforematch";
 
 /** The elements whose text is never read as words. */
 const UNREAD_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT"]);
-
-/**
- * The attribute worn by what is drawn among a tab's words and is none of
- * them: the find bar itself, standing inside the tab it searches, and a
- * code line's number in its gutter.
- */
-export const FIND_SKIP_ATTRIBUTE = "data-find-skip";
 
 /**
  * The attribute worn by a host whose open shadow root is searched in its
@@ -318,7 +311,6 @@ function scrollToRange(range: Range, root: Element): void {
     const box = element.getBoundingClientRect();
     const target = range.getBoundingClientRect();
     if (scrollsAlong(element, "y") && (target.top < box.top || target.bottom > box.bottom)) {
-      askScroll(element);
       element.scrollTop += target.top - box.top - (box.height - target.height) / 2;
     }
     if (scrollsAlong(element, "x") && (target.left < box.left || target.right > box.right)) {

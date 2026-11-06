@@ -1,3 +1,5 @@
+import { CLI_RELEASE } from "@repo/features/cli-release";
+import { workingAgentCount } from "@repo/features/tasks-view";
 import { AgentNoticeDoors, type AgentNotices } from "@repo/host/agent-notices";
 import {
   AppStateStore,
@@ -30,7 +32,7 @@ import {
 } from "@repo/host/quit";
 import { effectServiceLayer, serviceLayer } from "@repo/host/service-layer";
 import type { ColorCode } from "@repo/host/task-code-remote";
-import { NO_EXPERIMENTS } from "@repo/settings";
+import { HOST_CAPABILITY, NO_EXPERIMENTS } from "@repo/settings";
 import { Context, Effect, Layer } from "effect";
 import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
@@ -52,6 +54,21 @@ import {
 } from "./telemetry-service";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 import { createWindowService, type WindowService } from "./window-service";
+
+/**
+ * Every capability the desktop answers itself, but Install command-line tool
+ * in a live run before this build names a release of the command
+ * (`CLI_RELEASE`): until then the install script has none to install, so the
+ * row offers the npm command alone, as a browser tab does. Note that a
+ * fixture run keeps it, because its settings fixture answers the install
+ * with a staged one rather than running the script.
+ */
+function desktopClientCapabilities(fixtureMode: boolean) {
+  return ALL_CLIENT_CAPABILITIES.filter(
+    (capability) =>
+      capability !== HOST_CAPABILITY.CLI_INSTALL || fixtureMode || CLI_RELEASE !== undefined,
+  );
+}
 
 /**
  * The composition, as the bridge registration reads it. The keychain and the
@@ -213,7 +230,7 @@ export function composeDesktop(
           config,
           updateEngine !== undefined,
           // The desktop answers every capability a client can, beside the concerns its host runs.
-          hostCapabilities(host.concerns, ALL_CLIENT_CAPABILITIES),
+          hostCapabilities(host.concerns, desktopClientCapabilities(config.launch.fixtureMode)),
         ),
         services,
       );
@@ -234,6 +251,7 @@ export function composeDesktop(
         recordEvent: (name, properties) => {
           void run(operator.host.recordEvent(name, properties));
         },
+        workingAgents: () => workingAgentCount(state.snapshot().tasks),
       });
       const windows = createWindowService({
         config,

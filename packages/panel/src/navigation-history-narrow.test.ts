@@ -3,23 +3,18 @@
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
+import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { memoryHistory } from "@repo/ui/history-adapter";
+import { experimentsOn } from "@repo/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import type { AdminView } from "./admin/routing.js";
 import { runAppCommand } from "./app-commands.js";
 import { useCopyLink } from "./links-at-hand.js";
-import {
-  installWindowHistory,
-  throughHistory,
-  useWindowHistory,
-  type WindowHistoryLists,
-} from "./navigation-history.js";
+import { throughHistory, useWindowHistory, type WindowHistoryLists } from "./navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { chooseInboxTask, leaveInboxTask } from "./tasks/use-inbox-task.js";
@@ -32,10 +27,11 @@ import {
 } from "./tasks/use-tasks-tab.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "./testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { deliveryOf, handState, stateWith } from "./testing/app-state.js";
+import { deliveryOf, handState, registryWith, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { tasksControl } from "./testing/tasks-control.js";
+import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
 
 /**
  * navigation-history-narrow.test.ts -- on a stage as narrow as a phone's,
@@ -273,13 +269,8 @@ function unmountAll(): void {
 
 afterEach(unmountAll);
 
-/** The window standing as `start` says in a room, its history held in memory, or in the history given, and its addresses written from its Copy link, as the root wires them. */
-function mount(
-  room: ShellRoom,
-  start: Standing,
-  held: Parameters<typeof installWindowHistory>[0] = memoryHistory(),
-) {
-  installWindowHistory(held);
+/** The window standing as `start` says in a room, under a router over a memory history, or over the history given, and its addresses written from its Copy link, as the root wires them. */
+function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = windowRouter()) {
   let history: WindowHistoryLists | undefined;
   let shown: TasksControl | undefined;
   let standing = start;
@@ -324,7 +315,13 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  act(() =>
+    root.render(
+      held.provide(
+        onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(Probe)),
+      ),
+    ),
+  );
   return {
     history: () => history ?? assert.fail("the window's history stands"),
     /** The Tasks tab as the shell presses it. */
@@ -338,11 +335,11 @@ function mount(
         window.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
         press();
       }),
-    /** The address of every step held, oldest first, and the one standing. */
-    addresses: () => held.current().entries.map((entry) => entry.address),
-    standingAddress: () => held.current().entries[held.current().at]?.address,
+    /** The address of every entry the router's history holds, oldest first, and the one standing. */
+    addresses: () => held.addresses(),
+    standingAddress: () => held.history.location.href,
     /** Moves the history by itself, as a browser's Back and Forward do, never through the window. */
-    moveHistory: (delta: number) => act(() => held.go(delta)),
+    moveHistory: (delta: number) => act(() => held.history.go(delta)),
     held,
   };
 }
@@ -470,14 +467,14 @@ test("on a narrow stage a task opened from a list on its plan is one step, whose
   window.move((held) => ({
     ...held,
     inbox: { ...held.inbox, open: false },
-    panel: { open: true, tab: SIDE_PANEL_TAB.PLAN },
+    panel: { open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   }));
   assert.equal(window.addresses().length, 2, "landing on the plan is one step after the list");
 
   window.press(() => window.shown().sidePanel.onToggle());
   assert.deepEqual(
     window.at().panel,
-    { open: false, tab: SIDE_PANEL_TAB.PLAN },
+    { open: false, tab: SIDE_PANEL_TAB.DESCRIPTION },
     "Close shuts the panel",
   );
   assert.equal(window.at().inbox.open, false, "and leaves the task standing");
@@ -840,13 +837,13 @@ test("on a narrow stage Back from an automation with unsaved work to another aut
   assert.deepEqual(window.at().automation?.page, AUTOMATION_PAGE, "the draft's automation stands");
   window.moveHistory(-1);
   assert.deepEqual(window.at().automation?.page, AUTOMATION_PAGE, "and a browser's Back too");
-  assert.equal(window.held.current().at, 1, "the history stands back on it");
+  assert.equal(window.held.at(), 1, "the history stands back on it");
 });
 
 test("on a narrow stage another thing a link opens in the side panel standing over the plan is a step of its own, which Back shows again", () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);
   window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
-  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.PLAN));
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.DESCRIPTION));
   assert.equal(window.addresses().length, 3, "the plan, the page's tab, then the plan's tab");
 
   act(() => window.history().onBack());
@@ -862,7 +859,7 @@ test("on a narrow stage a task's way out steps back past its own panes to the pa
   window.move((held) => ({
     ...held,
     inbox: { ...held.inbox, open: false },
-    panel: { open: true, tab: SIDE_PANEL_TAB.PLAN },
+    panel: { open: true, tab: SIDE_PANEL_TAB.DESCRIPTION },
   }));
   // The task's own panes, each a step of its own: the agents' column, then a page's tab.
   window.press(() => window.shown().sidePanel.onToggle());
@@ -874,7 +871,7 @@ test("on a narrow stage a task's way out steps back past its own panes to the pa
   act(() => window.history().onLeave());
   assert.equal(window.at().inbox.open, true, "the way out lands on the Inbox at once");
   assert.deepEqual(window.addresses(), steps, "and pushes nothing");
-  assert.equal(window.held.current().at, 0);
+  assert.equal(window.held.at(), 0);
 
   act(() => window.history().onForward());
   assert.equal(window.at().inbox.open, false, "Forward opens the task again");
@@ -882,7 +879,7 @@ test("on a narrow stage a task's way out steps back past its own panes to the pa
 
 test("on a narrow stage a task with no page behind it, as one a link opened, names none for its way out", () => {
   const window = mount(SHELL_ROOM.NARROW, { ...ON_TASK, panel: { open: true, tab: PAGE_TAB } });
-  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.PLAN));
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.DESCRIPTION));
   assert.equal(window.history().canGoBack, true, "Back has the task's own pane behind it");
   assert.equal(window.history().away, undefined, "but the way out has no page to go back to");
 });

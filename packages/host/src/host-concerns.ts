@@ -3,8 +3,8 @@
  *
  * Every concern but the platform ones runs wherever the host does. A
  * platform concern reaches something only some hosts have: a process
- * spawner, This Mac's host, a terminal's relay socket, a
- * loopback the browser hands a sign-in back to. The
+ * spawner, This Mac's host, a terminal's relay socket, a listener on the
+ * machine's own loopback, a loopback the browser hands a sign-in back to. The
  * assembly is built with the platform concerns its host chose; one left out
  * is never started, asks for nothing, and answers each of its methods with a
  * refusal, so a client that asks anyway is told no rather than crashing.
@@ -32,7 +32,8 @@ export const HOST_CONCERN = {
   MAC_COMMANDS: "macCommands",
   THIS_MAC_HOST: "thisMacHost",
   TERMINALS: "terminals",
-  CHATGPT_SIGN_IN: "chatGptSignIn",
+  PORT_FORWARDS: "portForwards",
+  MIRRORS: "mirrors",
 } as const;
 
 export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -42,7 +43,8 @@ export const HOST_PLATFORM_CONCERN = {
   MAC_COMMANDS: HOST_CONCERN.MAC_COMMANDS,
   THIS_MAC_HOST: HOST_CONCERN.THIS_MAC_HOST,
   TERMINALS: HOST_CONCERN.TERMINALS,
-  CHATGPT_SIGN_IN: HOST_CONCERN.CHATGPT_SIGN_IN,
+  PORT_FORWARDS: HOST_CONCERN.PORT_FORWARDS,
+  MIRRORS: HOST_CONCERN.MIRRORS,
 } as const;
 
 export type HostPlatformConcern =
@@ -62,7 +64,7 @@ export const isPlatformConcern = (concern: HostConcern): concern is HostPlatform
 const CAPABILITY_OF_CONCERN = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: HOST_CAPABILITY.MAC_COMMANDS,
   [HOST_PLATFORM_CONCERN.TERMINALS]: HOST_CAPABILITY.TERMINALS,
-  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: HOST_CAPABILITY.CHATGPT_SIGN_IN,
+  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: HOST_CAPABILITY.PORT_FORWARDS,
 } as const satisfies Readonly<Partial<Record<HostPlatformConcern, HostCapability>>>;
 
 /** `CAPABILITY_OF_CONCERN` read by any platform concern, one that offers none among them. */
@@ -111,8 +113,8 @@ export function hostCapabilities(
 /** The methods each platform concern answers, which a host that left it out refuses. */
 const PLATFORM_CONCERN_METHODS = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: [GATEWAY_METHOD.MAC_COMMAND_ANSWER],
-  // Note that the panel asks nothing of This Mac's host, which tells the windows itself.
-  [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: [],
+  // Note that This Mac's host tells the windows itself, and is asked only to turn on or off.
+  [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: [GATEWAY_METHOD.HOSTS_THIS_MAC_SET],
   [HOST_PLATFORM_CONCERN.TERMINALS]: [
     GATEWAY_METHOD.TERMINALS_LIST,
     GATEWAY_METHOD.TERMINALS_CREATE,
@@ -129,10 +131,8 @@ const PLATFORM_CONCERN_METHODS = {
     GATEWAY_METHOD.BROWSER_LIVE_SEND,
     GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT,
   ],
-  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: [
-    GATEWAY_METHOD.CHATGPT_SIGN_IN,
-    GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL,
-  ],
+  [HOST_PLATFORM_CONCERN.PORT_FORWARDS]: [GATEWAY_METHOD.PORT_FORWARDS_SET],
+  [HOST_PLATFORM_CONCERN.MIRRORS]: [GATEWAY_METHOD.MIRRORS_ENSURE],
 } as const satisfies Readonly<Record<HostPlatformConcern, readonly GatewayMethod[]>>;
 
 /** The table a platform concern's composer answers: every method it names, and no other. */

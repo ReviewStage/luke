@@ -1,14 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
-import { memoryHistory } from "@repo/ui/history-adapter";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -18,10 +16,11 @@ import { App } from "./app.js";
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
 // within the test's own ticks rather than on a clock a busy machine outruns.
 import "./desktop/desktop-admin.js";
-import { installWindowHistory } from "./navigation-history.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, stateWith } from "./testing/app-state.js";
+import { onRegistry } from "./testing/copy-feedback.js";
+import { windowRouter } from "./testing/window-router.js";
 
 /**
  * app-admin-link.test.ts -- a link to the Admin place the system hands the
@@ -71,7 +70,6 @@ beforeEach(() => {
     applySessionReplay: () => undefined,
     adminDashboard: () => ({ href: "https://app.test/admin" }),
   });
-  installWindowHistory(memoryHistory());
   const quiet = Object.fromEntries([
     ...Object.keys(PUSH_METHOD).map((method) => [method, () => () => undefined]),
     ...bridgeEntries().map(([method, entry]) => [
@@ -113,9 +111,7 @@ async function settle(): Promise<void> {
 async function drawWindow(): Promise<void> {
   root = createRoot(document.body.appendChild(document.createElement("div")));
   act(() =>
-    root?.render(
-      createElement(RegistryContext.Provider, { value: AtomRegistry.make() }, createElement(App)),
-    ),
+    root?.render(windowRouter().provide(onRegistry(AtomRegistry.make(), createElement(App)))),
   );
   await settle();
 }

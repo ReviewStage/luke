@@ -4,18 +4,17 @@ import {
   encodeMention,
   MENTION_KIND,
   type MentionLines,
-  type PlanMention,
+  type DescriptionMention,
 } from "@repo/features/mention-link";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeRef } from "@repo/features/task-wire";
 import { backToWords, readFailedWords } from "@repo/features/words";
-import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { ERROR_STATE_PLACEMENT, ErrorState, Toolbar } from "@repo/ui";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import { useQuery } from "@tanstack/react-query";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import type { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -27,7 +26,7 @@ import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { ADDRESS, type Address, addressOf, HERE, ROUTE, route, THING } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentName, messageFailureWords } from "../tasks/agent-model.js";
-import { type InboxCodeDoors, UNREAD_FILE } from "../tasks/inbox-code-card.js";
+import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import {
   INBOX_COLUMNS,
   INBOX_VIEW,
@@ -53,7 +52,7 @@ import {
   type TaskMentionsValue,
   tasklessMentions,
   useMentionAgentsReader,
-  useSavedPlanText,
+  useSavedDescriptionText,
 } from "../tasks/task-mentions.js";
 import {
   cardTitle,
@@ -74,7 +73,7 @@ import {
 } from "../tasks/use-side-panel.js";
 import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability } from "../use-app-state.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
 import {
   COLUMN,
@@ -134,7 +133,7 @@ import { taskCardOf } from "./task-card.js";
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`). The chosen item's box
  * mentions what its repository and workspace hold (`answerPlace`), and,
- * for an item of a task, what the task's page offers besides: its plan
+ * for an item of a task, what the task's page offers besides: its description
  * and sections as saved, its pages, its agents, and their pull requests
  * (`heldTaskMentions`); and
  * its skills are read through its holder and drawn as chips that open
@@ -203,7 +202,6 @@ export const DesktopInbox = memo(function DesktopInbox({
   const narrowedTaskName = narrowedTaskRow?.name;
   const {
     view,
-    act,
     choices,
     openAutomation,
     failed,
@@ -441,11 +439,11 @@ export const DesktopInbox = memo(function DesktopInbox({
     if (!openHere(address)) elsewhere();
   };
   // A task or a section a mention names opens as a link to it would.
-  const openMention = (mention: PlanMention) =>
+  const openMention = (mention: DescriptionMention) =>
     openPlaceHere(placeOfMention(mention), () => tasks.onShowMention(mention));
-  // An item of a task offers what the task's page does: its plan and sections as saved, its pages, its agents, and their pull requests.
+  // An item of a task offers what the task's page does: its description and sections as saved, its pages, its agents, and their pull requests.
   const heldTask = chosen?.holder.kind === INBOX_HOLDER.TASK ? chosen.holder.task : undefined;
-  const planText = useSavedPlanText(heldTask);
+  const descriptionText = useSavedDescriptionText(heldTask);
   const mentions =
     place === undefined
       ? undefined
@@ -456,7 +454,7 @@ export const DesktopInbox = memo(function DesktopInbox({
         : heldTaskMentions(
             heldTask,
             place.workspace,
-            planText,
+            descriptionText,
             { pages: view.pages, agents: named, readAgents: readMentionAgents },
             { onOpenTask: openMention, onOpenFile: openMentionedFile },
           );
@@ -547,14 +545,13 @@ export const DesktopInbox = memo(function DesktopInbox({
               }
               doors={{
                 ...paneDoors(tasks, listed.holder, {
-                  act,
                   panelFor,
                   place,
                   openPlace: openPlaceHere,
                 }),
                 onMark: markItem,
                 onClose: closeItem,
-                onSnooze: marks.onSnooze,
+                onRemind: marks.onRemind,
               }}
             />
           </TaskMentions>
@@ -669,7 +666,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                   onChoose={open}
                   onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
                   onClose={closeItem}
-                  onSnooze={marks.onSnooze}
+                  onRemind={marks.onRemind}
                   onPointing={onPointing}
                 />
                 {chosen === undefined ? (
@@ -831,7 +828,9 @@ function InboxSidePanel({
   phone: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
   const { panel } = drawing;
-  const terminals = useCapability(HOST_CAPABILITY.TERMINALS);
+  const terminals =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
+    true;
   // A row opens what it names as a link to it would beside the item (`route.ts`): an agent of the
   // item's task reads beside it as the panel's preview, and any other task or agent is gone to.
   const openTarget = (target: ToolTarget) => {
@@ -854,7 +853,7 @@ function InboxSidePanel({
               tasks.onShowAgent(taskId, agent),
             );
       }
-      case TOOL_TARGET.PLAN:
+      case TOOL_TARGET.DESCRIPTION:
         if (taskId === undefined) return;
         return openPlace({ kind: LINK_PLACE.TASK, planId: taskId }, () => tasks.onShowTask(taskId));
       case TOOL_TARGET.INBOX:
@@ -950,18 +949,14 @@ function InboxSidePanel({
  * panel beside the Inbox, which stands for the agent and reads it the same
  * way; nothing read or opened until both are known.
  */
-function tasklessCode(
-  tasks: TasksControl,
-  act: ReturnType<typeof useAct>["act"],
-  place: TasklessPlace | undefined,
-): InboxCodeDoors {
+function tasklessCode(tasks: TasksControl, place: TasklessPlace | undefined): InboxCodeDoors {
   if (place === undefined || place.repository === null) {
-    return { repository: null, readFile: UNREAD_FILE, onOpenFile: () => undefined };
+    return { repository: null, place: undefined, onOpenFile: () => undefined };
   }
   const { workspaceId, repository } = place;
   return {
     repository,
-    readFile: (window) => act(ACT_KIND.TASKS_FILE, { workspaceId, repository, ...window }),
+    place: { workspaceId, repository },
     onOpenFile: (ref, commit) => tasks.sidePanel.onPreviewFile(ref, commit, repositoryReads(place)),
   };
 }
@@ -985,7 +980,6 @@ function paneDoors(
   tasks: TasksControl,
   holder: InboxHolder,
   seams: {
-    act: ReturnType<typeof useAct>["act"];
     /** The task, or the agent, the panel beside the Inbox stands for. */
     panelFor: string | undefined;
     /** Opens a place a part of the item names as a link to it would beside the item (`route.ts`), else through the door given. */
@@ -1016,7 +1010,7 @@ function paneDoors(
       onOpenAgent: (agentId) => openAgent(task.id, agentId),
       code: {
         repository: task.repository,
-        readFile: (window) => seams.act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
+        place: { taskId: task.id },
         // Note that code is a link like any other: beside the item it opens as the panel's preview.
         onOpenFile: (ref, commit) =>
           seams.panelFor === task.id
@@ -1034,6 +1028,6 @@ function paneDoors(
     taskCard: undefined,
     onOpenAgent: (agentId) =>
       seams.openPlace({ kind: LINK_PLACE.AGENT, agentId }, () => tasks.agentView.onOpen(agentId)),
-    code: tasklessCode(tasks, seams.act, seams.place),
+    code: tasklessCode(tasks, seams.place),
   };
 }

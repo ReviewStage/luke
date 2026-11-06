@@ -10,7 +10,12 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeActPortCalls,
+  fakeAppBridge,
+  readingFiles,
+} from "../testing/app-bridge.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -18,6 +23,7 @@ import {
   pressInComposer,
   QUIET_COMPOSER,
 } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
@@ -133,24 +139,27 @@ async function page({ box = true }: { box?: boolean } = {}) {
     sent.push(text);
     return new Promise<AgentAgentAnswer>(ignore);
   };
+  fakeActPort({ ...fakeActPortCalls(), ...readingFiles(readFile) });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   act(() =>
     root.render(
-      createElement(TaskMentions, {
-        value: PAGE,
-        children: [
-          createElement(FileTab, {
-            key: "file",
-            file: { path: "src/invite.ts", range: undefined, opened: 1 },
-            readFile,
-            onRead: ignore,
-          }),
-          box ? createElement(Box, { key: "box", sender }) : null,
-        ],
-      }),
+      withQueryClient(
+        createElement(TaskMentions, {
+          value: PAGE,
+          children: [
+            createElement(FileTab, {
+              key: "file",
+              place: { taskId: "task-1" },
+              file: { path: "src/invite.ts", range: undefined, opened: 1 },
+              onRead: ignore,
+            }),
+            box ? createElement(Box, { key: "box", sender }) : null,
+          ],
+        }),
+      ),
     ),
   );
   await settle();

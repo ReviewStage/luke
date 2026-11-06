@@ -3,7 +3,7 @@
  *
  * Inbox, Tasks, Automations, an agent's page, Version history, Admin,
  * an Inbox item, and the Automations list each stand under this one bar; a
- * document (a plan, Settings, a person, the automation editor) heads itself
+ * document (a description, Settings, a person, the automation editor) heads itself
  * in its page instead (`PageHeader`). The bar is one row at the window's bar
  * height (`--ui-toolbar-height`, which the shell sets level with its title
  * bar), and its slots stand in one order, each drawn only where it says
@@ -15,7 +15,10 @@
  *   the actions always end the bar. Its `title` is the page's name, drawn as
  *   its level-one heading on one line that fades out where the bar cuts it,
  *   as a row's name does, its hint reading it whole; a title that is more than words (an
- *   editable name, its skeleton block) stands there as given.
+ *   editable name, its skeleton block) stands there as given. A title in
+ *   words may open what it names (`titlePress`), set then at a bar title's
+ *   size, and may hold the page's menu on a right-click (`titleMenu`), which
+ *   is where the page's acts stand rather than a ⋯ at the bar's end.
  * - Where the page has a parent, the caller hands its `trail`, the places
  *   above it outermost first, and the bar leads its heading with them as
  *   crumbs (`Breadcrumbs`), each a press back to its place, the page's
@@ -78,8 +81,9 @@ import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
 import { BREADCRUMBS_VARIANT, Breadcrumbs, type Crumb } from "../breadcrumbs/breadcrumbs.js";
 import { EmptyState, type EmptyStateAction } from "../empty-state/empty-state.js";
 import { FILL_ELEMENT, Fill } from "../layout/layout.js";
+import type { ContextMenuProps } from "../menu/menu.js";
 import { ONE_LINE_ELEMENT, OneLine } from "../one-line/one-line.js";
-import { wholeWordsHint } from "../tooltip/hint.js";
+import { Tooltip, wholeWordsHint } from "../tooltip/hint.js";
 import {
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
@@ -126,6 +130,20 @@ const DETAIL = "ui-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-mute
 /** The title, in the dialog's type with a title's tracking; its room reaches 6px left of the words, so its own hover fill and field ring, which start there, are not clipped. */
 const TITLE = "ui-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-dialog-size font-dialog tracking-title";
 
+/** A title that opens what it names, set as a bar's title rather than a page's heading, so it reads no louder than the tabs beside it. */
+const TITLE_PRESS_HEADING =
+  "ui-toolbar-title m-0 min-w-0 text-toolbar-title font-toolbar-title tracking-title";
+
+/**
+ * The press itself: words at rest, a light wash on hover alone, as a page's
+ * title is in Notion, and no fill while what it opens stands. It is laid as
+ * a tab is (`tabs.tsx`): a control high, its mark at a tab's start inset and
+ * icon gap, so a bar that starts at its column's edge (`TOOLBAR_INSET.COLUMN`)
+ * stands its mark and words over the first tab's under it.
+ */
+const TITLE_PRESS =
+  "ui-toolbar-title-press inline-flex h-control max-w-full items-center gap-icon-gap rounded-control bg-transparent px-ui-8 hover:bg-muted [&_svg]:size-control-icon";
+
 /** Where a bar's heading stands its title on one row: the page's own name, its last words. */
 const HEADING_SEAT: TitleSeat = {
   room: ":scope > .ui-toolbar-heading",
@@ -148,12 +166,34 @@ export interface ToolbarPickUp {
   readonly shown: boolean;
 }
 
+/** A title in words that opens what it names, as a channel's name opens its details: whether that stands open, its hint, and the press. */
+export interface ToolbarTitlePress {
+  readonly open: boolean;
+  /** What the press opens, its hint ("Task details"). */
+  readonly label: string;
+  /** The mark of what the title names, inside the press before its words, as a chip wears it: a task's status. */
+  readonly icon?: ReactNode;
+  /** The card the press hangs while the pointer rests on it, naming what the title names whole, as its chip's does. */
+  readonly card?: ReactNode;
+  readonly onPress: () => void;
+}
+
+/** The page's menu on its title: `useMenu`'s `contextMenu()` and `keyMenu`. */
+export interface ToolbarTitleMenu {
+  readonly contextMenu: ContextMenuProps;
+  readonly keyMenu: (event: React.KeyboardEvent<HTMLElement>) => void;
+}
+
 /** What a workspace's bar holds, each slot drawn only where it says something. */
 export interface ToolbarProps {
   /** What stands first: a way back (`BackButton`) or a tab strip. */
   readonly lead?: ReactNode;
   /** The page's name, drawn as its heading on one line; a node that is more than words stands as given. */
   readonly title?: ReactNode;
+  /** Whether the title in words opens what it names (`ToolbarTitlePress`); read only where the title is words and there is no `trail`. */
+  readonly titlePress?: ToolbarTitlePress | undefined;
+  /** The menu a right-click, a long press, or the menu key on the title opens, in place of a ⋯ at the bar's end (`ToolbarTitleMenu`). */
+  readonly titleMenu?: ToolbarTitleMenu | undefined;
   /** Whether a title in words is the app's own (Settings, Tasks, Inbox), which a screen recording shows as it reads; one that names a task or a workspace stays masked, as every place of a trail and a picked-up name do. */
   readonly titleReplayUnmasked?: boolean | undefined;
   /** The places above the page, outermost first, which lead its heading as crumbs with the `title` last, or a document's `pickUp` name once it is shown; read only where the title is words or there is a `pickUp`. */
@@ -191,16 +231,91 @@ function said(node: ReactNode): boolean {
 function ToolbarTitle({
   title,
   unmasked,
+  press,
+  menu,
 }: {
   title: ReactNode;
   /** Whether a title in words shows in a screen recording (`titleReplayUnmasked`). */
   unmasked: boolean;
+  /** What a title in words opens, which makes it a press; none for words alone. */
+  press?: ToolbarTitlePress | undefined;
+  /** The page's menu, which a press holds on its right-click and the menu key (`titleMenu`). */
+  menu?: ToolbarTitleMenu | undefined;
 }): React.JSX.Element {
   if (typeof title !== "string") return <>{title}</>;
+  if (press !== undefined) {
+    return (
+      <h1 className={TITLE_PRESS_HEADING}>
+        <Tooltip label={press.label} card={press.card}>
+          <button
+            type="button"
+            className={TITLE_PRESS}
+            aria-expanded={press.open}
+            onClick={press.onPress}
+            {...menu?.contextMenu}
+            onKeyDown={menu?.keyMenu}
+          >
+            {press.icon}
+            <OneLine className="min-w-0" words={title}>
+              <ReplayWords unmasked={unmasked}>{title}</ReplayWords>
+            </OneLine>
+          </button>
+        </Tooltip>
+      </h1>
+    );
+  }
   return (
     <OneLine as={ONE_LINE_ELEMENT.H1} hint={wholeWordsHint(title)} className={TITLE} words={title}>
       <ReplayWords unmasked={unmasked}>{title}</ReplayWords>
     </OneLine>
+  );
+}
+
+/** The box a name holding the page's menu stands in: as wide as its words. */
+const TITLE_MENU = "ui-toolbar-title-menu w-fit min-w-0 max-w-full rounded-control";
+
+/**
+ * A name that is no press of its own holding the page's menu on a
+ * right-click, a long press, or the menu key and ⇧F10, where one is given
+ * (`titleMenu`); a press holds it itself (`ToolbarTitle`). The box is as wide
+ * as the name's words, so on the desktop's bar, which is otherwise the
+ * window's drag handle and would take the right-click, only the name keeps
+ * its presses and the rest of the bar still drags the window
+ * (`toolbar.css`). A name alone takes the focus as the menu's button, so the
+ * keys reach the menu; a trail's crumbs are buttons of their own, which no
+ * button may hold, so there the keys reach it from a crumb.
+ */
+function TitleMenu({
+  menu,
+  crumbs,
+  children,
+}: {
+  menu: ToolbarTitleMenu | undefined;
+  /** Whether the name is led by a trail's crumbs (`trail`). */
+  crumbs: boolean;
+  children: ReactNode;
+}): React.JSX.Element {
+  if (menu === undefined) return <>{children}</>;
+  if (crumbs) {
+    return (
+      // biome-ignore lint/a11y/useSemanticElements: the box groups a trail's crumbs and the page's name, not a form's fields, so it is no `<fieldset>`.
+      <div role="group" className={TITLE_MENU} {...menu.contextMenu} onKeyDown={menu.keyMenu}>
+        {children}
+      </div>
+    );
+  }
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: the box holds the page's heading, which a <button> may not hold.
+    <div
+      role="button"
+      aria-haspopup="menu"
+      className={TITLE_MENU}
+      tabIndex={0}
+      {...menu.contextMenu}
+      onKeyDown={menu.keyMenu}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -257,6 +372,8 @@ function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Eleme
 export function Toolbar({
   lead,
   title,
+  titlePress,
+  titleMenu,
   titleReplayUnmasked = false,
   trail,
   pickUp,
@@ -287,21 +404,31 @@ export function Toolbar({
     >
       {said(lead) ? <div className={LEAD}>{lead}</div> : null}
       <div className="ui-toolbar-heading">
-        {trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "" ? (
-          <ReplayMask>
-            <ToolbarTrail trail={trail} title={title} />
-          </ReplayMask>
-        ) : trail !== undefined && trail.length > 0 && !said(title) && pickUp !== undefined ? (
-          <ReplayMask>
-            <ToolbarTrail trail={trail} title={pickUp.name} shown={pickUp.shown} />
-          </ReplayMask>
-        ) : said(title) ? (
-          <ToolbarTitle title={title} unmasked={titleReplayUnmasked} />
-        ) : pickUp !== undefined && pickUp.name !== "" ? (
-          <ReplayMask>
-            <ToolbarPickedUp pickUp={pickUp} />
-          </ReplayMask>
-        ) : null}
+        <TitleMenu
+          menu={titlePress === undefined ? titleMenu : undefined}
+          crumbs={trail !== undefined && trail.length > 0}
+        >
+          {trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "" ? (
+            <ReplayMask>
+              <ToolbarTrail trail={trail} title={title} />
+            </ReplayMask>
+          ) : trail !== undefined && trail.length > 0 && !said(title) && pickUp !== undefined ? (
+            <ReplayMask>
+              <ToolbarTrail trail={trail} title={pickUp.name} shown={pickUp.shown} />
+            </ReplayMask>
+          ) : said(title) ? (
+            <ToolbarTitle
+              title={title}
+              unmasked={titleReplayUnmasked}
+              press={titlePress}
+              menu={titleMenu}
+            />
+          ) : pickUp !== undefined && pickUp.name !== "" ? (
+            <ReplayMask>
+              <ToolbarPickedUp pickUp={pickUp} />
+            </ReplayMask>
+          ) : null}
+        </TitleMenu>
         {said(detail) ? <OneLine className={DETAIL}>{detail}</OneLine> : null}
         {said(tag) ? <span className={TAG}>{tag}</span> : null}
       </div>

@@ -15,6 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { PendingComment } from "./pending-comments.js";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions.js";
 
@@ -89,17 +90,19 @@ function draw(): HTMLElement {
   root = createRoot(container);
   act(() =>
     root?.render(
-      createElement(ThreadWritesProvider, {
-        value: { agentId: "agent-1", onWritten: () => undefined },
-        children: [
-          createElement(ThreadActions, { key: "thread", thread: THREAD }),
-          createElement(PendingComment, {
-            key: "pending",
-            draft: PENDING,
-            words: createElement("p", null, PENDING.body),
-          }),
-        ],
-      }),
+      withQueryClient(
+        createElement(ThreadWritesProvider, {
+          value: { agentId: "agent-1", onWritten: () => undefined },
+          children: [
+            createElement(ThreadActions, { key: "thread", thread: THREAD }),
+            createElement(PendingComment, {
+              key: "pending",
+              draft: PENDING,
+              words: createElement("p", null, PENDING.body),
+            }),
+          ],
+        }),
+      ),
     ),
   );
   return container;

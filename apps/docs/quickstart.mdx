@@ -1,0 +1,24 @@
+---
+title: "Your first task"
+description: "Start a task, answer its agent, and merge its pull request"
+---
+
+A task is one piece of work, from the sentence that starts it to its merged pull request.
+
+## Start a task
+
+Press <kbd>⌘N</kbd>, pick a repository, and describe the change as you would in a GitHub issue.
+
+<Frame>
+  <img src="/images/home.png" alt="Vespin's Home: New task's message box on acme/relay, the Inbox items waiting on you, and recent tasks" />
+</Frame>
+
+The agent works in a cloud sandbox with its own checkout of the repository, not in your local checkout. It writes the task's description on the **Overview** tab as it goes.
+
+## Answer in the Inbox
+
+When the agent needs a decision, a to-do, or your review, it posts a thread to your Inbox (<kbd>⇧⌘I</kbd>). Press <kbd>1</kbd>–<kbd>9</kbd> to choose an option, or <kbd>R</kbd> to reply.
+
+## Review and merge
+
+The agent opens a pull request as you. On the task's **Pull request** tab, **Chapters** splits the diff into sections, each with a summary. The agent answers review comments and fixes failing checks until you merge.

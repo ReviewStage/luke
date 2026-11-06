@@ -111,6 +111,14 @@ const PLAN_REASON_STATUS: ReadonlyMap<string, PlanStatus> = new Map([
   ["usage_limit_exceeded", PLAN_STATUS.LIMIT_REACHED],
 ]);
 
+/**
+ * What Codex 0.163.0 says of a plan its ChatGPT backend answers
+ * `usage_not_included` for (`CodexErr::UsageNotIncluded`), a plan that
+ * does not include it: an account not eligible, though Codex files it under
+ * `usageLimitExceeded`, which would otherwise read as a limit that resets.
+ */
+const PLAN_NOT_INCLUDED = "To use Codex with your ChatGPT plan, upgrade";
+
 /** The status OpenAI refuses a credential with, which a failed connection carries in its `codexErrorInfo`. */
 const HTTP_UNAUTHORIZED = 401;
 
@@ -673,6 +681,7 @@ function turnCompletedMoments(params: unknown): readonly NativeMoment[] {
   const failure = words.length === 0 ? "turn_failed" : words.join(" ");
   const found = new Set([
     planStatusOfInfo(error?.codexErrorInfo),
+    said.includes(PLAN_NOT_INCLUDED) ? PLAN_STATUS.INELIGIBLE : undefined,
     ...quoted.map(([, , reason]) => PLAN_REASON_STATUS.get(reason ?? "")),
   ]);
   const plan = PLAN_REFUSAL_ORDER.find((status) => found.has(status));

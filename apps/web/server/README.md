@@ -160,22 +160,22 @@ it moves every task standing into its starter's first workspace, and
 statement joins into its own where clause. A task is read and written by
 every member of its workspace, whichever of them started it:
 `taskReachableBy` and `reachableTask` gate every task statement in
-`task-store.ts`, `plan-pages.ts`, and `plan-revisions.ts`, on the caller's
+`task-store.ts`, `task-pages.ts`, and `description-revisions.ts`, on the caller's
 membership of the task's workspace rather than on the task's starter.
 
-A plan's pictures are its own rows, `plan_attachment`, with their bytes in a
+A description's pictures are its own rows, `description_attachment`, with their bytes in a
 `bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@repo/features/picture-wire`),
 or to `MAX_VIDEO_BYTES` for a WebM an agent recorded
-(`packages/database/src/models/plan-attachments.ts`), gated by the same
+(`packages/database/src/models/description-attachments.ts`), gated by the same
 `taskReachableBy`. `POST /api/plans/<id>/attachments { picture }` keeps one, a
-`data:` URL of a PNG, JPEG, WebP, or WebM whose bytes sniff as its label, on a plan
-that is not archived and holds fewer than `MAX_PER_PLAN`, and, for a WebM,
-fewer than `MAX_VIDEOS_PER_PLAN` videos, answering `{ id }`
+`data:` URL of a PNG, JPEG, WebP, or WebM whose bytes sniff as its label, on a task
+that is not archived and whose description holds fewer than `MAX_PER_DESCRIPTION`, and, for a WebM,
+fewer than `MAX_VIDEOS_PER_DESCRIPTION` videos, answering `{ id }`
 or `{ refused: "too-many" }` or `{ refused: "too-many-videos" }`; `GET /api/plans/<id>/attachments/<picture>`
 serves the bytes under their sniffed type, `nosniff` and `private, no-store`,
-to a member alone, anyone else reading `not-found`. The plan's text names a
-picture by its address (`@repo/features/plan-attachment-link`), which
-`savePlanText` reads to stamp the picture `saved_at`, and the scheduled sweep
+to a member alone, anyone else reading `not-found`. The description's text names a
+picture by its address (`@repo/features/description-attachment-link`), which
+`saveDescriptionText` reads to stamp the picture `saved_at`, and the scheduled sweep
 deletes, a day on, a picture no save stamped.
 
 An agent's conversation keeps the member who started it as its
@@ -674,7 +674,7 @@ route through the one fallback rewrite of `server/function-rewrites.ts`,
 which carries the whole path in `route-path` for the dispatcher to restore,
 and a path no procedure matches is the router's own JSON 404. Vercel runs the
 web service's routes before the filesystem, so the functions that answer by
-their own name (the three WebSocket functions and the feedback courier) each
+their own name (the four WebSocket functions and the feedback courier) each
 stand on a pass-through rule ahead of the fallback.
 Every answer the route gives, a refusal and an unmatched path's 404 among
 them, carries `nosniff` and `Cross-Origin-Resource-Policy: same-origin`
@@ -834,14 +834,14 @@ The service counts its own half under the same key: the core loop the desktop
 cannot see (a task, workspace, issue, or automation made, an agent
 started, an agent's pull request opened, an Inbox answer,
 an integration connected or disconnected, and how a team comes together: a
-sign-up, an invitation sent and accepted, a member's thread post, plan edit, or
-plan comment, an automation run started, the GitHub App connected, a host
+sign-up, an invitation sent and accepted, a member's thread post, description edit, or
+description comment, an automation run started, the GitHub App connected, a host
 enrolled), recorded where each is committed
 through `recordServerEvent` in `packages/service/src/events/server-events.ts`.
 A sign-up and an accepted invitation commit inside Better Auth, so its hooks
 note them (`packages/service/src/auth/auth-counts.ts`) and the auth route
 records them once Better Auth has answered. Only a member's own thread post,
-plan edit, and plan comment are counted, never an agent's through its tools.
+description edit, and description comment are counted, never an agent's through its tools.
 Its vocabulary is typed per event and holds only fixed words, booleans, and
 catalog ids, and each event carries the account's id as `distinct_id`, so it
 joins the desktop's person and is erased with it. The `ProductAnalytics`
@@ -918,7 +918,8 @@ minutes, and an email to the issue's owners on a high-priority issue.
 
 ### Deploying
 
-The terminal relay, the Browser tab's live view, and the live reads' socket
+The terminal relay, the sandbox tunnel (`/api/terminal/tunnels`, a forwarded
+port's), the Browser tab's live view, and the live reads' socket
 (`/api/live/socket`, which answers a host's live polls) are WebSocket
 functions, each exporting the `http.Server` Vercel upgrades into, so enable the
 WebSockets feature on the Vercel team and make sure Fluid compute is on for

@@ -44,9 +44,12 @@ import {
   TextField,
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
+import { queryOptions, type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { askAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { failureShown, refusedShown } from "../failure-report.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { SkillMark } from "../tasks/skill-ref.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -89,10 +92,22 @@ const LINE_STATE = {
   [STATUS_TONE.NEUTRAL]: "plain",
 } as const satisfies Record<DetectedLine["tone"], string>;
 
-/** The service's preview as the dialog holds it: of which text, and what it answered. */
-interface Previewed {
-  readonly text: string;
-  readonly view: InstalledSkillPreviewView;
+/** What pasted text comes to, asked once typing pauses and again on Retry: answered at once on a failure, never tried again on its own. */
+function skillPreviewQueryOptions(workspaceId: string, text: string) {
+  return queryOptions({
+    queryKey: [QUERY_ROOT.INSTALLED_SKILL_PREVIEW, workspaceId, text],
+    queryFn: () => askAct(ACT_KIND.INSTALLED_SKILLS_PREVIEW, { workspaceId, text }),
+    retry: false,
+  });
+}
+
+/** The preview as the box reads it: none while it is out, a read being asked again among them, and a call with no answer as a failed preview, so the line under the box stops reading. */
+function previewView(
+  previewed: UseQueryResult<InstalledSkillPreviewView>,
+): InstalledSkillPreviewView | undefined {
+  if (previewed.isPending || previewed.isFetching) return undefined;
+  if (previewed.isError) return { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED };
+  return previewed.data;
 }
 
 /** A line in its tone's tint, announced as it lands and as it changes: an alert where it needs a hand. */
@@ -204,16 +219,17 @@ export function AddSkillDialog({
   /** The wait before a preview, the renderer's own where none is handed in. */
   pause?: (ms: number) => Promise<void>;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendInstalledSkillsInstall } = useMutation(
+    actMutation(ACT_KIND.INSTALLED_SKILLS_INSTALL),
+  );
   const [text, setText] = useState("");
-  const [previewed, setPreviewed] = useState<Previewed | undefined>(undefined);
+  // Note that the text is previewed once typing pauses, so a preview asks for the words as they settled.
+  const [settled, setSettled] = useState<string | undefined>(undefined);
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [fill, setFill] = useState<TextFill>(() => textFill(undefined));
   const [scope, setScope] = useState<InstalledSkillScope>(INSTALLED_SKILL_SCOPE.PERSONAL);
   const [query, setQuery] = useState("");
   const [installing, setInstalling] = useState(false);
-  // Note that Retry asks again by changing this, which the preview's effect reads.
-  const [attempt, setAttempt] = useState(0);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const box = useRef<HTMLTextAreaElement | null>(null);
   const scopes = installScopes(workspace);
@@ -222,29 +238,27 @@ export function AddSkillDialog({
   useEffect(() => {
     if (!asks) return;
     let current = true;
-    void pause(PREVIEW_PAUSE_MS)
-      .then(() =>
-        current
-          ? act(ACT_KIND.INSTALLED_SKILLS_PREVIEW, { workspaceId: workspace.id, text })
-          : undefined,
-      )
-      .catch(() => undefined)
-      .then((answer) => {
-        if (!current) return;
-        // Note that a call with no answer is a failed preview, so the line under the box stops reading.
-        const view = answer ?? { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED };
-        setPreviewed({ text, view });
-        if ("failure" in view) return;
-        setTicked(initialTicks(view));
-        setFill(textFill(view));
-        setQuery("");
-      });
+    void pause(PREVIEW_PAUSE_MS).then(() => {
+      if (current) setSettled(text);
+    });
     return () => {
       current = false;
     };
-  }, [act, asks, attempt, pause, text, workspace.id]);
-
-  const view = asks && previewed?.text === text ? previewed.view : undefined;
+  }, [asks, pause, text]);
+  const previewing = asks && settled === text;
+  const previewed = useQuery({
+    ...skillPreviewQueryOptions(workspace.id, text),
+    enabled: previewing,
+  });
+  const view = previewing ? previewView(previewed) : undefined;
+  // A preview that lands chooses its skills afresh, as React's guide adjusts state to a prop that changed.
+  const [landedOn, setLandedOn] = useState<InstalledSkillPreviewView | undefined>(undefined);
+  if (view !== undefined && !("failure" in view) && view !== landedOn) {
+    setLandedOn(view);
+    setTicked(initialTicks(view));
+    setFill(textFill(view));
+    setQuery("");
+  }
   const preview = view === undefined || "failure" in view ? undefined : view;
   const skills = preview?.kind === SKILL_PASTE_KIND.SOURCE ? preview.skills : [];
   const shown = shownSkills(skills, query);
@@ -272,7 +286,7 @@ export function AddSkillDialog({
     if (request === undefined || installing) return;
     setInstalling(true);
     setRefusal(undefined);
-    void act(ACT_KIND.INSTALLED_SKILLS_INSTALL, request)
+    void sendInstalledSkillsInstall(request)
       .catch(() => undefined)
       .then((answer) => {
         setInstalling(false);
@@ -362,10 +376,7 @@ export function AddSkillDialog({
         {line === undefined ? null : failed !== undefined && previewRetries(failed) ? (
           <ErrorState
             failure={failureShown({ surface: FAILURE_SURFACE.SKILL_PREVIEW, cause: failed })}
-            onRetry={() => {
-              setPreviewed(undefined);
-              setAttempt((was) => was + 1);
-            }}
+            onRetry={() => void previewed.refetch()}
           >
             <ReplayMask>{line.text}</ReplayMask>
           </ErrorState>

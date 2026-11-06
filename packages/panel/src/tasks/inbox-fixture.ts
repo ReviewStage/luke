@@ -167,7 +167,7 @@ const INVITES_ITEMS: readonly InboxItem[] = [
       agentSaid(
         101,
         12 * MINUTE,
-        "An invite is a pending `memberships` row, so withdrawing one deletes it. The plan leaves open who may.",
+        "An invite is a pending `memberships` row, so withdrawing one deletes it. The description leaves open who may.",
         {
           type: INBOX_ASK.DECIDE,
           options: [

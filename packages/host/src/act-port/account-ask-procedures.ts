@@ -1,5 +1,8 @@
 import type {
-  ChatGptSignInAnswerView,
+  ChatGptDeviceLoginParams,
+  ChatGptDevicePollAnswerView,
+  ChatGptDeviceStartAnswerView,
+  ChatGptDeviceWaitParams,
   DictationTranscribeAnswerView,
   DictationTranscribeParams,
   GitHubTokenAnswerView,
@@ -40,8 +43,11 @@ export interface AccountAskProceduresDependencies {
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
-    chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
-    chatGptSignInCancel(): Effect.Effect<void>;
+    chatGptDeviceStart(): Effect.Effect<ChatGptDeviceStartAnswerView>;
+    chatGptDeviceWait(params: ChatGptDeviceWaitParams): Effect.Effect<ChatGptDevicePollAnswerView>;
+    chatGptDeviceCancel(
+      params: ChatGptDeviceLoginParams,
+    ): Effect.Effect<ChatGptDevicePollAnswerView>;
     /** The account's GitHub token held at the host while any stream of it stands; what it holds reaches the panel on app state. */
     githubTokenFollow(): Effect.Effect<void>;
     githubTokenUnfollow(): Effect.Effect<void>;
@@ -117,17 +123,23 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.providerKeyForAgents(input);
     }),
-    [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: actPort[ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN].effect(
-      function* ({ context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.chatGptSignIn();
-      },
-    ),
-    [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]: actPort[
-      ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL
+    [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START]: actPort[
+      ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START
     ].effect(function* ({ context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.chatGptSignInCancel();
+      return yield* host.chatGptDeviceStart();
+    }),
+    [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_WAIT]: actPort[
+      ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_WAIT
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.chatGptDeviceWait(input);
+    }),
+    [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_CANCEL]: actPort[
+      ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_CANCEL
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.chatGptDeviceCancel(input);
     }),
     [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW]: actPort[
       ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW

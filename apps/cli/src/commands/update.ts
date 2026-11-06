@@ -12,9 +12,10 @@
  */
 
 import { CLI_EXIT } from "@repo/features/cli-exit";
+import { CLI_INSTALL_MODE } from "@repo/features/cli-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { Effect, FileSystem, Stdio, Stream } from "effect";
+import { Duration, Effect, FileSystem, Stdio, Stream } from "effect";
 import { Command } from "effect/cli";
 import { HttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -30,11 +31,11 @@ import { answer, CommandFailed, note } from "../output.js";
 import { serviceOrigin } from "../session.js";
 import { VERSION } from "./version.js";
 
-/** The install script's mode that installs the command, as it reads its first argument. */
-const CLI_MODE = "cli";
-
 /** The only scheme the install script is fetched over, since what it answers is run as a shell script. */
 const SCRIPT_PROTOCOL = "https:";
+
+/** How long the install script's download may take, as the Mac app bounds its own (`ANSWER_WITHIN.COMMAND`). */
+const DOWNLOAD_WITHIN = Duration.seconds(30);
 
 const encoder = new TextEncoder();
 
@@ -56,9 +57,15 @@ const installScript = Effect.fnUntraced(function* (origin: string) {
     exit: CLI_EXIT.UNAVAILABLE,
     message: `Could not fetch ${url}.`,
   });
-  const response = yield* Effect.mapError(HttpClient.get(url), () => unreachable);
-  if (response.status !== 200) return yield* unreachable;
-  return yield* Effect.mapError(response.text, () => unreachable);
+  // Note that the deadline spans the body too, because a stalled connection can hang after the headers.
+  return yield* Effect.gen(function* () {
+    const response = yield* HttpClient.get(url);
+    if (response.status !== 200) return yield* unreachable;
+    return yield* response.text;
+  }).pipe(
+    Effect.timeout(DOWNLOAD_WITHIN),
+    Effect.mapError((error) => (error instanceof CommandFailed ? error : unreachable)),
+  );
 });
 
 /** The script run in its `cli` mode, its words on stderr, ending as it ended. */
@@ -72,7 +79,7 @@ const runInstallScript = Effect.fnUntraced(function* (script: string) {
   const code = yield* Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* spawner.spawn(
-        ChildProcess.make("sh", ["-s", CLI_MODE], {
+        ChildProcess.make("sh", ["-s", CLI_INSTALL_MODE], {
           stdin: { stream: Stream.make(encoder.encode(script)) },
           stdout: "pipe",
           stderr: "inherit",

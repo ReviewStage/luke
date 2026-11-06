@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
 import { useSideBundles } from "../bundle-loader.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { PANEL_SPAN } from "../panel-spans.js";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "../description-editor/contract.js";
 import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -65,7 +65,7 @@ export function InboxFormText({
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const room = useRef<HTMLDivElement>(null);
   const statuses = useIntegrationStatuses();
-  const bundle = useAtomValue(useSideBundles().planEditor);
+  const bundle = useAtomValue(useSideBundles().descriptionEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   const { agent } = doors;
   // Note that a press on the field's name takes the caret into its words, as a label does for its input, since an editor is no labelable element.

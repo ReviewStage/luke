@@ -26,7 +26,6 @@ import { relayout } from "../testing/resize-observer.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import type { HeldTranscripts } from "./strip-tabs.js";
 import {
-  SummaryButton,
   type SummaryLayout,
   summaryHolds,
   TaskSummary,
@@ -384,7 +383,7 @@ test("the Inbox's row wears the Draft pencil beside its count while one of its i
 /** What the plan's own inbox holds in these tests: nothing. */
 const NO_INBOX = { open: [], waiting: [], settled: [] };
 
-/** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
+/** The plan's column as the shell lays it out: the summary, laid out by the column's own width. */
 function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const pin = useSummaryPin(true);
   const [column, setColumn] = useState<HTMLElement | null>(null);
@@ -392,7 +391,6 @@ function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   return createElement(
     "div",
     { ref: setColumn },
-    createElement(SummaryButton, { layout, cardId: "summary-card" }),
     createElement(TaskSummary, {
       tasks,
       layout,
@@ -404,8 +402,13 @@ function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   );
 }
 
+/** A plan whose summary lists something: one page its agents wrote. */
+function listedControl(): TasksControl {
+  return tasksControl({ pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }] });
+}
+
 /** The column of `plans` drawn `width` pixels wide, and ways to lay it out again at another width or over other plans. */
-function columnAt(width: number, tasks: TasksControl = tasksControl()) {
+function columnAt(width: number, tasks: TasksControl = listedControl()) {
   const measured = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
   measured.mockReturnValue(DOMRect.fromRect({ width }));
   const page = document.body.appendChild(document.createElement("div"));
@@ -427,24 +430,22 @@ function columnAt(width: number, tasks: TasksControl = tasksControl()) {
   };
 }
 
-test("a column too narrow to spare the rail draws none, and the toolbar's button hangs the whole summary as a card in its place", () => {
-  const column = columnAt(280);
-  assert.equal(column.rail(), null);
-
+test("where the summary cannot pin, the rail's chevron hangs the whole summary as a card over it", () => {
+  const column = columnAt(600);
   const toggle =
-    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle summary"]') ??
-    assert.fail("the toolbar's button stands");
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Expand summary"]') ??
+    assert.fail("the rail's chevron stands");
   act(() => toggle.click());
   const card = document.querySelector('[role="dialog"][aria-label="Summary"]');
   assert.ok(card, "the card hangs");
   assert.ok(card.querySelectorAll("li > button").length > 0, "the card lists the summary");
 });
 
-test("Escape takes the card the toolbar's button hung back down and hands the focus back to that button", () => {
-  const column = columnAt(280);
+test("Escape takes the card the rail's chevron hung back down and hands the focus back to the chevron", () => {
+  const column = columnAt(600);
   const toggle =
-    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle summary"]') ??
-    assert.fail("the toolbar's button stands");
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Expand summary"]') ??
+    assert.fail("the rail's chevron stands");
   act(() => toggle.click());
   assert.ok(document.querySelector('[role="dialog"][aria-label="Summary"]'), "the card hangs");
 
@@ -452,14 +453,14 @@ test("Escape takes the card the toolbar's button hung back down and hands the fo
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
   assert.equal(toggle.getAttribute("aria-expanded"), "false", "the card is taken down");
-  assert.equal(document.activeElement, toggle, "the toolbar's button has the focus back");
+  assert.equal(document.activeElement, toggle, "the chevron has the focus back");
 });
 
-test("a press outside the card the toolbar's button hung takes it down, and a press inside it leaves it", () => {
-  const column = columnAt(280);
+test("a press outside the card the rail's chevron hung takes it down, and a press inside it leaves it", () => {
+  const column = columnAt(600);
   const toggle =
-    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle summary"]') ??
-    assert.fail("the toolbar's button stands");
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Expand summary"]') ??
+    assert.fail("the rail's chevron stands");
   act(() => toggle.click());
   const card = document.querySelector('[role="dialog"][aria-label="Summary"]');
   assert.ok(card, "the card hangs");
@@ -471,14 +472,21 @@ test("a press outside the card the toolbar's button hung takes it down, and a pr
   assert.equal(toggle.getAttribute("aria-expanded"), "false", "a press outside takes it down");
 });
 
-test("where the summary pins beside the document, the toolbar's button says whether it stands pinned", () => {
-  const column = columnAt(1200);
+test("a card the rail's chevron hung goes once the column narrows past the rail it hangs over", () => {
+  const column = columnAt(600);
   const toggle =
-    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle pinned summary"]') ??
-    assert.fail("the toolbar's button stands");
-  const pinned = toggle.getAttribute("aria-pressed");
-  assert.ok(pinned === "true" || pinned === "false", "the button is a toggle");
-  assert.equal(pinned, String(column.rail()?.getAttribute("data-mode") === "column"));
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Expand summary"]') ??
+    assert.fail("the rail's chevron stands");
+  act(() => toggle.click());
+  assert.ok(document.querySelector('[role="dialog"][aria-label="Summary"]'), "the card hangs");
+
+  column.widen(400);
+  assert.equal(column.rail(), null, "no rail is left");
+  assert.equal(
+    document.querySelector('[role="dialog"][aria-label="Summary"]:not([data-leaving])'),
+    null,
+    "the card goes with it",
+  );
 });
 
 test("a column with room for the rail draws it, and one widened to that room draws it again", () => {
@@ -492,13 +500,13 @@ test("a column with room for the rail draws it, and one widened to that room dra
   assert.equal(column.rail()?.getAttribute("data-mode"), "rail");
 });
 
-test("a plan with nothing yet to list draws no summary and no toolbar button, and both stand once it holds a row", () => {
-  const listed = tasksControl();
-  const bare = tasksControl({ sidePanel: { ...listed.sidePanel, tabs: [], used: [] } });
+test("a plan with nothing yet to list draws no summary nor its chevron, and both stand once it holds a row", () => {
+  const listed = listedControl();
+  const bare = tasksControl();
   for (const width of [1200, 600, 280]) {
     const column = columnAt(width, bare);
     assert.equal(column.rail(), null, `no summary at ${width}px`);
-    assert.equal(column.toggle(), null, `no toolbar button at ${width}px`);
+    assert.equal(column.toggle(), null, `no chevron at ${width}px`);
     act(() => root?.unmount());
     document.body.innerHTML = "";
     vi.restoreAllMocks();
@@ -507,5 +515,5 @@ test("a plan with nothing yet to list draws no summary and no toolbar button, an
   const column = columnAt(1200, bare);
   column.redraw(listed);
   assert.equal(column.rail()?.getAttribute("data-mode"), "column");
-  assert.ok(column.toggle(), "the toolbar's button stands");
+  assert.ok(column.toggle(), "the chevron stands");
 });

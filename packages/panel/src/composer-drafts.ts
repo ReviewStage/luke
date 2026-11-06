@@ -9,8 +9,8 @@ import {
   type InboxReplyKind,
   inboxFormValueSchema,
 } from "@repo/features/inbox-wire";
-import { PLAN_COMMENT_SCOPE } from "@repo/features/plan-comment-wire";
-import { Duration, Effect, Equal, Schema } from "effect";
+import { DESCRIPTION_COMMENT_SCOPE } from "@repo/features/description-comment-wire";
+import { Duration, Effect, Equal, Schema, SchemaTransformation } from "effect";
 import { Atom } from "effect/reactivity";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { readKept, writeKept } from "./kept-storage.js";
@@ -23,9 +23,9 @@ import { rendererRuntime } from "./renderer-runtime.js";
  * Discord's, and GitHub's comments alike, and so does every box here that
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
  * draft agent its first message per plan, New task its words per workspace
- * the task starts in, a plan's comment its words per
+ * the task starts in, a description's comment its words per
  * thread being started, per thread answered, and per comment edited
- * (`plan-comments.tsx`), a line comment in Files changed its words per
+ * (`description-comments.tsx`), a line comment in Files changed its words per
  * agent, pull request, file, side, and last line (`comment-drafts.ts`), an agent's line
  * written again its words and files per agent and line
  * (`edit-composer.tsx`), and an inbox card its answer
@@ -71,17 +71,34 @@ const MAX_KEPT = 200;
 /** How long the typing rests before what the window changed is written to storage. */
 const STORE_PAUSE = Duration.millis(300);
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a plan's comment, a line comment on an agent's changed file, or an agent's line written again. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, a description's comment, a line comment on an agent's changed file, or an agent's line written again. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
   INBOX: "inbox",
   NEW_TASK: "newTask",
   NEW_AUTOMATION: "newAutomation",
-  PLAN_COMMENT: "planComment",
+  DESCRIPTION_COMMENT: "descriptionComment",
   LINE_COMMENT: "lineComment",
   EDIT: "edit",
 } as const;
+
+/** A description's comment's kind as storage holds it: today's, or `planComment`, which every draft kept before the description was named so holds, read as today's. */
+const descriptionCommentKind = Schema.Literals([
+  DRAFT_PLACE.DESCRIPTION_COMMENT,
+  "planComment",
+]).pipe(
+  Schema.decodeTo(
+    Schema.Literal(DRAFT_PLACE.DESCRIPTION_COMMENT),
+    SchemaTransformation.transform<
+      typeof DRAFT_PLACE.DESCRIPTION_COMMENT,
+      typeof DRAFT_PLACE.DESCRIPTION_COMMENT | "planComment"
+    >({
+      decode: () => DRAFT_PLACE.DESCRIPTION_COMMENT,
+      encode: (kind) => kind,
+    }),
+  ),
+);
 
 const draftPlaceSchema = Schema.Union([
   Schema.Struct({
@@ -125,7 +142,7 @@ const draftPlaceSchema = Schema.Union([
     workspaceId: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({
-    kind: Schema.Literal(DRAFT_PLACE.PLAN_COMMENT),
+    kind: descriptionCommentKind,
     /** The plan the comment is on, which the sidebar marks. */
     planId: Schema.String,
     /**
@@ -139,7 +156,7 @@ const draftPlaceSchema = Schema.Union([
       Schema.Struct({ threadId: Schema.String }),
       Schema.Struct({
         quote: Schema.String,
-        scope: Schema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
+        scope: Schema.Literals(Object.values(DESCRIPTION_COMMENT_SCOPE)),
       }),
     ]),
   }),
@@ -287,8 +304,11 @@ export type NewAgentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_A
 /** An inbox card's place. */
 export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>;
 
-/** A plan comment's place: a thread being started, answered, or one of its comments edited. */
-export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;
+/** A description comment's place: a thread being started, answered, or one of its comments edited. */
+export type DescriptionCommentPlace = Extract<
+  DraftPlace,
+  { kind: typeof DRAFT_PLACE.DESCRIPTION_COMMENT }
+>;
 
 /** A line comment in Files changed: the agent, the file, and the side and last line it stands under. */
 export type LineCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.LINE_COMMENT }>;
@@ -708,6 +728,86 @@ export function heldLines<Line>(): Atom.Writable<readonly Line[]> {
   );
 }
 
+/** What `keptLines` keeps a line as in storage, and reads it back from. */
+export interface KeptLines<Line, Kept> {
+  /** Where in the renderer's storage they are kept. */
+  readonly key: string;
+  /** A line as storage holds it. */
+  readonly kept: Schema.Codec<Kept, Kept>;
+  /** A line as it is kept, leaving out what storage cannot hold, its files among them. */
+  readonly toKept: (line: Line) => Kept;
+  readonly fromKept: (kept: Kept) => Line;
+  /** What tells one kept line from another, whichever window wrote it. */
+  readonly idOf: (kept: Kept) => string;
+}
+
+/** Moved on by every write of kept lines, and by another window's write to storage, so a read of them reads storage again. */
+const keptRevisionAtom = Atom.keepAlive(Atom.make(0));
+
+/**
+ * Lines a window holds for the account signed in to it, as `heldLines`
+ * does, that also outlast a reload and a relaunch on this Mac: storage is
+ * where they stand, each kept as `toKept` makes it, with its account's id,
+ * and read back for that account alone. What storage cannot hold, a line's
+ * files, stays in the window that attached them, by the line. Note that a write
+ * starts from what storage holds, because another window keeps its lines
+ * there too: it changes the lines it changed, adds the ones it added, and
+ * lets go of the ones it let go, so a line another window let go is never
+ * written back. A window not signed in keeps nothing.
+ */
+export function keptLines<Line, Kept>(spec: KeptLines<Line, Kept>): Atom.Writable<readonly Line[]> {
+  const stored = Schema.fromJsonString(
+    Schema.Array(Schema.Struct({ accountId: Schema.String, line: spec.kept })),
+  );
+  const idOf = (line: Line) => spec.idOf(spec.toKept(line));
+  // Each line as this window last wrote it, its files among it, by its id.
+  const held = Atom.keepAlive(Atom.make<ReadonlyMap<string, Line>>(new Map()));
+  const read = (owner: Owner, lines: ReadonlyMap<string, Line>): readonly Line[] =>
+    owner === null
+      ? []
+      : readKept(spec.key, stored, [])
+          .filter((entry) => entry.accountId === owner)
+          .map(({ line: kept }) => {
+            const was = lines.get(spec.idOf(kept));
+            return was !== undefined && Equal.equals(spec.toKept(was), kept)
+              ? was
+              : spec.fromKept(kept);
+          });
+  const self: Atom.Writable<readonly Line[]> = Atom.keepAlive(
+    Atom.writable(
+      (get) => {
+        get(keptRevisionAtom);
+        return read(get(ownerAtom), get(held));
+      },
+      (ctx, next: readonly Line[]) => {
+        const owner = ctx.get(ownerAtom);
+        if (owner === null) return;
+        const was = new Set(ctx.get(self).map(idOf));
+        const changed = new Map(next.map((line) => [idOf(line), line]));
+        const all = readKept(spec.key, stored, []);
+        const standing = all.flatMap((entry) => {
+          if (entry.accountId !== owner) return [entry];
+          const id = spec.idOf(entry.line);
+          const line = changed.get(id);
+          if (line !== undefined) return [{ accountId: owner, line: spec.toKept(line) }];
+          // Note that a line this window held and lets go goes, and one only another window holds stands.
+          return was.has(id) ? [] : [entry];
+        });
+        const kept = new Set(
+          standing.flatMap((entry) => (entry.accountId === owner ? [spec.idOf(entry.line)] : [])),
+        );
+        const added = next
+          .filter((line) => !was.has(idOf(line)) && !kept.has(idOf(line)))
+          .map((line) => ({ accountId: owner, line: spec.toKept(line) }));
+        writeKept(spec.key, stored, [...standing, ...added]);
+        ctx.set(held, new Map([...ctx.get(held), ...changed]));
+        ctx.set(keptRevisionAtom, ctx.get(keptRevisionAtom) + 1);
+      },
+    ),
+  );
+  return self;
+}
+
 /**
  * Hands what the window holds for an account's address to its id, the
  * drafts' files and every store of held lines alike, once its identity
@@ -758,6 +858,7 @@ export function useDraftsOwner(
 ): void {
   const own = useAtomSet(ownerAtom);
   const change = useAtomSet(draftsAtom);
+  const reread = useAtomSet(keptRevisionAtom);
   const adopt = useAtomSet(adoptAtom);
   const id = account?.id;
   const email = account?.email;
@@ -778,10 +879,12 @@ export function useDraftsOwner(
   useEffect(() => {
     const heard = (event: StorageEvent) => {
       if (event.key === STORAGE_KEY) change(REREAD);
+      // Note that lines kept beside the drafts are read from storage again on any other write, which costs a read.
+      else reread((was) => was + 1);
     };
     window.addEventListener("storage", heard);
     return () => window.removeEventListener("storage", heard);
-  }, [change]);
+  }, [change, reread]);
   // Note that what the window holds unwritten is written at once wherever the words could be lost
   // or read elsewhere before the typing rests: the box losing focus, the window losing it, hidden,
   // or closed, a quit's included, and the window's root going.
@@ -1101,7 +1204,7 @@ export function useDraftWriter(): DraftWriter {
 }
 
 /** Whether a plan holds a draft: one of its agents', its draft agent's, an inbox card's, or a comment's. */
-export function usePlanDrafted(taskId: string): boolean {
+export function useDescriptionDrafted(taskId: string): boolean {
   return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
 }
 

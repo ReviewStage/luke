@@ -264,8 +264,68 @@
           "dest": "/api/terminal/sessions.js"
         },
         {
+          "src": "/api/terminal/tunnels",
+          "dest": "/api/terminal/tunnels"
+        },
+        {
+          "src": "/api/terminal/tunnels\\.js",
+          "dest": "/api/terminal/tunnels.js"
+        },
+        {
           "src": "/api/(.*)",
           "dest": "/api/default.js?route=orpc&route-path=$1"
+        },
+        {
+          "src": "/docs/?",
+          "dest": "https://stage-a8145d8f.mintlify.site/docs",
+          "transforms": [
+            {
+              "type": "request.headers",
+              "op": "delete",
+              "target": {
+                "key": "cookie"
+              }
+            }
+          ]
+        },
+        {
+          "src": "/docs/(.*)",
+          "dest": "https://stage-a8145d8f.mintlify.site/docs/$1",
+          "transforms": [
+            {
+              "type": "request.headers",
+              "op": "delete",
+              "target": {
+                "key": "cookie"
+              }
+            }
+          ]
+        },
+        {
+          "src": "/_mintlify/(.*)",
+          "dest": "https://stage-a8145d8f.mintlify.site/_mintlify/$1",
+          "transforms": [
+            {
+              "type": "request.headers",
+              "op": "delete",
+              "target": {
+                "key": "cookie"
+              }
+            }
+          ]
+        },
+        {
+          "src": "/mintlify-assets/(.*)",
+          "dest": "https://stage-a8145d8f.mintlify.site/mintlify-assets/$1",
+          "transforms": [
+            {
+              "type": "request.headers",
+              "op": "delete",
+              "target": {
+                "key": "cookie"
+              }
+            }
+          ]
         },
         {
           "src": "/app\\.html",
@@ -311,7 +371,7 @@
           }
         },
         {
-          "src": "/(?!(?:404|about|accept-invitation|account|admin|agents|api|app|assets|auth|billing|blog|board|changelog|cli|connect|connect-github|consent|dashboard|desktop-session|docs|download|downloads|eve|feed|github-installed|help|home|inbox|install|integration-connected|integrations|invite|join|k7x2|legal|login|logout|mac|mcp|new|notifications|oauth|open|page-in-mac-app|pages|plan|plans|pricing|privacy|r8v3|search|security|settings|sign-in|sign-out|sign-up|status|support|task|tasks|team|teams|terms|workspaces)/?$)(?=[A-Za-z0-9_-]{1,96}/?$)(?:[a-z0-9-]+|[A-Za-z0-9]{32}|personal-[A-Za-z0-9_-]+)/?",
+          "src": "/(?!(?:404|about|accept-invitation|account|admin|agents|api|app|assets|auth|billing|blog|board|changelog|cli|connect|connect-github|consent|dashboard|desktop-session|docs|download|downloads|eve|feed|github-installed|help|home|inbox|install|integration-connected|integrations|invite|join|k7x2|legal|login|logout|mac|mcp|mintlify-assets|new|notifications|oauth|open|page-in-mac-app|pages|plan|plans|pricing|privacy|r8v3|search|security|settings|sign-in|sign-out|sign-up|status|support|task|tasks|team|teams|terms|workspaces)/?$)(?=[A-Za-z0-9_-]{1,96}/?$)(?:[a-z0-9-]+|[A-Za-z0-9]{32}|personal-[A-Za-z0-9_-]+)/?",
           "dest": "/app.html",
           "headers": {
             "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self' https://vespin.page; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",

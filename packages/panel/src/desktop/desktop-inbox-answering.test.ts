@@ -21,10 +21,10 @@ import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
 import { ACT_KIND } from "@repo/host/acts";
 import { Effect, Schema } from "effect";
 import { act } from "react";
-import { beforeAll, test } from "vitest";
+import { beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { sideBundles } from "../bundle-loader.js";
-import { planEditor } from "../plan-editor/index.js";
+import { descriptionEditor } from "../description-editor/index.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -151,7 +151,7 @@ function optionHeads(page: HTMLElement): (string | null)[] {
   return openOptions(pane).map((each) => wordsOf(each));
 }
 
-test("an open item's ⋯ menu in the pane's bar offers Resolve without answering beside Mark as read or unread, Snooze, and Copy link, which asks first and then settles it at the revision drawn, the thread saying who resolved it; a settled item's menu offers Copy link alone", async () => {
+test("an open item's ⋯ menu in the pane's bar offers Resolve without answering beside Mark as read or unread, Remind me, and Copy link, which asks first and then settles it at the revision drawn, the thread saying who resolved it; a settled item's menu offers the same less Resolve", async () => {
   world.listedWorkspace = ACME;
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -166,7 +166,7 @@ test("an open item's ⋯ menu in the pane's bar offers Resolve without answering
     "Copy link",
     "—",
     "Mark as unreadU",
-    "SnoozeH",
+    "Remind meH",
     "—",
     "Resolve without answering",
   ]);
@@ -188,8 +188,8 @@ test("an open item's ⋯ menu in the pane's bar offers Resolve without answering
   act(() => ellipsis().click());
   assert.deepEqual(
     menuWords(),
-    ["Copy link", "—", "Mark as unreadU"],
-    "a settled item offers no Close",
+    ["Copy link", "—", "Mark as unreadU", "Remind meH"],
+    "a settled item offers Remind me but no Close",
   );
 });
 
@@ -386,20 +386,29 @@ test("an item gone from under its open box, as a teammate's delete takes it, let
   world.inboxes.set(BILLING.id, [RETRY]);
   act(() => pushAgain());
   await settle();
+  await vi.waitFor(() =>
+    assert.equal(
+      listed(page).some((row) => row.endsWith(THRESHOLD.title)),
+      false,
+      "the item is gone",
+    ),
+  );
   // Note that the item standing again shows what was kept of its draft, since its row and its box went with it.
   world.inboxes.set(BILLING.id, [THRESHOLD, RETRY]);
   act(() => pushAgain());
   await settle();
 
-  assert.equal(composerEditor(itemPane(page)).textContent, "", "the gone item's draft is let go");
+  await vi.waitFor(() =>
+    assert.equal(composerEditor(itemPane(page)).textContent, "", "the gone item's draft is let go"),
+  );
 });
 
 test("an answer box whose editor bundle could not be loaded says so beside Retry, and Retry mounts the editor once the bundle lands", async () => {
   // Note that the chunk fails the first time it is asked for and lands the next, as a connection that dropped for a moment does.
   let failed = false;
   const bundles = sideBundles({
-    planEditor: () => {
-      if (failed) return Promise.resolve(planEditor);
+    descriptionEditor: () => {
+      if (failed) return Promise.resolve(descriptionEditor);
       failed = true;
       return Promise.reject(new Error("The chunk could not be loaded."));
     },
@@ -592,6 +601,12 @@ test("Enter anywhere in a form of several fields, in its number field or its tex
   typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
   await settle();
   assert.equal(footWords(pane), "", "a field filled lets the line go");
+  // Note that the repository's paths land through a query, so Enter is pressed once the @ list holds them.
+  const listed = () =>
+    [...pane.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
+      (name) => name.textContent,
+    );
+  await vi.waitFor(() => assert.deepEqual(listed(), ["rollout-store.ts"]));
   pressInComposer(field("Reason"), "Enter");
   await settle();
   assert.deepEqual(sent, [], "the first Enter picks the mention");
@@ -833,10 +848,12 @@ test("an answer leaves Needs you the moment it is sent, its row staying where it
   answerWithNote(page, "Use 90%");
   await settle();
   assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
-  assert.deepEqual(
-    listed(page),
-    ["How is a failed email retried?", "*Expire after 7 days?", "▸ Alert at 80%?"],
-    "the answered row stays where it stood",
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      listed(page),
+      ["How is a failed email retried?", "*Expire after 7 days?", "▸ Alert at 80%?"],
+      "the answered row stays where it stood",
+    ),
   );
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
 });
@@ -899,6 +916,8 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   // The invites plan's change is pushed, as an answer from another Mac would be.
   world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }, { items: [answered] });
   await settle();
+  // Note that the push reaches the hidden Inbox's read one notify tick later, which lands before it is shown again.
+  await vi.waitFor(() => assert.deepEqual(listed(page), ["*Alert at 80%?"]));
   act(() => world.setInboxOpen(true));
   await settle();
   assert.deepEqual(
@@ -966,7 +985,7 @@ test("an answer the service refuses brings its item back as it was, needing you,
   await act(async () => answer({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   await settle();
   const pane = itemPane(page);
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
+  await vi.waitFor(() => assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*"));
   assert.equal(composerEditor(pane).textContent, "Use 90%", "the box keeps its words");
   assert.ok(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,
@@ -1003,7 +1022,9 @@ test("an answer no reply came back for is taken as sent once its thread holds a 
   world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, { items: [landed, RETRY] });
   await settle();
   const pane = itemPane(page);
-  assert.equal(composerEditor(pane).textContent, "", "the words that went back are let go");
+  await vi.waitFor(() =>
+    assert.equal(composerEditor(pane).textContent, "", "the words that went back are let go"),
+  );
   assert.equal(pane.querySelector('.agent-composer [role="alert"]'), null);
 });
 
@@ -1060,8 +1081,7 @@ test("an item its agent posts again after it was answered needs you again once a
       { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
     ]),
   );
-  await settle();
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
+  await vi.waitFor(() => assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*"));
 });
 
 test("a message the service took stays the last word on its item's row once another plan's item is chosen, though the list's read of its plan is older than the message", async () => {

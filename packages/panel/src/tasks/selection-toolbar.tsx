@@ -7,7 +7,7 @@ import type {
   EditorFormat,
   EditorFormatDoors,
   EditorFormatting,
-} from "../plan-editor/contract.js";
+} from "../description-editor/contract.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**

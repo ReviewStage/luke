@@ -113,6 +113,8 @@ interface Main {
   createRefused: TerminalRefusal | undefined;
   /** What `terminal.list` answers in place of the list, where the service refuses it. */
   listRefused: TerminalRefusal | undefined;
+  /** What `terminal.resume` answers in place of the sandbox, where the service refuses it. */
+  resumeRefused: TerminalRefusal | undefined;
   /** The answers held back, in the order asked, each landing when the test lets it go. */
   readonly held: (() => void)[];
   /** The kinds whose answers are held back until the test lets them go. */
@@ -160,6 +162,7 @@ beforeEach(() => {
         };
         return main.listed;
       case ACT_KIND.TERMINAL_RESUME:
+        if (main.resumeRefused !== undefined) return { refused: main.resumeRefused };
         main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
         return { sandbox: SANDBOX_STATE.RUNNING };
       default:
@@ -172,6 +175,7 @@ beforeEach(() => {
     down: new Set(),
     createRefused: undefined,
     listRefused: undefined,
+    resumeRefused: undefined,
     held: [],
     holding: new Set(),
     post: (terminalId) => {
@@ -503,6 +507,18 @@ test("a stopped sandbox shows its bar over the dimmed screen and resumes only on
   ]);
 });
 
+test("a resume whose snapshot is gone says the sandbox shut down and how to start a fresh one", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
+  main.resumeRefused = TERMINAL_REFUSAL.SANDBOX_SNAPSHOT_GONE;
+  const tab = await mount();
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.equal(
+    tab.bar(),
+    "This sandbox shut down after being idle. Send the agent a message to start a fresh one.",
+  );
+});
+
 test("Return on the stopped bar resumes the sandbox, as its action does", async () => {
   main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
   const tab = await mount();
@@ -768,10 +784,13 @@ test("a port that answers no attach in line is closed without losing the tab its
 test("a tab taken down with an attach still out lets its shell go, and closes the port that lands after it", async () => {
   await mount();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  assert.deepEqual(main.sent.at(-1), {
-    kind: ACT_KIND.TERMINAL_DETACH,
-    payload: { agentId: AGENT.id, terminalId: OLDEST },
-  });
+  // Note that the detach reaches the act port a few steps after the tab goes, as its mutation sends it.
+  await vi.waitFor(() =>
+    assert.deepEqual(main.sent.at(-1), {
+      kind: ACT_KIND.TERMINAL_DETACH,
+      payload: { agentId: AGENT.id, terminalId: OLDEST },
+    }),
+  );
   assert.equal(main.post(OLDEST).closed(), true);
 });
 
@@ -1032,8 +1051,8 @@ test("a refused shell rename reopens its field holding the name typed, says unde
   act(() => {
     reopened?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  await settle();
-  assert.equal(tab.rows()[0]?.name, "zsh");
+  // Note that the refusal is let go of as its mutation resets, which reaches React a tick later.
+  await vi.waitFor(() => assert.equal(tab.rows()[0]?.name, "zsh"));
   assert.ok(!tab.container.textContent?.includes("could not be renamed"));
 });
 
@@ -1324,8 +1343,15 @@ test("a new shell asked for while a shell is connected starts at once, and shows
   act(() => {
     tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
   });
-  await settle();
-  assert.deepEqual(tab.kinds(before), ["terminal.create", "terminal.attach", "terminal.list"]);
+  // Note that the relist is a read sent beside the attach's mutation, so the two reach the port in either order.
+  await vi.waitFor(() =>
+    assert.deepEqual([...tab.kinds(before)].sort(), [
+      "terminal.attach",
+      "terminal.create",
+      "terminal.list",
+    ]),
+  );
+  assert.equal(tab.kinds(before)[0], "terminal.create");
   assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
 });
 

@@ -16,10 +16,10 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { confirmFailure } from "../failure-report.js";
-import { PLACEMENT_END, type PlanEditorPlacement } from "../plan-editor/contract.js";
+import { PLACEMENT_END, type DescriptionEditorPlacement } from "../description-editor/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
-import { clickPlacement, documentWordsAt } from "./plan-document-editor.js";
+import { clickPlacement, documentWordsAt } from "./description-document-editor.js";
 import {
   PullRequestWriteNote,
   type ReadAgain,
@@ -30,14 +30,14 @@ import {
 } from "./pull-request-writes.js";
 
 /**
- * pull-request-description.tsx -- a pull request's description edited in place: GitHub's rendering as it reads, the plan's editor on its Markdown once pressed, and the edit written to GitHub as it finishes or is left.
+ * pull-request-description.tsx -- a pull request's description edited in place: GitHub's rendering as it reads, the description's editor on its Markdown once pressed, and the edit written to GitHub as it finishes or is left.
  *
  * Where the member may edit the description, its words are drawn as GitHub
- * renders them, and nothing on them marks them editable, as a plan's
+ * renders them, and nothing on them marks them editable, as a description's
  * sections are drawn; a click on the words opens the editor in their place,
  * the caret where the click landed, and so does Return on the description
  * selected. The editor is every Markdown document's (`./markdown-editor.tsx`),
- * on the description as written, with the plan's toolbar, `/` menu and
+ * on the description as written, with the description's toolbar, `/` menu and
  * chords; until its bundle has loaded, GitHub's rendering stands. Esc or ⌘↩
  * finishes it, and so does focus leaving it: words left as they opened
  * write nothing, and changed ones are written to GitHub on the member's
@@ -88,7 +88,7 @@ type Editing =
       readonly opened: string;
       /** The words GitHub holds, as far as the tab knows: those it opened on, or those last written. */
       readonly base: string;
-      readonly placement: PlanEditorPlacement | undefined;
+      readonly placement: DescriptionEditorPlacement | undefined;
       /** Each opening's own, so a reload opens a new editor rather than keeping the old one's words. */
       readonly generation: number;
       /** The read standing when the last write went out, which a newer read closes the editor after. */
@@ -231,7 +231,7 @@ export function PullRequestDescription({
     writes.dismiss();
     setHeldNote(undefined);
   };
-  const open = (placement: PlanEditorPlacement | undefined) => {
+  const open = (placement: DescriptionEditorPlacement | undefined) => {
     draft.current = undefined;
     setEditing((was) => ({
       kind: EDITING.OPEN,

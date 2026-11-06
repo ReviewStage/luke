@@ -1,4 +1,5 @@
 import {
+  type ChatGptDeviceSettled,
   type FastAccess,
   PROVIDER_KEY_KIND,
   type ProviderKeyKind,
@@ -40,7 +41,7 @@ export const accountProviderKey = pgTable(
     /** Whether the key's organization may run Anthropic's fast mode, as a fast request on the key last settled; null where none has. */
     fastAccess: text("fast_access").$type<FastAccess>(),
     /**
-     * When the access token a ChatGPT sign-in's sealed credentials hold
+     * When the access token a ChatGPT plan's sealed credentials hold
      * expires, so a refresh is due without opening them; null for every
      * other kind, whose credential carries no expiry we read.
      */
@@ -67,16 +68,27 @@ export const accountProviderKey = pgTable(
 );
 
 /**
- * The account's own `ext_agent_host_id` for our hosted runtime: the host
- * OpenAI's Sign in with ChatGPT names when the desktop signs in for the
- * service, minted once and kept across sign-outs, as OpenAI's guide asks a
- * host's id to be, so it outlives the credential row it signs in for. It is
- * an opaque identifier, not a credential, and leaves with the account.
+ * The account's pending connection of a ChatGPT plan through Codex's
+ * device-code login: at most one per account, a new one replacing it, so
+ * none outlives the next start. The device authorization and its user code,
+ * which together claim the sign-in at OpenAI, are held only as the service
+ * sealed them (`models/provider-key-seal.ts`'s `sealChatGptDeviceCodes`),
+ * bound to the account and the login, never in the clear and never in the
+ * panel, and leave the row once it settles. `outcome` is how it settled,
+ * null while it is pending, so a poll after the one that settled it answers
+ * the same. The row leaves with its account.
  */
-export const accountChatGptHost = pgTable("account_chatgpt_host", {
+export const accountChatGptDeviceLogin = pgTable("account_chatgpt_device_login", {
   userId: text("user_id")
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
-  extAgentHostId: text("ext_agent_host_id").notNull(),
+  /** The opaque id the panel polls and cancels the login by, minted afresh at every start. */
+  loginId: text("login_id").notNull(),
+  /** The device authorization and user code as the service sealed them; null once the login settled. */
+  sealedCodes: text("sealed_codes"),
+  /** How the login settled; null while it is pending. */
+  outcome: text("outcome").$type<ChatGptDeviceSettled>(),
+  /** When OpenAI stops taking the user code, fifteen minutes after the start. */
+  expiresAt: timestamptz("expires_at").notNull(),
   createdAt: timestamptz("created_at").notNull(),
 });

@@ -64,7 +64,7 @@ function pressed(
 
 describe("the stops", () => {
   test("are whole screens, most recent first, every task in one list, each once", () => {
-    const work = screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN);
+    const work = screen("a", { agent: "x" }, SIDE_PANEL_TAB.DESCRIPTION);
     const stops = walked(work, screen("b", { agent: "y" }), inbox, work);
     assert.deepEqual(stops, [work, inbox, screen("b", { agent: "y" })]);
   });
@@ -72,13 +72,16 @@ describe("the stops", () => {
   test("tell a screen apart by either pane's tab, and a pane showing none from one showing a tab", () => {
     assert.equal(
       sameStop(
-        screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN),
+        screen("a", { agent: "x" }, SIDE_PANEL_TAB.DESCRIPTION),
         screen("a", { agent: "x" }, SIDE_PANEL_TAB.COMMENTS),
       ),
       false,
     );
     assert.equal(
-      sameStop(screen("a", { agent: "x" }), screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN)),
+      sameStop(
+        screen("a", { agent: "x" }),
+        screen("a", { agent: "x" }, SIDE_PANEL_TAB.DESCRIPTION),
+      ),
       false,
     );
     assert.equal(
@@ -99,7 +102,7 @@ describe("the stops", () => {
 });
 
 describe("a move of the window", () => {
-  const work = screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN);
+  const work = screen("a", { agent: "x" }, SIDE_PANEL_TAB.DESCRIPTION);
 
   test("onto a task records one stop for the screen, whatever both its panes show", () => {
     const stops = moved([inbox], inbox, work, false);
@@ -140,7 +143,7 @@ describe("a move of the window", () => {
 });
 
 describe("⌃Tab", () => {
-  const here = screen("a", undefined, SIDE_PANEL_TAB.PLAN);
+  const here = screen("a", undefined, SIDE_PANEL_TAB.DESCRIPTION);
   const stops = walked(automationsPage, screen("b", { agent: "y" }), inbox, here);
 
   test("tapped, goes to the screen before this one and shows nothing", () => {
@@ -223,12 +226,12 @@ describe("what is on screen", () => {
     boundFor: "a",
     openTaskId: "a",
     column: { agent: "x" },
-    panel: SIDE_PANEL_TAB.PLAN,
+    panel: SIDE_PANEL_TAB.DESCRIPTION,
     fullScreen: false,
   };
 
   test("is the open task with both its panes' tabs, either of them none", () => {
-    assert.deepEqual(shownStop(standing), screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN));
+    assert.deepEqual(shownStop(standing), screen("a", { agent: "x" }, SIDE_PANEL_TAB.DESCRIPTION));
     assert.deepEqual(
       shownStop({ ...standing, column: { draft: "d" }, panel: undefined }),
       screen("a", { draft: "d" }),
@@ -238,9 +241,10 @@ describe("what is on screen", () => {
 
   test("keeps the column's tab under a panel filling the window, the screen told apart by it", () => {
     const filled = shownStop({ ...standing, fullScreen: true });
-    assert.deepEqual(filled, screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN, true));
+    assert.deepEqual(filled, screen("a", { agent: "x" }, SIDE_PANEL_TAB.DESCRIPTION, true));
     assert.equal(
-      filled !== undefined && sameStop(filled, screen("a", { agent: "x" }, SIDE_PANEL_TAB.PLAN)),
+      filled !== undefined &&
+        sameStop(filled, screen("a", { agent: "x" }, SIDE_PANEL_TAB.DESCRIPTION)),
       false,
     );
   });

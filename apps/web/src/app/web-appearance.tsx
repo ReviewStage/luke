@@ -15,9 +15,10 @@
  * dark from its first frame rather than light until the state is read.
  */
 
-import { APP_SETTINGS_VIEW, useAppSlice } from "@repo/panel/use-app-state";
+import { appStateQuery, selectAppSettingsView } from "@repo/panel/use-app-state";
 import type { Theme } from "@repo/ui";
 import { wearTheme } from "@repo/ui/appearance";
+import { useQuery } from "@tanstack/react-query";
 import { useLayoutEffect } from "react";
 import { THEME_KEY, tintChrome } from "../theme-chrome";
 
@@ -42,7 +43,7 @@ function wearAccountTheme(theme: Theme, root = document.documentElement): () => 
 
 /** Draws nothing: wears the account's Theme setting on the tab's root for as long as the app is drawn. */
 export function WebAppearance(): null {
-  const theme = useAppSlice(APP_SETTINGS_VIEW)?.theme;
+  const theme = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data?.theme;
   useLayoutEffect(() => (theme === undefined ? undefined : wearAccountTheme(theme)), [theme]);
   return null;
 }

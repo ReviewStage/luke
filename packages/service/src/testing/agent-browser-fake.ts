@@ -262,6 +262,8 @@ export interface FakeSandboxScenario {
   readonly unavailable?: number;
   /** Whether every resume is unavailable, as Vercel answering the status given. */
   readonly resumeUnavailable?: number;
+  /** The error code Vercel's body names on that refusal, where it names one. */
+  readonly resumeCode?: string;
   /** What the recording's commands answer: the start's output (`started` where none is named), the stop's JSON (none recorded where none is named), and the video the stop leaves behind. */
   readonly recording?: {
     readonly start?: CommandRun;
@@ -303,7 +305,12 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
       refused() ??
       (scenario.resumeUnavailable === undefined
         ? undefined
-        : Effect.fail(new SandboxUnavailable({ status: scenario.resumeUnavailable }))) ??
+        : Effect.fail(
+            new SandboxUnavailable({
+              status: scenario.resumeUnavailable,
+              ...(scenario.resumeCode === undefined ? undefined : { code: scenario.resumeCode }),
+            }),
+          )) ??
       Effect.sync(() => {
         if (status === "running") return listed();
         resumes += 1;
@@ -350,7 +357,6 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
     openInteractive: () =>
       refused() ??
       Effect.succeed({ url: "wss://sbx-fixture.vercel.run/ws", token: Redacted.make("pty-token") }),
-    updateTimeout: () => Effect.die("a sandbox the scenario opened is already within the timeout"),
   };
   return { api, ran };
 }

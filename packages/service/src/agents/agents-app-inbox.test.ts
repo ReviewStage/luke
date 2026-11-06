@@ -13,7 +13,7 @@ import {
 } from "@repo/database/models/automation-store";
 import { readMessageByClientId } from "@repo/database/models/message-reads";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { savePlanText, updateTask } from "@repo/database/models/task-store";
+import { saveDescriptionText, updateTask } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { inboxItem } from "@repo/database/schemas/inbox";
 import { conversations } from "@repo/database/schemas/storage";
@@ -263,7 +263,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           name: "Billing export",
           repository: RELAY_FULL_NAME,
         });
-        yield* savePlanText(owner, second.id, SAVED);
+        yield* saveDescriptionText(owner, second.id, SAVED);
         const secondAgent = (yield* startedAgent(owner, second.id, ask)).agent;
         const onSecond = (value: ThreadPost) =>
           postInboxThread({ userId: owner, taskId: second.id, agentId: secondAgent.id }, value);

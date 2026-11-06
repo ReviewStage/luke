@@ -38,6 +38,7 @@ import { useId, useRef, useState } from "react";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { ChangedMark } from "../settings/marks.js";
 import { PickerRow } from "../settings/picker-row.js";
+import { useSettingRowWrite } from "../settings/row-write.js";
 import { SelectRow } from "../settings/select-row.js";
 import { SwitchRow } from "../settings/switch-row.js";
 import { CHANGES_WORDS } from "./changes-model.js";
@@ -203,6 +204,12 @@ export type ViewSettingsScope =
     }
   | { readonly kind: typeof VIEW_SETTINGS_SCOPE.LINES };
 
+/** A switch's value as its setting stores it. */
+const switchStored = (enabled: boolean) => enabled;
+
+/** A switch's setting as the switch draws it. */
+const switchDrawn = (value: unknown) => value === true;
+
 /**
  * The settings every run of lines follows, a File tab's and a diff's alike:
  * wrap and numbers, and, where the lines carry notes, as a diff's review
@@ -210,7 +217,15 @@ export type ViewSettingsScope =
  * chip at the end of their line.
  */
 function LinesRows({ notes }: { notes: boolean }): React.JSX.Element {
-  const { settings, change } = useFileViewSettings();
+  const { settings } = useFileViewSettings();
+  const wordWrapWrite = useSettingRowWrite("wordWrap", switchStored, switchDrawn, true);
+  const lineNumbersWrite = useSettingRowWrite("lineNumbers", switchStored, switchDrawn, true);
+  const diffMinimizeCommentsWrite = useSettingRowWrite(
+    "diffMinimizeComments",
+    switchStored,
+    switchDrawn,
+    true,
+  );
   const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
   return (
     <>
@@ -220,7 +235,7 @@ function LinesRows({ notes }: { notes: boolean }): React.JSX.Element {
         labelReplayUnmasked
         checked={settings.wordWrap}
         changed={changed("wordWrap")}
-        onChange={(wordWrap) => change("wordWrap", wordWrap)}
+        write={wordWrapWrite}
       />
       <SwitchRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
@@ -228,7 +243,7 @@ function LinesRows({ notes }: { notes: boolean }): React.JSX.Element {
         labelReplayUnmasked
         checked={settings.lineNumbers}
         changed={changed("lineNumbers")}
-        onChange={(lineNumbers) => change("lineNumbers", lineNumbers)}
+        write={lineNumbersWrite}
       />
       {notes ? (
         <SwitchRow
@@ -244,7 +259,7 @@ function LinesRows({ notes }: { notes: boolean }): React.JSX.Element {
           }
           checked={settings.diffMinimizeComments}
           changed={changed("diffMinimizeComments")}
-          onChange={(diffMinimizeComments) => change("diffMinimizeComments", diffMinimizeComments)}
+          write={diffMinimizeCommentsWrite}
         />
       ) : null}
     </>
@@ -292,7 +307,20 @@ function ThemeRows(): React.JSX.Element {
 
 /** The type every run of code is set in: its font, its size, its line height, and its ligatures, a File tab's lines and a diff's alike. */
 function TypeRows(): React.JSX.Element {
-  const { settings, change } = useFileViewSettings();
+  const { settings } = useFileViewSettings();
+  const diffFontWrite = useSettingRowWrite(
+    "diffFont",
+    (value: FileViewSettings["diffFont"]) => value,
+  );
+  const diffFontSizeWrite = useSettingRowWrite(
+    "diffFontSize",
+    (value: FileViewSettings["diffFontSize"]) => value,
+  );
+  const diffLineHeightWrite = useSettingRowWrite(
+    "diffLineHeight",
+    (value: FileViewSettings["diffLineHeight"]) => value,
+  );
+  const diffLigaturesWrite = useSettingRowWrite("diffLigatures", switchStored, switchDrawn, true);
   const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
   return (
     <>
@@ -304,7 +332,7 @@ function TypeRows(): React.JSX.Element {
         options={FONT_OPTIONS}
         parse={(raw) => optionOf(FONT_OPTIONS, raw)}
         changed={changed("diffFont")}
-        onChange={(diffFont) => change("diffFont", diffFont)}
+        write={diffFontWrite}
       />
       <SelectRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
@@ -314,7 +342,7 @@ function TypeRows(): React.JSX.Element {
         options={FONT_SIZE_OPTIONS}
         parse={(raw) => optionOf(FONT_SIZE_OPTIONS, raw)}
         changed={changed("diffFontSize")}
-        onChange={(diffFontSize) => change("diffFontSize", diffFontSize)}
+        write={diffFontSizeWrite}
       />
       <SelectRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
@@ -324,7 +352,7 @@ function TypeRows(): React.JSX.Element {
         options={LINE_HEIGHT_OPTIONS}
         parse={(raw) => optionOf(LINE_HEIGHT_OPTIONS, raw)}
         changed={changed("diffLineHeight")}
-        onChange={(diffLineHeight) => change("diffLineHeight", diffLineHeight)}
+        write={diffLineHeightWrite}
       />
       <SwitchRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
@@ -332,7 +360,7 @@ function TypeRows(): React.JSX.Element {
         labelReplayUnmasked
         checked={settings.diffLigatures}
         changed={changed("diffLigatures")}
-        onChange={(diffLigatures) => change("diffLigatures", diffLigatures)}
+        write={diffLigaturesWrite}
       />
     </>
   );
@@ -341,6 +369,16 @@ function TypeRows(): React.JSX.Element {
 /** What a diff marks: its layout, its changed words, its indicators, and its backgrounds, where the diff is wide enough to split said under the layout. */
 function DiffRows({ roomy }: { roomy: boolean }): React.JSX.Element {
   const { settings, change } = useFileViewSettings();
+  const inlineDiffWrite = useSettingRowWrite(
+    "inlineDiff",
+    (value: FileViewSettings["inlineDiff"]) => value,
+  );
+  const diffBackgroundsWrite = useSettingRowWrite(
+    "diffBackgrounds",
+    switchStored,
+    switchDrawn,
+    true,
+  );
   const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
   return (
     <>
@@ -360,7 +398,7 @@ function DiffRows({ roomy }: { roomy: boolean }): React.JSX.Element {
         options={INLINE_DIFF_OPTIONS}
         parse={(raw) => optionOf(INLINE_DIFF_OPTIONS, raw)}
         changed={changed("inlineDiff")}
-        onChange={(inlineDiff) => change("inlineDiff", inlineDiff)}
+        write={inlineDiffWrite}
       />
       <SegmentedRow
         label="Indicators"
@@ -375,7 +413,7 @@ function DiffRows({ roomy }: { roomy: boolean }): React.JSX.Element {
         labelReplayUnmasked
         checked={settings.diffBackgrounds}
         changed={changed("diffBackgrounds")}
-        onChange={(diffBackgrounds) => change("diffBackgrounds", diffBackgrounds)}
+        write={diffBackgroundsWrite}
       />
     </>
   );

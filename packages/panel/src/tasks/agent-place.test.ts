@@ -5,10 +5,11 @@ import { AGENT_MACHINE, type AgentSummary } from "@repo/features/agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
+import { appBridge } from "../app-bridge.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { handBeats } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { AgentPlace } from "./agent-place.js";
 
 /**
@@ -56,6 +57,8 @@ async function placeOf(
   clear();
   fakeActPort({});
   handBeats(ages);
+  // Note that the label is read once, so the document is in the client from its first frame, as the root's `ensureQueryData` leaves it.
+  writeAppState(await appBridge().requestAppState());
   const registry = AtomRegistry.make();
   registries.push(registry);
   const container = document.createElement("div");
@@ -89,8 +92,11 @@ test("a device the presence read finds silent reads offline", async () => {
 });
 
 test("a presence read that fails says the status cannot be checked, never offline", async () => {
-  const label = await labelWhile(undefined);
-  assert.equal(label, "Runs on: Charles's MacBook Air · Can't check status");
+  await labelWhile(undefined);
+  // Note that the read's failure reaches the presence query a moment after the document does.
+  await vi.waitFor(() =>
+    assert.equal(document.body.textContent, "Runs on: Charles's MacBook Air · Can't check status"),
+  );
 });
 
 test("a device the account does not own, which the read does not name, shows its name alone", async () => {

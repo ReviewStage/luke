@@ -12,7 +12,7 @@ import { adminIntegrations } from "@repo/service/admin/admin-health";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 import { choose, menuItems, openViewOptions } from "./support/view-options";
 
 /**
@@ -108,6 +108,7 @@ let root: Root | undefined;
 /** jsdom's stand-in for the browser's ResizeObserver, which it lacks; a list row measures its title with one, and the page is never resized. */
 class StillResizeObserver {
   observe(): void {}
+  unobserve(): void {}
   disconnect(): void {}
 }
 
@@ -162,6 +163,7 @@ async function openReliability(body: AdminReliability | undefined): Promise<Open
       ),
     );
   });
+  if (body !== undefined) await readLanded(page);
   return { page, heard };
 }
 
@@ -255,12 +257,15 @@ test("product analytics is a link only where the deployment names its console", 
   act(() => root?.unmount());
 
   const unnamed = await openReliability(reliability({ analyticsConsoleUrl: undefined }));
+  // Note that the first page's answer stands until the second read lands.
+  await vi.waitFor(() =>
+    expect(
+      Array.from(unnamed.page.querySelectorAll("a")).some(
+        (anchor) => anchor.textContent === "product analytics",
+      ),
+    ).toBe(false),
+  );
   expect(unnamed.page.textContent).toContain("live in product analytics, not this database");
-  expect(
-    Array.from(unnamed.page.querySelectorAll("a")).some(
-      (anchor) => anchor.textContent === "product analytics",
-    ),
-  ).toBe(false);
 });
 
 test("the time range is a week or a month, and its choice hands up", async () => {

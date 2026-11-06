@@ -167,6 +167,66 @@ jobs:
       - name: The store's lock and claim tests on a real Postgres
         run: pnpm exec vitest run --project database .postgres.test.ts
 
+  # The image every cloud agent's sandbox boots from (`apps/web/agent-image/`),
+  # pushed to the project's Vercel Container Registry as Vercel's guide does
+  # it (https://vercel.com/docs/container-registry/github-actions), under the
+  # tag its staged build context digests to, which the web build names too
+  # (`apps/web/scripts/agent-image.ts`). A pull request's run pushes the one
+  # its Preview names, and the merge queue's the one `main` deploys, so no
+  # deploy names an image not yet pushed. A tag already pushed is not built
+  # again, and the job ends only once Vercel has prepared the image for
+  # Sandbox, which a sandbox cannot boot before. It signs in with GitHub's
+  # OIDC token, which the team's VCR policy trusts, so no secret is kept.
+  agent-image:
+    name: Agent image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+      - name: Stage the build context
+        id: stage
+        run: |
+          pnpm --filter @repo/agent-runner build
+          tag=$(pnpm --silent --filter @repo/web agent-image "$RUNNER_TEMP/agent-image" | tail -n 1)
+          echo "image=vcr.vercel.com/$TEAM/$PROJECT/agent-image:$tag" >> "$GITHUB_OUTPUT"
+        env:
+          TEAM: ${{ vars.VERCEL_TEAM_SLUG }}
+          PROJECT: ${{ vars.VERCEL_PROJECT_SLUG }}
+      - name: Log in to VCR
+        uses: vercel/vcr-action/login@6888f841cb0d2255ef9dab40f068cba07234ef47 # v1
+        with:
+          team: ${{ vars.VERCEL_TEAM_ID }}
+      - name: Look for the image
+        id: pushed
+        run: |
+          if docker buildx imagetools inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          IMAGE: ${{ steps.stage.outputs.image }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        if: steps.pushed.outputs.found != 'true'
+      - name: Build and push
+        if: steps.pushed.outputs.found != 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ${{ runner.temp }}/agent-image
+          platforms: linux/amd64
+          provenance: false
+          tags: ${{ steps.stage.outputs.image }}
+          outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Wait for Vercel to prepare it
+        uses: vercel/vcr-action/wait-for-optimized-image@6888f841cb0d2255ef9dab40f068cba07234ef47 # v1
+        with:
+          image: ${{ steps.stage.outputs.image }}
+          timeout-seconds: 1800
+
   # The one check the ruleset requires, so a job or slice added above is
   # required without a ruleset edit. It passes only where every job it needs
   # succeeded. Note that it runs whatever became of them, because a job skipped
@@ -175,7 +235,7 @@ jobs:
   ci:
     name: CI
     if: ${{ always() }}
-    needs: [portable, tests, postgres]
+    needs: [portable, tests, postgres, agent-image]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

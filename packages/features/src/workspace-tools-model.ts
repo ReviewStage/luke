@@ -21,9 +21,7 @@
  */
 
 import { AGENT_TOOL, type AgentTool } from "./agent-tools.js";
-import { MESSAGE_SENDER, type MessageSender } from "./agent-wire.js";
 import { PRODUCT_NAME } from "./product-name.js";
-import { dayAndTimeText } from "./time-format.js";
 import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "./workspace-tools-wire.js";
 
 /** The groups our tools stand under on their page, in the order they are drawn. */
@@ -32,7 +30,7 @@ export const WORKSPACE_TOOL_GROUP = {
   THREADS: "Threads",
   AGENTS: "Agents and tasks",
   AUTOMATIONS: "Automations",
-  PLAN: "Plan and comments",
+  DESCRIPTION: "Description and comments",
   PAGES: "Pages and pictures",
   WEB: "Browser and web",
   CODE: "Code",
@@ -102,7 +100,7 @@ const WORKSPACE_TOOL_WORDS = {
   },
   [AGENT_TOOL.READ_TASK]: {
     group: WORKSPACE_TOOL_GROUP.AGENTS,
-    summary: "Reads a task and its plan",
+    summary: "Reads a task and its description",
   },
   [AGENT_TOOL.CREATE_TASK]: {
     group: WORKSPACE_TOOL_GROUP.AGENTS,
@@ -140,20 +138,20 @@ const WORKSPACE_TOOL_WORDS = {
     group: WORKSPACE_TOOL_GROUP.AUTOMATIONS,
     summary: "Runs an automation now",
   },
-  [AGENT_TOOL.EDIT_PLAN]: {
-    group: WORKSPACE_TOOL_GROUP.PLAN,
-    summary: "Takes notes in its task's plan",
+  [AGENT_TOOL.EDIT_DESCRIPTION]: {
+    group: WORKSPACE_TOOL_GROUP.DESCRIPTION,
+    summary: "Takes notes in its task's description",
   },
   [AGENT_TOOL.READ_COMMENTS]: {
-    group: WORKSPACE_TOOL_GROUP.PLAN,
-    summary: "Reads the comment threads on the plan",
+    group: WORKSPACE_TOOL_GROUP.DESCRIPTION,
+    summary: "Reads the comment threads on the description",
   },
   [AGENT_TOOL.REPLY_TO_COMMENT]: {
-    group: WORKSPACE_TOOL_GROUP.PLAN,
+    group: WORKSPACE_TOOL_GROUP.DESCRIPTION,
     summary: "Answers a comment thread it was mentioned in",
   },
   [AGENT_TOOL.UPDATE_COMMENT]: {
-    group: WORKSPACE_TOOL_GROUP.PLAN,
+    group: WORKSPACE_TOOL_GROUP.DESCRIPTION,
     summary: "Resolves or reopens a comment thread",
   },
   [AGENT_TOOL.SHOW_PAGE]: {
@@ -170,7 +168,7 @@ const WORKSPACE_TOOL_WORDS = {
   },
   [AGENT_TOOL.LOOK_AT_PICTURE]: {
     group: WORKSPACE_TOOL_GROUP.PAGES,
-    summary: "Looks at a picture in the plan",
+    summary: "Looks at a picture in the description",
   },
   [AGENT_TOOL.BROWSER]: {
     group: WORKSPACE_TOOL_GROUP.WEB,
@@ -274,7 +272,7 @@ export function workspaceToolSections(names: readonly string[]): readonly Worksp
   });
 }
 
-/** Why `run_on_mac` is off for an agent, the service's two reasons and the one this Mac knows first. */
+/** Why `run_on_mac` is off for an agent, the service's reason and the one this Mac knows first. */
 export const RUN_ON_MAC_REASON = {
   SETTINGS_OFF: "settings-off",
   ...RUN_ON_MAC_OFF,
@@ -293,12 +291,7 @@ export const RUN_ON_MAC_REASON_WORDS = {
   [RUN_ON_MAC_REASON.SETTINGS_OFF]: { short: "Off in Settings" },
   [RUN_ON_MAC_REASON.MAC_AWAY]: {
     short: "No Mac listening",
-    detail: `${PRODUCT_NAME} isn't open on any Mac of the developer who started this agent, or it stopped listening.`,
-  },
-  [RUN_ON_MAC_REASON.OUTSIDE_WORDS]: {
-    short: "Someone else's words",
-    detail:
-      "Someone other than the developer who started this agent put words into it, such as a teammate's message, a webhook's body, or a review on its pull request, so it never runs commands on their Mac again.",
+    detail: `${PRODUCT_NAME} isn't open on the Mac this agent's commands run on, or it stopped listening.`,
   },
 } as const satisfies Record<RunOnMacReason, RunOnMacReasonWords>;
 
@@ -306,31 +299,10 @@ export const RUN_ON_MAC_REASON_WORDS = {
 export const RUN_ON_MAC_DESCRIPTION =
   "Runs one shell command on the developer's own Mac, in their login shell from their home folder, and reads what it printed. It reaches what their account on the Mac reaches: local checkouts, uncommitted work, installed tools, and running servers. The Mac asks first unless Settings › This Mac says otherwise.";
 
-/** Who put the first outside words into an agent, by what kind of sender carried them, as a sentence opens. */
-const OUTSIDE_WORDS_FROM = {
-  [MESSAGE_SENDER.MEMBER]: "A teammate's message",
-  [MESSAGE_SENDER.AGENT]: "A teammate's agent's message",
-  [MESSAGE_SENDER.AUTOMATION]: "An automation's webhook or event",
-  [MESSAGE_SENDER.GITHUB]: "A review or comment on its pull request",
-  [MESSAGE_SENDER.APP]: "A message",
-} as const satisfies Record<MessageSender, string>;
-
-/**
- * The sentence of detail `run_on_mac`'s page says under its reason: for
- * outside words, who put the first of them in and when, where the service
- * could say; the reason's own sentence otherwise, where it has one.
- */
-export function runOnMacDetail(
-  reason: RunOnMacReason,
-  standing: RunOnMacStanding | undefined,
-): string | undefined {
+/** The sentence of detail `run_on_mac`'s page says under its reason, where it has one. */
+export function runOnMacDetail(reason: RunOnMacReason): string | undefined {
   const words: RunOnMacReasonWords = RUN_ON_MAC_REASON_WORDS[reason];
-  const general = words.detail;
-  if (reason !== RUN_ON_MAC_REASON.OUTSIDE_WORDS || standing === undefined || standing.on) {
-    return general;
-  }
-  if (standing.from === undefined || standing.at === undefined) return general;
-  return `${OUTSIDE_WORDS_FROM[standing.from]} put words into this agent on ${dayAndTimeText(standing.at)}. It no longer runs commands on the Mac of the developer who started it, since those words were not theirs.`;
+  return words.detail;
 }
 
 /** What decides whether `run_on_mac` is on: this Mac's setting, where the reader may be told it, and the service's answer. */

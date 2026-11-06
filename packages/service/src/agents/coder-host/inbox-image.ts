@@ -4,7 +4,6 @@ import { SIGNATURE_BYTES } from "@repo/features/image-signature";
 import { INBOX_BOUNDS, type InboxImageType } from "@repo/features/inbox-wire";
 import { mediaDimensions, sniffMediaType } from "@repo/features/media-signature";
 import { Effect, Result } from "effect";
-import type { SandboxSession } from "eve/sandbox";
 import type { InboxImage } from "../../inbox/inbox-store.js";
 
 /**
@@ -26,9 +25,13 @@ import type { InboxImage } from "../../inbox/inbox-store.js";
  */
 
 /** The sandbox as the inbox reaches it: one file read as a stream of bytes, or nothing where there is no file. */
-type InboxSandbox = Pick<SandboxSession, "readFile">;
+interface InboxSandbox {
+  readonly readFile: (options: {
+    readonly path: string;
+  }) => PromiseLike<ReadableStream<Uint8Array> | null>;
+}
 
-/** The door to the session's sandbox, opened on first use: eve's `ctx.getSandbox()`, or a test's double. */
+/** The door to the session's sandbox, opened on first use, or a test's double. */
 export type InboxSandboxDoor = () => Promise<InboxSandbox>;
 
 /** Why a picture was not read, in the words the model reads; each is followed by the path. */

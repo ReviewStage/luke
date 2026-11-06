@@ -47,15 +47,18 @@ import {
 import {
   commandKeyshortcuts,
   GAP,
-  GroupHeader,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
   NOTE_LINE_LOOK,
   NoteLine,
+  ProviderMark,
+  ROVING_ORIENTATION,
+  rovingStep,
   SearchField,
   Shortcut,
   Stack,
+  useComboboxField,
 } from "@repo/ui";
 import { integrationLines } from "@repo/ui/integration-search";
 import { land } from "@repo/ui/landed";
@@ -89,9 +92,11 @@ import { experimentPages, settingsPageShown } from "./settings/settings-rows.js"
  * are not drawing right now is not offered, because a result that leads to a
  * page without its row is a promise the page cannot keep.
  *
- * Results read the way macOS System Settings reads them: grouped under the
- * name of the page that holds them. Pressing one opens its page and takes
- * the view to the row itself, by the anchor the row wears.
+ * Results read the way Linear's settings search reads them: each page found
+ * stands with its glyph, by its own name or by the rows it holds, and those
+ * rows stand nested under it. The field's keys walk them, each step showing
+ * its page beside the list with the row lit, and pressing one opens its page
+ * and takes the view to the row itself, by the anchor the row wears.
  * The search is read-only over names and descriptions the build already
  * fixed — a query narrows what is offered and never widens what can be done.
  */
@@ -262,6 +267,29 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: [
             "Connect an agent",
             "mcp server url address claude code codex cursor vs code chatgpt connector external outside",
+          ],
+        }
+      : undefined,
+    // The CLI page's two groups, drawn once an account is signed in: the command's install, and its sign-in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.CLI_INSTALL,
+          label: "Install the vespin command",
+          page: SETTINGS_VIEW.CLI,
+          haystack: [
+            "Install the vespin command",
+            "cli command-line tool terminal shell npm path reinstall",
+          ],
+        }
+      : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.CLI_SIGN_IN,
+          label: "Sign in from your terminal",
+          page: SETTINGS_VIEW.CLI,
+          haystack: [
+            "Sign in from your terminal",
+            "cli command-line tool vespin login sign out everywhere logout",
           ],
         }
       : undefined,
@@ -520,6 +548,23 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     }));
 }
 
+/** Everything a query can find right now: the pages shown, by their names, and the rows they hold. */
+export interface SettingsSearchCorpus {
+  /** The pages the Settings sidebar lists, in its order. */
+  pages: readonly SettingsView[];
+  entries: readonly SettingsSearchEntry[];
+}
+
+/** The pages the sidebar lists and every row they draw, as a query reads them. */
+export function settingsSearchCorpus(input: SettingsSearchInput): SettingsSearchCorpus {
+  return {
+    pages: SETTINGS_PAGE_LIST.filter((page) =>
+      settingsPageShown(page, input.capabilities, input.settings.experiments),
+    ),
+    entries: settingsSearchEntries(input),
+  };
+}
+
 /** A row a query found, with the stretches of its name that say why. */
 export interface SettingsSearchResult extends SettingsSearchEntry {
   marks: readonly MatchRange[];
@@ -528,14 +573,16 @@ export interface SettingsSearchResult extends SettingsSearchEntry {
 /** One page's matches: the page that heads the group, and the rows under it, best first. */
 interface SettingsSearchGroup {
   page: SettingsView;
+  /** The stretches of the page's own name the query found, absent where only its rows matched. */
+  marks: readonly MatchRange[] | undefined;
   items: readonly SettingsSearchResult[];
 }
 
 /** What became of the query, reported so no narrowing is ever silent. */
 export interface SettingsSearchOutcome {
-  /** The kept rows grouped under their pages, in the Settings sidebar's own order. */
+  /** The kept pages, each with the rows it holds that the query kept, best first. */
   groups: readonly SettingsSearchGroup[];
-  /** How many rows the query kept, across every group. */
+  /** How many pages and rows the query kept, across every group. */
   matched: number;
 }
 
@@ -546,26 +593,59 @@ export interface SettingsSearchOutcome {
  * query or begins with it ranks above one whose words are scattered, a row
  * found only by what its name does not say last. Letters typed in order
  * find nothing, so "thm" is not Theme. A blank query is no search at all.
- * The kept rows come back grouped by page, because that is how the results
- * are drawn, each page's rows best first and equals in the corpus's order.
+ *
+ * A page is found by its own name as well as through the rows it holds, so
+ * "hosts" finds the Hosts page itself. The kept rows come back under their
+ * page, because that is how the results are drawn, each page's rows best
+ * first and equals in the corpus's order; and the pages come back best
+ * first, each as good as the best of its own name and its rows, equals in
+ * the sidebar's order, so the first result is the best one.
  */
 export function searchSettings(
-  entries: readonly SettingsSearchEntry[],
+  corpus: SettingsSearchCorpus,
   query: string,
 ): SettingsSearchOutcome | undefined {
   if (searchTokens(query).length === 0) return undefined;
-  const kept = entries.flatMap((entry): { entry: SettingsSearchResult; score: number }[] => {
+  const kept = corpus.entries.flatMap((entry): { entry: SettingsSearchResult; score: number }[] => {
     const hit = searchHit({ label: entry.label, keywords: entry.haystack }, query);
     return hit === undefined ? [] : [{ entry: { ...entry, marks: hit.label }, score: hit.score }];
   });
-  const groups = SETTINGS_PAGE_LIST.flatMap((page): SettingsSearchGroup[] => {
-    const items = kept
-      .filter(({ entry }) => entry.page === page)
-      .sort((a, b) => b.score - a.score)
-      .map(({ entry }) => entry);
-    return items.length > 0 ? [{ page, items }] : [];
+  const scored = corpus.pages.flatMap((page): { group: SettingsSearchGroup; score: number }[] => {
+    const named = searchHit({ label: resultPageWord(page) }, query);
+    const held = kept.filter(({ entry }) => entry.page === page).sort((a, b) => b.score - a.score);
+    const score = Math.max(named?.score ?? -Infinity, held[0]?.score ?? -Infinity);
+    if (score === -Infinity) return [];
+    const group = { page, marks: named?.label, items: held.map(({ entry }) => entry) };
+    return [{ group, score }];
   });
-  return { groups, matched: kept.length };
+  const groups = scored.sort((a, b) => b.score - a.score).map(({ group }) => group);
+  const pagesNamed = groups.filter((group) => group.marks !== undefined).length;
+  return { groups, matched: kept.length + pagesNamed };
+}
+
+/** One result the keys step through: a page, or a row on it. */
+export interface SettingsSearchStop {
+  page: SettingsView;
+  /** The row, absent where the stop is the page itself. */
+  entry?: SettingsSearchResult | undefined;
+}
+
+/** The results in the order they are drawn and walked: each page, then the rows it holds. */
+export function settingsSearchStops(search: SettingsSearchOutcome): readonly SettingsSearchStop[] {
+  return search.groups.flatMap((group) => [
+    { page: group.page },
+    ...group.items.map((entry) => ({ page: group.page, entry })),
+  ]);
+}
+
+/**
+ * Which stop Return opens before any is stepped to: the best page's own,
+ * where its name was found, else its best row, since a page found only
+ * through a row was asked for by that row.
+ */
+export function bestSettingsStop(search: SettingsSearchOutcome): number {
+  const first = search.groups[0];
+  return first === undefined || first.marks !== undefined || first.items.length === 0 ? 0 : 1;
 }
 
 /** Whether the landing can hold the keyboard, or only be scrolled into view. */
@@ -581,9 +661,11 @@ const FOCUSABLE = "button, select, input, textarea, [tabindex]";
  * the row lit for a moment, as every place landed on is (`land`), once more
  * each time it is landed on. It lands after the page's own header focus on
  * purpose: the result named a row, so the row is where the view belongs. A
- * row the page is not drawing is given up on quietly.
+ * row the page is not drawing is given up on quietly. A preview, the
+ * search's keys stepping onto the row while the caret stays in the field,
+ * lights the row and leaves the keyboard where it is (`keyboard: false`).
  */
-export function landOnSettingsRow(id: string): () => void {
+export function landOnSettingsRow(id: string, keyboard = true): () => void {
   return focusSeek({
     find: () =>
       document.querySelector<HTMLElement>(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${id}"]`),
@@ -593,10 +675,26 @@ export function landOnSettingsRow(id: string): () => void {
       // A row with one control anchors the control itself, which takes the
       // keyboard; a row of several anchors the row and takes none, since
       // choosing among its buttons is not the landing's to do.
-      if (element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
+      if (keyboard && element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
       land(element);
     },
   });
+}
+
+/** The results the field steers while a query found any: how many stops stand, which is lit, and what stepping onto one and choosing one do. */
+export interface SettingsSearchSteering {
+  /** How many stops the results draw, none while no query found anything. */
+  count: number;
+  /** The lit stop, below zero for none. */
+  active: number;
+  /** The id of the list the field steers. */
+  listId: string;
+  /** The id of the lit stop's row, while one is lit. */
+  activeId: string | undefined;
+  /** A key stepped onto a stop: it is lit, and its page shown with its row lit, the caret staying in the field. */
+  onStep: (index: number) => void;
+  /** Return chose a stop, below zero where none was stepped to: its page opens and its row takes the keyboard. */
+  onChoose: (index: number) => void;
 }
 
 /**
@@ -612,25 +710,31 @@ export function landOnSettingsRow(id: string): () => void {
  * asked for it, and it holds no layer of its own: Escape in the field it left
  * untouched leaves Settings in one press, as it would with the caret nowhere.
  *
+ * While a query found anything, the field steers the results under it as
+ * Linear's settings search does, the caret staying in it: ↓ and Tab step to
+ * the next result, ↑ and Shift-Tab to the one before, wrapping, and each step
+ * shows the result's page beside the list with its row lit, so the page is
+ * read before anything is chosen. Return opens the lit result, or the best
+ * one where none is lit, and hands its row the keyboard.
+ *
  * Otherwise Escape unwinds one layer at a time, the way it does everywhere
  * else in the window: a held query is cleared first, and only an empty field
  * lets go of the caret — both stopped here, so neither press falls through
- * and turns the page or the tab behind the field. Return opens the first result, so a
- * query someone is sure of needs no pointer. Command-F lands here unless the
- * page beside it has a search of its own, as Integrations does, which is
+ * and turns the page or the tab behind the field. Command-F lands here unless
+ * the page beside it has a search of its own, as Integrations does, which is
  * the nearer question; the chord is printed in whichever field it lands in.
  */
 export function SettingsSearchField({
   query,
   onQueryChange,
-  onSubmit,
+  results,
   find = true,
   onFind,
 }: {
   query: string;
   onQueryChange: (query: string) => void;
-  /** Return pressed in the field: the first result is the answer. */
-  onSubmit: () => void;
+  /** The results the field steers. */
+  results: SettingsSearchSteering;
   /** Whether Command-F lands here: not while the page shows a search of its own. */
   find?: boolean;
   /** Shows the field before Command-F lands in it, where it stands hidden, as a narrow room hides the page list behind a page. */
@@ -675,6 +779,32 @@ export function SettingsSearchField({
   // The caret Settings placed on its own holds no layer, so its Escape is
   // left to fall through to the window and leave Settings.
   const untouched = placed && query.length === 0;
+  const steering = useComboboxField({
+    open: results.count > 0,
+    active: results.active,
+    count: results.count,
+    controls: results.listId,
+    activeId: results.activeId,
+    onActiveChange: results.onStep,
+    onChoose: results.onChoose,
+    onEscape: () => onQueryChange(""),
+    onKey: (event) => {
+      // Note that Tab walks the results rather than leaving the field, so the
+      // keys a hand already rests on step through them.
+      if (event.key === "Tab" && results.count > 0) {
+        if (event.metaKey || event.altKey || event.ctrlKey) return;
+        event.preventDefault();
+        const toward = event.shiftKey ? "ArrowUp" : "ArrowDown";
+        const to = rovingStep(toward, ROVING_ORIENTATION.VERTICAL, results.active, results.count);
+        if (to !== undefined) results.onStep(to);
+        return;
+      }
+      if (event.key !== "Escape" || untouched) return;
+      event.stopPropagation();
+      if (query.length > 0) onQueryChange("");
+      else field.current?.blur();
+    },
+  });
   return (
     <search
       className="settings-search mb-section-gap flex-none"
@@ -707,15 +837,7 @@ export function SettingsSearchField({
           onQueryChange(next);
         }}
         onClear={() => onQueryChange("")}
-        onEnter={onSubmit}
-        onEscape={
-          untouched
-            ? undefined
-            : () => {
-                if (query.length > 0) onQueryChange("");
-                else field.current?.blur();
-              }
-        }
+        combobox={steering}
       />
     </search>
   );
@@ -746,23 +868,44 @@ function ResultLabel({ entry }: { entry: SettingsSearchResult }): React.JSX.Elem
   );
 }
 
+/** A row's own glyph, where it has one beside its page's: an integration's mark. */
+function resultIcon(entry: SettingsSearchResult): React.JSX.Element | undefined {
+  if (entry.page !== SETTINGS_VIEW.INTEGRATIONS) return undefined;
+  const provider = INTEGRATION_PROVIDER_LIST.find((each) => each === entry.id);
+  return provider === undefined ? undefined : <ProviderMark provider={provider} />;
+}
+
+/** The id of the row drawing the stop at `index` of the list `listId`, which the field names active. */
+export function settingsSearchStopId(listId: string, index: number): string {
+  return `${listId}-${index}`;
+}
+
 /**
- * What a query left, in the sidebar where the list of pages was: each page
- * that holds a match names itself as a heading, the way the sidebar's other
- * lists are headed, with the kept rows beneath it, each marking why it
- * matched. The row last opened stays marked, the way a list marks the page
- * it opened. An emptied search says so quietly rather than going blank.
+ * What a query left, in the sidebar where the list of pages was, read as
+ * Linear's settings search reads: each page the query found, or found rows
+ * on, stands as a result of its own with its glyph, its name marked where the
+ * query found it, and the rows it holds nested under it, each marking why it
+ * matched and an integration's wearing its mark. The stop the field's keys
+ * lit, or the one last pressed, is marked while its page is the one shown,
+ * the way a list marks the page it opened. An emptied search says so quietly
+ * rather than going blank.
  */
 export function SettingsSearchResults({
   search,
-  opened,
+  listId,
+  active,
+  shown,
   onOpen,
 }: {
   search: SettingsSearchOutcome;
-  /** The id of the result last pressed, absent until one is. */
-  opened?: string | undefined;
-  /** A pressed row, which opens its page and lands on the row. */
-  onOpen: (entry: SettingsSearchEntry) => void;
+  /** The list's id, which the field controls. */
+  listId: string;
+  /** The lit stop, below zero for none. */
+  active: number;
+  /** The page shown beside the results. */
+  shown: SettingsView;
+  /** A pressed result, by its stop's index: its page opens and the view lands on its row. */
+  onOpen: (index: number) => void;
 }): React.JSX.Element {
   if (search.matched === 0) {
     return (
@@ -771,27 +914,41 @@ export function SettingsSearchResults({
       </NoteLine>
     );
   }
+  // Each row's index among the stops, counted as they are drawn: each page, then its rows.
+  let at = -1;
+  const stop = (page: SettingsView) => {
+    at += 1;
+    const index = at;
+    return {
+      id: settingsSearchStopId(listId, index),
+      current: index === active && page === shown ? NAV_CURRENT.LOCATION : undefined,
+      roving: true,
+      onClick: () => onOpen(index),
+    };
+  };
   return (
-    <div className="settings-search-results flex flex-col gap-section-gap">
-      {search.groups.map((group) => (
-        <section key={group.page} aria-label={resultPageWord(group.page)}>
-          <GroupHeader label={resultPageWord(group.page)}>
+    <div id={listId} className="settings-search-results flex flex-col gap-tight-gap">
+      {search.groups.map((group) => {
+        const page = settingsPageOf(group.page);
+        return (
+          <section key={group.page} aria-label={resultPageWord(group.page)}>
             <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
+              <li>
+                <NavItem icon={page.icon} {...stop(group.page)}>
+                  <Highlighted text={page.title} ranges={group.marks ?? []} />
+                </NavItem>
+              </li>
               {group.items.map((entry) => (
                 <li key={entry.id}>
-                  <NavItem
-                    current={entry.id === opened ? NAV_CURRENT.LOCATION : undefined}
-                    roving
-                    onClick={() => onOpen(entry)}
-                  >
+                  <NavItem nested icon={resultIcon(entry)} {...stop(group.page)}>
                     <ResultLabel entry={entry} />
                   </NavItem>
                 </li>
               ))}
             </Stack>
-          </GroupHeader>
-        </section>
-      ))}
+          </section>
+        );
+      })}
     </div>
   );
 }

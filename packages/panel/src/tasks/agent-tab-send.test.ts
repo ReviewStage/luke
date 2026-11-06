@@ -25,9 +25,12 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { menuItem } from "../testing/desktop-inbox.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { AgentTab } from "./agent-tab.js";
 
 /**
@@ -35,8 +38,8 @@ import { AgentTab } from "./agent-tab.js";
  * its transcript at once as the developer's line, the box empty and taking
  * words, and the row the service writes for it lands in the line's place,
  * drawn once, whichever of the row and the send's answer comes first; a
- * message refused while the developer had written on stays where it went,
- * marked Not sent, with a Retry of its own; the working line stands from the
+ * message refused stays where it went, marked Not delivered, whether its tab
+ * stood as it landed or not, its alert offering Retry and Edit; the working line stands from the
  * press, before the service takes the line. Synthetic throughout.
  */
 
@@ -56,7 +59,7 @@ const AGENT_SUMMARY: AgentSummary = {
   createdAt: 1_000,
   status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: AGENT_BRIEF.PLAN,
+  brief: AGENT_BRIEF.DESCRIPTION,
 };
 
 const MESSAGES: readonly AgentTranscriptMessage[] = [
@@ -106,6 +109,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /**
@@ -148,21 +152,31 @@ async function drawnTab(
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  await act(async () =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(AgentTab, {
-          agent,
-          control,
-          shown: true,
-          onOpenSubagent: () => undefined,
-          onOpenTarget: () => undefined,
-          onHeld: () => undefined,
-        }),
+  const registry = AtomRegistry.make();
+  const draw = (open: boolean) =>
+    act(async () =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(
+            "div",
+            null,
+            open
+              ? createElement(AgentTab, {
+                  agent,
+                  control,
+                  shown: true,
+                  onOpenSubagent: () => undefined,
+                  onOpenTarget: () => undefined,
+                  onHeld: () => undefined,
+                })
+              : null,
+            createElement(ToastHost),
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  await draw(true);
   await settle();
   return {
     container,
@@ -178,6 +192,28 @@ async function drawnTab(
     },
     landRow: async () => {
       release();
+      await settle();
+    },
+    /** Closes the tab, the window's registry standing, as another tab or task opening does. */
+    close: async () => {
+      await draw(false);
+      await settle();
+    },
+    /** Opens the tab again on the same registry. */
+    open: async () => {
+      await draw(true);
+      await settle();
+    },
+    /** Picks `label` from the menu of the red alert beside the line reading `words`. */
+    pick: async (words: string, label: string) => {
+      const [line] = [...container.querySelectorAll<HTMLElement>(".is-user")].filter((each) =>
+        each.textContent?.includes(words),
+      );
+      const mark =
+        line?.querySelector<HTMLButtonElement>('button[aria-label="Not delivered"]') ??
+        assert.fail("the line wears the red alert");
+      await act(async () => mark.click());
+      await act(async () => menuItem(label).click());
       await settle();
     },
     /** The developer's lines in the transcript reading `words`. */
@@ -299,29 +335,103 @@ test("two messages of the same words are two lines, each let go by its own row a
   );
 });
 
-test("a message refused after the developer wrote on stays where it went, marked Not sent, and its own Retry sends it again under its key", async () => {
+/** What the time under a line is led by where it did not go, said as an alert. */
+function statusOf(line: HTMLElement | undefined): string | null | undefined {
+  return line?.querySelector('.ui-message-line [role="alert"]')?.textContent;
+}
+
+test("a message refused stays where it went, marked Not delivered, the box empty, and its alert's Retry sends it again under its key as the newest line", async () => {
+  const tab = await drawnTab([]);
+  await tab.send("Rebase on main");
+  await tab.send("Then fix CI");
+
+  await tab.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
+  assert.equal(
+    composerEditor(tab.container).textContent,
+    "",
+    "the words never come back into the box",
+  );
+  assert.equal(statusOf(tab.lines("Rebase on main")[0]), "Not delivered");
+  assert.deepEqual(
+    tab.sent.map((each) => each.text),
+    ["Rebase on main", "Then fix CI"],
+    "the line behind it still goes",
+  );
+  await tab.answer(1, TAKEN);
+
+  await tab.pick("Rebase on main", "Retry");
+  assert.deepEqual(
+    tab.sent.map((each) => each.text),
+    ["Rebase on main", "Then fix CI", "Rebase on main"],
+  );
+  assert.equal(tab.sent[2]?.clientKey, tab.sent[0]?.clientKey);
+  const order = [...tab.container.querySelectorAll(".is-user")].map((each) => each.textContent);
+  assert.ok(
+    order.findIndex((words) => words?.includes("Rebase on main")) >
+      order.findIndex((words) => words?.includes("Then fix CI")),
+    "the line tried again stands last",
+  );
+  assert.equal(statusOf(tab.lines("Rebase on main")[0]), undefined, "and is on its way again");
+});
+
+test("Edit takes a message that did not go back into the box, ahead of the words written since, and lets its line go", async () => {
   const tab = await drawnTab([]);
   await tab.send("Rebase on main");
   typeInComposer(tab.container, "Then fix CI");
 
   await tab.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
-  assert.equal(composerEditor(tab.container).textContent, "Then fix CI", "the newer words stay");
-  const [line] = tab.lines("Rebase on main");
-  assert.ok(line, "the refused words stay on their line");
-  const mark = line.querySelector(".ui-failure-note") ?? assert.fail("marked as not sent");
-  assert.equal(mark.textContent, "Not sentRetry", "as an alert");
-  assert.equal(mark.getAttribute("role"), "alert");
-  const retry = mark.querySelector("button") ?? assert.fail("with a Retry of its own");
-  await act(async () => retry.click());
+  await tab.pick("Rebase on main", "Edit");
+  assert.equal(tab.lines("Rebase on main").length, 0, "the line is gone");
+  pressInComposer(tab.container, "Enter");
   await settle();
 
   assert.deepEqual(
     tab.sent.map((each) => each.text),
-    ["Rebase on main", "Rebase on main"],
+    ["Rebase on main", "Rebase on main\n\nThen fix CI"],
   );
-  assert.equal(tab.sent[1]?.clientKey, tab.sent[0]?.clientKey);
-  assert.equal(line.querySelector(".ui-failure-note"), null, "the line is on its way again");
-  assert.equal(composerEditor(tab.container).textContent, "Then fix CI");
+  assert.notEqual(tab.sent[1]?.clientKey, tab.sent[0]?.clientKey, "as a message of its own");
+});
+
+test("a refusal for good marks the lines refused for now before it as not delivered too, offering no Retry the closed box could not take", async () => {
+  const tab = await drawnTab([]);
+  await tab.send("Rebase on main");
+  await tab.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
+  await tab.send("Then fix CI");
+  await tab.answer(1, { failure: AGENT_CALL_FAILURE.AGENT_RETIRED });
+
+  const mark =
+    tab
+      .lines("Rebase on main")[0]
+      ?.querySelector<HTMLButtonElement>('button[aria-label="Not delivered"]') ??
+    assert.fail("the earlier line wears the red alert");
+  await act(async () => mark.click());
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
+    [],
+    "its menu says why with nothing to press",
+  );
+});
+
+test("a refusal for good that lands while the tab is closed says the message was not delivered in a toast", async () => {
+  const tab = await drawnTab([]);
+  await tab.send("Rebase on main");
+  await tab.close();
+
+  await tab.answer(0, { failure: AGENT_CALL_FAILURE.AGENT_RETIRED });
+
+  assert.match(newestToastSays() ?? "", /^Message not delivered/);
+});
+
+test("a refusal that lands while the tab is closed is drawn where the line went once the tab opens again, never in the box", async () => {
+  const tab = await drawnTab([]);
+  await tab.send("Rebase on main");
+  await tab.close();
+
+  await tab.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
+  await tab.open();
+
+  assert.equal(statusOf(tab.lines("Rebase on main")[0]), "Not delivered");
+  assert.equal(composerEditor(tab.container).textContent, "");
 });
 
 test("a line another hand sent after a stopped turn, its page saying the agent runs, puts the tab to work: no Stopped under it, and ⌘ turns Send into Queue", async () => {

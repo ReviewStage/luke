@@ -1,10 +1,15 @@
 import { signedInAccountId } from "@repo/credentials/snapshot";
 import { agentDefaultOf } from "@repo/features/account-preferences-live";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
-import { HOST_READ_STATUS, type HostReadStatus, useHostRead } from "./use-host-read.js";
+import {
+  accountPreferencesQuery,
+  accountPreferencesRetryMutation,
+  modelsQuery,
+  modelsRetryMutation,
+} from "./live-reads.js";
+import { appStateQuery, selectAccount } from "./use-app-state.js";
 
 /**
  * account-choices.ts -- the account's own choices as every surface draws them: its preferences row, which the host holds for the session, the models it is offered and its devices, which a surface holds while it draws one, and the default a new agent runs on, worked out from both.
@@ -18,28 +23,30 @@ import { HOST_READ_STATUS, type HostReadStatus, useHostRead } from "./use-host-r
  * (`agentDefaultOf`): the fallback the models mark as paid for.
  */
 
-/** The default a new agent runs on, as a surface draws it, with where its reads stand and Try again. */
+/** The default a new agent runs on, as a surface draws it, with whether its reads failed and Try again. */
 export interface DrawnAgentDefault {
   /** The default; none until both reads it is worked out from have answered, or where the preferences could not be read. */
   readonly choice: ModelChoice | undefined;
-  readonly status: HostReadStatus;
+  /** Whether the preferences could not be read, so no default can be drawn. */
+  readonly failed: boolean;
+  /** Try again on both reads, settling once both asks land, whether or not they were refused. */
   readonly retry: () => Promise<void>;
 }
 
 /** The account signed in, by the id the host holds its reads under; none while nobody is. */
 function useAccountKey(): string | undefined {
-  return signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  return signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
 }
 
-/** The account's preferences row, which the host holds for the session. */
+/** The account's preferences row, which the host holds for the session (`accountPreferencesQuery`). */
 export function useAccountPreferences() {
-  return useHostRead(LIVE_READ.ACCOUNT_PREFERENCES, useAccountKey());
+  return useQuery(accountPreferencesQuery(useAccountKey()));
 }
 
-/** The models the account is offered and its devices, held while `drawing`, a surface that draws one. */
+/** The models the account is offered and its devices, held while `drawing`, a surface that draws one (`modelsQuery`). */
 export function useOfferedModels(drawing = true) {
   const accountId = useAccountKey();
-  return useHostRead(LIVE_READ.MODELS, drawing ? accountId : undefined);
+  return useQuery(modelsQuery(drawing ? accountId : undefined));
 }
 
 /**
@@ -52,25 +59,18 @@ export function useOfferedModels(drawing = true) {
 export function useAgentDefault(): DrawnAgentDefault {
   const preferences = useAccountPreferences();
   const models = useOfferedModels();
-  const read =
-    models.status === HOST_READ_STATUS.FAILED
-      ? { failed: true as const }
-      : models.rows === undefined
-        ? {}
-        : { rows: models.rows };
+  const { mutateAsync: retryPreferences } = useMutation(accountPreferencesRetryMutation());
+  const { mutateAsync: retryModels } = useMutation(modelsRetryMutation());
+  const read = models.isError
+    ? { failed: true as const }
+    : models.data === undefined
+      ? {}
+      : { rows: models.data };
   const choice =
-    preferences.rows === undefined ? undefined : agentDefaultOf(preferences.rows.agent, read);
-  const status =
-    preferences.status === HOST_READ_STATUS.FAILED
-      ? HOST_READ_STATUS.FAILED
-      : choice === undefined
-        ? HOST_READ_STATUS.LOADING
-        : HOST_READ_STATUS.READY;
-  const retryPreferences = preferences.retry;
-  const retryModels = models.retry;
+    preferences.data === undefined ? undefined : agentDefaultOf(preferences.data.agent, read);
   const retry = useCallback(
-    () => Promise.all([retryPreferences(), retryModels()]).then(() => undefined),
+    () => Promise.allSettled([retryPreferences(), retryModels()]).then(() => undefined),
     [retryPreferences, retryModels],
   );
-  return { choice, status, retry };
+  return { choice, failed: preferences.isError, retry };
 }

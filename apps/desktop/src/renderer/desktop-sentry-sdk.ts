@@ -15,8 +15,9 @@ import {
 } from "@repo/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@repo/features/sentry-tracing";
 import { sendShownFailure } from "@repo/features/shown-failure";
-import { appStateNow } from "@repo/panel/use-app-state";
+import { appStateQuery } from "@repo/panel/use-app-state";
 import {
+  browserProfilingIntegration,
   browserTracingIntegration,
   captureException,
   getActiveSpan,
@@ -25,8 +26,10 @@ import {
   logger,
   startInactiveSpan,
   startNewTrace,
+  uiProfiler,
   withStreamedSpan,
 } from "@sentry/electron/renderer";
+import type { QueryClient } from "@tanstack/react-query";
 import { BLANK_WINDOW, type BlankWindow, type DesktopSentry } from "./desktop-sentry";
 
 /** The mechanism each blank window's report names, so Sentry's issue says which path caught it. */
@@ -60,22 +63,39 @@ const PANEL_SPAN_OP = "ui.panel";
  * slow frame, and Interaction to Next Paint, which the SDK's web vitals
  * report by default. A page that hangs is main's to report, from Electron's
  * own word that it stopped answering (`main/window/renderer-health.ts`).
+ *
+ * The window profiles from the moment the SDK stands to its close, in
+ * chunks of a minute, wherever main served its document with the profiling
+ * policy, which it does for a sample of launches
+ * (`SENTRY_PROFILE_SESSION_SAMPLE_RATE`); elsewhere the browser refuses the
+ * profiler once and the SDK profiles nothing more. Note that it profiles the
+ * whole session rather than only sampled traces, because a Mac running hot
+ * is mostly the work no trace was open for. A profile is the panel's own
+ * stack frames, function names and bundle paths, and none of a person's words.
  */
-export function initDesktopSentry(): DesktopSentry {
+export function initDesktopSentry(queryClient: QueryClient): DesktopSentry {
   init({
     integrations: [
       browserTracingIntegration({
         shouldCreateSpanForRequest: sentryTracesRequest,
         enableLongAnimationFrame: true,
       }),
+      browserProfilingIntegration(),
     ],
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
+    profileLifecycle: "manual",
+    profileSessionSampleRate: 1,
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
-    beforeSendLog: (log) => logNamingAccount(log, signedInAccountId(appStateNow()?.account)),
+    beforeSendLog: (log) =>
+      logNamingAccount(
+        log,
+        signedInAccountId(queryClient.getQueryData(appStateQuery.queryKey)?.account),
+      ),
     ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
     beforeSendSpan: withStreamedSpan(spanWithoutAccessTokens),
   });
+  uiProfiler.startProfiler();
   return {
     reportBlankWindow: (error, why) => {
       captureException(error, { mechanism: BLANK_WINDOW_MECHANISM[why] });

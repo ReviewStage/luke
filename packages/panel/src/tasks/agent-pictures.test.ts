@@ -7,11 +7,12 @@ import {
   PICTURE_OMISSION,
 } from "@repo/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@repo/features/inbox-wire";
-import type { PictureAnswer } from "@repo/ui/picture-cache";
+import type { PictureAnswer } from "@repo/ui/picture-read";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@repo/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { viewerPlace } from "../testing/viewer-place.js";
 import {
   type AgentPictureDoor,
@@ -99,6 +100,8 @@ async function drawn(
   moving = false,
   answer: (id: string) => Promise<PictureAnswer> = () =>
     Promise.resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }),
+  /** Whether to wait for every picture to land, which a read the test holds never does. */
+  waitForPictures = true,
 ) {
   const read: string[] = [];
   const door: AgentPictureDoor = {
@@ -114,20 +117,30 @@ async function drawn(
   roots.push(root);
   await act(async () =>
     root.render(
-      createElement(
-        AgentPicturesProvider,
-        { value: door },
-        createElement(AgentMessage, {
-          message,
-          plan: false,
-          lead: AGENT_LEAD,
-          moving,
-          delegation: { models: [] },
-        }),
+      withQueryClient(
+        createElement(
+          AgentPicturesProvider,
+          { value: door },
+          createElement(AgentMessage, {
+            message,
+            description: false,
+            lead: AGENT_LEAD,
+            moving,
+            delegation: { models: [] },
+          }),
+        ),
       ),
     ),
   );
+  if (waitForPictures) await landed(container);
   return { container, read };
+}
+
+/** Waits until no picture in `container` is still being read, as the window's queries hand each read to React a tick after it lands. */
+async function landed(container: HTMLElement): Promise<void> {
+  await vi.waitFor(() =>
+    assert.equal((container.textContent ?? "").includes("Reading the picture"), false),
+  );
 }
 
 test("a set the agent showed stays out of the finished turn's fold, each picture read once and drawn at its own shape", async () => {
@@ -400,6 +413,9 @@ test("a tile whose read did not land says it could not be read, and its Retry re
   refusing = false;
   await act(async () => retry?.click());
 
+  await vi.waitFor(() =>
+    assert.equal(failed()?.querySelector("button")?.getAttribute("aria-label"), "Enlarge Screen 2"),
+  );
   assert.deepEqual(
     read.filter((id) => id === failing.id),
     [failing.id, failing.id],
@@ -546,8 +562,11 @@ test("the viewer opened on the first picture to land reaches the rest as their r
         : new Promise((resolve) => {
             held.push(() => resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }));
           }),
+    false,
   );
-  const tile = container.querySelector<HTMLButtonElement>(`${SHOWN_TILES} button`);
+  const tileNow = () => container.querySelector<HTMLButtonElement>(`${SHOWN_TILES} button`);
+  await vi.waitFor(() => assert.equal(tileNow() === null, false));
+  const tile = tileNow();
   assert.ok(tile);
 
   await act(async () => tile.click());
@@ -556,7 +575,7 @@ test("the viewer opened on the first picture to land reaches the rest as their r
     for (const release of held) release();
   });
 
-  assert.equal(viewerPlace(document), "1 of 3");
+  await vi.waitFor(() => assert.equal(viewerPlace(document), "1 of 3"));
 });
 
 test("a WebM the agent showed plays where it stands, above the picture shown with it, left out of the replay, and its Expand opens the viewer over both", async () => {
@@ -840,10 +859,12 @@ test("an image a line's row names by the picture it was kept as is read through 
     ],
   });
 
-  const chips = [...container.querySelectorAll('ul[aria-label="Attached files"] > li')];
-  assert.deepEqual(
-    chips.map((chip) => chip.querySelector("img")?.getAttribute("src")),
-    ["data:image/png;base64,iVBORw==", "data:image/png;base64,AAAA"],
+  const chips = () => [...container.querySelectorAll('ul[aria-label="Attached files"] > li')];
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      chips().map((chip) => chip.querySelector("img")?.getAttribute("src")),
+      ["data:image/png;base64,iVBORw==", "data:image/png;base64,AAAA"],
+    ),
   );
   assert.deepEqual(read, [kept.id]);
 });
@@ -866,7 +887,7 @@ test("a line still on its way draws its files going up with no share, each takin
   const root = createRoot(host);
   roots.push(root);
   const draw = (sending: boolean) =>
-    act(() => root.render(createElement(MessageFileChips, { message, sending })));
+    act(() => root.render(withQueryClient(createElement(MessageFileChips, { message, sending }))));
   draw(true);
   const meter = host.querySelector('[role="progressbar"]') ?? assert.fail("a file going up");
   assert.equal(meter.getAttribute("aria-label"), "Uploading spec.pdf");

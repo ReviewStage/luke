@@ -12,9 +12,10 @@
 import { ACT_KIND } from "@repo/host/acts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { STATUS_TONE } from "@repo/ui";
+import { useMutation } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
 import { useEffect } from "react";
-import { useAct } from "./act.js";
+import { pressMutation } from "./act-mutations.js";
 import { readKeptOption, writeKept } from "./kept-storage.js";
 import { useToast } from "./toast.js";
 
@@ -34,7 +35,7 @@ function keepAnnounced(version: string): void {
 /** Says, once for each version, that the app was updated to the version running. */
 export function useUpdatedToast(update: UpdateSnapshot | undefined): void {
   const toast = useToast();
-  const { press } = useAct();
+  const { mutate: openChangelog } = useMutation(pressMutation(ACT_KIND.UPDATE_OPEN_CHANGELOG));
   const version = update?.status === UPDATE_STATUS.UPDATED ? update.currentVersion : undefined;
   useEffect(() => {
     if (version === undefined || readAnnounced() === version) return;
@@ -45,9 +46,9 @@ export function useUpdatedToast(update: UpdateSnapshot | undefined): void {
       replayUnmasked: true,
       action: {
         label: "What's new",
-        onPress: () => press(ACT_KIND.UPDATE_OPEN_CHANGELOG),
+        onPress: () => openChangelog(),
         replayUnmasked: true,
       },
     });
-  }, [toast, press, version]);
+  }, [toast, openChangelog, version]);
 }

@@ -44,20 +44,21 @@ import {
 /**
  * use-side-panel.ts -- the open task's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
  *
- * The task's column is the task's own: its Overview, holding the plan's
- * document, and its coding agents (`use-main-tabs.ts`); everything else
- * (the plan's comments, and what its agents made) stands
+ * The task's column is the task's own: its Overview, holding its
+ * description, and its coding agents (`use-main-tabs.ts`); everything else
+ * (the description's comments, and what its agents made) stands
  * in a panel at the window's right that the developer
  * opens and closes, as every devtool window's secondary sidebar does. A
  * subagent's tab opened from an agent's transcript opens it too. Not to be
  * confused with "the panel", which in this renderer is the app's whole surface.
  *
- * A fixed tab stands in the strip only once the open task has used it: a
- * comment was left on its plan. The plan's own tab once stood here on every
- * task, and the task's Inbox on a task where an item waited; neither is
- * drawn or offered now, since the column's Overview holds the plan and a
- * task's threads open in the window's Inbox, and what
- * an earlier version kept of either reads and opens nothing
+ * No fixed tab stands in the strip now. The description's own tab once stood here
+ * on every task, the task's Inbox on a task where an item waited, and the
+ * description's Comments once a comment was left on it; none is drawn or offered
+ * now, since the column's Overview holds the description, a task's threads open
+ * in the window's Inbox, and the description lists its own comments in its
+ * margin's place (`description-comments.tsx`'s `DescriptionCommentList`), and what an
+ * earlier version kept of any of them reads and opens nothing
  * (`DRAWN_KINDS`). So a new task has no tab,
  * and what arrives on it adds its tab at the strip's end as it arrives,
  * never taking the chosen one's place. Beside the window's Inbox the panel
@@ -171,12 +172,13 @@ import {
 /** The panel's kinds of tab, the fixed three. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   /**
-   * The task's plan, which the column's Overview holds now
+   * The task's description, which the column's Overview holds now
    * (`use-main-tabs.ts`). Note that it is kept here, drawn and offered
    * nowhere (`DRAWN_KINDS`), because what an earlier version kept and pinned
-   * names it, and a pin or a link naming it opens Overview instead.
+   * names it, and a pin or a link naming it opens Overview instead. Its value
+   * is the name the description had then, which is what was kept.
    */
-  PLAN: "plan",
+  DESCRIPTION: "plan",
   /**
    * The task's Inbox, whose threads open in the window's Inbox narrowed to
    * the task now. Note that it is kept here, drawn and offered nowhere
@@ -184,7 +186,12 @@ export const SIDE_PANEL_TAB = {
    * it, and a pin naming it opens the window's Inbox instead.
    */
   INBOX: "inbox",
-  /** The plan's comment threads, open and resolved (`plan-comments.tsx`). */
+  /**
+   * The description's comment threads, which the description lists in its margin's place
+   * now (`description-comments.tsx`'s `DescriptionCommentList`). Note that it is kept
+   * here, drawn and offered nowhere (`DRAWN_KINDS`), because what an earlier
+   * version kept and pinned names it.
+   */
   COMMENTS: "comments",
 } as const;
 
@@ -290,7 +297,7 @@ interface SidePanelTabKind {
 }
 
 export const SIDE_PANEL_TAB_KIND = {
-  [SIDE_PANEL_TAB.PLAN]: { label: "Plan", icon: DocumentIcon },
+  [SIDE_PANEL_TAB.DESCRIPTION]: { label: "Description", icon: DocumentIcon },
   [SIDE_PANEL_TAB.INBOX]: { label: TAB_WORDS.INBOX, icon: InboxIcon },
   [SIDE_PANEL_TAB.COMMENTS]: { label: "Comments", icon: CommentsIcon },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
@@ -300,10 +307,18 @@ export const SIDE_PANEL_TABS: readonly FixedSidePanelTab[] = Object.values(SIDE_
 
 const FIXED_TABS: ReadonlySet<StripTab> = new Set(SIDE_PANEL_TABS);
 
-/** The kinds the panel draws, every one but the plan's, which the column's Overview holds, and the Inbox's, whose threads the window's Inbox holds. */
+/** The kinds of old that are chosen and shown nowhere: the Inbox's, whose threads the window's Inbox holds, and Comments, which the description lists itself. */
+const RETIRED_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS];
+
+/** The kinds the panel draws: none of the description's, which the column's Overview holds, nor the retired ones. */
 export const DRAWN_KINDS: readonly FixedSidePanelTab[] = SIDE_PANEL_TABS.filter(
-  (kind) => kind !== SIDE_PANEL_TAB.PLAN && kind !== SIDE_PANEL_TAB.INBOX,
+  (kind) => kind !== SIDE_PANEL_TAB.DESCRIPTION && !RETIRED_KINDS.includes(kind),
 );
+
+/** Whether a tab is of a retired kind, which nothing chooses, shows, or reopens. */
+function retiredKind(tab: SidePanelTab): boolean {
+  return RETIRED_KINDS.some((kind) => kind === tab);
+}
 
 /** Whether a tab is one of the fixed kinds. */
 function isFixedTab(tab: SidePanelTab): tab is FixedSidePanelTab {
@@ -803,8 +818,8 @@ function clampWidth(width: number): number {
 }
 
 /**
- * Whether the open task holds something of each fixed kind: its plan
- * always, its plan any comment. A kind not yet read on the task is absent,
+ * Whether the open task holds something of each fixed kind: its description
+ * always, its description any comment. A kind not yet read on the task is absent,
  * which draws no tab, as nothing does.
  */
 export type TaskHolds = Partial<Record<FixedSidePanelTab, boolean | undefined>>;
@@ -1768,7 +1783,7 @@ function carriedPin(pin: KeptPin): pin is CarriedPin {
  */
 function heldPin(pin: KeptPin): PinnedTab[] {
   const { tab } = pin;
-  if (isAgentTab(tab) || !currentPin(tab) || tab === SIDE_PANEL_TAB.INBOX) return [];
+  if (isAgentTab(tab) || !currentPin(tab) || retiredKind(tab)) return [];
   const { label, at, position } = pin;
   const fields = position === undefined ? { tab, label, at } : { tab, label, at, position };
   return ["task" in pin ? { ...fields, task: pin.task } : { ...fields, agent: pin.agent }];
@@ -1788,8 +1803,10 @@ function settled(state: SidePanelState): HeldState {
   ];
   return {
     ...state,
-    // The plan's tab leads, since a kept order from before it stood here holds it nowhere.
-    tabs: [...new Set([SIDE_PANEL_TAB.PLAN, ...state.tabs.filter(current), ...SIDE_PANEL_TABS])],
+    // The description's tab leads, since a kept order from before it stood here holds it nowhere.
+    tabs: [
+      ...new Set([SIDE_PANEL_TAB.DESCRIPTION, ...state.tabs.filter(current), ...SIDE_PANEL_TABS]),
+    ],
     tab: tab === undefined || !panelChoice(tab) ? undefined : tab,
     width: clampWidth(state.width),
     subagents: [],
@@ -1931,8 +1948,8 @@ function shownTab(
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
-/** The kinds whose first hold keeps the tab shown as it stood (`arrived`): every kind but the retired Inbox. */
-const HELD_KINDS = SIDE_PANEL_TABS.filter((tab) => tab !== SIDE_PANEL_TAB.INBOX);
+/** The kinds whose first hold keeps the tab shown as it stood (`arrived`): every kind but the retired ones. */
+const HELD_KINDS = SIDE_PANEL_TABS.filter((tab) => !retiredKind(tab));
 
 /** Whether two reads of what a task holds say the same of every kind. */
 function sameHolds(a: TaskHolds, b: TaskHolds): boolean {
@@ -2160,7 +2177,7 @@ export function useSidePanel(
   const onToggleAskedAnswered = useCallback(() => setToggleAskedOn(undefined), []);
   const onChoose = useCallback(
     (tab: SidePanelTab) => {
-      if (tab === SIDE_PANEL_TAB.INBOX) return;
+      if (retiredKind(tab)) return;
       setAsked(undefined);
       update((held) => ({
         ...withPagePlaced(
@@ -2178,15 +2195,15 @@ export function useSidePanel(
     },
     [update, drawn, taskId, pagePlace],
   );
-  // Note that the Inbox's kind of old, which a step of the history or a pin
-  // an earlier version kept may still name, is never chosen nor shown: a
-  // task's threads open in the window's Inbox. A tab shown on another task
+  // Note that the retired kinds, which a step of the history or a pin an
+  // earlier version kept may still name, are never chosen nor shown: a
+  // task's threads open in the window's Inbox, and the description lists its comments. A tab shown on another task
   // is not counted viewed on the open one, because the task it is viewed on is the one about to open, whose
   // strip is not drawn yet; it goes to that strip's end only where it is
   // sure to stand in none of it (`withTabLastOn`).
   const onShow = useCallback(
     (on: string, tab: SidePanelTab) => {
-      if (tab === SIDE_PANEL_TAB.INBOX) return;
+      if (retiredKind(tab)) return;
       setAsked({ task: on, tab, carry: on !== taskId || stop !== taskId });
       setOpened((was) => was + 1);
       update((held) => {
@@ -2332,6 +2349,7 @@ export function useSidePanel(
   // the strip the tab is placed in draws it from the moment it stands again.
   const onReopen = useCallback(
     (tab: SidePanelTab, at: number, file: OpenFile | undefined) => {
+      if (retiredKind(tab)) return;
       setAsked(undefined);
       update((held) => {
         // A file stands in one tab at most, so the record kept with the tab

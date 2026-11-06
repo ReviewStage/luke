@@ -5,9 +5,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { readAgent } from "@repo/database/models/agent-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { savePlanText } from "@repo/database/models/task-store";
+import { saveDescriptionText } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, messages } from "@repo/database/schemas/storage";
@@ -21,6 +22,7 @@ import {
 } from "@repo/features/agent-wire";
 import { INBOX_ASK_STATUS, INBOX_IMAGE_TYPE, type InboxItem } from "@repo/features/inbox-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import {
@@ -39,10 +41,10 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import type { MessageReceivedPart } from "eve/client";
 import { agentPullRequestProcedures } from "../agents/agent-pull-request-procedures.js";
 import { agentsApp } from "../agents/agents-app.js";
 import { agentsProcedures } from "../agents/agents-procedures.js";
+import type { MessageReceivedPart } from "../agents/attached-files.js";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
 import { instancePublishedCache } from "../agents/coder-host/published.js";
@@ -160,7 +162,7 @@ export function freshInstallation(
 export const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
 
-/** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
+/** The saved description as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
 export const SNAPSHOT = `# Teammate invitations\n\n${SAVED}`;
 
 export const SOL = "openai/gpt-6.1-sol";
@@ -677,7 +679,11 @@ export const openTask = (
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
-    yield* savePlanText(owner, task.id, SAVED);
+    yield* saveDescriptionText(owner, task.id, SAVED);
+    // Both accounts have Descriptions on, so an agent started on the task is handed its description.
+    for (const account of [owner, other]) {
+      yield* writeAccountPreferences(account, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
+    }
     const installation = freshInstallation();
     assert.equal(
       yield* connectWorkspaceGitHub(task.workspaceId, installation),

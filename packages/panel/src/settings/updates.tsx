@@ -18,7 +18,8 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@repo/ui";
-import { useAct } from "../act.js";
+import { useMutation } from "@tanstack/react-query";
+import { pressMutation } from "../act-mutations.js";
 import { failureShown, type ShownFailure } from "../failure-report.js";
 
 /**
@@ -110,7 +111,9 @@ export function UpdatesSection({
   /** Whether the platform offers updates; where it does not, the changelog stands alone. */
   offered: boolean;
 }): React.JSX.Element {
-  const { press } = useAct();
+  const { mutate: sendUpdateOpenChangelog } = useMutation(
+    pressMutation(ACT_KIND.UPDATE_OPEN_CHANGELOG),
+  );
   const row = updateRow(control.update, control.build);
   return (
     <SettingsSection>
@@ -175,7 +178,7 @@ export function UpdatesSection({
               href={UPDATE_ENDPOINT.CHANGELOG_PAGE_URL}
               onClick={(event) => {
                 event.preventDefault();
-                press(ACT_KIND.UPDATE_OPEN_CHANGELOG);
+                sendUpdateOpenChangelog();
               }}
             >
               Open changelog

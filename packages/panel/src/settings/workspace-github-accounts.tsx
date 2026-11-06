@@ -4,7 +4,6 @@ import {
   type GitHubRepositoriesAnswer,
   type GitHubRepository,
 } from "@repo/features/github-repositories-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { countWords, readFailedWords, readingWords, TERM } from "@repo/features/words";
 import type { WorkspaceGithubInstallation } from "@repo/features/workspace-wire";
@@ -18,14 +17,21 @@ import {
   SettingsRowMark,
   TEXT_BUTTON_TONE,
   TextButton,
+  usePageScroll,
 } from "@repo/ui";
 import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { unreadShown } from "../failure-report.js";
+import {
+  repositoryListsQuery,
+  repositoryListsRetryMutation,
+  repositoryScope,
+} from "../live-reads.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -36,7 +42,8 @@ import { MenuRow } from "./menu-row.js";
  * integration of its own: its picture on GitHub, its login, how many
  * repositories it holds as its one line, and a chevron folding their names
  * open under its words. Every account starts closed, and a long list shows
- * its first lines and then Show all. A row's ⋯,
+ * its first lines and then Show all, which draws only the names near the
+ * view of an account's thousands (`VirtualRows`). A row's ⋯,
  * where it holds acts at all, is the only way one row differs from another
  * (`workspace-token-repositories.tsx`).
  *
@@ -144,20 +151,23 @@ export function GitHubOwnerRow({
   const count = names.length;
   const cut = !whole && count > FIRST_SHOWN;
   const shown = cut ? names.slice(0, FIRST_SHOWN) : names;
-  const lines = (
-    <>
-      {shown.map((name) => (
-        <SettingsFoldLine key={name.toLowerCase()}>{name}</SettingsFoldLine>
-      ))}
-      {cut ? (
-        <SettingsFoldFoot>
-          <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => setWhole(true)}>
-            {`Show all ${count}`}
-          </TextButton>
-        </SettingsFoldFoot>
-      ) : null}
-    </>
-  );
+  const { scroller, shiftedBy } = usePageScroll();
+  const keys = shown.map((name) => name.toLowerCase());
+  const foot = cut ? (
+    <SettingsFoldFoot>
+      <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => setWhole(true)}>
+        {`Show all ${count}`}
+      </TextButton>
+    </SettingsFoldFoot>
+  ) : undefined;
+  const run = {
+    scroller,
+    shiftedBy,
+    keys,
+    line: (index: number, place: VirtualRowPlace) => (
+      <SettingsFoldLine place={place}>{shown[index] ?? ""}</SettingsFoldLine>
+    ),
+  };
   return (
     <MenuRow
       thing={login}
@@ -170,7 +180,7 @@ export function GitHubOwnerRow({
         ...(count === 0
           ? {}
           : {
-              fold: { lines, label: `${login}'s repositories`, defaultOpen: false },
+              fold: { run, lines: foot, label: `${login}'s repositories`, defaultOpen: false },
             }),
       }}
     />
@@ -205,9 +215,10 @@ function ListedAccountRows({
   workspaceId: string;
   connections: readonly ShownConnection[];
 }): React.JSX.Element {
-  const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
-  const answer = list.rows;
-  const failed = answer === undefined && list.status === HOST_READ_STATUS.FAILED;
+  const list = useQuery(repositoryListsQuery(workspaceId));
+  const retry = useMutation(repositoryListsRetryMutation());
+  const answer = list.data;
+  const failed = answer === undefined && list.isError;
   const reading = answer === undefined && !failed;
   useAnnounceShown(ANNOUNCE.POLITE, reading ? WORDS.READING : "");
   const byOwner = answer === undefined ? undefined : repositoriesByOwner(answer.repositories);
@@ -245,7 +256,7 @@ function ListedAccountRows({
         <SettingsLine>
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.WORKSPACE_REPOSITORIES_READ)}
-            onRetry={list.retry}
+            onRetry={() => retry.mutate(repositoryScope(workspaceId))}
           >
             {WORDS.NOT_READ}
           </ErrorState>

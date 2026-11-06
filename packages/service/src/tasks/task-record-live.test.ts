@@ -3,8 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@repo/database/core/live-statement";
 import { Database, type DatabaseServices } from "@repo/database/core/query";
-import { listPages, writePage } from "@repo/database/models/plan-pages";
-import { readTaskPlan, savePlanText, updateTask } from "@repo/database/models/task-store";
+import { listPages, writePage } from "@repo/database/models/task-pages";
+import {
+  readTaskDescription,
+  saveDescriptionText,
+  updateTask,
+} from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
 import { type TaskRecordLiveRows, taskRecordLiveRowsSchema } from "@repo/features/live-wire";
@@ -24,12 +28,12 @@ import { taskRecordLiveStatements } from "./task-record-live.js";
  * Synthetic accounts, pages, and words throughout.
  */
 
-const PARTS = ["plan", "pages", "code"] as const;
+const PARTS = ["description", "pages", "code"] as const;
 
 type Part = (typeof PARTS)[number];
 
-/** The parts a held read answers: the plan and the pages; no desktop reads the code again. */
-const HELD_PARTS = ["plan", "pages"] as const;
+/** The parts a held read answers: the description and the pages; no desktop reads the code again. */
+const HELD_PARTS = ["description", "pages"] as const;
 
 /** A new account, as the store holds one. */
 const openUser = Effect.gen(function* () {
@@ -48,7 +52,7 @@ const liveRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     const statements = Option.getOrThrow(taskRecordLiveStatements(reader, taskId));
     return yield* Schema.decodeUnknownEffect(taskRecordLiveRowsSchema)({
-      plan: yield* runLive(statements.plan),
+      description: yield* runLive(statements.description),
       pages: yield* runLive(statements.pages),
       code: yield* runLive(statements.code),
     });
@@ -58,7 +62,7 @@ const liveRecordOf = (reader: string, taskId: string) =>
 const heldRecordOf = (reader: string, taskId: string) =>
   Effect.gen(function* () {
     return {
-      plan: yield* readTaskPlan(reader, taskId),
+      description: yield* readTaskDescription(reader, taskId),
       pages: yield* listPages(reader, taskPageOwner(taskId)),
     };
   });
@@ -76,7 +80,7 @@ function movedHeld(before: HeldRecord, after: HeldRecord): readonly Part[] {
   return HELD_PARTS.filter((part) => JSON.stringify(before[part]) !== JSON.stringify(after[part]));
 }
 
-/** The moves a held reading makes for the live ones expected: the plan's and the pages'. */
+/** The moves a held reading makes for the live ones expected: the description's and the pages'. */
 function heldOf(expected: readonly Part[]): readonly Part[] {
   return expected.filter((part) => part !== "code");
 }
@@ -108,7 +112,9 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
           });
 
         assert.deepEqual(live, {
-          plan: [{ taskId: task.id, savedAt: Option.getOrThrow(held.plan).updatedAt }],
+          description: [
+            { taskId: task.id, savedAt: Option.getOrThrow(held.description).updatedAt },
+          ],
           pages: [],
           code: [],
         });
@@ -145,7 +151,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
           ),
         );
         assert.deepEqual(yield* liveRecordOf(stranger, task.id), {
-          plan: [],
+          description: [],
           pages: [],
           code: [],
         });
@@ -153,7 +159,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
   );
 
   it.effect(
-    "the plan moves for a teammate as anyone saves its text, at the instant the open document reads as its last save, and not as it is renamed; a stranger reads none",
+    "the description moves for a teammate as anyone saves its text, at the instant the open document reads as its last save, and not as it is renamed; a stranger reads none",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -174,17 +180,23 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
             const nextHeld = yield* heldRecordOf(teammate, task.id);
             assert.deepEqual(movedParts(live, nextLive), expected, "the live marks moved");
             assert.deepEqual(
-              nextLive.plan.map((plan) => plan.savedAt),
-              [Option.getOrThrow(nextHeld.plan).updatedAt],
+              nextLive.description.map((description) => description.savedAt),
+              [Option.getOrThrow(nextHeld.description).updatedAt],
               "the mark is the open document's last save",
             );
             live = nextLive;
           });
 
-        yield* step(["plan"], savePlanText(owner, task.id, "## Invites\n\nThey expire."));
-        yield* step(["plan"], savePlanText(teammate, task.id, "## Invites\n\nA week."));
+        yield* step(
+          ["description"],
+          saveDescriptionText(owner, task.id, "## Invites\n\nThey expire."),
+        );
+        yield* step(
+          ["description"],
+          saveDescriptionText(teammate, task.id, "## Invites\n\nA week."),
+        );
         yield* step([], updateTask(owner, task.id, { name: "Invitations" }));
-        assert.deepEqual((yield* liveRecordOf(stranger, task.id)).plan, []);
+        assert.deepEqual((yield* liveRecordOf(stranger, task.id)).description, []);
       }),
   );
 });

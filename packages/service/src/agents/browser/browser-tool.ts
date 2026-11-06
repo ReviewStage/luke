@@ -89,7 +89,6 @@ import { webmDimensions } from "@repo/features/video-signature";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
-import type { ToolModelOutput } from "eve/tools";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { AgentBrowser, type BrowserUnreachable } from "./agent-browser.js";
@@ -110,7 +109,7 @@ export const BROWSER_TOOL = {
   name: AGENT_TOOL.BROWSER,
   description:
     "Drive a real browser, a Chromium in your own sandbox, whose tabs the developer can watch " +
-    "and take over in the Browser tab beside the plan. Your own dev server is at localhost " +
+    "and take over in the Browser tab beside the description. Your own dev server is at localhost " +
     "there, such as http://localhost:3000/. Each call takes up to " +
     `${BROWSER_AGENT_LIMITS.MAX_ACTIONS} actions, run in order: list the tabs, open one at an ` +
     "address, navigate, go back or forward, click, type, choose an option in a dropdown, press " +
@@ -219,7 +218,7 @@ export function browserNotRun(reason: string): BrowserToolResult {
 /** The words a refused action answers: a member drives its tab. */
 function drivenWords(tab: string): string {
   return (
-    `Not done: a member is driving tab ${tab} in the Browser tab beside the plan. ` +
+    `Not done: a member is driving tab ${tab} in the Browser tab beside the description. ` +
     "Wait until they hand it back, then call again, or ask them what they need."
   );
 }
@@ -747,14 +746,26 @@ function withoutPictures(output: UnparsedWireValue, forModel: boolean): Unparsed
   });
 }
 
+/** One part of what the model is shown: words, or a picture's base64 and its type. */
+type BrowserModelPart =
+  | { readonly type: "text"; readonly text: string }
+  | {
+      readonly type: "file";
+      readonly data: { readonly type: "data"; readonly data: string };
+      readonly mediaType: string;
+    };
+
+/** What the model is shown of a call's result: the JSON it is, or its parts in order. */
+type BrowserModelOutput =
+  | { readonly type: "json"; readonly value: UnparsedWireValue }
+  | { readonly type: "content"; readonly value: readonly BrowserModelPart[] };
+
 /**
  * What the model is shown of a call's result: the result as JSON with each
  * screenshot's picture beside it as an image, never its base64 spelled out
- * as text; anything else as the JSON it is. Note that the output is eve's
- * literal shape, spelled here rather than built with eve's helpers, as
- * `pictureLookModelOutput` spells it.
+ * as text; anything else as the JSON it is.
  */
-export function browserModelOutput(output: UnparsedWireValue): ToolModelOutput {
+export function browserModelOutput(output: UnparsedWireValue): BrowserModelOutput {
   if (!isRecord(output) || !isRan(output) || !Array.isArray(output.steps)) {
     return { type: "json", value: output };
   }

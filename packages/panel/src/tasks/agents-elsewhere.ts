@@ -1,8 +1,9 @@
 import type { AgentPullRequest, AgentSummary } from "@repo/features/agent-wire";
 import type { ListedPullRequest } from "@repo/features/task-wire";
-import * as Atom from "effect/reactivity/Atom";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery } from "../use-app-state.js";
 import type { AgentsControl } from "./use-agents.js";
 
 /**
@@ -21,7 +22,7 @@ import type { AgentsControl } from "./use-agents.js";
  */
 
 /** Every agent's pull request the window's task list carries, a task's or one on none. */
-const listedPullRequestsAtom = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.agentPullRequests);
+const selectListedPullRequests = (state: AppStateSnapshot) => state.tasks.agentPullRequests;
 
 /** Whether the place's control lists the agent, archived or not. */
 function listsAgent(agents: AgentsControl, agentId: string): boolean {
@@ -48,7 +49,7 @@ export function useAgentsElsewhere(
   agents: AgentsControl,
   named: readonly string[],
 ): (agentId: string) => AgentsControl {
-  const listed = useAppSlice(listedPullRequestsAtom);
+  const listed = useQuery({ ...appStateQuery, select: selectListedPullRequests }).data;
   const [rows, setRows] = useState<ReadonlyMap<string, AgentSummary>>(() => new Map());
   // The agents asked for once, so a read that found none is not asked again on every draw.
   const asked = useRef(new Set<string>());

@@ -39,18 +39,20 @@ function Looks(): React.JSX.Element {
         glyph={<AlertIcon />}
         actions={<Button variant={BUTTON_VARIANT.OUTLINE}>Move to Acme</Button>}
       >
-        This plan's repository, acme/relay, belongs to the Acme workspace.
+        This task's repository, acme/relay, belongs to the Acme workspace.
       </Banner>
       <Banner
         look={BANNER_LOOK.CARD}
         glyph={<ArchiveIcon />}
         actions={<Button variant={BUTTON_VARIANT.PRIMARY}>Unarchive</Button>}
       >
-        <Text variant={TEXT_VARIANT.SECTION}>This plan is archived</Text>
+        <Text variant={TEXT_VARIANT.SECTION}>This task is archived</Text>
       </Banner>
       <Banner look={BANNER_LOOK.CARD} tone={STATUS_TONE.ATTENTION} glyph={<AlertIcon />}>
-        <Text variant={TEXT_VARIANT.SECTION}>Every new plan starts from this template</Text>
-        <Text tone={TEXT_TONE.MUTED}>Edit it to change what a plan holds when it is made.</Text>
+        <Text variant={TEXT_VARIANT.SECTION}>Every new description starts from this template</Text>
+        <Text tone={TEXT_TONE.MUTED}>
+          Edit it to change what a description holds when it is made.
+        </Text>
       </Banner>
       <Banner
         look={BANNER_LOOK.CARD}
@@ -114,7 +116,7 @@ function Banners(): React.JSX.Element {
             glyph={<AlertIcon />}
             actions={<Button variant={BUTTON_VARIANT.OUTLINE}>Move to Acme</Button>}
           >
-            This plan's repository, acme/relay, belongs to the Acme workspace, which this account
+            This task's repository, acme/relay, belongs to the Acme workspace, which this account
             cannot push to.
           </Banner>
         </div>
@@ -123,11 +125,16 @@ function Banners(): React.JSX.Element {
         <Stack gap={GAP.FIELD}>
           <ViewingAsBanner
             member={{ name: "Ada Lovelace", email: "ada@example.com" }}
-            onStop={() => Promise.resolve("The sign-in could not be stopped.")}
+            stop={{
+              run: () => undefined,
+              busy: false,
+              refusal: "The sign-in could not be stopped.",
+              failed: false,
+            }}
           />
           <ViewingAsBanner
             member={{ email: "ada@example.com" }}
-            onStop={() => Promise.resolve(undefined)}
+            stop={{ run: () => undefined, busy: false, refusal: undefined, failed: false }}
           />
         </Stack>
       </CatalogSection>

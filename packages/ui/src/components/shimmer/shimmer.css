@@ -1,33 +1,72 @@
 /* shimmer.css -- words with a light passing along them: the muted gray with
-   the highlight in the text's own ink. Its duration is a literal as an endless
-   loop with no end of its own may have, because it answers
-   --ui-loop-motion with its play state. */
+   the highlight in the text's own ink. The light is a window 60% of the
+   words' width, opaque at its middle and clear at its edges, sliding from
+   just before the words to just past them while the copy of the words inside
+   it slides back by as much. Both move on `transform` alone, so the
+   compositor runs the loop and the line is never painted again for it. Its
+   duration is a literal as an endless loop with no end of its own may have,
+   because it answers --ui-loop-motion with its play state. */
 
 @layer components {
-  .ui-shimmer {
+  /* Note that it clips with `clip`, never `hidden`, so the window sliding
+     past its edges widens no scroller around it and makes none of its own. */
+  .ui-shimmer-frame {
+    position: relative;
     display: inline-block;
-    background-image: linear-gradient(
-      90deg,
-      var(--ui-color-text-muted) 0%,
-      var(--ui-color-text-muted) 40%,
-      var(--ui-color-text) 50%,
-      var(--ui-color-text-muted) 60%,
-      var(--ui-color-text-muted) 100%
-    );
-    background-size: 300% 100%;
-    background-clip: text;
-    color: transparent;
-    animation: ui-shimmer 2s linear infinite;
+    overflow: clip;
+  }
+
+  .ui-shimmer {
+    color: var(--ui-color-text-muted);
+  }
+
+  /* The window's left edge travels from 0.8 of the words' width before them
+     to 1.2 past their start, its center from half a width before them to
+     half a width past them. A percentage of `translate` is of the window's
+     own width, 0.6 of the words'. */
+  .ui-shimmer-light {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 60%;
+    pointer-events: none;
+    user-select: none;
+    mask-image: linear-gradient(90deg, transparent, black, transparent);
+    mask-repeat: no-repeat;
+    animation: ui-shimmer-window 2s linear infinite;
     animation-play-state: var(--ui-loop-motion);
   }
 
-  @keyframes ui-shimmer {
+  /* The copy is the words' width again, so it wraps as they do, and slides
+     back by the window's own travel, in its own widths, standing still over
+     the words. */
+  .ui-shimmer-light-words {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: calc(100% / 0.6);
+    color: var(--ui-color-text);
+    animation: ui-shimmer-words 2s linear infinite;
+    animation-play-state: var(--ui-loop-motion);
+  }
+
+  @keyframes ui-shimmer-window {
     from {
-      background-position: 100% center;
+      transform: translateX(calc(-0.8 / 0.6 * 100%));
     }
 
     to {
-      background-position: 0% center;
+      transform: translateX(calc(1.2 / 0.6 * 100%));
+    }
+  }
+
+  @keyframes ui-shimmer-words {
+    from {
+      transform: translateX(80%);
+    }
+
+    to {
+      transform: translateX(-120%);
     }
   }
 }

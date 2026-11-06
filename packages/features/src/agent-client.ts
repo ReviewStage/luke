@@ -43,6 +43,9 @@ import {
   type AgentReviewOptionsAnswerView,
   type AgentWorkspaceListParams,
   type AgentWorkspaceToolsAnswerView,
+  type ChatGptDeviceLoginParams,
+  type ChatGptDevicePollAnswerView,
+  type ChatGptDeviceStartAnswerView,
   type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -84,7 +87,6 @@ import {
   type RefusedDevice,
   TRANSCRIPT_PARTS_QUERY,
 } from "./agent-wire.js";
-import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
 import type { AgentChangeRequest } from "./contract/agents.js";
 import {
   credentialMissingDataSchema,
@@ -147,16 +149,13 @@ import {
   modelChoiceSchema,
 } from "./models-wire.js";
 import {
-  type ChatGptCredentialsSaveRequest,
-  type ChatGptHostAnswer,
-  chatGptCredentialsSaveRequestSchema,
+  chatGptDeviceLoginRequestSchema,
   PROVIDER_KEY_QUERY,
   providerKeyForAgentsRequestSchema,
   providerKeySaveRequestSchema,
 } from "./provider-key-wire.js";
 import type { PullRequestChaptersLiveAnswer } from "./pull-request-chapters-live.js";
 import {
-  type ChaptersModelAnswerView,
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "./pull-request-chapters-view.js";
@@ -223,7 +222,6 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
   [HOSTED_API_ERROR.INVALID_REQUEST]: AGENT_CALL_FAILURE.INVALID_CHOICE,
   [HOSTED_API_ERROR.NOT_PERMITTED]: AGENT_CALL_FAILURE.NOT_PERMITTED,
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING,
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE,
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT,
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE,
@@ -272,7 +270,6 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
   [HOSTED_API_ERROR.NOT_PERMITTED]: AGENT_CALL_FAILURE.NOT_PERMITTED,
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING,
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE,
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT,
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE,
@@ -498,27 +495,6 @@ function defaultOf(read: AccountPreferencesAnswerWire | Failed): AgentDefaultAns
   return read.txid === undefined ? { choice } : { choice, txid: read.txid };
 }
 
-/** The chapters model as nothing the window can show: the call never answered, or answered no model this build offers. */
-const CHAPTERS_MODEL_UNANSWERED = {
-  failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
-} as const;
-
-/** The chapters model a write left off the preferences snapshot, with the transaction it committed in, or unanswered where it carries none this build offers. */
-function chaptersModelAnswerOf(
-  asked: Effect.Effect<AccountPreferencesAnswerWire, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
-  return Effect.match(asked, {
-    onFailure: () => CHAPTERS_MODEL_UNANSWERED,
-    onSuccess: (read) => {
-      const model = Option.getOrUndefined(
-        Schema.decodeUnknownOption(chaptersModelSchema)(read.chaptersModel),
-      );
-      if (model === undefined) return CHAPTERS_MODEL_UNANSWERED;
-      return read.txid === undefined ? { model } : { model, txid: read.txid };
-    },
-  });
-}
-
 /**
  * The window's reads and writes of a task's coding agents: the models the
  * service offers and the account's default among them, a task's agents,
@@ -642,15 +618,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** The account's chapters model written on its own, answering it as kept with the transaction it committed in. */
-  writeChaptersModel(
-    model: ChaptersModelId,
-  ): Effect.Effect<ChaptersModelAnswerView, never, HttpClient.HttpClient> {
-    return chaptersModelAnswerOf(
-      askHosted(this.#hosted.account.writePreferences, { chaptersModel: model }),
-    );
-  }
-
   /**
    * The memories our agents kept in a workspace the account is a member of,
    * sealed for following, each with its keeper's name and whether the
@@ -707,24 +674,31 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
   }
 
-  /** The account's `ext_agent_host_id` for our hosted runtime, which a ChatGPT sign-in names as its host. */
-  chatGptHost(): Effect.Effect<ChatGptHostAnswer | Failed, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.account.chatGptHost, undefined), {});
+  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses. */
+  startChatGptDeviceLogin(): Effect.Effect<
+    ChatGptDeviceStartAnswerView,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedAnswer(askHosted(this.#hosted.account.startChatGptDeviceLogin, undefined), {});
   }
 
-  /**
-   * A ChatGPT sign-in the desktop completed, handed to the service once,
-   * answering the keys as they then stand and, where the service kept
-   * nothing, why; a sign-in the service would refuse by shape never travels.
-   */
-  saveChatGptCredentials(
-    credentials: ChatGptCredentialsSaveRequest,
-  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(
-      readEither(chatGptCredentialsSaveRequestSchema)(credentials),
-    );
+  /** How a device-code login stands, the keys once it connected; a login id the service would refuse by shape never travels. */
+  pollChatGptDeviceLogin(
+    params: ChatGptDeviceLoginParams,
+  ): Effect.Effect<ChatGptDevicePollAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(chatGptDeviceLoginRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(askHosted(this.#hosted.account.saveChatGptCredentials, admitted), {});
+    return hostedAnswer(askHosted(this.#hosted.account.pollChatGptDeviceLogin, admitted), {});
+  }
+
+  /** A device-code login withdrawn, answering how it then stands; a login id the service would refuse by shape never travels. */
+  cancelChatGptDeviceLogin(
+    params: ChatGptDeviceLoginParams,
+  ): Effect.Effect<ChatGptDevicePollAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(chatGptDeviceLoginRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.account.cancelChatGptDeviceLogin, admitted), {});
   }
 
   /**
@@ -1687,15 +1661,15 @@ export class HostedAgentClient {
     );
   }
 
-  /** One item snoozed for the account until `until`, in epoch milliseconds, which marks it read, or its snooze ended where `until` is null, under the idempotency key given where one is: its id and its read state; not found where the item is not one the account reaches. */
-  snoozeInboxItem(
+  /** One item's reminder set for the account for `until`, in epoch milliseconds, or canceled where `until` is null, whether it is read standing as it was, under the idempotency key given where one is: its id and its read state; not found where the item is not one the account reaches. */
+  remindInboxItem(
     itemId: string,
     until: number | null,
     key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(
-        this.#hosted.inbox.snoozeItem,
+        this.#hosted.inbox.remindItem,
         { params: { id: itemId }, body: { until } },
         HOSTED_DEADLINE.USUAL,
         key,

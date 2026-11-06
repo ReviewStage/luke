@@ -87,9 +87,9 @@ export const GATEWAY_METHOD = {
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /** The id of the task a link names by its workspace and its number, found by the service; answered to the caller, never held in the view. */
   TASKS_FIND: "tasks.find",
-  /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
+  /** A page of one description's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
-  /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
+  /** One revision of one description beside the one before it, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISION: "tasks.revision",
   /** One version of one page of one plan with its HTML, read from the service for the frame that draws it; answered to the caller, never held in the view. */
   TASKS_PAGE: "tasks.page",
@@ -104,19 +104,19 @@ export const GATEWAY_METHOD = {
   /** One plan's or agent's pages let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_PAGES_UNFOLLOW: "tasks.pagesUnfollow",
   /**
-   * One task's plan held for a window from now until it is let go, and a
+   * One task's description held for a window from now until it is let go, and a
    * while after among those let go lately: the task's record followed over
-   * the service's held poll, and its plan read again whenever its mark moves
-   * past the copy held. What it holds is heard as `PLAN_DOCUMENTS_CHANGED`
+   * the service's held poll, and its description read again whenever its mark moves
+   * past the copy held. What it holds is heard as `DESCRIPTION_DOCUMENTS_CHANGED`
    * events, on the app state every window draws, never answered.
    */
   TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
-  /** One task's plan let go by the window that held it: it stays among those let go lately until later ones push it out. */
+  /** One task's description let go by the window that held it: it stays among those let go lately until later ones push it out. */
   TASKS_DOCUMENT_UNFOLLOW: "tasks.documentUnfollow",
-  /** One task's held plan read again at once, as Try again asks; never answered. */
+  /** One task's held description read again at once, as Try again asks; never answered. */
   TASKS_DOCUMENT_RETRY: "tasks.documentRetry",
   /**
-   * One task's plan history held for a window's version history from now
+   * One task's description history held for a window's version history from now
    * until it is let go, and a while after among those let go lately: its
    * newest page followed over the service's held poll, and the older pages
    * read past it laid after it. What it holds is heard as
@@ -139,27 +139,27 @@ export const GATEWAY_METHOD = {
   TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
   /** One task's or agent's Browser tabs let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_BROWSER_TABS_UNFOLLOW: "tasks.browserTabsUnfollow",
-  /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
+  /** One picture of one description, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   TASKS_PICTURE: "tasks.picture",
-  /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
+  /** One picture kept on one description on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
-   * One task's comments, its plan's own threads or one page's, held followed
+   * One task's comments, its description's own threads or one page's, held followed
    * for a window from now until it is let go, over Neon Realtime, and a
-   * while after among those let go lately: the open task's plan's, or a page
-   * tab's. What they hold is heard as `PLAN_COMMENTS_CHANGED` events, on the
+   * while after among those let go lately: the open task's description's, or a page
+   * tab's. What they hold is heard as `DESCRIPTION_COMMENTS_CHANGED` events, on the
    * app state every window draws, never answered.
    */
   TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
-  /** One task's plan's or page's comments let go by the window that held them: they stay among those let go lately until later ones push them out. */
+  /** One task's description's or page's comments let go by the window that held them: they stay among those let go lately until later ones push them out. */
   TASKS_COMMENTS_UNFOLLOW: "tasks.commentsUnfollow",
-  /** One held plan's or page's comments read again at once, as Try again asks, where a window holds them or let them go lately. */
+  /** One held description's or page's comments read again at once, as Try again asks, where a window holds them or let them go lately. */
   TASKS_COMMENTS_RETRY: "tasks.commentsRetry",
-  /** A comment thread started on one task's plan, answered with the thread as it stands. */
+  /** A comment thread started on one task's description, answered with the thread as it stands. */
   TASKS_COMMENT_START: "tasks.commentStart",
-  /** One thing done to one comment thread of one task's plan, answered with the thread as it stands. */
+  /** One thing done to one comment thread of one task's description, answered with the thread as it stands. */
   TASKS_COMMENT_ACT: "tasks.commentAct",
-  /** One revision of one plan put back as its content on the service; the view takes the task as the service answered it. */
+  /** One revision of one description put back as its content on the service; the view takes the task as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
@@ -314,6 +314,8 @@ export const GATEWAY_METHOD = {
   HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
+  /** Run agents on this Mac turned on, This Mac enrolled, or off, its host removed; done, or why not. */
+  HOSTS_THIS_MAC_SET: "hosts.thisMacSet",
   /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   /** A box's pending pairing approved by its code, which makes the account's host; its id, or why not. */
@@ -449,8 +451,6 @@ export const GATEWAY_METHOD = {
   AGENTS_CHAPTERS_RETRY: "agents.chaptersRetry",
   /** One agent's pull request's chapters generated for its head on our own model key, or the generation already under way, answered as a read of them is. */
   AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
-  /** The Claude model the account's Generate chapters runs on, drawn over the account's preferences at once and written to the service; the model as kept, or why it is unchanged. */
-  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
   /**
    * Our own tools one agent is offered, held for a window from now until it
    * is let go, asked of the service at once and again as a window comes
@@ -486,10 +486,12 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
   PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
-  /** A ChatGPT sign-in for our hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
-  CHATGPT_SIGN_IN: "chatGpt.signIn",
-  /** The ChatGPT sign-in waiting on the browser, withdrawn. */
-  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
+  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
+  CHATGPT_DEVICE_START: "chatGpt.device.start",
+  /** A device-code login waited on, by its login id, asked after on the interval its start named until it settles or an ask goes unanswered; how it settled, the keys as they then stand once it connected. */
+  CHATGPT_DEVICE_WAIT: "chatGpt.device.wait",
+  /** A device-code login withdrawn, by its login id; how it then stands. */
+  CHATGPT_DEVICE_CANCEL: "chatGpt.device.cancel",
   /**
    * The member's own GitHub token as its login, hint, and status, never the
    * token, held for a window from now until it is let go, asked of the
@@ -544,8 +546,9 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
-  /** One item snoozed for the account until an instant, which marks it read, or its snooze ended; its read state, or why there is no answer. */
-  AGENTS_INBOX_SNOOZE: "agents.inboxSnooze",
+  /** One item's reminder set for the account for an instant, or canceled, whether it is read standing as it was; its read state, or why there is no answer. */
+  // Note that setting a reminder keeps Snooze's id, because a write queued offline is kept on disk by its method's id, and one under an id no host answers is dropped.
+  AGENTS_INBOX_REMIND: "agents.inboxSnooze",
   /** Where one item the account may read stands, its agent, task, and workspace, as a link by its id alone is opened; or why there is no answer. */
   AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
@@ -644,6 +647,20 @@ export const GATEWAY_METHOD = {
   BROWSER_LIVE_CONNECT: "browserLive.connect",
   BROWSER_LIVE_SEND: "browserLive.send",
   BROWSER_LIVE_DISCONNECT: "browserLive.disconnect",
+  /**
+   * A coding agent's cloud ports forwarded to this Mac's `127.0.0.1`
+   * (`@repo/features/port-forward-acts`), for one agent at a time: how its
+   * forwarding turned on or off, its standing told as
+   * `PORT_FORWARDS_CHANGED`. What a forwarded connection carries never
+   * crosses the Gateway.
+   */
+  PORT_FORWARDS_SET: "portForwards.set",
+  /**
+   * A cloud agent's mirror on this Mac (`@repo/host`'s `compose-mirrors.ts`),
+   * made where none stands and kept in step from then on, answered with its
+   * folder (`{ folder }`) once its worktree stands.
+   */
+  MIRRORS_ENSURE: "mirrors.ensure",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
@@ -765,11 +782,11 @@ export const GATEWAY_EVENT = {
   BROWSER_LIVE_CLOSED: "browserLive.closed",
   /** Every plan's or agent's pages the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PAGES_CHANGED: "pages.changed",
-  /** Every plan's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
-  PLAN_COMMENTS_CHANGED: "planComments.changed",
-  /** Every task's plan the host holds for the windows, whole, as its reads of them and the writes since stand, each time any of them moves. */
-  PLAN_DOCUMENTS_CHANGED: "planDocuments.changed",
-  /** Every task's plan history the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  /** Every description's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
+  DESCRIPTION_COMMENTS_CHANGED: "descriptionComments.changed",
+  /** Every task's description the host holds for the windows, whole, as its reads of them and the writes since stand, each time any of them moves. */
+  DESCRIPTION_DOCUMENTS_CHANGED: "descriptionDocuments.changed",
+  /** Every task's description history the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HISTORIES_CHANGED: "histories.changed",
   /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   AUTOMATIONS_CHANGED: "automations.changed",
@@ -817,6 +834,8 @@ export const GATEWAY_EVENT = {
   WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
   /** The outside MCP clients the host holds for the windows, whole, as its read of them stands, each time it moves. */
   MCP_CLIENTS_CHANGED: "mcpClients.changed",
+  /** The one agent whose cloud ports are forwarded to this Mac and how its forwarding stands, or none, each time it moves. */
+  PORT_FORWARDS_CHANGED: "portForwards.changed",
   /** How many changes made offline the service refused as they were sent again, since the windows last cleared the count, each time it moves. */
   OFFLINE_REFUSED_CHANGED: "offlineRefused.changed",
   /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

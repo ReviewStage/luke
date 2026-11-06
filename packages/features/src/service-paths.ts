@@ -25,14 +25,12 @@ export const HOSTED_SERVICE_PATH = {
    * `provider-key-wire.ts` declares every body.
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
-  /**
-   * The account's ChatGPT sign-in for our hosted runtime, as the desktop
-   * hands it over (PUT); its removal is `ACCOUNT_PROVIDER_KEYS`'s DELETE with
-   * its kind. The answer is the provider keys' and never carries a token.
-   */
-  ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
-  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for our hosted runtime under (GET). */
-  ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
+  /** A ChatGPT plan's connection through Codex's device-code login begun (POST): the code to enter, and the login to poll. */
+  ACCOUNT_CHATGPT_DEVICE: "/api/account/chatgpt/device",
+  /** One check of a device-code connection (POST), by its login. */
+  ACCOUNT_CHATGPT_DEVICE_POLL: "/api/account/chatgpt/device/poll",
+  /** A device-code connection dropped (POST), by its login. */
+  ACCOUNT_CHATGPT_DEVICE_CANCEL: "/api/account/chatgpt/device/cancel",
   /**
    * The memories our agents kept in a workspace the account is a member
    * of, named in the query: read them (GET), or forget one by its id
@@ -112,9 +110,9 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_AGENT_PAGES: "/api/live/agent-pages",
   /** The run of an automation that started one coding agent under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its row inline, none for an agent no run started; or `not-found`. `agent-origin-live.ts` declares the answer. */
   LIVE_AGENT_ORIGIN: "/api/live/agent-origin",
-  /** One task's newest page of plan history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
+  /** One task's newest page of description history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
   LIVE_TASK_HISTORY: "/api/live/task-history",
-  /** One task's comments under `?id=`, its plan's own threads, or with `&page=` one page's on every version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. `plan-comment-live.ts` declares the answer. */
+  /** One task's comments under `?id=`, its description's own threads, or with `&page=` one page's on every version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. `description-comment-live.ts` declares the answer. */
   LIVE_TASK_COMMENTS: "/api/live/task-comments",
   /** One task's Browser tabs under `?id=`, the agent's pointer on each among them, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
   LIVE_TASK_BROWSER_TABS: "/api/live/task-browser-tabs",
@@ -272,7 +270,7 @@ export const HOSTED_SERVICE_PATH = {
    * GitHub holds it now (GET), named by the workspace and the repository
    * (`GITHUB_REPOSITORIES_QUERY`), for a place with no plan to name it by,
    * such as an agent an automation started; the answer is a plan's tree's
-   * (`plan-wire.ts`).
+   * (`description-wire.ts`).
    */
   GITHUB_REPOSITORY_TREE: "/api/github/repositories/tree",
   /**
@@ -285,7 +283,7 @@ export const HOSTED_SERVICE_PATH = {
   /**
    * The skills a developer may choose of a repository a workspace's
    * installation reaches (GET), named as `GITHUB_REPOSITORY_TREE` names it;
-   * the answer is a plan's skills' (`plan-wire.ts`).
+   * the answer is a plan's skills' (`description-wire.ts`).
    */
   GITHUB_REPOSITORY_SKILLS: "/api/github/repositories/skills",
   /**
@@ -467,14 +465,14 @@ export interface SkillsPlace {
   readonly repository?: string;
 }
 
-/** One plan's pictures, under which each is served as its bytes (`planAttachmentPath`). */
-function planAttachmentsPath(taskId: string): string {
+/** One description's pictures, under which each is served as its bytes (`descriptionAttachmentPath`). */
+function descriptionAttachmentsPath(taskId: string): string {
   return `${taskPath(taskId)}/attachments`;
 }
 
-/** One picture of one plan, as its bytes (GET). */
-export function planAttachmentPath(taskId: string, attachmentId: string): string {
-  return `${planAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
+/** One picture of one description, as its bytes (GET). */
+export function descriptionAttachmentPath(taskId: string, attachmentId: string): string {
+  return `${descriptionAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
 }
 
 /** One item of a task's inbox, which its attachments are under. */

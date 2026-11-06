@@ -1,27 +1,26 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { memoryHistory } from "@repo/ui/history-adapter";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { App } from "./app.js";
 import { runAppCommand } from "./app-commands.js";
 // Note that Settings is loaded as the window loads it, on first use
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
 // within the test's own ticks rather than on a clock a busy machine outruns.
 import "./desktop/desktop-settings.js";
-import { installWindowHistory } from "./navigation-history.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, signedInAs } from "./testing/app-state.js";
+import { onRegistry, writeHandedAppState } from "./testing/copy-feedback.js";
+import { windowRouter } from "./testing/window-router.js";
 
 /**
  * app-account-home.test.ts -- an account leaving the window takes its place
@@ -55,7 +54,6 @@ beforeEach(() => {
   listeners = new Set();
   window.localStorage.clear();
   fakeAppPlatform({ ...QUIET_PANEL, applySessionReplay: () => undefined });
-  installWindowHistory(memoryHistory());
   const quiet = Object.fromEntries([
     ...Object.keys(PUSH_METHOD).map((method) => [method, () => () => undefined]),
     ...bridgeEntries().map(([method, entry]) => [
@@ -96,6 +94,13 @@ async function deliver(snapshot: AppStateSnapshot, version: number): Promise<voi
   await settle();
 }
 
+/** Whether setup's last step offers Finish. */
+function finishStands(): boolean {
+  return [...document.querySelectorAll("button")].some(
+    (each) => each.textContent?.trim() === "Finish",
+  );
+}
+
 /** The button drawn with `name` as its words. */
 function button(name: string): HTMLButtonElement {
   const found = [...document.querySelectorAll("button")].find(
@@ -111,11 +116,11 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
     "app.setupPlace",
     JSON.stringify({ "account-grace": { audience: "me", at: 3 } }),
   );
+  // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
+  await writeHandedAppState();
   root = createRoot(document.body.appendChild(document.createElement("div")));
   act(() =>
-    root?.render(
-      createElement(RegistryContext.Provider, { value: AtomRegistry.make() }, createElement(App)),
-    ),
+    root?.render(windowRouter().provide(onRegistry(AtomRegistry.make(), createElement(App)))),
   );
   await settle();
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
@@ -123,9 +128,13 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
   assert.ok(document.querySelector(".desktop-settings"), "Settings stands");
 
   await deliver({ ...ADA, account: { status: ACCOUNT_STATUS.SIGNED_OUT } }, 2);
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector(".desktop-onboarding") !== null, true),
+  );
   await deliver(GRACE, 3);
+  await vi.waitFor(() => assert.equal(finishStands(), true));
   act(() => button("Finish").click());
 
-  assert.equal(document.querySelector(".desktop-settings"), null, "Settings is gone");
+  assert.equal(document.querySelector(".desktop-settings") === null, true, "Settings is gone");
   assert.ok(document.querySelector(".home-composer"), "Home stands");
 });

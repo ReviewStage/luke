@@ -6,7 +6,6 @@ import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { type HistoryAdapter, type HistorySnapshot, memoryHistory } from "@repo/ui/history-adapter";
 import { isAgentTab, isDraftTab, isFileTab, isPageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -17,10 +16,10 @@ import { runAppCommand } from "./app-commands.js";
 import { stepTitle } from "./history-titles.js";
 import { useCopyLink } from "./links-at-hand.js";
 import {
-  installWindowHistory,
   MOUSE_BUTTON,
   type StepTitle,
   sameHistoryPage,
+  savesStep,
   throughHistory,
   useHistoryMouseButtons,
   useWindowHistory,
@@ -42,11 +41,7 @@ import { handHostReads, handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { agentsControl, tasksControl } from "./testing/tasks-control.js";
-
-/** A place as the window's history holds it. */
-type HeldPlace = ReturnType<
-  Parameters<typeof installWindowHistory>[0]["current"]
->["entries"][number]["state"];
+import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
 
 const TASK_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 const AUTOMATION_ID = "5d1e7a9c-3b2f-4c6d-8e0a-9f1b2c3d4e5a";
@@ -64,42 +59,6 @@ function unmountAll(): void {
 beforeEach(() => fakeAppPlatform(QUIET_PANEL));
 
 afterEach(unmountAll);
-
-/** A history the test stands on any trail, as a browser's lands on entries the window never held, or on one holding no step. */
-function landingHistory<State>(): HistoryAdapter<State> & {
-  land: (trail: HistorySnapshot<State>) => void;
-} {
-  let snapshot: HistorySnapshot<State> = { entries: [], at: -1 };
-  const listeners = new Set<() => void>();
-  const stand = (next: HistorySnapshot<State>) => {
-    snapshot = next;
-    for (const listener of [...listeners]) listener();
-  };
-  return {
-    current: () => snapshot,
-    push: (entry) => {
-      const entries = [...snapshot.entries.slice(0, snapshot.at + 1), entry];
-      stand({ entries, at: entries.length - 1 });
-    },
-    replace: (entry) =>
-      stand(
-        snapshot.at < 0
-          ? { entries: [entry], at: 0 }
-          : { entries: snapshot.entries.with(snapshot.at, entry), at: snapshot.at },
-      ),
-    go: (delta) => {
-      const at = snapshot.at + delta;
-      if (delta !== 0 && at >= 0 && at < snapshot.entries.length) {
-        stand({ entries: snapshot.entries, at });
-      }
-    },
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    land: stand,
-  };
-}
 
 /** The leave ask a test stands while a page holds unsaved work, or nothing. */
 interface LeaveAskHolder {
@@ -123,13 +82,12 @@ function askingThrough(ask: LeaveAskHolder, base: TasksControl): TasksControl {
   };
 }
 
-/** The window's history over the Tasks tab as `plans` stands, restood by the returned setter, kept in a memory history of its own as a window's root installs one, and its addresses written from the window's own Copy link, as the root wires it. */
+/** The window's history over the Tasks tab as `plans` stands, restood by the returned setter, kept in a memory history of its own under the window's router as a window's root mounts one, and its addresses written from the window's own Copy link, as the root wires it. */
 function mount(
   initial: TasksControl,
-  held: Parameters<typeof installWindowHistory>[0] = memoryHistory(),
+  held: TestWindowRouter = windowRouter(),
   titled?: (tasks: TasksControl) => StepTitle | undefined,
 ) {
-  installWindowHistory(held);
   let history: WindowHistoryLists | undefined;
   let shown: TasksControl | undefined;
   let restand: ((tasks: TasksControl) => void) | undefined;
@@ -160,7 +118,7 @@ function mount(
   // Each window reads its state under a registry of its own, as the window's root provides one.
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  act(() => root.render(held.provide(onRegistry(AtomRegistry.make(), createElement(Probe)))));
   return {
     history: () => {
       assert.ok(history);
@@ -169,10 +127,10 @@ function mount(
     stand: (tasks: TasksControl) => act(() => restand?.(tasks)),
     /** Presses Escape where it reaches the Tasks tab, as the window's own listener hands it on. */
     escape: () => act(() => void shown?.back()),
-    /** The address of every step held, oldest first. */
-    addresses: () => held.current().entries.map((entry) => entry.address),
+    /** The address of every entry the router's history holds, oldest first. */
+    addresses: () => held.addresses(),
     /** Moves the history by itself, as a browser's Back and Forward do, never through the window. */
-    moveHistory: (delta: number) => act(() => held.go(delta)),
+    moveHistory: (delta: number) => act(() => held.history.go(delta)),
   };
 }
 
@@ -302,8 +260,10 @@ test("a move landing where the history no longer holds the window's step, while 
   const asked: (() => void)[] = [];
   const ask: LeaveAskHolder = { current: undefined };
   const homes: string[] = [];
-  const held = landingHistory<HeldPlace>();
+  const held = windowRouter();
   const window = mount(askingThrough(ask, tasksControl()), held);
+  const home = held.history.location.state.step;
+  assert.ok(home !== undefined);
   window.stand(
     askingThrough(
       ask,
@@ -315,24 +275,28 @@ test("a move landing where the history no longer holds the window's step, while 
       }),
     ),
   );
-  const [home, task] = held.current().entries;
-  assert.ok(home !== undefined && task !== undefined);
+  const [, task] = held.addresses();
+  assert.ok(task !== undefined);
 
   ask.current = (leave) => asked.push(leave);
-  // The home page's entry read back afresh, as a browser hands one over after a reload.
-  act(() => held.land({ entries: [{ ...home }], at: 0 }));
+  // The home page's entry from a visit the trail no longer holds, as a browser lands on one long behind.
+  act(() => held.history.push("/app", { step: { ...home, index: home.index + 10 } }));
   assert.deepEqual(homes, [], "the move waits on the ask");
-  assert.deepEqual(window.addresses(), ["/app", task.address], "the plan's step is written again");
-  assert.equal(held.current().at, 1);
+  assert.deepEqual(
+    window.addresses(),
+    ["/app", task, "/app", task],
+    "the plan's step is written again",
+  );
+  assert.equal(held.at(), 3);
 
   act(() => asked[0]?.());
   assert.deepEqual(homes, ["home"], "Leave goes home");
-  assert.equal(held.current().at, 0);
+  assert.equal(held.at(), 2);
 });
 
 test("a move landing on an entry holding no step opens Home, as a page loaded there does, and Home writes its step on it", () => {
   const homes: string[] = [];
-  const held = landingHistory<HeldPlace>();
+  const held = windowRouter();
   const window = mount(tasksControl(), held);
   window.stand(
     tasksControl({
@@ -343,12 +307,14 @@ test("a move landing on an entry holding no step opens Home, as a page loaded th
     }),
   );
 
-  act(() => held.land({ entries: [], at: -1 }));
+  // An entry no window wrote, as one the page first loaded on.
+  act(() => held.history.push("/acme/automations"));
   assert.deepEqual(homes, ["home"], "the plan is left for Home");
 
   window.stand(tasksControl());
-  act(() => held.land({ entries: [], at: -1 }));
-  assert.deepEqual(window.addresses(), ["/app"], "the window on Home writes its step there");
+  act(() => held.history.push("/acme/automations"));
+  assert.equal(held.history.location.href, "/app", "the window on Home writes its step there");
+  assert.ok(savesStep(held.history.location));
 });
 
 /** The window on the Inbox, or on the task `onTask` stands, each Inbox opened recorded in `inboxes` and each task left in `left`. */
@@ -909,7 +875,7 @@ test("Back's list names a task and its agent's tab by the names they go by now, 
       tasks: [listedTask("Auth refactor")],
       agents: agentsControl({ agents: [openAgent("Token refresh")] }),
     },
-    memoryHistory(),
+    windowRouter(),
     namedAsShown,
   );
   press();
@@ -938,7 +904,7 @@ test("Back's list names a renamed agent's tab by its name now beside a page's ta
       agents: agentsControl({ agents: [openAgent("Token refresh")] }),
       pages: [{ id: page.page, title: "Notes", version: 1, at: 1 }],
     },
-    memoryHistory(),
+    windowRouter(),
     namedAsShown,
   );
   press();
@@ -970,7 +936,7 @@ test("Back's list names a person's page by the name the workspace's members give
         workspaceId: workspace.id,
       },
     }),
-    memoryHistory(),
+    windowRouter(),
     namedAsShown,
   );
   press();
@@ -1180,7 +1146,7 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
       ? { label: "Home" }
       : { label: "Auth refactor", detail: column.agent };
   };
-  const window = mount(tasksControl(), memoryHistory(), titled);
+  const window = mount(tasksControl(), windowRouter(), titled);
   press();
   window.stand(onTabs({ column: AGENT_A, shown }));
   press();
@@ -1250,7 +1216,7 @@ test("a task the Inbox is narrowed to is a step linked by it, which Back leaves 
     workspaces: [workspace],
     inboxView: { ...base.inboxView, open: true, onOpen: leaveInboxTask, onChoose: () => undefined },
   });
-  const window = mount(onInbox, memoryHistory(), stepTitleOf);
+  const window = mount(onInbox, windowRouter(), stepTitleOf);
   await settle();
   press();
   act(() => chooseInboxTask(taskId));

@@ -9,7 +9,7 @@ import { DayScreen } from "@repo/panel/admin/screens/day";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-day.test.ts -- one day's page names the day it covers and whether it
@@ -51,7 +51,7 @@ const ADA_ACTIVE: AdminDayActiveAccount = {
   admin: true,
   counts: {
     tasksCreated: 3,
-    planRevisions: 14,
+    descriptionRevisions: 14,
     agentsStarted: 9,
     inboxAnswered: 2,
     automationRuns: 1,
@@ -66,7 +66,7 @@ const LIN_ACTIVE: AdminDayActiveAccount = {
   admin: false,
   counts: {
     tasksCreated: 1,
-    planRevisions: 0,
+    descriptionRevisions: 0,
     agentsStarted: 2,
     inboxAnswered: 0,
     automationRuns: 0,
@@ -83,7 +83,12 @@ function detail(overrides: Partial<AdminDayDetail> = {}): AdminDayDetail {
     day: DAY,
     limit: 2,
     activity: {
-      features: { agentsStarted: 12, planRevisions: 15, inboxAnswered: 2, automationRuns: 1 },
+      features: {
+        agentsStarted: 12,
+        descriptionRevisions: 15,
+        inboxAnswered: 2,
+        automationRuns: 1,
+      },
       activeDevelopers: 4,
       accounts: [ADA_ACTIVE, LIN_ACTIVE],
     },
@@ -143,6 +148,7 @@ async function openDay(body: AdminDayDetail | undefined): Promise<Opened> {
       ),
     );
   });
+  if (body !== undefined) await readLanded(page);
   return { page, opened, backs };
 }
 
@@ -201,7 +207,7 @@ test("a loaded day names itself and states its totals and accounts under their h
   ]);
   expect(page.textContent).toContain("Active developers4");
   expect(page.textContent).toContain("Agents started12");
-  expect(page.textContent).toContain("Plan revisions15");
+  expect(page.textContent).toContain("Description revisions15");
   expect(page.textContent).toContain("Inbox items answered2");
   expect(page.textContent).toContain("Automation runs1");
   expect(page.textContent).toContain("Active accounts3");
@@ -212,7 +218,7 @@ test("the accounts read busiest first, an admin marked in words and an email sho
   const { page } = await openDay(detail());
 
   expect(rows(page, "Accounts active this day")).toEqual([
-    ["Account", "Tasks", "Plan revisions", "Agents", "Inbox answered", "Automation runs"],
+    ["Account", "Tasks", "Description revisions", "Agents", "Inbox answered", "Automation runs"],
     ["AAda LovelaceAdminada@example.test", "3", "14", "9", "2", "1"],
     ["LLinlin@example.test", "1", "0", "2", "0", "0"],
   ]);
