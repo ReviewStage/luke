@@ -203,6 +203,11 @@ function saveLeft(
   saving = Symbol(left.taskId),
   cause?: unknown,
 ): void {
+  // Note that words whose save waited on one out are not sent once another account has signed in, because they would save as it.
+  if (left.registry.get(wordsOwnerAtom) !== left.owner) {
+    mark(left.registry, savingLeftAtom, saving, false);
+    return;
+  }
   mark(left.registry, savingLeftAtom, saving, true);
   const request = leavingSave(now);
   if (request === undefined) {
@@ -321,6 +326,9 @@ export function useDescriptionEditing(
   // Whether the open editor holds words typed since its last hand-over.
   const [holding, setHolding] = useState(false);
   const registry = useContext(RegistryContext);
+  const owner = useAtomValue(wordsOwnerAtom);
+  // The account signed in as the open editor opened, whose words it holds.
+  const wroteAs = useRef(owner);
   const toast = useToast();
   const withdrawToast = useWithdrawToast();
   // The open editor's words not yet handed over, which a task leaving must save too.
@@ -347,7 +355,7 @@ export function useDescriptionEditing(
   // so a pause and a close landing in one flush start one save, not two.
   const send = () => {
     const held = latest.current;
-    if (held === undefined) return;
+    if (held === undefined || registry.get(wordsOwnerAtom) !== wroteAs.current) return;
     const request = pendingSave(held);
     if (request === undefined) return;
     const sentFrom = opening.current;
@@ -385,6 +393,16 @@ export function useDescriptionEditing(
     return () => mark(registry, openUnsavedAtom, taskId, false);
   }, [registry, taskId, unsaved]);
 
+  // Another account signing in closes an editor open on the last one's words,
+  // which are never saved as it; a save's answer still out lands on no editor.
+  useEffect(() => {
+    if (latest.current === undefined || wroteAs.current === owner) return;
+    opening.current += 1;
+    latest.current = undefined;
+    setEditor(undefined);
+    setHolding(false);
+  }, [owner]);
+
   // A pause that ran out on the newest keystroke saves what stands.
   useEffect(() => {
     if (AsyncResult.isSuccess(pause) && !pause.waiting && pause.value === stamp.current) send();
@@ -406,6 +424,7 @@ export function useDescriptionEditing(
     opening.current += 1;
     const kept = text === undefined ? undefined : takeLeft(registry, taskId);
     if (kept !== undefined) withdrawToast(taskId);
+    wroteAs.current = registry.get(wordsOwnerAtom);
     latest.current = kept;
     setEditor(kept);
     setSelecting(undefined);
@@ -418,7 +437,7 @@ export function useDescriptionEditing(
       const leaving = new MutationObserver(queryClient, writes.current);
       const left: LeftTask = {
         taskId,
-        owner: registry.get(wordsOwnerAtom),
+        owner: wroteAs.current,
         save: (request) => leaving.mutate(request),
         place: drawnPlace.current,
         registry,
@@ -446,6 +465,7 @@ export function useDescriptionEditing(
       if (text === undefined) return;
       if (editor !== undefined && !editorCloses(editorCloseAsked(editor))) return;
       opening.current += 1;
+      wroteAs.current = registry.get(wordsOwnerAtom);
       setEditor(editorOpened(text));
       setPlacement(place);
       setSelecting(undefined);

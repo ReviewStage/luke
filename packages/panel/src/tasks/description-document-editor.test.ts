@@ -975,6 +975,24 @@ test("words a description was left with go once another account signs in, so nei
   assert.equal(unsavedWords(container), false);
 });
 
+test("an editor open on words not yet saved closes once another account signs in, and leaving sends none of them", async () => {
+  const { container, sent, render } = mount();
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  signedIn = "account-teammate";
+  render(DOCUMENT_TASK);
+  await settle();
+  const closed = container.querySelector(".description-document-editor") === null;
+  render(other);
+  await settle();
+
+  assert.ok(closed, "the editor closed as the account changed");
+  assert.equal(sent.length, 0, "nothing saves them as the account now signed in");
+  assert.equal(unsavedWords(container), false);
+});
+
 test("words typed and not yet saved are unsaved work, and once they save they are not", async () => {
   const { container } = mount();
   act(() => block(container, "Goal").click());
