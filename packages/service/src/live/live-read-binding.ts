@@ -110,6 +110,8 @@ interface Orderable {
 interface LivePartColumns<Columns extends LiveColumns, Instants extends LiveColumns> {
   readonly columns: Columns;
   readonly instants?: Instants;
+  /** Whether the statement orders its rows as the part declares; `false` leaves the order to the reader alone (`orderedLiveRows`), as a statement that never ordered them did. */
+  readonly ordered?: boolean;
 }
 
 /** A column read across an outer join, which answers null where the join finds no row, typed so. */
@@ -136,7 +138,9 @@ export function liveRowsStatement<
 ): Option.Option<LiveStatement> {
   const instants: LiveColumns = selected.instants ?? {};
   const columns: LiveColumns = selected.columns;
-  const order = part.order.map(([field, way]) => {
+  // Note that an unordered part orders by nothing, which renders no `order by`, so its statement stays as it was written before it was declared.
+  const declared = selected.ordered === false ? [] : part.order;
+  const order = declared.map(([field, way]) => {
     const column = columns[field] ?? instants[field];
     if (column === undefined)
       throw new Error(`a live read orders by ${field}, which it does not select`);
