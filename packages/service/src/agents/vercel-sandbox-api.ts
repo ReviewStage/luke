@@ -324,7 +324,8 @@ interface SandboxCreate {
   readonly vcpus: number;
   readonly keepLastSnapshots: {
     readonly count: number;
-    readonly expiration: number;
+    /** How long a kept snapshot lasts; where unsaid, the sandbox's own default. */
+    readonly expiration?: number;
     readonly deleteEvicted: boolean;
   };
   readonly env: Readonly<Record<string, string>>;
