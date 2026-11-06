@@ -28,10 +28,12 @@ import type { PortActPayload } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useIsMutating, useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOfferedModels } from "../account-choices.js";
 import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import {
   DRAFT_PLACE,
   type Draft,
@@ -720,7 +722,28 @@ export function useAgents(input: {
   mintKey?: () => string;
 }): AgentsControl {
   const { taskId, agentId, repository } = input;
+  // Note that the reads below stay on `act` until they move to queries; every write is a mutation.
   const { act } = input.acts;
+  const { mutateAsync: sendStart, isPending: starting } = useMutation(
+    actMutation(ACT_KIND.AGENTS_START),
+  );
+  const { mutateAsync: sendStop } = useMutation(actMutation(ACT_KIND.AGENTS_STOP));
+  const { mutateAsync: sendRewind } = useMutation(actMutation(ACT_KIND.AGENTS_REWIND));
+  const { mutateAsync: sendMessage } = useMutation(actMutation(ACT_KIND.AGENTS_MESSAGE));
+  const { mutateAsync: sendChoice } = useMutation(actMutation(ACT_KIND.AGENTS_CHOOSE));
+  const { mutateAsync: sendServers } = useMutation(actMutation(ACT_KIND.AGENTS_SERVERS));
+  const { mutateAsync: sendAddRepository } = useMutation(
+    actMutation(ACT_KIND.AGENTS_ADD_REPOSITORY),
+  );
+  const { mutateAsync: sendRename } = useMutation(actMutation(ACT_KIND.AGENTS_RENAME));
+  const { mutateAsync: sendArchive } = useMutation(actMutation(ROW_WRITE.AGENT_ARCHIVE.kind));
+  const { mutateAsync: sendDelete } = useMutation(actMutation(ACT_KIND.AGENTS_DELETE));
+  const { mutateAsync: sendChapters } = useMutation(actMutation(ACT_KIND.CHAPTERS_GENERATE));
+  const { mutateAsync: sendInboxAnswer } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_ANSWER));
+  const { mutateAsync: sendInboxMessage } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_MESSAGE));
+  const { mutateAsync: sendInboxStart } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_START));
+  // Note that an archive is out while any of the window's is, ⌘Z's sends among them, as the host draws each at once.
+  const archiving = useIsMutating({ mutationKey: [ROW_WRITE.AGENT_ARCHIVE.kind] }) > 0;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
   // Note that the page's agent is drawn from the task list's row of it, its workspace and repository among it, so choosing it reads nothing.
   const listedPage =
@@ -732,7 +755,6 @@ export function useAgents(input: {
     generation: 0,
   });
   const modelsGeneration = useRef(0);
-  const [starting, setStarting] = useState(false);
   // Where a Start from an agent and a draft stand: the open task, or the page's agent where no task
   // is open, whose Start the service puts where that agent is (its task, or its workspace).
   const startsOn = taskId ?? agentId;
@@ -851,7 +873,6 @@ export function useAgents(input: {
     setLookups((count) => count + 1);
   }, [list?.failed, lookupFailed, retryList]);
   // The archives asked here and still out.
-  const [archivesOut, setArchivesOut] = useState(0);
 
   /** Settles the ask of `generation` where it is still the newest: read at any point, failed only while it is out. */
   const settleModels = useCallback((generation: number, state: ModelsReadState) => {
@@ -895,15 +916,9 @@ export function useAgents(input: {
     on: string,
     asked: Omit<PortActPayload<typeof ACT_KIND.AGENTS_START>, "taskId">,
   ): Promise<AgentActAnswer> => {
-    setStarting(true);
     // Note that a Start from the page's agent names no task, so the service puts it where that agent is.
     const where = on === taskId ? { taskId: on } : undefined;
-    return act(ACT_KIND.AGENTS_START, { ...where, ...asked })
-      .catch(agentUnreached)
-      .then((answer) => {
-        setStarting(false);
-        return answer;
-      });
+    return sendStart({ ...where, ...asked }).catch(agentUnreached);
   };
 
   /**
@@ -1281,7 +1296,7 @@ export function useAgents(input: {
 
   // A refused Stop leaves the button as it was, so it says so in a toast.
   const onStop = async (agentId: string): Promise<boolean> => {
-    const answer = await act(ACT_KIND.AGENTS_STOP, { agentId }).catch(agentUnreached);
+    const answer = await sendStop({ agentId }).catch(agentUnreached);
     const took = !("failure" in answer);
     if (!took) {
       failed(STOP_FAILED, {
@@ -1295,15 +1310,15 @@ export function useAgents(input: {
 
   const onRewind = useCallback(
     (agentId: string, messageId: string): Promise<AgentActAnswer> =>
-      act(ACT_KIND.AGENTS_REWIND, { agentId, messageId }).catch(agentUnreached),
-    [act],
+      sendRewind({ agentId, messageId }).catch(agentUnreached),
+    [sendRewind],
   );
 
   const onMessage = useCallback<MessageSender>(
     async (agentId, text, clientKey, attachments) => {
       // Note that a message that opens the agent's sandbox anew while its image is prepared is
       // taken at once, its relaunch waiting on the image in the service, so it is asked once.
-      const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_MESSAGE, {
+      const answer: AgentActAnswer = await sendMessage({
         agentId,
         text,
         clientKey,
@@ -1311,14 +1326,13 @@ export function useAgents(input: {
       }).catch(agentUnreached);
       return answer;
     },
-    [act],
+    [sendMessage],
   );
 
   // A change of model is drawn by the host the moment it is asked, and taken back should the service refuse it.
   const onChoose = useCallback<ChoiceWriter>(
-    (agentId, choice) =>
-      act(ACT_KIND.AGENTS_CHOOSE, { agentId, ...choiceRequest(choice) }).catch(agentUnreached),
-    [act],
+    (agentId, choice) => sendChoice({ agentId, ...choiceRequest(choice) }).catch(agentUnreached),
+    [sendChoice],
   );
 
   // Note that the host sends each agent's switches one after another, in the
@@ -1330,7 +1344,7 @@ export function useAgents(input: {
     async (agentId, disabledServers) => {
       const change = (switches.current.get(agentId) ?? 0) + 1;
       switches.current.set(agentId, change);
-      const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_SERVERS, {
+      const answer: AgentActAnswer = await sendServers({
         agentId,
         disabledServers,
       }).catch(agentUnreached);
@@ -1343,16 +1357,14 @@ export function useAgents(input: {
       }
       return answer;
     },
-    [act, failed],
+    [sendServers, failed],
   );
 
   // A repository added draws nothing on the agent's row, so its answer is only the dialog's to say.
   const onAddRepository = useCallback(
     (agentId: string, repository: string): Promise<AgentActAnswer> =>
-      act(ACT_KIND.AGENTS_ADD_REPOSITORY, { agentId, addRepository: { repository } }).catch(
-        agentUnreached,
-      ),
-    [act],
+      sendAddRepository({ agentId, addRepository: { repository } }).catch(agentUnreached),
+    [sendAddRepository],
   );
 
   // A rename's field closes as the edit ends, and the host draws the new name at once, so a second
@@ -1362,7 +1374,7 @@ export function useAgents(input: {
   const onRename = async (agentId: string, title: string): Promise<boolean> => {
     const rename = (renames.current.get(agentId) ?? 0) + 1;
     renames.current.set(agentId, rename);
-    const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_RENAME, {
+    const answer: AgentActAnswer = await sendRename({
       agentId,
       title,
     }).catch(agentUnreached);
@@ -1377,11 +1389,14 @@ export function useAgents(input: {
     return false;
   };
 
-  // The agents the list draws as they stand at each call, and the act,
-  // which ⌘Z reads an archive's row and sends its writes through.
+  // The agents the list draws as they stand at each call, and the archive's
+  // mutation, which ⌘Z reads an archive's row and sends its writes through.
   const listedNow = useRef(input.listedAgents ?? NO_LISTED_AGENTS);
   listedNow.current = input.listedAgents ?? NO_LISTED_AGENTS;
-  const agentDoors: RowDoors<readonly AgentSummary[]> = { rows: () => listedNow.current, act };
+  const agentDoors: RowDoors<readonly AgentSummary[], typeof ROW_WRITE.AGENT_ARCHIVE.kind> = {
+    rows: () => listedNow.current,
+    send: sendArchive,
+  };
   // The host draws the agent moved at once, and back where the service
   // refuses. An archive kept is ⌘Z's to take back, and its toast's Undo
   // runs the same entry, unless a question was asked first, since ⌘Z must
@@ -1396,10 +1411,7 @@ export function useAgents(input: {
     const pressed = pressRows(ROW_WRITE.AGENT_ARCHIVE, agentDoors, [
       { id: agentId, after: { archived } },
     ]);
-    setArchivesOut((count) => count + 1);
-    const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_ARCHIVE, { agentId, archived })
-      .catch(agentUnreached)
-      .finally(() => setArchivesOut((count) => count - 1));
+    const answer: AgentActAnswer = await sendArchive({ agentId, archived }).catch(agentUnreached);
     const words = archiveWords(archived);
     if ("failure" in answer) {
       const notReady = answer.failure === AGENT_CALL_FAILURE.AGENT_NOT_READY;
@@ -1420,7 +1432,7 @@ export function useAgents(input: {
   archiveNow.current = onArchive;
 
   const onDelete = async (agentId: string): Promise<ActedResult> => {
-    const answer = await act(ACT_KIND.AGENTS_DELETE, { agentId }).catch(agentUnreached);
+    const answer = await sendDelete({ agentId }).catch(agentUnreached);
     if ("failure" in answer) {
       const notReady = answer.failure === AGENT_CALL_FAILURE.AGENT_NOT_READY;
       return {
@@ -1497,25 +1509,25 @@ export function useAgents(input: {
 
   const generateChapters = useCallback<AgentsControl["generateChapters"]>(
     (agentId, number) =>
-      act(ACT_KIND.CHAPTERS_GENERATE, pullRequestAsked(agentId, number)).catch(
+      sendChapters(pullRequestAsked(agentId, number)).catch(
         (): PullRequestChaptersAnswerView => CHAPTERS_UNANSWERED,
       ),
-    [act],
+    [sendChapters],
   );
 
   const answerInbox = useCallback<InboxAnswerer>(
-    (params) => act(ACT_KIND.AGENTS_INBOX_ANSWER, params),
-    [act],
+    (params) => sendInboxAnswer(params),
+    [sendInboxAnswer],
   );
 
   const messageInbox = useCallback<InboxMessenger>(
-    (params) => act(ACT_KIND.AGENTS_INBOX_MESSAGE, params),
-    [act],
+    (params) => sendInboxMessage(params),
+    [sendInboxMessage],
   );
 
   const startInboxThread = useCallback<InboxThreadStarter>(
-    (params) => act(ACT_KIND.AGENTS_INBOX_START, params),
-    [act],
+    (params) => sendInboxStart(params),
+    [sendInboxStart],
   );
 
   // Note that the skills are kept for the plan and its repository as they
@@ -1605,7 +1617,7 @@ export function useAgents(input: {
     onOpenIntegrations: () => latest.current.onOpenIntegrations(),
     me: input.me,
     onOpenApiKeys: (provider) => latest.current.onOpenApiKeys(provider),
-    archiving: archivesOut > 0,
+    archiving,
     onRename,
     onArchive,
     onDelete,
