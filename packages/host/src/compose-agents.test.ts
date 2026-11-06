@@ -1194,7 +1194,7 @@ function subject(
 
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
-    const { call, asked, sealTranscript } = yield* subject();
+    const { call, acts, asked, sealTranscript } = yield* subject();
     sealTranscript(LIVE_ANSWERED);
 
     assert.deepEqual(
@@ -1303,7 +1303,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHANGES,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, {
+      yield* acts.CHAPTERS_GENERATE({
         agentId: AGENT_ID,
         number: 11,
       }),

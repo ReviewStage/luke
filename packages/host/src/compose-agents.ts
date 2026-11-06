@@ -105,11 +105,7 @@ import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
-import {
-  type PullRequestChaptersAnswerView,
-  pullRequestChaptersParamsSchema,
-  pullRequestChaptersReadParamsSchema,
-} from "@repo/features/pull-request-chapters-view";
+import { pullRequestChaptersReadParamsSchema } from "@repo/features/pull-request-chapters-view";
 import { markedAs } from "@repo/features/read-mark";
 import { commitShaSchema } from "@repo/features/task-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
@@ -178,7 +174,7 @@ import {
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import type { ACCOUNT_ASK_ACTS } from "./contract/index.js";
+import type { ACCOUNT_ASK_ACTS, CHAPTERS_ACTS } from "./contract/index.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostActTable } from "./host-acts.js";
@@ -385,8 +381,8 @@ export interface AgentsDependencies {
 }
 
 export interface AgentsComposer extends Composer {
-  /** The account's own asks, answered directly as the panel's port asks them. */
-  readonly acts: HostActTable<typeof ACCOUNT_ASK_ACTS>;
+  /** The account's own asks and a pull request's chapters generated, answered directly as the panel's port asks them. */
+  readonly acts: HostActTable<typeof ACCOUNT_ASK_ACTS & typeof CHAPTERS_ACTS>;
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
@@ -1363,8 +1359,8 @@ function composed(
       answer,
     );
 
-  /** The account's own asks, answered as the panel's port asks them (`ACCOUNT_ASK_ACTS`). */
-  const acts: HostActTable<typeof ACCOUNT_ASK_ACTS> = {
+  /** The account's own asks and a pull request's chapters generated, answered as the panel's port asks them (`ACCOUNT_ASK_ACTS`, `CHAPTERS_ACTS`). */
+  const acts: HostActTable<typeof ACCOUNT_ASK_ACTS & typeof CHAPTERS_ACTS> = {
     PROVIDER_KEYS_SAVE: (save) => Effect.flatMap(asked(client.saveProviderKey(save)), keysWritten),
     PROVIDER_KEYS_REMOVE: (removal) =>
       Effect.flatMap(asked(client.removeProviderKey(removal)), keysWritten),
@@ -1390,6 +1386,7 @@ function composed(
     ),
     // Note that the clip passes through once and is noted nowhere, because its words are the developer's voice.
     DICTATION_TRANSCRIBE: (clip) => asked(client.transcribeDictation(clip)),
+    CHAPTERS_GENERATE: ({ agentId, number }) => asked(client.generateChapters(agentId, number)),
   };
 
   const methods: HostMethodTable = {
@@ -1842,16 +1839,6 @@ function composed(
         );
         yield* chapters.retry(key);
         return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          pullRequestChaptersParamsSchema,
-          params,
-          "generating a pull request's chapters names one agent",
-        );
-        const answer = yield* asked(client.generateChapters(agentId, number));
-        return carried<PullRequestChaptersAnswerView>(answer);
       }),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW]: (params) =>

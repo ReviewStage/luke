@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { INTEGRATION_CALL_FAILURE } from "@repo/features/integration-view";
-import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
-import { type ActPortClient, INTEGRATION_ACT_KIND, type PortActResult } from "../contract/index.js";
+import { INTEGRATION_ACT_KIND } from "../contract/index.js";
+import { hostActPort } from "../testing/host-act-port.js";
 import type { ActSender } from "./base.js";
-import type { IntegrationProceduresDependencies } from "./index.js";
 import { integrationProcedures } from "./integration-procedures.js";
-import { settledAct, type TestActPort, testActPort } from "./testing.js";
+import { type TestActPort, testActPort } from "./testing.js";
 
 /**
  * Settings' integration acts, through the act port as a window calls them:
- * only a panel of this build's own renderer asks; any other
- * window, and a frame this build does not trust, are refused in each
- * kind's own words before the host is asked; and a panel's ask reaches the
- * host, Try again on the held integrations with no payload at all.
+ * only a panel of this build's own renderer asks; any other window, and a
+ * frame this build does not trust, are refused in each kind's own words
+ * before the host or the service is asked; and a panel's Try again on the
+ * held integrations reaches the host with no payload at all.
  */
 
 // The platform's handle on the window that asked, which no procedure here reads.
@@ -23,37 +23,15 @@ const SENDER = Symbol("window");
 const PANEL: ActSender = { sender: SENDER, panel: true };
 const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
-const ports: TestActPort<unknown>[] = [];
-
-afterEach(() => {
-  for (const port of ports.splice(0)) port.close();
-});
-
-/** A window's client of the act port serving `procedures`, standing as `actor`, trusted or not. */
-function windowClient(
-  procedures: Parameters<typeof testActPort<unknown>>[0],
-  actor: ActSender,
-  trusted = true,
-): ActPortClient {
-  const port = testActPort<unknown>(procedures);
-  ports.push(port);
-  return port.as(actor, { trusted });
-}
-
 const LINEAR = { provider: INTEGRATION_PROVIDER.LINEAR } as const;
-const RENAME = {
-  provider: INTEGRATION_PROVIDER.LINEAR,
-  connection: "linear-2",
-  label: "Work",
-} as const;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]:
     "Could not read your integrations again on this system.",
-  [INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT]: "Could not connect that integration on this system.",
   [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY]:
     "Could not read that integration's tools again on this system.",
+  [INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT]: "Could not connect that integration on this system.",
   [INTEGRATION_ACT_KIND.INTEGRATIONS_CANCEL]:
     "Could not cancel connecting that integration on this system.",
   [INTEGRATION_ACT_KIND.INTEGRATIONS_DISCONNECT]:
@@ -64,137 +42,85 @@ const REFUSAL = {
 
 type Kind = keyof typeof REFUSAL;
 
-/** One call of each kind, as a panel makes it. */
-const ACTS: readonly {
-  kind: Kind;
-  call: (client: ActPortClient) => Promise<PortActResult<Kind>>;
-}[] = [
-  {
-    kind: INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY,
-    call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY](),
-  },
-  {
-    kind: INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT,
-    call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT](LINEAR),
-  },
-  {
-    kind: INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY,
-    call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY](LINEAR),
-  },
-  {
-    kind: INTEGRATION_ACT_KIND.INTEGRATIONS_CANCEL,
-    call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_CANCEL](LINEAR),
-  },
-  {
-    kind: INTEGRATION_ACT_KIND.INTEGRATIONS_DISCONNECT,
-    call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_DISCONNECT](LINEAR),
-  },
+/** The kinds the integrations' own procedures answer, the rest declared and answered by the composer. */
+const BY_HAND: ReadonlySet<Kind> = new Set([
+  INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY,
+  INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY,
+]);
+
+/** One ask of each kind, with a payload its schema takes. */
+const ASKS: readonly { readonly kind: Kind; readonly payload?: WireBoundaryInput }[] = [
+  { kind: INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY },
+  { kind: INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY, payload: LINEAR },
+  { kind: INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT, payload: LINEAR },
+  { kind: INTEGRATION_ACT_KIND.INTEGRATIONS_CANCEL, payload: LINEAR },
+  { kind: INTEGRATION_ACT_KIND.INTEGRATIONS_DISCONNECT, payload: LINEAR },
   {
     kind: INTEGRATION_ACT_KIND.INTEGRATIONS_RENAME,
-    call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_RENAME](RENAME),
+    payload: { ...LINEAR, connection: "linear-2", label: "Work" },
   },
-  {
-    kind: INTEGRATION_ACT_KIND.MCP_CLIENTS_REVOKE,
-    call: (client) =>
-      client[INTEGRATION_ACT_KIND.MCP_CLIENTS_REVOKE]({ clientId: "client-claude" }),
-  },
+  { kind: INTEGRATION_ACT_KIND.MCP_CLIENTS_REVOKE, payload: { clientId: "client-claude" } },
 ];
 
-/** A window's act port over a host that answers each integration ask, and what it was asked, in order. */
-function windowPort(actor: ActSender, trusted = true) {
+const ports: TestActPort<unknown>[] = [];
+
+afterEach(() => {
+  for (const port of ports.splice(0)) port.close();
+});
+
+/** The holds' act port over a host that writes down what it was asked, in order. */
+function heldPort() {
   const asked: string[] = [];
-  const host: IntegrationProceduresDependencies["host"] = {
-    integrationsFollow: () =>
-      Effect.sync(() => {
-        asked.push("follow");
-      }),
-    integrationsUnfollow: () =>
-      Effect.sync(() => {
-        asked.push("unfollow");
-      }),
-    integrationsRetry: () =>
-      Effect.sync(() => {
-        asked.push("retry");
-      }),
-    integrationsConnect: ({ provider }) =>
-      Effect.sync(() => {
-        asked.push(`connect ${provider}`);
-        return { failure: INTEGRATION_CALL_FAILURE.NOT_OPENED };
-      }),
-    integrationsToolsFollow: ({ provider }) =>
-      Effect.sync(() => {
-        asked.push(`tools ${provider}`);
-      }),
-    integrationsToolsUnfollow: ({ provider }) =>
-      Effect.sync(() => {
-        asked.push(`tools let go ${provider}`);
-      }),
-    integrationsToolsRetry: ({ provider }) =>
-      Effect.sync(() => {
-        asked.push(`tools again ${provider}`);
-      }),
-    integrationsCancel: ({ provider }) =>
-      Effect.sync(() => {
-        asked.push(`cancel ${provider}`);
-        return { status: INTEGRATION_STATUS.DISCONNECTED };
-      }),
-    integrationsDisconnect: ({ provider }) =>
-      Effect.sync(() => {
-        asked.push(`disconnect ${provider}`);
-        return { status: INTEGRATION_STATUS.DISCONNECTED };
-      }),
-    integrationsRename: ({ provider, connection, label }) =>
-      Effect.sync(() => {
-        asked.push(`rename ${provider} ${connection}`);
-        return { account: { provider, connection, label, status: INTEGRATION_STATUS.CONNECTED } };
-      }),
-    mcpClientsFollow: () => Effect.sync(() => void asked.push("follow clients")),
-    mcpClientsUnfollow: () => Effect.sync(() => void asked.push("unfollow clients")),
-    mcpClientsRetry: () => Effect.sync(() => void asked.push("retry clients")),
-    mcpClientsRevoke: ({ clientId }) =>
-      Effect.sync(() => {
-        asked.push(`revoke ${clientId}`);
-        return { serverUrl: "https://app.test/api/mcp", clients: [] };
-      }),
-  };
-  const client = windowClient(integrationProcedures({ host }), actor, trusted);
-  return { client, asked };
+  const noted = (what: string) => () => Effect.sync(() => void asked.push(what));
+  const port = testActPort<unknown>(
+    integrationProcedures({
+      host: {
+        integrationsFollow: noted("follow"),
+        integrationsUnfollow: noted("unfollow"),
+        integrationsRetry: noted("retry"),
+        integrationsToolsFollow: noted("tools"),
+        integrationsToolsUnfollow: noted("tools let go"),
+        integrationsToolsRetry: noted("tools again"),
+        mcpClientsFollow: noted("follow clients"),
+        mcpClientsUnfollow: noted("unfollow clients"),
+        mcpClientsRetry: noted("retry clients"),
+      },
+    }),
+  );
+  ports.push(port);
+  return { port, asked };
 }
 
-it("a window that is not a panel is refused every integration act in the kind's own words, and the host is not asked", async () => {
-  const { client, asked } = windowPort(OTHER_WINDOW);
-  for (const act of ACTS) {
-    assert.deepEqual(await settledAct(act.call(client)), { refused: REFUSAL[act.kind] });
-  }
-  assert.deepEqual(asked, []);
-});
+it.effect("a panel's Try again on the held integrations reaches the host with no payload", () =>
+  Effect.gen(function* () {
+    const { port, asked } = heldPort();
 
-it("a frame this build does not trust is refused every integration act, even as a panel, and the host is not asked", async () => {
-  const { client, asked } = windowPort(PANEL, false);
-  for (const act of ACTS) {
-    assert.deepEqual(await settledAct(act.call(client)), { refused: REFUSAL[act.kind] });
-  }
-  assert.deepEqual(asked, []);
-});
+    assert.deepEqual(
+      yield* port.perform({ kind: INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY }, PANEL),
+      { answer: undefined },
+    );
+    assert.deepEqual(asked, ["retry"]);
+  }),
+);
 
-it("a panel's ask reaches the host, and the host's answer is the panel's", async () => {
-  const { client, asked } = windowPort(PANEL);
+it.effect(
+  "a window that is not a panel, and a frame this build does not trust, are refused every integration act in the kind's own words, and neither the host nor the service is asked",
+  () =>
+    Effect.gen(function* () {
+      const { port, requests } = yield* hostActPort();
+      const held = heldPort();
+      const refused = [];
+      for (const ask of ASKS) {
+        const served = BY_HAND.has(ask.kind) ? held.port : port;
+        refused.push(yield* served.perform(ask, OTHER_WINDOW));
+        refused.push(yield* served.perform(ask, PANEL, { trusted: false }));
+      }
 
-  assert.deepEqual(await settledAct(client[INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]()), {
-    answer: undefined,
-  });
-  assert.deepEqual(await settledAct(client[INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT](LINEAR)), {
-    answer: { failure: INTEGRATION_CALL_FAILURE.NOT_OPENED },
-  });
-  assert.deepEqual(await settledAct(client[INTEGRATION_ACT_KIND.INTEGRATIONS_RENAME](RENAME)), {
-    answer: {
-      account: {
-        provider: INTEGRATION_PROVIDER.LINEAR,
-        connection: "linear-2",
-        label: "Work",
-        status: INTEGRATION_STATUS.CONNECTED,
-      },
-    },
-  });
-  assert.deepEqual(asked, ["retry", "connect linear", "rename linear linear-2"]);
-});
+      assert.deepEqual(
+        refused,
+        ASKS.flatMap((ask) => [{ refused: REFUSAL[ask.kind] }, { refused: REFUSAL[ask.kind] }]),
+      );
+      assert.deepEqual(held.asked, []);
+      assert.deepEqual(requests, []);
+    }),
+);

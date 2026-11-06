@@ -92,20 +92,7 @@ import {
   type ThisMacHostSetParams,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
-import {
-  AUTOMATION_CALL_FAILURE,
-  type AutomationChangeParams,
-  type AutomationCreateParams,
-  type AutomationDeletedView,
-  type AutomationFollow,
-  type AutomationIdParams,
-  type AutomationRunParams,
-  type AutomationRunView,
-  type AutomationView,
-  automationDeletedViewSchema,
-  automationRunViewSchema,
-  automationViewSchema,
-} from "@repo/features/automation-view";
+import type { AutomationFollow } from "@repo/features/automation-view";
 import {
   type BrowserLiveClosedEvent,
   type BrowserLiveMessageEvent,
@@ -121,38 +108,8 @@ import {
   hostPairingDenyViewSchema,
   hostPairingViewSchema,
 } from "@repo/features/host-pairing-view";
-import {
-  INSTALLED_SKILL_CALL_FAILURE,
-  type InstalledSkillContentView,
-  type InstalledSkillFollowParams,
-  type InstalledSkillIdParams,
-  type InstalledSkillInstallParams,
-  type InstalledSkillInstallView,
-  type InstalledSkillPreviewParams,
-  type InstalledSkillPreviewView,
-  type InstalledSkillRemovedView,
-  installedSkillContentViewSchema,
-  installedSkillInstallViewSchema,
-  installedSkillPreviewViewSchema,
-  installedSkillRemovedViewSchema,
-} from "@repo/features/installed-skill-view";
-import {
-  INTEGRATION_CALL_FAILURE,
-  type IntegrationAccountView,
-  type IntegrationConnectView,
-  type IntegrationProviderParams,
-  type IntegrationRenameParams,
-  type IntegrationStatusView,
-  integrationAccountViewSchema,
-  integrationConnectViewSchema,
-  integrationStatusViewSchema,
-} from "@repo/features/integration-view";
-import {
-  MCP_CLIENTS_CALL_FAILURE,
-  type McpClientRevokeParams,
-  type McpClientsView,
-  mcpClientsViewSchema,
-} from "@repo/features/mcp-client-view";
+import type { InstalledSkillFollowParams } from "@repo/features/installed-skill-view";
+import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
   type PortForwarding,
@@ -160,12 +117,7 @@ import {
   portForwardingAnswerSchema,
   portForwardingSchema,
 } from "@repo/features/port-forward-acts";
-import {
-  type PullRequestChaptersAnswerView,
-  type PullRequestChaptersParams,
-  type PullRequestChaptersReadParams,
-  pullRequestChaptersAnswerViewSchema,
-} from "@repo/features/pull-request-chapters-view";
+import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
@@ -550,8 +502,6 @@ export interface HostOperator {
   integrationsRetry(): Effect.Effect<void>;
   /** The account's integrations the host holds for the windows, whole, each time they move. */
   onIntegrationsChanged(listener: (held: AppIntegrations) => void): () => void;
-  /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
-  integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
   /** The tools one server offers the account's agents, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onIntegrationToolsChanged`. */
   integrationsToolsFollow(params: IntegrationProviderParams): Effect.Effect<void>;
   /** One server's tools let go by the windows. */
@@ -560,12 +510,6 @@ export interface HostOperator {
   integrationsToolsRetry(params: IntegrationProviderParams): Effect.Effect<void>;
   /** Every server's tools the host holds for the windows, whole, each time any of them moves. */
   onIntegrationToolsChanged(listener: (held: AppIntegrationTools) => void): () => void;
-  /** The account's sign-in to one provider under way ended, revoking nothing; where it then stands, or why there is no answer. */
-  integrationsCancel(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
-  /** The account's connection to one account at a provider ended; where it then stands, or why there is no answer. */
-  integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
-  /** One account at a provider named as the developer calls it; the account as it then stands, or why there is no answer. */
-  integrationsRename(params: IntegrationRenameParams): Effect.Effect<IntegrationAccountView>;
   /** The outside MCP clients the account allowed, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onMcpClientsChanged`. */
   mcpClientsFollow(): Effect.Effect<void>;
   /** The outside MCP clients let go by the windows. */
@@ -574,8 +518,6 @@ export interface HostOperator {
   mcpClientsRetry(): Effect.Effect<void>;
   /** The outside MCP clients the host holds for the windows, whole, each time they move. */
   onMcpClientsChanged(listener: (held: AppMcpClients) => void): () => void;
-  /** One outside MCP client revoked under the Mac's session; the clients as they then stand, or why the revoke did not finish. */
-  mcpClientsRevoke(params: McpClientRevokeParams): Effect.Effect<McpClientsView>;
   /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
   githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
   /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
@@ -775,16 +717,6 @@ export interface HostOperator {
   agentOriginRetry(params: AgentPageParams): Effect.Effect<void>;
   /** Every agent's origin the host holds for the windows, whole, each time any of them moves. */
   onAgentOriginsChanged(listener: (held: AppAgentOrigins) => void): () => void;
-  /** An automation made; the automation as the service kept it, or why it was not made. */
-  automationCreate(params: AutomationCreateParams): Effect.Effect<AutomationView>;
-  /** One automation changed; the automation as it then stands, or why it is unchanged. */
-  automationChange(params: AutomationChangeParams): Effect.Effect<AutomationView>;
-  /** One automation deleted with its history; or why it stands. */
-  automationDelete(params: AutomationIdParams): Effect.Effect<AutomationDeletedView>;
-  /** One automation run now under the window's key; the run as it came out, or why there is none. */
-  automationRun(params: AutomationRunParams): Effect.Effect<AutomationRunView>;
-  /** A webhook's secret minted again; the automation and the new secret, for the asking window alone to show once, or why there is none. */
-  automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
   /** A workspace's automations, a workspace's runs, or an automation's runs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onAutomationsChanged`. */
   automationsFollow(scope: AutomationFollow): Effect.Effect<void>;
   /** A held list or history let go, kept followed a while among those let go lately. */
@@ -809,10 +741,6 @@ export interface HostOperator {
   chaptersRetry(params: PullRequestChaptersReadParams): Effect.Effect<void>;
   /** Every agent's pull request's chapters the host holds for the windows, whole, each time any of them moves. */
   onChaptersChanged(listener: (held: AppChapters) => void): () => void;
-  /** One agent's pull request's chapters generated for its head, or the generation already under way; the chapters as they then stand, or why there are none. */
-  pullRequestChaptersGenerate(
-    params: PullRequestChaptersParams,
-  ): Effect.Effect<PullRequestChaptersAnswerView>;
   /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
   installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
   /** A workspace's skills let go by the windows. */
@@ -821,18 +749,6 @@ export interface HostOperator {
   installedSkillsRetry(params: InstalledSkillFollowParams): Effect.Effect<void>;
   /** Every workspace's skills the host holds for the windows, whole, each time any of them moves. */
   onInstalledSkillsChanged(listener: (held: AppInstalledSkills) => void): () => void;
-  /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
-  installedSkillsRead(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillContentView>;
-  /** What a paste would install, read by the service; or why it did not say. */
-  installedSkillsPreview(
-    params: InstalledSkillPreviewParams,
-  ): Effect.Effect<InstalledSkillPreviewView>;
-  /** The skills a paste makes, installed all or none; or why none were. */
-  installedSkillsInstall(
-    params: InstalledSkillInstallParams,
-  ): Effect.Effect<InstalledSkillInstallView>;
-  /** One installed skill removed; or why it stands. */
-  installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
   agentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
   /** One image an agent's pull request's overview names, read by the service on the App's token; or why there is none. */
@@ -1033,13 +949,6 @@ function pullRequestPart(params: PullRequestPartParams): PullRequestPartParams {
   return { part: params.part, ...pullRequestRead(params) };
 }
 
-/** A read or a Generate of a pull request's chapters as the gateway carries it: the agent, and the number where the tab names one. */
-function pullRequestChaptersRead(params: PullRequestChaptersParams): PullRequestChaptersParams {
-  return params.number === undefined
-    ? { agentId: params.agentId }
-    : { agentId: params.agentId, number: params.number };
-}
-
 /**
  * The host refused a call, or answered a shape its method does not document:
  * a defect of this build, worded by the router as the kind's refusal. Note
@@ -1091,9 +1000,6 @@ const AGENT_UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 /** A pairing's read, approve, or deny that reached no answer, as each of them answers one. */
 const PAIRING_UNANSWERED = { failure: HOST_PAIRING_CALL_FAILURE.UNANSWERED } as const;
 
-/** An automation call that reached no answer, as every automation method answers one. */
-const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
-
 /** A task call that reached no answer, as every task method answers one. */
 const TASK_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
@@ -1102,15 +1008,6 @@ const GITHUB_DISCONNECT_UNANSWERED = { failure: GITHUB_DISCONNECT_FAILURE.UNANSW
 
 /** An admin read that reached no answer. */
 const ADMIN_READ_UNANSWERED = { refused: ADMIN_UNANSWERED } as const;
-
-/** What an integration call the host could not answer is drawn as. */
-const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
-
-/** An outside MCP clients call that reached no answer. */
-const MCP_CLIENTS_UNANSWERED = { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED } as const;
-
-/** An installed skills call that reached no answer, as every installed skills method answers one. */
-const INSTALLED_SKILL_UNANSWERED = { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED } as const;
 
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
@@ -1171,11 +1068,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppIntegrations>(payload) : undefined),
         listener,
       ),
-    integrationsConnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, integrationTarget(params)),
-        answerOf(integrationConnectViewSchema, INTEGRATION_UNANSWERED),
-      ),
     integrationsToolsFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, integrationTarget(params))),
     integrationsToolsUnfollow: (params) =>
@@ -1189,25 +1081,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppIntegrationTools>(payload) : undefined),
         listener,
       ),
-    integrationsCancel: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_CANCEL, integrationTarget(params)),
-        answerOf(integrationStatusViewSchema, INTEGRATION_UNANSWERED),
-      ),
-    integrationsDisconnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, integrationTarget(params)),
-        answerOf(integrationStatusViewSchema, INTEGRATION_UNANSWERED),
-      ),
-    integrationsRename: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_RENAME, {
-          provider: params.provider,
-          connection: params.connection,
-          label: params.label,
-        }),
-        answerOf(integrationAccountViewSchema, INTEGRATION_UNANSWERED),
-      ),
     mcpClientsFollow: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_FOLLOW, {})),
     mcpClientsUnfollow: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_UNFOLLOW, {})),
     mcpClientsRetry: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_RETRY, {})),
@@ -1217,11 +1090,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held clients are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppMcpClients>(payload) : undefined),
         listener,
-      ),
-    mcpClientsRevoke: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: params.clientId }),
-        answerOf(mcpClientsViewSchema, MCP_CLIENTS_UNANSWERED),
       ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
@@ -2137,31 +2005,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppAgentOrigins>(payload) : undefined),
         listener,
       ),
-    automationCreate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_CREATE, params),
-        answerOf(automationViewSchema, AUTOMATION_UNANSWERED),
-      ),
-    automationChange: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, params),
-        answerOf(automationViewSchema, AUTOMATION_UNANSWERED),
-      ),
-    automationDelete: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_DELETE, params),
-        answerOf(automationDeletedViewSchema, AUTOMATION_UNANSWERED),
-      ),
-    automationRun: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_RUN, params),
-        answerOf(automationRunViewSchema, AUTOMATION_UNANSWERED),
-      ),
-    automationNewWebhookSecret: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, params),
-        answerOf(automationViewSchema, AUTOMATION_UNANSWERED),
-      ),
     automationsFollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, scope)),
     automationsUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, scope)),
     automationsRetry: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_RETRY, scope)),
@@ -2215,11 +2058,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppChapters>(payload) : undefined),
         listener,
       ),
-    pullRequestChaptersGenerate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, pullRequestChaptersRead(params)),
-        answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     installedSkillsFollow: (params) =>
       fire(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW, { workspaceId: params.workspaceId }),
@@ -2236,26 +2074,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held skills are the host's own, handed over in this process, so they are passed on as built, as the held memories are.
         (payload) => (isRecord(payload) ? answered<AppInstalledSkills>(payload) : undefined),
         listener,
-      ),
-    installedSkillsRead: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_READ, params),
-        answerOf(installedSkillContentViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsPreview: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, params),
-        answerOf(installedSkillPreviewViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsInstall: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, params),
-        answerOf(installedSkillInstallViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsRemove: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, params),
-        answerOf(installedSkillRemovedViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     agentChanges: (params) =>
       Effect.map(
