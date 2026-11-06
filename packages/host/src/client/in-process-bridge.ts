@@ -1,6 +1,3 @@
-/**
- * in-process-bridge.ts -- the window's bridge for a shell that runs the host in the page it draws: the document straight from the store, and the one-shot events from an emitter the shell drives.
- */
 import { Effect, type Scope } from "effect";
 import {
   type AppStateDelivery,
@@ -12,25 +9,16 @@ import type { AppBridge, PushPayloadFor } from "../bridge.js";
 import type { PushMethod } from "../contract/pushes.js";
 import { type AppStateStore, publishAppStateChanges } from "./app-state-store.js";
 
-/**
- * The one-shot events a shell feeds the page: an app link. Each is said once
- * and never bootstrapped from.
- */
 type InProcessEventMethod = Extract<PushMethod, "onShowLink">;
 
-/** Where the shell says each one-shot event, to every subscription standing in the page. */
 type InProcessEvents = {
   readonly [Method in InProcessEventMethod]: (payload: PushPayloadFor<Method>) => void;
 };
 
 interface InProcessBridgeDependencies {
-  /** The document the page is drawn from. */
   state: AppStateStore;
-  /** The page's own facts beside the document, which the shell alone can read. */
   windowFacts: () => AppWindowFacts;
-  /** The page's own reports that reach anything here: that it painted, and its surface events. */
   reports: Pick<AppBridge, "notifyReady" | "recordSurfaceEvent">;
-  /** Where a page's listener that failed is said. */
   report: (message: string) => void;
 }
 
@@ -39,31 +27,19 @@ interface InProcessBridge {
   events: InProcessEvents;
 }
 
-/** An unsubscribe with nothing to end. */
 const unsubscribe = (): void => {};
-/** What has no listener in a page that runs no Browser tab, menu bar, or global key. */
 const neverDelivered = (): (() => void) => unsubscribe;
 
-/** One subscription set: what a page subscribed, the one door that tells them all, and its close. */
 interface Listeners<Payload> {
   subscribe: (listener: (payload: Payload) => void) => () => void;
   emit: (payload: Payload) => void;
   close: () => void;
 }
 
-/** Each one-shot event's subscriptions, the page's side and the shell's of one set. */
 type EventListeners = {
   readonly [Method in InProcessEventMethod]: Listeners<PushPayloadFor<Method>>;
 };
 
-/**
- * Note that each subscription is held as its own entry, so a listener
- * subscribed twice hears twice and one unsubscribe ends one of them, as a
- * listener on a channel of the desktop's does. Each is told on its own as
- * well: one that throws is reported, and the rest still hear, because on the
- * desktop a page's callback throws in the page and never into the sender.
- * Once closed, a set holds no subscription and takes none.
- */
 function listeners<Payload>(report: (message: string) => void): Listeners<Payload> {
   const held = new Set<{ readonly listener: (payload: Payload) => void }>();
   let closed = false;
@@ -94,15 +70,6 @@ function listeners<Payload>(report: (message: string) => void): Listeners<Payloa
   };
 }
 
-/**
- * The bridge for a page that runs the host in its own process. The page is
- * always a panel, and no other window stands beside it. The document
- * is the store's, read whole on request and pushed as what moved on every
- * change; the one-shot events are what the shell says through `events`; every
- * subscription ends with the scope; and everything a Browser tab, the menu
- * bar, or a global key would say is never said, its
- * subscription ending cleanly.
- */
 export function createInProcessBridge(
   dependencies: InProcessBridgeDependencies,
 ): Effect.Effect<InProcessBridge, never, Scope.Scope> {
@@ -110,9 +77,6 @@ export function createInProcessBridge(
   return Effect.gen(function* () {
     const snapshot = (): AppStateSnapshot => ({ ...state.snapshot(), window: windowFacts() });
     const appState = listeners<AppStateDelivery>(report);
-    // Note that the page is handed what moved since the document it was last
-    // handed, as a desktop window's stream hands it, which its own read
-    // bootstraps it from.
     let sent: AppStateSnapshot | undefined;
     yield* publishAppStateChanges(
       state,
@@ -128,7 +92,6 @@ export function createInProcessBridge(
     const said: EventListeners = {
       onShowLink: listeners(report),
     };
-    // A page whose bridge is closed hears nothing more, whoever still holds `events`.
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         appState.close();

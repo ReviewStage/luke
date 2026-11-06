@@ -6,104 +6,24 @@ import { boolean, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
-/**
- * One row per account for scalar cross-device preferences. Platform-local
- * settings stay in each app's own store; only preferences that should follow
- * the signed-in account belong here.
- */
 export const accountPreference = pgTable("account_preference", {
   userId: text("user_id")
     .primaryKey()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  /**
-   * Where the account's app links open (`@repo/features/link-open`); null
-   * until the account chooses, which reads as the browser. A part of the
-   * snapshot of its own rather than the shared preferences, so a build that
-   * predates it, writing that part whole, never clears it; written alone, it
-   * moves no `updated_at`.
-   */
   linkOpen: text("link_open").$type<LinkOpen>(),
-  /**
-   * What Enter does in an agent's message box while it works
-   * (`@repo/settings`'s `AGENT_ENTER`): steer the turn or queue the
-   * message; null until the account chooses, which reads as steer. A part of
-   * the snapshot of its own, as the link choice is, for the same reason.
-   */
   agentEnter: text("agent_enter").$type<AgentEnter>(),
-  /**
-   * Who authors an agent's commits and opens its pull request, and whether
-   * the other is credited as co-author (`@repo/settings`'s
-   * `COMMIT_AUTHOR`); null until the account chooses, which reads as the
-   * developer with our bot as co-author. A part of the snapshot of its own,
-   * as the link choice is, for the same reason.
-   */
   commitAuthor: text("commit_author").$type<CommitAuthor>(),
-  /**
-   * Whether the account finished its setup after sign-in, so setup stands
-   * once for the account rather than once on each device; null until it
-   * does. A part of the snapshot of its own, as the link choice is.
-   */
   setupFinished: boolean("setup_finished"),
-  /**
-   * Where the account stands in setup, as its JSON (`@repo/settings`'s
-   * `SetupPlace`: who it is for, the step it is on, and the team's workspace
-   * once made), so setup left partway resumes at the same step on another
-   * device; null until setup starts. A part of the snapshot of its own, as
-   * the link choice is.
-   */
   setupPlace: text("setup_place"),
-  /**
-   * The model and effort a coding agent starts on when Start is clicked, as
-   * AI Gateway's catalog names them (`packages/service/src/providers/model-catalog.ts`); null on both
-   * means the account has never chosen and starts on the catalog's default.
-   * The context window beside them is null for the model's whole window,
-   * which is also what a choice written before the window could be chosen
-   * reads as, and `standard` where the smaller window was chosen.
-   */
   agentModel: text("agent_model"),
   agentEffort: text("agent_effort"),
   agentContextWindow: text("agent_context_window").$type<ContextWindow>(),
-  /**
-   * The Claude model a Generate chapters this account presses runs on
-   * (`@repo/features/chapters-model-choice`); null until the account
-   * chooses, and a value no build lists any more, both read as Haiku.
-   * Written alone, it moves no `updated_at`.
-   */
   chaptersModel: text("chapters_model").$type<ChaptersModelId>(),
-  /**
-   * Each experiment the account turned on or back off, by its key
-   * (`@repo/settings`'s `EXPERIMENT`); null on a row that never chose one,
-   * which reads as every experiment off. A write merges its keys over what
-   * stood, so a Mac that knows fewer experiments never erases another's
-   * choice, and a key no build lists any more is left inert.
-   */
   experiments: jsonb("experiments").$type<ExperimentChoices>(),
-  /**
-   * Where the account last chose to run a task, as New task's or a quick
-   * add's Runs on sent it (`runs-on-pick.ts`): the cloud, or one of its
-   * devices by id, which a task an agent makes for the account starts on;
-   * null on both until a start names one, which reads as the cloud. The
-   * device is kept by id alone, with no reference to its row, so a device
-   * since removed is still told apart from no pick at all. Written alone,
-   * it moves no `updated_at`.
-   */
-  /**
-   * Whether our Slack bot writes the account the threads that wait on them
-   * (`packages/service/src/slack/thread-dms.ts`), in every workspace whose
-   * bot is connected; null until the account chooses, which reads as on.
-   * Written alone, it moves no `updated_at`.
-   */
   slackNotifications: boolean("slack_notifications"),
   runsOnMachine: text("runs_on_machine").$type<AgentMachineKind>(),
   runsOnDeviceId: uuid("runs_on_device_id"),
   createdAt: createdAt(),
-  /**
-   * When the preferences part was last written; null on a row only a
-   * coding-agent choice opened. The desktop reads the instant's presence as
-   * a snapshot to apply over its own settings, so a row with none written
-   * must answer none, or a never-synced Mac would take an empty snapshot
-   * over the settings it holds.
-   */
   updatedAt: timestamptz("updated_at"),
 });

@@ -49,8 +49,8 @@ import {
   listTasks,
   nameUntitledTask,
   readTask,
-  readTaskHeader,
   readTaskDescription,
+  readTaskHeader,
   readTaskWorkspace,
   saveDescriptionText,
   setTaskParent,
@@ -61,16 +61,6 @@ import {
   updateTask,
 } from "../task-store.js";
 
-/**
- * A plan's pin is its reader's own: two members of one workspace read the
- * plan they share, and each reads only the pin they made, through the
- * store's public reads, over a real dialect. A pin made again keeps its first
- * instant, a settle leaves it standing, and it goes with its plan and its
- * account.
- *
- * Synthetic accounts, workspaces, and plans throughout.
- */
-
 const SHARED_TASK = { name: "Teammate invitations" };
 
 const openAccount = Effect.gen(function* () {
@@ -80,7 +70,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** Dean's workspace with Charles a member of it, and a plan Dean started there. */
 const openSharedTask = Effect.gen(function* () {
   const dean = yield* openAccount;
   const charles = yield* openAccount;
@@ -90,7 +79,6 @@ const openSharedTask = Effect.gen(function* () {
   return { dean, charles, taskId, workspace };
 });
 
-/** The plan's line in the account's list, failing the test where it has none. */
 const listedTask = (userId: string, taskId: string) =>
   Effect.map(
     listTasks(userId),
@@ -98,7 +86,6 @@ const listedTask = (userId: string, taskId: string) =>
       tasks.find(({ id }) => id === taskId) ?? assert.fail("the plan is not in the list"),
   );
 
-/** The plan's pin as the account reads it, in the list and opened alike, which must agree. */
 const pinReadBy = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const listed = (yield* listedTask(userId, taskId)).pinnedAt;
@@ -113,7 +100,6 @@ const pinnedOnes = (taskId: string) =>
     db.select({ userId: taskPin.userId }).from(taskPin).where(eq(taskPin.taskId, taskId)),
   );
 
-/** The plan's read mark as the account reads it, in the list and opened alike, which must agree. */
 const markReadBy = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const { readThrough, markedUnread } = yield* listedTask(userId, taskId);
@@ -513,7 +499,6 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           parentTaskId: null,
           mode: TASK_MODE.AGENT,
           assigneeId: null,
-          // The workspace's first task.
           number: 1,
         };
 
@@ -524,9 +509,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
 
         yield* updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS });
         const header = Option.getOrThrow(yield* readTaskHeader(charles, taskId));
-        // Starting a task assigns it to whoever started it.
         assert.deepEqual(header, { ...started, status: TASK_STATUS.IN_PROGRESS, assigneeId: dean });
-        // The header agrees with the whole read on everything it answers.
         const whole = Option.getOrThrow(yield* readTask(charles, taskId));
         assert.deepEqual(header, {
           workspaceId: whole.task.workspaceId,
@@ -565,7 +548,6 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
   );
 });
 
-/** The task's number, status, and priority as the account opens it, failing the test where it reaches none. */
 const standingOf = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (read) => {
     const { number, status, priority } = Option.getOrElse(read, () =>
@@ -574,7 +556,6 @@ const standingOf = (userId: string, taskId: string) =>
     return { number, status, priority };
   });
 
-/** The task's parent as the account reads it, failing the test where it reaches none. */
 const parentOf = (userId: string, taskId: string) =>
   Effect.map(
     readTaskHeader(userId, taskId),
@@ -612,7 +593,6 @@ it.layer(getTestDB())("a task's parent", (it) => {
         const { dean, charles, workspace } = yield* openSharedTask;
         const tree = { organizationId: workspace, repository: "dean/side" };
         const { id: top } = yield* createTask(dean, { ...tree, name: "Top" });
-        // Dean's own token reached this repository, which Charles's never read.
         const { id: hidden } = yield* createTask(dean, {
           ...tree,
           name: "Hidden",
@@ -669,7 +649,6 @@ it.layer(getTestDB())("a task's parent", (it) => {
         const outsider = yield* openAccount;
         const elsewhere = yield* openWorkspace(dean);
         const { id: other } = yield* createTask(dean, { name: "Other", organizationId: elsewhere });
-        // Dean's own token reached this repository, which Charles's never read.
         const { id: hidden } = yield* createTask(dean, {
           name: "Hidden",
           organizationId: workspace,
@@ -781,7 +760,6 @@ it.layer(getTestDB())("a task's status and priority", (it) => {
   );
 });
 
-/** Who the task is assigned to, by id, as the account reads it in the list and opened alike, which must agree. */
 const assigneeReadBy = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const listed = (yield* listedTask(userId, taskId)).assignee?.userId;
@@ -882,7 +860,6 @@ it.layer(getTestDB())("a task's assignee", (it) => {
       const other = yield* createTask(dean, { organizationId: elsewhere, assigneeId: charles });
       yield* updateTask(dean, taskId, { assigneeId: charles });
 
-      // The member's row is deleted as the plugin deletes it, whichever write takes them out.
       yield* leaveWorkspace(workspace, charles);
 
       assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
@@ -992,7 +969,6 @@ it.layer(getTestDB())("a task's work beginning", (it) => {
   );
 });
 
-/** A pull request as an agent's row keeps it, standing where `state` says. */
 const pullRequestIn = (state: StoredPullRequest["state"]): StoredPullRequest => ({
   number: 42,
   title: "Teammate invitations",
@@ -1004,16 +980,13 @@ const pullRequestIn = (state: StoredPullRequest["state"]): StoredPullRequest => 
   changedFiles: 1,
 });
 
-/** A guard reading every agent idle. */
 const everyoneIdle = () => Effect.succeed(true);
 
-/** A guard reading every agent idle but the one named, as an archive reads them. */
 const idleBut =
   (busy: string) =>
   (agents: readonly TaskStandingAgent[]): Effect.Effect<ReadonlySet<string>> =>
     Effect.succeed(new Set(agents.map(({ id }) => id).filter((id) => id !== busy)));
 
-/** Who archived the agent, as Dean reads it: none while it stands unarchived. */
 const archiveOf = (dean: string, agentId: string) =>
   Effect.map(readAgent(dean, agentId), (agent) =>
     agent.pipe(
@@ -1032,12 +1005,10 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         const reader = yield* openTaskAgent(charles, workspace, taskId);
         yield* beginTaskWork(dean, taskId);
 
-        // No merged pull request yet: the reader's row keeps none, the other's is still open.
         yield* recordAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.OPEN));
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.IN_PROGRESS);
 
-        // Merged, but the guard reads one standing agent at work, and sees only the standing ones.
         yield* recordAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.MERGED));
         const seen: string[] = [];
         const readerBusy = (agents: readonly { readonly id: string }[]) =>
@@ -1049,7 +1020,6 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         assert.deepEqual(seen.toSorted(), [merged, reader].toSorted());
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.IN_PROGRESS);
 
-        // Everyone idle: done, and done once, stamped when it finished; the work taken up again clears the stamp.
         yield* TestClock.adjust("1 minute");
         const finishedAt = yield* Clock.currentTimeMillis;
         assert.equal(yield* finishTaskWork(charles, taskId, everyoneIdle), true);
@@ -1075,13 +1045,11 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         yield* recordAgentPublished(dean, drafting, pullRequestIn(PULL_REQUEST_STATE.OPEN));
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
 
-        // Archived, the draft's agent is left out, and so would the merged one be.
         yield* archiveAgent(dean, drafting, true);
         yield* archiveAgent(dean, merged, true);
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         yield* archiveAgent(dean, merged, false);
 
-        // A question open for the developer holds the task; a notice does not.
         const question = yield* openInboxItem(dean, workspace, taskId, merged, true);
         yield* openInboxItem(dean, workspace, taskId, merged, false);
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
@@ -1129,7 +1097,6 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), true);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.DONE);
 
-        // The extra's merge alone is a merged pull request of the task.
         yield* recordAgentPublished(dean, agent, null);
         assert.equal(yield* taskHasMergedPullRequest(dean, taskId), false);
         yield* recordAgentRepositoryPublished(
@@ -1172,7 +1139,6 @@ it.layer(getTestDB())("a task's move to Done", (it) => {
         yield* archiveAgent(dean, byHand, true);
         const asDean = { by: AGENT_ARCHIVER.MEMBER, userId: dean } as const;
 
-        // Dean's Done archives the idle agent as Dean, and leaves the running one at work.
         const moved = yield* updateTask(dean, taskId, { status: TASK_STATUS.DONE }, undefined, {
           archivedBy: asDean,
           idle: idleBut(running),
@@ -1181,7 +1147,6 @@ it.layer(getTestDB())("a task's move to Done", (it) => {
         assert.deepEqual(yield* archiveOf(dean, idle), { ...asDean, withTask: true });
         assert.equal(yield* archiveOf(dean, running), undefined);
 
-        // Its turn ends while the task stands Done by Dean's move: archived then, as Dean.
         const ended = yield* archiveAgentOfDoneTask(charles, taskId, running, idleBut(""));
         assert.deepEqual(
           ended.map(({ id }) => id),
@@ -1189,13 +1154,11 @@ it.layer(getTestDB())("a task's move to Done", (it) => {
         );
         assert.deepEqual(yield* archiveOf(dean, running), { ...asDean, withTask: true });
 
-        // Moved off Done, the task brings back what its Done archived, and the agent archived by hand stays.
         yield* updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS });
         assert.equal(yield* archiveOf(dean, idle), undefined);
         assert.equal(yield* archiveOf(dean, running), undefined);
         assert.notEqual(yield* archiveOf(dean, byHand), undefined);
 
-        // A turn ending on a task no longer Done archives nothing.
         const after = yield* archiveAgentOfDoneTask(charles, taskId, running, idleBut(""));
         assert.deepEqual(after, []);
         assert.equal(yield* archiveOf(dean, running), undefined);
@@ -1203,7 +1166,6 @@ it.layer(getTestDB())("a task's move to Done", (it) => {
   );
 });
 
-/** When the task was finished, as the account reads it in the list and opened alike, which must agree. */
 const completedReadBy = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const listed = (yield* listedTask(userId, taskId)).completedAt;
@@ -1262,7 +1224,6 @@ it.layer(getTestDB())("when a task was finished", (it) => {
       const dean = yield* openAccount;
       const organizationId = yield* openWorkspace(dean);
       const todo = yield* createTask(dean, { organizationId });
-      // An earlier build moved the task back to Todo without clearing the stamp.
       yield* db
         .update(task)
         .set({ completedAt: new Date(0) })

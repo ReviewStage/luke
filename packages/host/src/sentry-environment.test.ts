@@ -1,7 +1,3 @@
-/**
- * sentry-environment.test.ts -- which environment each build reports under.
- */
-
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { SENTRY_ENVIRONMENT, sentryEnvironment } from "./sentry-environment.js";

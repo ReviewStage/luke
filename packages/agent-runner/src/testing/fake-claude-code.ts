@@ -1,50 +1,26 @@
-/**
- * fake-claude-code.ts -- a scripted CLI for the runner's tests: it plays a recorded turn once the service's first message arrives, and keeps what the runner handed it.
- *
- * It stands at the process boundary the runner drives the real CLI across,
- * so a test sees what the CLI would have: the options it was started with,
- * every prompt in order, the interrupts, the model, effort, and fast mode
- * changes, and
- * whether it was closed. It runs the runner's own Stop hook where the CLI
- * would, before the `result` it precedes.
- */
-
 import type { Options, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Deferred, Effect, Exit, Layer, Queue, Stream } from "effect";
 import { ClaudeCode, type ClaudeCodeSession } from "../claude-code.js";
 import type { Step, StopReport } from "./recorded-stream.js";
 
-/** An effort the CLI was set to, as `applyFlagSettings` takes it. */
 type EffortSetting = Parameters<ClaudeCodeSession["applyFlagSettings"]>[0]["effortLevel"];
 
-/** What the fake CLI was handed, in the order it was handed it. */
 interface CliRecord {
   options: Options | undefined;
   readonly prompts: SDKUserMessage[];
   interrupts: number;
   readonly models: (string | undefined)[];
   readonly efforts: EffortSetting[];
-  /** Each fast mode the flag settings were set to. */
   readonly fastModes: (boolean | null | undefined)[];
   closed: boolean;
 }
 
-/** The runner's Stop hook, as the CLI calls it. */
 function stopHookOf(options: Options) {
   const hook = options.hooks?.Stop?.[0]?.hooks[0];
   if (hook === undefined) throw new Error("the runner registered no Stop hook");
   return hook;
 }
 
-/**
- * A fake CLI that plays `steps` once, from the service's first message. `prompted`
- * holds each prompt as the CLI reads it, for a test that must wait on one.
- * Each `result` names the prompts its turn took, as the CLI's does, but one
- * whose step says it names none. `chain`
- * is the stored session's entries, which every session it is asked for
- * reads as. A CLI that stops `answering` records each control request
- * (a model change, an interrupt) and never answers it.
- */
 export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function* (
   steps: readonly Step[],
   chain: readonly string[] = [],
@@ -70,11 +46,8 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
     readonly options: Options;
   }): ClaudeCodeSession => {
     record.options = params.options;
-    // The prompts the running turn has taken, which its `result` names.
     const taken: string[] = [];
 
-    // Note that the prompts are read for as long as the service sends them, as the
-    // CLI reads its stdin, while the script plays beside them.
     const prompts = Stream.fromAsyncIterable(params.prompt, (cause) => cause).pipe(
       Stream.tap((prompt) =>
         Effect.sync(() => record.prompts.push(prompt)).pipe(
@@ -103,8 +76,6 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
     };
     const play = (step: Step): Stream.Stream<SDKMessage> => {
       if ("emit" in step) {
-        // Note that the message crosses as a line of JSON, which the SDK takes
-        // as an `SDKMessage` unchecked, just as it reads the CLI's stdout.
         const message: SDKMessage = JSON.parse(JSON.stringify(step.emit));
         if (message.type === "result" && step.namesNoPrompt !== true) {
           message.user_message_uuids = taken.splice(0);
@@ -121,22 +92,17 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
       if ("untilReleased" in step) return Stream.drain(Stream.fromEffect(Deferred.await(released)));
       return Stream.drain(Stream.fromEffect(runHook(step.stopHook)));
     };
-    // The CLI starts its first turn on the service's first message.
     const script = Stream.fromIterable<Step>([{ awaitPrompt: true }, ...steps]).pipe(
       Stream.flatMap(play),
     );
     const messages = Stream.toAsyncIterable(
       Stream.merge(script, prompts).pipe(Stream.interruptWhen(Deferred.await(closing))),
     );
-    // Note that the SDK hands out its own generator, whose return waits on the read under way,
-    // which a quiet CLI answers only once it writes again or is closed; so does this one.
     async function* read() {
       for await (const message of messages) yield message;
     }
     const sdkMessages = read();
 
-    // A request recorded, then answered, or held for good by a CLI that stopped answering: a race
-    // of nothing never settles.
     const answer = (): Promise<undefined> =>
       answering ? Promise.resolve(undefined) : Promise.race([]);
     return {
@@ -162,7 +128,6 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
     };
   };
 
-  /** Lets a script held at `untilReleased` go on. */
   const release = Deferred.succeed(released, undefined);
   const sessionChain = async () => chain;
   return {

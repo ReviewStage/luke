@@ -30,17 +30,6 @@ import {
   sessionInstalledSkills,
 } from "../installed-skill-store.js";
 
-/**
- * The skills members install, through the store's public reads and writes
- * over a real dialect: a personal skill is its installer's alone in every
- * workspace, a workspace skill is installed and read by every current
- * member and removed by its installer while a member or by its current
- * owners and admins, a name is held once per scope,
- * and a skill's files are held to their bounds.
- *
- * Synthetic accounts, workspaces, and skills throughout.
- */
-
 const PERSONAL: InstalledSkillOwner = { scope: INSTALLED_SKILL_SCOPE.PERSONAL };
 const inWorkspace = (organizationId: string): InstalledSkillOwner => ({
   scope: INSTALLED_SKILL_SCOPE.WORKSPACE,
@@ -82,7 +71,6 @@ const namesSeen = (userId: string, organizationId: string) =>
     rows.map((row) => `${row.scope}:${row.name}`),
   );
 
-/** Whether the account's removal of the skill removed it. */
 const removed = (userId: string, id: string) =>
   Effect.map(removeInstalledSkill(userId, id), Option.isSome);
 

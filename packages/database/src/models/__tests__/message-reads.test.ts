@@ -34,14 +34,6 @@ import {
 } from "../message-reads.js";
 import { storeWriter } from "../writer.js";
 
-/**
- * Where a reader of a conversation stands once it has every row, and whether
- * a subagent's session under a conversation still runs, and which turn a
- * tool call's Stop stands on by its key, over a real dialect.
- *
- * Synthetic accounts, conversations, and rows throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -63,7 +55,6 @@ const openConversation = (userId: string, parentConversationId?: string) =>
     return id;
   });
 
-/** A coding agent's conversation of the account's, whose turnless lines await their turn. */
 const openAgentConversation = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -72,7 +63,6 @@ const openAgentConversation = (userId: string) =>
     return id;
   });
 
-/** A developer's line no turn owns, written at `at` where given. */
 const writeLine = (userId: string, conversationId: string, seq: number, at = new Date()) =>
   Database.use((db) =>
     db.insert(messages).values({
@@ -88,7 +78,6 @@ const writeLine = (userId: string, conversationId: string, seq: number, at = new
     }),
   );
 
-/** A finished row of a turn, or of none for a line a turn took in mid-run. */
 const writeTurnRow = (
   userId: string,
   conversationId: string,
@@ -126,7 +115,6 @@ const openTurn = (userId: string, conversationId: string, status: TurnStatus) =>
     ([row]) => row?.id ?? "",
   );
 
-/** A row of a turn carrying the words given, as eve's receipt of a line holds them. */
 const writeReceipt = (
   userId: string,
   conversationId: string,
@@ -150,17 +138,14 @@ const writeReceipt = (
     }),
   );
 
-/** The conversation a live statement reads the awaiting line of, under a name of its own so the read's own join of `conversations` is not the one it names. */
 const named = alias(conversations, "named");
 
-/** The live statement's fragment for one conversation, as a select of its own, rendered as Realtime takes it. */
 const awaitingLineStatement = (conversationId: string) =>
   queryBuilder
     .select({ at: newestAwaitingLineAt(named.id) })
     .from(named)
     .where(eq(named.id, conversationId));
 
-/** When the newest line awaiting its turn in the conversation was written, by the live statement's fragment, in epoch milliseconds; null where none awaits. */
 const awaitingLineAt = (conversationId: string) =>
   Effect.map(
     Database.use((db) =>
@@ -376,7 +361,6 @@ it.layer(getTestDB())("a conversation's reader", (it) => {
         yield* writeLine(owner, waiting, 1, new Date(1_000));
         yield* writeLine(owner, waiting, 2, new Date(5_000));
         const answered = yield* openTurn(owner, waiting, TURN_STATUS.SETTLED);
-        // A turn's row carrying other words is no receipt of either line.
         yield* writeReceipt(owner, waiting, 3, answered, "Line 2 and more");
 
         yield* writeLine(owner, received, 1, new Date(2_000));
@@ -408,8 +392,6 @@ it.layer(getTestDB())("a conversation's reader", (it) => {
         const client = yield* SqlClient.SqlClient;
         const statement = awaitingLineStatement(randomUUID()).toSQL();
         const values = statement.params.map((value) => `'${String(value)}'`).join(", ");
-        // Note that the scan of the whole table is refused, so a table this small still reads as
-        // one of millions would, and the plan is generic, as one prepared once and run again is.
         yield* client.unsafe("set enable_seqscan = off");
         yield* client.unsafe("set plan_cache_mode = force_generic_plan");
         yield* client.unsafe(`prepare awaiting_line as ${statement.sql}`);

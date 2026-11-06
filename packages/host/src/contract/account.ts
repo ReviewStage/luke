@@ -8,20 +8,10 @@ import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { ACCOUNT_ACT_KIND } from "./kinds.js";
 
-/**
- * account.ts -- the account's asks of the host: signing in, signing out, the account deleted, and its grant of support access, as procedures.
- *
- * Each output is its schema flipped, so oRPC's output check encodes the
- * row's value into what crosses the port, the convention every act contract
- * keeps (`agents.ts`).
- */
-
-/** Which provider a sign-in goes through. */
 const providerParamsSchema = EffectSchema.Struct({
   provider: EffectSchema.Literals(Object.values(ACCOUNT_PROVIDER)),
 });
 
-/** Whether the grant of support access is granted for seven days, or revoked. */
 const supportAccessParamsSchema = EffectSchema.Struct({ grant: EffectSchema.Boolean });
 
 export const accountActsContract = {

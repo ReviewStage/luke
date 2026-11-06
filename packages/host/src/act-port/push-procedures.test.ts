@@ -7,15 +7,7 @@ import { PUSH, type PushEvent } from "../contract/index.js";
 import { runModeFor } from "../run-mode.js";
 import { WindowPushes } from "./push-procedures.js";
 
-/** An app link to a task, as the system hands one to the app. */
 const LINK = { workspace: "workspace-1", place: { kind: LINK_PLACE.TASK, planId: "task-1" } };
-
-/**
- * What a window's push stream sends: every event in the order main pushed
- * it, and the document latest-wins, so a reader that falls behind reads the
- * newest document next and never one older than an event it already heard;
- * and of each document, only what moved since the one it last sent.
- */
 
 const WINDOW = Symbol("window");
 
@@ -27,7 +19,6 @@ const RUN = {
   platform: "darwin",
 } as const;
 
-/** The document at `version`, whose coding agents' unseen dots move with it, so every version moves a slice. */
 function documentAt(version: number): AppStateSnapshot {
   return {
     ...initialAppState(RUN, true, []),
@@ -37,7 +28,6 @@ function documentAt(version: number): AppStateSnapshot {
   };
 }
 
-/** What one read of a stream carried, a document by its version. */
 function heard(read: IteratorResult<PushEvent>): number | string | undefined {
   if (read.done) return undefined;
   return read.value.push === PUSH.APP_STATE ? read.value.payload.version : read.value.push;
@@ -50,7 +40,6 @@ it("three documents pushed before a slow reader reads are one delivery, the thir
   pushes.push(WINDOW, PUSH.SHOW_LINK, LINK);
 
   assert.equal(heard(await stream.next()), 3);
-  // Nothing else was held for it: the next read is the event pushed after.
   assert.equal(heard(await stream.next()), PUSH.SHOW_LINK);
 });
 
@@ -65,7 +54,6 @@ it("every event is sent in order, each after a document at least as new as the o
   pushes.pushState(WINDOW, documentAt(3));
 
   assert.deepEqual(reads, [2, PUSH.SHOW_LINK, PUSH.MENU_COMMAND]);
-  // A document pushed once the last was sent is sent in its own turn.
   assert.equal(heard(await stream.next()), 3);
 });
 
@@ -122,7 +110,6 @@ it("a document queued but unread as its window is held waits for the release, an
   await reading;
   assert.equal(read, 2);
   pushes.push(WINDOW, PUSH.MENU_COMMAND, "settings");
-  // Nothing else was queued for it: the next read is the event pushed after.
   assert.equal(heard(await page.next()), PUSH.MENU_COMMAND);
   await page.return?.(undefined);
 });
@@ -140,7 +127,6 @@ it("an event pushed to a held window goes out behind the document held before it
   await page.return?.(undefined);
 });
 
-/** What the next read of a stream carried, as the delivery of a document it must be. */
 async function delivered(stream: AsyncIteratorObject<PushEvent>): Promise<AppStateDelivery> {
   const read = await stream.next();
   if (read.done || read.value.push !== PUSH.APP_STATE) throw new Error("no document was sent");

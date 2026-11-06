@@ -56,20 +56,6 @@ import {
 } from "../mac-command-store.js";
 import { createTask } from "../task-store.js";
 
-/**
- * The commands an account's agents queue for its Mac, over a real dialect:
- * a command is claimed once and settled once, by its own account alone, a
- * row its call has stopped waiting for is never claimed, a read claims and
- * waits on only the kinds it names, so a row of a kind no read names now
- * is left be, a row queued before kinds were reads as a shell command, and
- * a Mac counts as listening from its last read on. The live statement
- * delivers what a Mac following live would claim: the account's unclaimed
- * commands of its kinds and no one else's.
- *
- * Synthetic accounts and commands throughout.
- */
-
-/** The instant the clock reads now, which every command these tests queue is at or after. */
 const now = Effect.map(Clock.currentTimeMillis, (millis) => new Date(millis));
 
 const RESULT: MacCommandResult = {
@@ -80,7 +66,6 @@ const RESULT: MacCommandResult = {
   timedOut: false,
 };
 
-/** The account's unclaimed commands of the kinds given as a Mac following them live decodes them, the statement run as Realtime runs it. */
 const liveCommandsOf = (userId: string, kinds: readonly MacCommandKind[]) =>
   Effect.gen(function* () {
     const statement = Option.getOrThrow(macCommandsLiveStatement(userId, kinds));
@@ -107,10 +92,6 @@ const command = (timeoutSeconds = 60): MacCommand => ({
   timeoutSeconds,
 });
 
-/**
- * A row of a kind no read names now, as a service that still queued Mac
- * Browser commands left one waiting, written as that build wrote it; its id.
- */
 const queueOtherKind = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -123,7 +104,6 @@ const queueOtherKind = (userId: string) =>
     return id;
   });
 
-/** What every Mac's read names: shell alone. */
 const SHELL_ONLY = [MAC_COMMAND_KIND.SHELL];
 
 it.layer(getTestDB())("the Mac command store", (it) => {
@@ -180,7 +160,6 @@ it.layer(getTestDB())("the Mac command store", (it) => {
       const { owner } = yield* openAccounts;
       const since = yield* now;
       const id = randomUUID();
-      // Note that the row is written as a build before kinds wrote one, naming no kind.
       yield* db.execute(
         sql`INSERT INTO mac_command (id, user_id, command, timeout_seconds, queued_at)
             VALUES (${id}, ${owner}, 'uptime', 60, ${since.toISOString()})`,
@@ -270,7 +249,6 @@ it.layer(getTestDB())("the Mac command store", (it) => {
   );
 });
 
-/** A coding agent's conversation under the account, with the agent itself in the workspace given, started on the prompt given or blank, answering both ids. */
 const openAgent = (userId: string, organizationId: string, prompt: string | null = null) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -292,7 +270,6 @@ const openAgent = (userId: string, organizationId: string, prompt: string | null
     return { id, conversationId };
   });
 
-/** A worker's conversation delegated from the one given, under the same account. */
 const openWorker = (userId: string, parentConversationId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -306,12 +283,6 @@ const openWorker = (userId: string, parentConversationId: string) =>
     return id;
   });
 
-/**
- * One line sent into the conversation, as the writer keeps a developer's or
- * an agent's line to a coding agent, with the metadata given; with no
- * sender, as a line was kept before senders were, or as the model's own
- * reply is.
- */
 const sendLine = (
   owner: string,
   conversationId: string,
@@ -492,9 +463,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
               }),
             );
             yield* claimAutomationRun(run.id, agent.id);
-            // A send refused withdraws its line, so the run fails having handed the agent nothing.
             if (!sent) yield* failClaimedRun(run.id, AUTOMATION_RUN_REASON.UNAVAILABLE);
-            // Written as a line was before it said what fired it: its sender, and nothing else.
             yield* sendLine(starter, agent.conversationId, 1, { kind: MESSAGE_SENDER.AUTOMATION });
             return yield* heardFromAnotherAccount({
               userId: starter,
@@ -510,7 +479,6 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
           "a webhook's run whose send was refused",
         );
 
-        // An eve agent's opening from before the Start wrote it, untagged, as its relay wrote it.
         const started = yield* openAgent(starter, workspace, "Triage what came in.");
         const db = yield* Database;
         yield* db
@@ -542,7 +510,6 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
         const heardAfter = (line: GitHubLineMetadata) =>
           Effect.gen(function* () {
             const agent = yield* openAgent(starter, workspace, "Expire invitations.");
-            // Written as a line was before it said whose words it carries: its sender and what GitHub told.
             yield* sendLine(
               starter,
               agent.conversationId,

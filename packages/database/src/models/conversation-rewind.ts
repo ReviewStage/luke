@@ -12,42 +12,14 @@ import {
 } from "./dispatch-claim.js";
 import type { ConversationTarget } from "./writer.js";
 
-/**
- * conversation-rewind.ts -- a coding agent's conversation cut back to just before one of the developer's lines.
- *
- * A rewind drops the line named and everything after it: the turn it
- * opened and every later turn, with every row they wrote, and every row no
- * turn owns from the line on. A cut at the first line keeps the first
- * turn's row, its rows gone and settled, since an agent with no turn at all
- * reads as one that never started. It counts the journal revision up and marks
- * the conversation rewound at it, so a reader holding an older cursor
- * reads the transcript afresh rather than joining what it holds, and
- * keeps the line's client id for the next launch of a Claude Code or
- * Codex runner to cut the harness's own session before, and clears what
- * that session's turns' messages handed it (`native_handed`), since the
- * cut may drop the turns that handed it, so the next message hands the
- * call's words and the task again. A line no turn
- * took yet never reached the harness's session, so a cut at one leaves a
- * cut still waiting for a launch as it stands, since that one is earlier.
- *
- * Only a line that opened its turn, or awaits one, can be cut at: a line
- * a turn under way took in after its first step sits inside that turn's
- * work, which no harness can cut through.
- */
-
-/** Why a line cannot be cut at. */
 export const REWIND_REFUSAL = {
-  /** No developer's line of that id stands in the conversation. */
   NOT_FOUND: "not_found",
-  /** The line was taken into a turn already under way, or shares its turn with an earlier line. */
   INSIDE_TURN: "inside_turn",
-  /** A hand-over to the agent stayed under way for as long as the cut waits for it to end; nothing was cut. */
   BUSY: "busy",
 } as const;
 
 export type RewindRefusal = (typeof REWIND_REFUSAL)[keyof typeof REWIND_REFUSAL];
 
-/** What a rewind cut: the line's client id and words' place, and the turns it dropped. */
 export interface ConversationRewound {
   readonly clientId: string;
   readonly turnIds: readonly string[];
@@ -102,7 +74,6 @@ const findLine = SqlSchema.findOneOption({
     ),
 });
 
-/** The developer's lines a turn took, oldest first, which tells the line that opened it. */
 const findTurnLines = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
   Result: Schema.Struct({ seq: Schema.Number }),
@@ -160,7 +131,6 @@ const findTurnBefore = SqlSchema.findAll({
     ),
 });
 
-/** A turn kept as the conversation's settled first, its work dropped, with no Stop or failure on it. */
 const settleKeptTurn = SqlSchema.void({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
   execute: ({ conversationId, turnId }) =>
@@ -212,7 +182,6 @@ const deleteTurns = SqlSchema.void({
     ),
 });
 
-/** The journal counted up and the conversation marked rewound at it, the harness's cut set unless the line was never heard and an earlier cut waits, what its turns' messages handed cleared, and a dropped turn the projection held let go. */
 const markRewound = SqlSchema.void({
   Request: Schema.Struct({
     conversationId: Schema.String,
@@ -301,7 +270,6 @@ const findNativeRewind = SqlSchema.findOneOption({
     ),
 });
 
-/** Where a cut at the line named starts: its row and the instant the turns it drops were queued from; refused where it stands inside a turn. */
 const cutPoint = (conversationId: string, messageId: string) =>
   Effect.gen(function* () {
     const line = yield* findLine({ conversationId, messageId });
@@ -320,42 +288,28 @@ const cutPoint = (conversationId: string, messageId: string) =>
     return Result.succeed({ seq, clientId, heard: turnId !== null, from });
   });
 
-/** The cut, under the conversation's row lock and with no hand-over under way, answering what it cut or why it could not. */
 const cut = (target: ConversationTarget, messageId: string, place: number) =>
   Effect.gen(function* () {
     const { conversationId } = target;
     const held = yield* lockConversation(target);
     if (Option.isNone(held)) return Result.fail(REWIND_REFUSAL.NOT_FOUND);
-    // A hand-over under way ends first, so the line it hands is cut with the rest after the runtime heard it,
-    // and the stop that follows the cut stops whatever it started (`coder-host/rewind.ts`).
     if (yield* dispatchClaimStands(conversationId, place)) return yield* new DispatchClaimHeld();
     const point = yield* cutPoint(conversationId, messageId);
     if (Result.isFailure(point)) return Result.fail(point.failure);
     const { seq, clientId, heard, from } = point.success;
     const turnIds = (yield* findTurnsFrom({ conversationId, from })).map((turn) => turn.id);
     yield* deleteMessagesFrom({ conversationId, seq, turnIds });
-    // Note that a cut dropping every turn keeps the first one's row, its work gone and settled, because
-    // an agent with no turn at all reads as one that never started, and fails past its grace.
     const [first, ...later] = turnIds;
     const keepsFirst =
       first !== undefined && (yield* findTurnBefore({ conversationId, from })).length === 0;
     const dropped = keepsFirst ? later : turnIds;
     if (keepsFirst && first !== undefined) yield* settleKeptTurn({ conversationId, turnId: first });
     if (dropped.length > 0) yield* deleteTurns({ conversationId, turnIds: dropped });
-    // Note that a worker a dropped turn delegated is stamped deleted with it, so it is listed no more.
     yield* retireWorkersFrom({ conversationId, from });
     yield* markRewound({ conversationId, clientId, heard, turnIds });
     return Result.succeed<ConversationRewound>({ clientId, turnIds });
   });
 
-/**
- * Cuts the conversation back to just before the developer's line named, as
- * above, in one transaction, once no hand-over to the agent is under way
- * (`dispatch-claim.ts`), waiting for one as long as a claim can stand, since
- * its caller has already stopped the agent for the cut; refused where the
- * account holds no such line, where the line sits inside a turn, or where
- * hand-overs kept the conversation claimed past that wait.
- */
 export function rewindConversation(
   target: ConversationTarget,
   messageId: string,
@@ -377,7 +331,6 @@ export function rewindConversation(
   );
 }
 
-/** The client id of the line a harness's session is still to be cut before, where a rewind left one; none otherwise. */
 export function readNativeRewind(
   target: ConversationTarget,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
@@ -386,7 +339,6 @@ export function readNativeRewind(
   );
 }
 
-/** Lets the harness's cut go once a launch has handed it over, unless a newer rewind replaced it meanwhile. */
 export function clearNativeRewindHanded(
   conversationId: string,
   clientId: string,
@@ -394,7 +346,6 @@ export function clearNativeRewindHanded(
   return clearNativeRewind({ conversationId, clientId });
 }
 
-/** The journal revision the conversation was last rewound at, which a cursor read before it is stale past; none for one never rewound. */
 export function readRewoundRevision(
   target: ConversationTarget,
 ): Effect.Effect<number | undefined, StoreFailure, DatabaseServices> {
@@ -405,11 +356,6 @@ export function readRewoundRevision(
   );
 }
 
-/**
- * Whether the conversation could be cut back to just before the line named,
- * read without cutting, so a caller stops nothing for a cut that would be
- * refused; the cut itself reads it again under its locks.
- */
 export function readRewindable(
   target: ConversationTarget,
   messageId: string,

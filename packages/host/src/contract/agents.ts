@@ -1,16 +1,3 @@
-/**
- * agents.ts -- the Tasks tab's core asks of the host about a task's coding agents, as procedures.
- *
- * A kind that carries nothing takes `undefined` alone, so a window calls it
- * with no payload and one sent anything is refused.
- * Each output is its view schema flipped, so oRPC's output check encodes the
- * row's value into what crosses the port, as every act contract's does. What an
- * agent published is read here too: its pull request, its changes, its Pull
- * request tab's overview, an image that overview names, and a change made to
- * the pull request on GitHub. A box's pairing is read, approved, and denied
- * here too, by the code its link named, as Settings › Hosts asks.
- */
-
 import { eventIterator, type } from "@orpc/contract";
 import {
   agentAddRepositoryParamsSchema,
@@ -65,17 +52,11 @@ import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { AGENT_ACT_KIND } from "./kinds.js";
 
-/**
- * An identifier that has to match the one it names elsewhere, a task or a
- * workspace, so its ends are admitted as written rather than trimmed into a
- * value the host would not hold, and one that carries nothing is refused.
- */
 const exactId = EffectSchema.String.check(
   EffectSchema.makeFilter((value) => value.trim().length > 0),
   EffectSchema.isMaxLength(512),
 );
 
-/** Which agent's tab the panel shows. */
 const shownParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NullOr(exactId),
 });
@@ -99,14 +80,12 @@ export const agentActsContract = {
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held hosts reach the panel on app state, and the stream is the window's hold on them.
   [AGENT_ACT_KIND.HOSTS_FOLLOW]: actProcedure("Could not follow your hosts on this system.")
     .input(exactInput(EffectSchema.Undefined))
     .output(eventIterator(type<never>())),
   [AGENT_ACT_KIND.HOSTS_RETRY]: actProcedure("Could not read your hosts again on this system.")
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held beats reach the panel on app state, and the stream is the window's hold on them.
   [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: actProcedure(
     "Could not follow your devices' beats on this system.",
   )
@@ -148,7 +127,6 @@ export const agentActsContract = {
   )
     .input(exactInput(agentMessagesParamsSchema))
     .output(EffectSchema.flip(agentMessagesAnswerViewSchema)),
-  // Note that the hold's stream carries nothing: the held transcript reaches the panel on app state, and the stream is the window's hold on it.
   [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: actProcedure(
     "Could not follow the agent's transcript on this system.",
   )
@@ -216,7 +194,6 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.AGENTS_PAGE]: actProcedure("Could not read the agent on this system.")
     .input(exactInput(agentPageParamsSchema))
     .output(EffectSchema.flip(agentPageAnswerViewSchema)),
-  // Note that the hold's stream carries nothing: the held origin reaches the panel on app state, and the stream is the window's hold on it.
   [AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW]: actProcedure(
     "Could not follow the run that started the agent on this system.",
   )
@@ -227,7 +204,6 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPageParamsSchema))
     .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held part reaches the panel on app state, and the stream is the window's hold on it.
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW]: actProcedure(
     "Could not follow the agent's pull request on this system.",
   )
@@ -243,7 +219,6 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPullRequestReadParamsSchema))
     .output(EffectSchema.flip(agentChangesAnswerViewSchema)),
-  // Note that the hold's stream carries nothing: the held tools reach the panel on app state, and the stream is the window's hold on them.
   [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: actProcedure(
     `Could not follow the agent's ${PRODUCT_NAME} tools on this system.`,
   )

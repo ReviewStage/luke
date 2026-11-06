@@ -1,32 +1,12 @@
-/**
- * queued-writes.ts -- a keyed row write that went untaken, as the sync engine takes it: refused, left standing to wait while unanswered, or settled where the service took it already under its key.
- *
- * The writes that may wait for the service (`WriteDeclaration.queue` on
- * each: a task's start, rename, standing, and pin, a repository's pin, a
- * section write, an agent's start, rename, and pin, and an inbox item's read
- * mark, reminder, nod, and close, and every item marked read) do what each
- * does when sent at once: a start that names an agent starts it, and a nod
- * or a close on an item its agent waits on is handed to that agent. Each is
- * sent under its idempotency key, but a start that names an agent, which
- * that agent's own key keeps, and reads its client's untaken answer here
- * (`@repo/features/keyed-write`).
- */
-
 import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
 import type { Refused, Written } from "@repo/sync";
 import { hostMintedId } from "@repo/wire/host-ids";
 
-/** What a write answers its caller whether the service kept it or refused it. */
 export interface WriteAnswers<Answer> {
   readonly kept: Answer;
   readonly refused: Answer;
 }
 
-/**
- * A keyed write's untaken answer as the engine takes it: one the service
- * took already stands down at once as kept, one unanswered waits, and one
- * refused, or carried by no credential, is taken back.
- */
 export function untaken<Change, Answer>(
   failure: WriteUntaken,
   answers: WriteAnswers<Answer>,
@@ -38,25 +18,15 @@ export function untaken<Change, Answer>(
   return { refused: answers.refused };
 }
 
-/**
- * The key one of a write's several calls is sent under, where the write
- * goes to the service as several (a drag's section writes): a name-based id
- * of the write's own key and the call's place, so each call sent again
- * lands once and no two share a key.
- */
 export function callKey(key: string | undefined, call: number): string | undefined {
   return key === undefined ? undefined : hostMintedId([key, String(call)]);
 }
 
-/** How many changes made offline the service refused as they were sent again, since the windows last cleared the count. */
 export interface OfflineRefused {
-  /** One more refused. */
   readonly raise: () => void;
-  /** None refused, as the windows saw them or a sign-out let them go. */
   readonly clear: () => void;
 }
 
-/** The count, none to start with, each move told through `tell` as the whole count. */
 export function offlineRefusedCount(tell: (count: number) => void): OfflineRefused {
   let count = 0;
   return {

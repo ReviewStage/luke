@@ -26,15 +26,6 @@ import { lineSendersOf } from "../agent-store.js";
 import { awaitingLinesOf, listMessagesPast, readMessageByClientId } from "../message-reads.js";
 import { STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
 
-/**
- * The store writer's journal over a real dialect: as eve runs a step again,
- * the newest step told a second time settles the calls its abandoned
- * attempt asked for, and an older step told again changes nothing; and as a
- * turn fails, a coding agent's journal keeps the words it formed while a
- * brain's lets them go. Synthetic accounts and conversations throughout.
- */
-
-/** The one tool the turn calls, whose input and output the journal takes as they come. */
 const TOOLS = {
   bash: wireValidatedTool("Runs a command.", Schema.Struct({ command: Schema.String })),
 };
@@ -49,7 +40,6 @@ const openConversation = (kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSA
     return { userId, conversationId };
   });
 
-/** A step eve ran, gave up on, and ran again: the abandoned attempt's words, then the step told again. */
 const RETRIED_ATTEMPT = [
   { kind: RUN_EVENT.STEP_STARTED, step: 1 },
   {
@@ -59,7 +49,6 @@ const RETRIED_ATTEMPT = [
   },
 ] as const;
 
-/** A turn that formed words and asked for a call in its one step, then failed before the call answered, after an abandoned attempt at that step where one is given; its journal as the store then holds it. */
 const failedTurnJournal = (
   kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND],
   abandoned: typeof RETRIED_ATTEMPT | readonly [] = [],
@@ -214,7 +203,6 @@ it.layer(getTestDB())("the store writer's journal rewrites", (it) => {
           trigger: TURN_TRIGGER.ASK,
           at: 0,
         });
-        // Note that the metric is read as Sentry's layer reads it, from the registry by its name.
         const rewritten = Effect.gen(function* () {
           const found = (yield* Metric.snapshot).find(
             ({ id }) => id === "app.transcript.journal_rewrite_bytes",

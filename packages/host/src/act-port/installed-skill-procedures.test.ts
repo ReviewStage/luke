@@ -8,14 +8,6 @@ import type { ActSender } from "./base.js";
 import { installedSkillProcedures } from "./installed-skill-procedures.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
-/**
- * Settings › Skills' acts through the act port as a window calls them: a
- * panel's Try again, install, and removal reach the host with what the page
- * names and hear its answer; any other window, and a frame this build does not
- * trust, are refused in each kind's own words before the host is asked;
- * and a payload off the kind's schema is refused at the port. Synthetic ids.
- */
-
 const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true };
@@ -35,7 +27,6 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/** A window's act port over a host answering as told, and what it was asked, in order. */
 function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   const asked: string[] = [];
   const refused = { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED } as const;
@@ -79,7 +70,6 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
         }),
       ),
     remove: (skillId = SKILL_ID) =>
-      // SAFETY: an id is sent as a window might send it, one the kind's schema may refuse.
       settledAct(client[INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_REMOVE]({ skillId } as never)),
     asked,
   };

@@ -1,4 +1,3 @@
-// compose-account.test.ts -- session replay's answer across an account deletion and a later sign-in, and the account's access across a read and a sign-out, over the desktop's account source; and a browser tab's account steps refused rather than dying, a change during the launch's read heard, and a sign-in's count sent before the tab leaves, over the cookie source.
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
@@ -33,18 +32,10 @@ import { oauthAccountSourceLayer } from "./oauth-account-source.js";
 import { runModeFor } from "./run-mode.js";
 import { recordingReporter } from "./testing/recording-reporter.js";
 
-/**
- * The account concern on an ordinary run, over the real settings store and a
- * kernel whose events the test reads: what it tells the renderers about
- * recording as an account is deleted and another sign-in lands.
- */
-
 const ACCOUNT_BASE_URL = "https://account.example.test/api/auth";
-/** The hosted service's origin, which the kernel derives from the account's address. */
 const SERVICE_BASE_URL = "https://account.example.test";
 const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
-/** A consent the developer grants at once: the trip is the exchange itself. */
 const grantingConsent: OpenConsent = (options) => ({
   signInEffect: () =>
     options.exchange({
@@ -57,7 +48,6 @@ const grantingConsent: OpenConsent = (options) => ({
   reopen: () => undefined,
 });
 
-/** The account service, answered: the deletion, then the second sign-in's exchange and identity. */
 const accountService: typeof globalThis.fetch = async (input, init) => {
   const request = new Request(input, init);
   if (request.url === `${SERVICE_BASE_URL}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`)
@@ -69,33 +59,21 @@ const accountService: typeof globalThis.fetch = async (input, init) => {
   throw new Error(`this test reaches no network: ${request.url}`);
 };
 
-/** Real event-loop turns until `holds`, since the store's file I/O is real. */
 const until = (holds: () => boolean) =>
   Effect.promise(async () => {
     for (let turn = 0; turn < 2_000 && !holds(); turn += 1) await nextTurn();
   });
 
-/**
- * The account concern over the real settings store, already holding a
- * signed-in account, linked and started on `machine`'s identity and whatever
- * else it adds.
- */
 const signedInAccount = (input: {
   readonly kernel: HostKernel;
   readonly machine: Layer.Layer<AppIdentity>;
 }) => desktopAccount({ ...input, consent: grantingConsent, signedIn: true });
 
-/**
- * The account concern over the desktop's own account source and the real
- * settings store, holding a signed-in account where `signedIn` asks for one,
- * its sign-ins taken through `consent`.
- */
 const desktopAccount = (input: {
   readonly kernel: HostKernel;
   readonly machine: Layer.Layer<AppIdentity>;
   readonly consent: OpenConsent;
   readonly signedIn: boolean;
-  /** The host's capability gate, as `compose-host.ts` links it; none moves nothing. */
   readonly capabilities?: {
     readonly startCapabilities: Effect.Effect<void>;
     readonly stopCapabilities: Effect.Effect<void>;
@@ -106,8 +84,6 @@ const desktopAccount = (input: {
       input.machine,
       Layer.succeed(HostKernelTag, input.kernel),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-      // The desktop's own account source. The store keeps an account only
-      // where that source's cipher can encrypt one.
       Layer.provide(
         oauthAccountSourceLayer,
         Layer.merge(
@@ -122,7 +98,6 @@ const desktopAccount = (input: {
       NodeFileSystem.layer,
       NodePath.layer,
     );
-    // Settings' lifetime is not run, so its counted events stay disarmed and send nothing.
     const settings = yield* Effect.provide(composeSettings(), machine);
     if (input.signedIn) {
       yield* Effect.orDie(
@@ -146,7 +121,6 @@ const desktopAccount = (input: {
 it.effect(
   "a session that stays signed in as another person, as a renewal whose identity read names someone else, stops the last person's capabilities before starting the next's, and a new address for the same person stops nothing",
   () => {
-    /** Who the account service's identity read names. */
     let named = { sub: "user-1", email: "dana@example.com" };
     const identity: typeof globalThis.fetch = async (input, init) => {
       const request = new Request(input, init);
@@ -154,7 +128,6 @@ it.effect(
       return accountService(input, init);
     };
     return Effect.gen(function* () {
-      // Note that the identity read runs on a flight of its own, outside this test's services, so it reaches the platform's fetch.
       vi.spyOn(globalThis, "fetch").mockImplementation(identity);
       const stateRoot = yield* temporaryDirectoryScoped("account-switch-");
       const gate: string[] = [];
@@ -186,7 +159,6 @@ it.effect(
         return now.status === ACCOUNT_STATUS.SIGNED_IN ? now.email : undefined;
       };
 
-      // The identity read names the stored person at a new address, then at another.
       yield* account.session.refreshOnce();
       named = { sub: "user-1", email: "dana@new.example.com" };
       yield* account.session.refreshOnce();
@@ -247,13 +219,11 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
       email: "dev@example.com",
     });
 
-    // The deletion lands: recording is stood down, signed out, for the rest of the run so far.
     yield* call(GATEWAY_METHOD.ACCOUNT_DELETE);
     yield* until(() => lastPermitted() === false);
     assert.deepEqual(lastReplay(), { permitted: false });
     assert.deepEqual(yield* account.sessionReplayState, { permitted: false });
 
-    // A later sign-in in the same run starts it again, filed under the account that signed in.
     yield* call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider: ACCOUNT_PROVIDER.GITHUB });
     assert.equal(account.signedIn(), true);
     yield* until(() => lastPermitted() === true);
@@ -290,7 +260,6 @@ it.effect(
         },
         emit: () => undefined,
       });
-      // A reason a provider's answer could have shaped, which must stay in the host's log.
       const reason = "callback carried code=secret-code";
       for (const failure of Object.values(SIGN_IN_FAILURE)) {
         const account = yield* desktopAccount({
@@ -354,7 +323,6 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
         platform: PRODUCT_PLATFORM.DESKTOP,
       }),
     });
-    // Nothing is read until the gate opening asks, so nothing is an admin before it, and the read is owed.
     assert.deepEqual(yield* account.accessState, { admin: false, pending: true });
 
     yield* account.refreshAccess;
@@ -380,7 +348,6 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
   ),
 );
 
-/** The browser tab's service, on the tab's own origin, as Better Auth and our routes answer it. */
 const TAB_ORIGIN = "https://app.example.test";
 const BROWSER_CONTEXT = { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR };
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
@@ -391,17 +358,11 @@ const SESSION_USER = {
 } as const;
 
 interface TabService {
-  /** Whether a session stands behind the tab's cookie. */
   signedIn: boolean;
-  /** Whether every account step (a sign-in, a sign-out, a deletion) meets an outage. */
   stepsDown: boolean;
-  /** Holds the next session read's answer until this settles. */
   heldRead?: Promise<void> | undefined;
-  /** Every request, by path, in the order sent. */
   readonly sent: string[];
-  /** The bodies of every batch of counts sent. */
   readonly counts: string[];
-  /** Whether the tab keeps that a sign-in left it, as its session storage does across the provider's pages. */
   signInLeft: boolean;
 }
 
@@ -412,7 +373,6 @@ const ACCOUNT_STEPS: readonly string[] = [
   HOSTED_SERVICE_PATH.ACCOUNT_DELETE,
 ];
 
-/** The scripted service behind the platform fetch, which the cookie source and the settings ride. */
 const tabFetch =
   (service: TabService): typeof globalThis.fetch =>
   async (input, init) => {
@@ -441,16 +401,10 @@ const tabFetch =
     }
   };
 
-/**
- * The account concern in a browser tab, over the cookie source and the real
- * settings store, linked as the host links them and armed to send its
- * counts. Its lifetime is forked, so a test can act while the launch reads.
- */
 const browserAccount = (service: TabService) =>
   Effect.gen(function* () {
     const stateRoot = yield* temporaryDirectoryScoped("account-browser-");
     const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
-    /** The counts' batches already sent each time the tab left, by the address it left for. */
     const departures: { url: string; countsSent: string[] }[] = [];
     const door: CookieSessionDoor = {
       currentAddress: () => "/",
@@ -482,7 +436,6 @@ const browserAccount = (service: TabService) =>
         }),
       ),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-      // A version the counted events allowlist reads, and packaged as a browser tab is, so the counts are sent.
       Layer.succeed(AppIdentity, {
         appVersion: "1.0.0",
         packaged: true,
@@ -506,7 +459,6 @@ const browserAccount = (service: TabService) =>
     return { account, settings, gateway, events, departures, launched };
   });
 
-/** `body` over a tab whose every request, the settings' own counts among them, reaches `service`. */
 const inTab = <A, E, R>(service: TabService, body: Effect.Effect<A, E, R>) =>
   body.pipe(
     Effect.provideService(FetchHttpClient.Fetch, tabFetch(service)),
@@ -522,7 +474,6 @@ const tabService = (initial: Partial<TabService>): TabService => ({
   ...initial,
 });
 
-/** The signed-in person's address, and nothing for any other account. */
 const signedInEmail = (payload: WireValue | AccountSnapshot | undefined) =>
   isRecord(payload) && payload.status === ACCOUNT_STATUS.SIGNED_IN ? payload.email : undefined;
 
@@ -562,7 +513,6 @@ it.effect(
       const { account, gateway, launched, departures } = yield* browserAccount(service);
       yield* Fiber.join(launched);
 
-      // A sign-in answers that it did not finish, in the key the gate says it in.
       const begun = yield* gateway.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, {
         provider: ACCOUNT_PROVIDER.GITHUB,
       });
@@ -593,7 +543,6 @@ it.effect(
       const { account, settings, events, launched } = yield* browserAccount(service);
       yield* until(() => service.sent.includes("/api/auth/get-session"));
 
-      // A sign-in lands elsewhere, and a refused call's re-read settles on it while the launch's read is held.
       service.signedIn = true;
       yield* account.token.refreshAccount();
       release();
@@ -607,7 +556,6 @@ it.effect(
         );
       yield* until(changed);
       assert.equal(changed(), true);
-      // The session is the launch's own account, so, as for a launch that read it itself, no sign-in is counted.
       yield* settings.flushProductEvents;
       assert.ok(service.counts.length > 0, "the launch's counts were sent");
       assert.ok(service.counts.every((batch) => !batch.includes(PRODUCT_EVENT.ACCOUNT_SIGN_IN)));
@@ -642,10 +590,8 @@ it.effect(
   "in a browser, a sign-in that left the tab is counted once, its start with it, on the page it comes back to",
   () => {
     const service = tabService({ signedIn: false });
-    /** How many of the counts sent so far are `name`, as a batch's body spells it. */
     const sentCounts = (name: string) =>
       service.counts.join("\n").split(JSON.stringify(name)).length - 1;
-    /** One page of the tab, launched and its counts sent, closed as the tab leaves it. */
     const page = <A>(
       body: (tab: Effect.Success<ReturnType<typeof browserAccount>>) => Effect.Effect<A>,
     ) =>
@@ -662,7 +608,6 @@ it.effect(
       yield* page(({ gateway }) =>
         gateway.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider: ACCOUNT_PROVIDER.GITHUB }),
       );
-      // The provider signs the person in and sends the tab back to a page of its own, which a reload follows.
       service.signedIn = true;
       yield* page(() => Effect.void);
       yield* page(() => Effect.void);

@@ -19,26 +19,13 @@ import {
 import type { ActSender } from "./base.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
-/**
- * The account's own asks, through the act port as a window calls them: only
- * a panel of this build's own renderer asks; any other window, and
- * a frame this build does not trust, are refused in each kind's own words
- * before the host is asked; a panel's ask reaches the host with its payload
- * as the panel sent it, and a kind that carries nothing with nothing; a
- * provider key crosses once and never comes back in a refusal; and a host
- * that fails answers the kind's own sentence rather than what the failure held.
- */
-
-// The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true };
 const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
-/** A synthetic provider key, as Settings carries it once. */
 const PROVIDER_KEY = "sk-proj-synthetic-00000000000000000000abcd";
 
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE]: "Couldn't save your API key on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE]: "Couldn't remove your API key on this system.",
@@ -51,7 +38,6 @@ const REFUSAL = {
   [ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE]: "Could not transcribe the recording on this system.",
 } as const;
 
-/** Every kind, each with a payload its schema admits and the host ask it reaches. */
 const ACTS = [
   {
     kind: ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE,
@@ -112,10 +98,6 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/**
- * A window's act port, opened as the bridge opens one: the host's answer
- * given by `answer`, and the window standing as `actor`, trusted or not.
- */
 function windowPort(
   actor: ActSender,
   options: { trusted?: boolean; answer?: () => Effect.Effect<unknown> } = {},
@@ -130,7 +112,6 @@ function windowPort(
         asked.push(params.length === 0 ? [name] : [name, params[0]]);
         return answer();
       });
-  // SAFETY: each fake answers what its test hands it; the port's output schema checks it.
   const host = Object.fromEntries(ACTS.map((act) => [act.ask, ask(act.ask)])) as HostAsk;
   const port = testActPort(accountAskProcedures({ host }));
   ports.push(port);
@@ -138,15 +119,12 @@ function windowPort(
   return { client, asked };
 }
 
-/** Any port kind's procedure, erased to the union of what every one takes and answers. */
 type PortCall = (payload: PortActPayload<PortActKind>) => Promise<PortActResult<PortActKind>>;
 
 function portCall(client: ActPortClient, kind: PortActKind): PortCall {
-  // SAFETY: each test pairs a kind with the payload its own procedure takes, or one it refuses on purpose.
   return client[kind] as PortCall;
 }
 
-/** One kind called on the port with `payload`, settled to its answer or the sentence of its refusal. */
 async function settled(
   client: ActPortClient,
   kind: PortActKind,
@@ -211,7 +189,6 @@ it("a host that dies, or answers what the kind cannot carry, is refused in the k
 
 it("a payload carrying a key its kind's schema does not name is refused in the kind's own words, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
-  // SAFETY: the stray key is the point; a window's payload crosses as a structured-clone value.
   const strayed = {
     workspaceId: "workspace-1",
     id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",

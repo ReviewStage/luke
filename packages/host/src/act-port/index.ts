@@ -41,14 +41,6 @@ import {
   workspaceProcedures,
 } from "./workspace-procedures.js";
 
-/**
- * index.ts -- the act port's server: every procedure of `@repo/host/contract`, served over a window's `MessagePort`.
- *
- * The bridge upgrades each window's port with the handler built here, in
- * `apps/desktop/src/main/bridge-host.ts` alone, and hands every call the
- * context `ActPortContext` names.
- */
-
 export { accountAskProcedures } from "./account-ask-procedures.js";
 export type { AccountProceduresDependencies } from "./account-procedures.js";
 export type { AgentProceduresDependencies } from "./agents-procedures.js";
@@ -68,40 +60,26 @@ export {
   terminalProcedures,
 } from "./terminal-procedures.js";
 
-/** The act port's server, which the bridge upgrades each window's port with. */
 export type ActPortHandler<Sender = unknown> = RPCHandler<ActPortContext<Sender>>;
 
-/**
- * The procedures a platform answers itself, built from `actPortFor`: every
- * port kind that reaches its windows, ports, or system, and none of the
- * host's, so each kind has its procedure on exactly one side.
- */
 export type PlatformActProcedures<Sender> = ContractedRouter<
   Pick<typeof actContract, PlatformPortActKind>,
   ActPortContext<Sender>
 >;
 
-/**
- * Every platform kind refused in its own sentence, as a platform that can
- * carry none of them answers: a shell spreads these under the few it does
- * answer, so its table stays total and the window draws each refusal.
- */
 export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sender> {
   const port = actPortFor<Sender>();
   const procedures: Partial<PlatformActProcedures<Sender>> = {};
   for (const kind of Object.values(PLATFORM_PORT_ACT_KIND)) {
-    // Note that every kind is refused alike, whatever it takes and answers, so it is assigned rather than typed by the kind.
     Object.assign(procedures, {
       [kind]: port[kind].handler(({ errors }) => {
         throw errors.REFUSED();
       }),
     });
   }
-  // SAFETY: the loop above gave every platform kind its procedure.
   return procedures as PlatformActProcedures<Sender>;
 }
 
-/** What the act port's procedures are handed, by the domain that uses it, in alphabetical order. */
 export interface ActPortDependencies {
   readonly account: AccountProceduresDependencies;
   readonly accountAsks: AccountAskProceduresDependencies;
@@ -112,23 +90,12 @@ export interface ActPortDependencies {
   readonly installedSkills: InstalledSkillProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
   readonly macCommands: MacCommandProceduresDependencies;
-  /** What main pushes each window, which the push stream reads. */
   readonly pushes: WindowPushes;
   readonly settings: SettingsProceduresDependencies;
   readonly tasks: TasksProceduresDependencies;
   readonly workspaces: WorkspaceProceduresDependencies;
 }
 
-/**
- * The act port's handler. Note that nothing a procedure ends in crosses as
- * anything but a refusal: a row's own refusal crosses as it is, and every
- * other failure, a defect, an input its schema refused, an answer its
- * schema could not encode, is answered with the procedure's own sentence, so
- * the window never hears what a failure held and never meets an error it
- * does not draw. That failure is logged here, in main, before it is replaced.
- * The host's procedures sit beside the platform's own, and together they
- * answer every kind of the contract.
- */
 export function createActPortHandler<Sender>(
   dependencies: ActPortDependencies,
   platformProcedures: PlatformActProcedures<Sender>,
@@ -151,7 +118,6 @@ export function createActPortHandler<Sender>(
   return actPortHandlerOf({ ...router, ...pushProcedures(dependencies.pushes) });
 }
 
-/** The act port's handler over the procedures given, every failure but a refusal answered as `createActPortHandler` says. */
 export function actPortHandlerOf<Sender>(
   router: Router<ActPortContext<Sender>>,
 ): ActPortHandler<Sender> {

@@ -44,18 +44,6 @@ import { runModeFor } from "./run-mode.js";
 import { fixedAccountSource } from "./testing/fixed-account-source.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
-/**
- * The host assembled with a chosen set of platform concerns, on a fixture
- * run over a state root of the test's own: a host built without them stands
- * with none of their seams provided and refuses their methods, where the
- * desktop's, built with all of them, answers.
- */
-
-/**
- * Every seam a host stands on whatever it was built with, the kernel over
- * them. The account source is each test's own, so none of the desktop's
- * source's seams are here.
- */
 const machineOver = (stateRoot: string) =>
   Layer.provideMerge(
     hostKernelLayer,
@@ -77,7 +65,6 @@ const machineOver = (stateRoot: string) =>
     ),
   );
 
-/** The desktop's own account source, over its cipher and its loopback consent. */
 const desktopAccountSource = Layer.provide(
   oauthAccountSourceLayer,
   Layer.merge(
@@ -90,10 +77,8 @@ const desktopAccountSource = Layer.provide(
   ),
 );
 
-/** A client offering one capability of its own, as a browser might. */
 const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.MICROPHONE];
 
-/** What a standing host answers for an agent's terminals, and which concerns it says it runs. */
 const askedOfStandingHost = Effect.gen(function* () {
   const { concerns } = yield* HostAssemblyTag;
   const { gateway } = yield* HostTag;
@@ -105,10 +90,6 @@ describe("the host's platform concerns", () => {
   it.effect("left out, need no spawner or terminal socket, and refuse their methods", () =>
     Effect.gen(function* () {
       const stateRoot = yield* temporaryDirectoryScoped("host-browser-");
-      // Note that nothing here provides a `ChildProcessSpawner` or a
-      // `TerminalSocket`. The layer's type, narrowed to the concerns chosen,
-      // asks for neither, and a build that reached for one anyway would die
-      // here on the missing service.
       const browser = hostStandingLayer.pipe(
         Layer.provideMerge(hostAssemblyLayer([])),
         Layer.provide(Layer.merge(machineOver(stateRoot), fixedAccountSource())),
@@ -165,7 +146,6 @@ describe("the host's platform concerns", () => {
 
       const asked = yield* Effect.provide(askedOfStandingHost, desktop);
 
-      // A fixture run signs no account in, so the terminals concern itself answers, and refuses as signed out.
       assert.deepEqual(asked.terminals, {
         ok: false,
         error: { code: GATEWAY_ERROR.REFUSED, message: "signed out" },
@@ -179,7 +159,6 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.LOCAL_TERMINALS,
         HOST_CAPABILITY.PORT_FORWARDS,
       ]);
-      // The desktop answers every client capability too: its Zoom, login item and Keyboard shortcuts page stand on DESKTOP_APP.
       assert.deepEqual(hostCapabilities(asked.concerns, ALL_CLIENT_CAPABILITIES), [
         HOST_CAPABILITY.UPDATES,
         HOST_CAPABILITY.MICROPHONE,
@@ -204,9 +183,6 @@ describe("the host's account source", () => {
         email: "dev@example.com",
         provider: ACCOUNT_PROVIDER.GITHUB,
       } as const;
-      // Note that nothing here provides a `SignInConsent` or a `SecretCipher`:
-      // they are the desktop's source's own requirements, so the assembly's
-      // type asks for neither, and a build that reached for one would die here.
       const host = hostStandingLayer.pipe(
         Layer.provideMerge(hostAssemblyLayer([])),
         Layer.provide(Layer.merge(machineOver(stateRoot), fixedAccountSource({ account }))),

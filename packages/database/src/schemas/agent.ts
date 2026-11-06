@@ -30,120 +30,6 @@ import { device } from "./device.js";
 import { conversations } from "./storage.js";
 import { task } from "./task.js";
 
-/**
- * coding-agent.ts -- one coding agent started on a task, linking its conversation to the task it works.
- *
- * A coding agent is a `coding_agent` conversation: its transcript is that
- * conversation's `messages` rows and its status its latest `turns` row, so
- * this row holds only what the conversation does not. The model, effort,
- * and context window are read on every step, so switching later is a row
- * update; the window is the model's whole one unless the developer chose
- * the smaller standard one, which is also what an agent started before the
- * window could be chosen ran on and keeps; the snapshot
- * is the exact plan text the agent was handed, kept whole because the plan
- * keeps being edited after, or where the developer started it on a prompt of
- * their own, the snapshot is null and the prompt is what it was handed, so
- * at most one of the two stands, and neither for an agent started blank,
- * whose first words come later, such as a call's spoken opening; the
- * repository is `owner/name`, null for an agent with none, such as one on a
- * task with no repository, which does no repository work; the branch
- * is the one checked out in the agent's sandbox as its last turn ended,
- * which is where its pull request is looked up, and null until a turn ends
- * or where the checkout stood detached or on its start branch; the start branch is the one its
- * starter named for its checkout to be cloned at, such as a stacked pull
- * request's, and null for the repository's default branch, which every
- * agent started without one is cloned at; the title is the agent's name on
- * its tab, generated once from what it was handed as its first session
- * starts and renamed by the developer, null until either and after a rename
- * that cleared it. The last step is what the provider counted of the
- * newest model step of the agent's own conversation, with the estimates of
- * what it read that no provider counts apart (`StoredAgentStep`), and
- * `compacted_at` when eve last compacted that conversation; both are null
- * until it happens, and both are what the tab's context ring reads.
- * `published` is the pull request from the agent's branch as GitHub last
- * answered a read of it (`coder-host/published.ts`), null before a read
- * found one; the task list reads it so the sidebar asks GitHub nothing.
- * `published_read` is when that read was (`StoredPublishedRead`), which lets
- * a tab's read answer from the row rather than GitHub; null before one, for
- * a write that names none, and once a change to the pull request lets it go.
- * `archived_at` is when the developer put the agent away, which leaves it
- * out of every list but the one that asks for archived agents, and null
- * while it stands; its conversation and pull request are kept either way.
- * `archived_by` is who archived it (`StoredArchive`), written with
- * `archived_at` and cleared with it; null for an archive from before the
- * column, and for one an automation's sweep made.
- * `disabled_servers` is the MCP servers, by connection name (one account
- * at an integration: `notion`, `notion-2`, the first account's name being
- * its provider's), the developer switched off for this agent from its
- * composer, which its next turns are not handed; null, like an empty list, switches none off, so a
- * server connected later is on for every agent. A provider no longer
- * offered may stand in the list and is ignored where it is read.
- * `mentioned_servers` is the MCP servers a message to the agent mentioned
- * since its last turn started (`@Linear`), which its next turn is handed
- * whatever `disabled_servers` says and then takes back to null, so a mention
- * turns a server on for the one turn and never touches the switch.
- * `automation_origin` is the run of an automation that started the agent,
- * kept as it stood when the run started (`StoredAutomationOrigin`), so the
- * agent still names its automation once that automation is deleted and
- * `automation_id` goes null; null for an agent started by hand.
- * `automation_run_id` is the run of an automation the agent belongs to: the
- * run that started it, or the run that started the agent that started it,
- * so a run reads every agent it made; null for an agent no run owns, and
- * once that run's row is gone.
- * `started_from` is the agent of the same plan this one was started from
- * (`StoredStartedFrom`): the one it continues, or forks at one of its
- * messages, with how many of that agent's steps its first message replayed
- * of how many there were, and the branch that agent's work was copied to
- * for it where it could be; null for an agent started afresh. The source is
- * named by id and held to nothing, so an agent outlives a source discarded
- * after it.
- * `started_by_agent_id` is the coding agent whose `start_agent` started this
- * one, always an agent of the same account, which is told when this one's
- * run ends without finishing; null for an agent a member, the brain, or an
- * automation started, and once the starter's row is gone. A Continue or a
- * Fork by hand names none, whoever started its source, but for a Continue
- * by hand of an agent a pilot started, which names that pilot, so a
- * continued sub-pilot still reports up to its parent.
- * `author` is who the agent's commits are by and its pull request is opened
- * as, the developer or our GitHub App with why (`AGENT_AUTHOR`),
- * settled once as its first session starts and never moved after, so its
- * instructions and its checkout agree; null before then, and for an agent
- * from before the column, which writes as the App.
- * `payer` is who pays for the agent's model calls (`AGENT_PAYER`),
- * the starter's Claude or ChatGPT plan, their own API key, or the service's,
- * recorded as it starts and never moved after; null for an agent from
- * before the column. What answers its conversation is the conversation's
- * own `runtime`.
- * There is no commit column: the
- * checkout's own output is in the transcript, and the pull request on
- * GitHub records its base.
- *
- * `kind` is what the agent is (`AGENT_KIND`): a coder, as every agent
- * started on work is and every row from before the column reads, or a
- * task's pilot.
- *
- * `machine` is where the agent's runner and checkout live
- * (`AGENT_MACHINE`): a Vercel Sandbox, as every row from before the
- * column reads, or the starter's own Mac, named by `device_id`, which a
- * local agent is pinned to and every line and request for it goes to
- * (`./device-agent.ts`); null for an agent in a sandbox, and once its Mac's row
- * is gone, which leaves the agent with no Mac to run on.
- *
- * `idempotency_key` is the Start request's own key, unique per account, so a
- * network retry of one Start finds the agent it already made rather than
- * starting a second. The row goes with its task, its account, and its
- * conversation alike.
- */
-/**
- * The newest model step of an agent's own conversation, as the coder host
- * relayed it: the tokens its provider counted, the share of them its
- * prefix cache read or wrote, and the estimates of what the step read that
- * the provider does not count apart, the instructions, the tool
- * definitions, and the plan or task the agent was handed, each estimated
- * as eve's own compaction estimates (`coder-host/token-estimate.ts`); a
- * native step estimates the plan or task alone and tells the rest as 0.
- * `at` is the epoch milliseconds the step's end was relayed.
- */
 export interface StoredAgentStep {
   readonly inputTokens: number;
   readonly outputTokens: number;
@@ -155,14 +41,6 @@ export interface StoredAgentStep {
   readonly at: number;
 }
 
-/**
- * The run of an automation that started an agent, as the run started it: the
- * automation's name, what fired the run, the automation's prompt alone,
- * without the lines we add of the firing, and a webhook call's body as
- * its caller sent it, cut as the agent was handed it, where the firing was
- * one. The body is the agent's task already, so it is kept nowhere the task
- * is not.
- */
 export interface StoredAutomationOrigin {
   readonly name: string;
   readonly firing: AutomationFiring;
@@ -170,34 +48,16 @@ export interface StoredAutomationOrigin {
   readonly body?: string;
 }
 
-/**
- * The agent an agent was started from: its id, the assistant message it was
- * forked at where it was forked rather than continued, and how many of that
- * message's steps, and of the last of them how many words and calls, the
- * fork kept where it was a reply still being written,
- * how many of the source's steps the replay kept of how many there were,
- * and the branch its work was copied to where it could be.
- */
 export interface StoredStartedFrom {
   readonly agentId: string;
   readonly messageId?: string;
-  /** How many of the message's steps the fork kept, as seen when Fork was pressed on a reply still being written; absent where it kept the message whole. */
   readonly messageSteps?: number;
-  /** How many words and calls of the last of those steps the fork kept, as seen at that press; absent where it kept that step whole. */
   readonly messageStepParts?: number;
   readonly steps: number;
   readonly totalSteps: number;
-  /** The branch the source's work was copied to for this agent, what it had not pushed included; absent where it could not be copied. */
   readonly branch?: string;
 }
 
-/**
- * Who archived an agent, and why: a member from the window, or the brain or
- * another coding agent acting for one, the member always, the agent by its
- * id and its title as it stood, and the reason where one was given.
- * `withTask` marks an agent archived along with its task, by the member who
- * archived the task, which the task's unarchive brings back with it.
- */
 export interface StoredArchive {
   readonly by: AgentArchiver;
   readonly userId: string;
@@ -207,27 +67,11 @@ export interface StoredArchive {
   readonly withTask?: boolean;
 }
 
-/**
- * The pull request from an agent's branch as its row keeps it: what the
- * wire carries of it, and beside that what the service alone reads. The
- * head it was read at, which a delivery about a commit's checks is matched
- * against; and when it merged, as GitHub reports it, absent until it has.
- * A row written before these were kept holds none of them. A row written
- * while Factory stood may hold `areas` beside them, which nothing reads now
- * and the next write drops.
- */
 export interface StoredPullRequest extends AgentPullRequest {
   readonly headSha?: string;
   readonly mergedAt?: number;
 }
 
-/**
- * The read of GitHub that wrote an agent's `published`: when it was, in
- * epoch millis, the branch the row stood on as it read, and whether GitHub
- * held that branch, a pull request from it or the branch pushed alone. What
- * the read answered is the row's again from these, so long as the row still
- * stands on that branch.
- */
 export interface StoredPublishedRead {
   readonly at: number;
   readonly branch: string | null;
@@ -238,27 +82,19 @@ export const agentTable = pgTable(
   "agent",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** The task the agent works on; null for an agent an automation started with no task. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
-    /** The workspace the agent belongs to, its task's or its automation's. */
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    /** The automation whose run started the agent; null for one started by hand or once that automation is deleted. */
     automationId: uuid("automation_id").references((): AnyPgColumn => automation.id, {
       onDelete: "set null",
     }),
-    /** The run of an automation the agent belongs to; null for one no run owns, and once that run is deleted. */
     automationRunId: uuid("automation_run_id").references((): AnyPgColumn => automationRun.id, {
       onDelete: "set null",
     }),
-    /** The run of an automation that started the agent, as it stood then; null for one started by hand. */
     automationOrigin: jsonb("automation_origin").$type<StoredAutomationOrigin>(),
-    /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
     startedFrom: jsonb("started_from").$type<StoredStartedFrom>(),
-    /** What outside the app the agent was started from, a Slack message, with its link; null for one started in the app. */
     source: jsonb("source").$type<AgentSource>(),
-    /** The coding agent whose `start_agent` started this one; null for any other starter, and once the agent's row is gone. */
     startedByAgentId: uuid("started_by_agent_id").references((): AnyPgColumn => agentTable.id, {
       onDelete: "set null",
     }),
@@ -268,130 +104,66 @@ export const agentTable = pgTable(
     conversationId: uuid("conversation_id")
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
-    /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
     model: text("model").notNull(),
     effort: text("effort").notNull(),
-    /** Which of the model's context windows the agent runs on; a model with one window runs on it whatever this says. */
     contextWindow: text("context_window")
       .$type<ContextWindow>()
       .notNull()
       .default(CONTEXT_WINDOW.LONG),
-    /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead, or started blank. */
     descriptionSnapshot: text("description_snapshot"),
-    /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan, or started blank. */
     prompt: text("prompt"),
-    /** The GitHub repository the agent works in, as `owner/name`, the one it starts in; null for an agent with none. Any others are its `agent_repository` rows. */
     repository: text("repository"),
-    /** The branch checked out in the sandbox as the last turn ended; null before one ends or on a detached HEAD. */
     branch: text("branch"),
-    /** The branch the agent's checkout is cloned at, as its starter named it; null for the repository's default branch. */
     startBranch: text("start_branch"),
-    /** The agent's title as its tab shows it; null falls back to the model's name. */
     title: text("title"),
-    /** The newest model step of the agent's own conversation; null before its first. */
     lastStep: jsonb("last_step").$type<StoredAgentStep>(),
-    /** When eve last compacted the agent's own conversation; null where it never has. */
     compactedAt: timestamptz("compacted_at"),
-    /** The pull request from the agent's branch as GitHub last answered; null before a read found one. */
     published: jsonb("published").$type<StoredPullRequest>(),
-    /** When the read that wrote `published` was, and of which branch; null before one, and once a change lets it go. */
     publishedRead: jsonb("published_read").$type<StoredPublishedRead>(),
-    /** When the developer archived the agent; null while it is not. */
     archivedAt: timestamptz("archived_at"),
-    /** Who archived the agent, and why; null while it is not, and for an archive no one was recorded for. */
     archivedBy: jsonb("archived_by").$type<StoredArchive>(),
-    /** The MCP servers switched off for this agent, by integration provider; null switches none off. */
     disabledServers: jsonb("disabled_servers").$type<readonly string[]>(),
-    /** The MCP servers mentioned since the agent's last turn started, by integration provider; null for none. */
     mentionedServers: jsonb("mentioned_servers").$type<readonly string[]>(),
-    /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
     author: text("author").$type<AgentAuthor>(),
-    /** How the agent's repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
     githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
-    /** Who pays for the agent's model calls, recorded as it starts and never moved; null for an agent from before the column. */
     payer: text("payer").$type<AgentPayer>(),
-    /**
-     * The digest of the bearer the agent's runner presents at our MCP server and its events
-     * route, never the bearer itself; null where no runner holds one. Kept on the agent's row rather
-     * than its conversation's, because a launch writes it while a message's hand-over holds the
-     * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
-     */
     runnerTokenHash: text("runner_token_hash"),
-    /** What the agent is (`AGENT_KIND`): a coder, or a task's pilot; a coder for every row from before the column. */
     kind: text("kind").$type<AgentKind>().notNull().default(AGENT_KIND.CODER),
-    /** Where the agent's runner and checkout live; a Vercel Sandbox for every row from before the column. */
     machine: text("machine").$type<AgentMachineKind>().notNull().default(AGENT_MACHINE.VERCEL),
-    /** The Mac a local agent is pinned to; null for one in a sandbox. */
     deviceId: uuid("device_id").references(() => device.id, { onDelete: "set null" }),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
-    /**
-     * The instant every member without a read mark of their own
-     * (`agent-read.ts`) has read the agent through, as a task's
-     * `read_through` is (`task.ts`): stamped on the agents that stood as
-     * read marks moved to the service, null on one started since.
-     */
     readThrough: timestamptz("read_through"),
   },
   (table) => [
-    // One agent per Start: a retry carrying the same key finds this row.
     uniqueIndex("agent_user_idempotency").on(table.userId, table.idempotencyKey),
-    // The tabs read one task's agents in the order they were started.
     index("agent_task_created").on(table.taskId, table.createdAt),
-    // Every tool call of ours, runner event, and session route finds the agent its conversation is;
-    // one agent per conversation, since an agent is started on a conversation of its own.
     uniqueIndex("agent_conversation").on(table.conversationId),
-    // A workspace's agents with no task are read newest first.
     index("agent_org_created").on(table.organizationId, table.createdAt),
-    // The agents with no task, which the sidebar lists across the account's workspaces, are read
-    // by workspace newest first, apart from the task agents that outnumber them.
     index("agent_org_taskless_created")
       .on(table.organizationId, table.createdAt)
       .where(sql`${table.taskId} is null`),
-    // A run reads the agents it made, by the run's id; most agents belong to no run.
     index("agent_automation_run")
       .on(table.automationRunId)
       .where(sql`${table.automationRunId} is not null`),
-    // An agent's summary names the agents started from it, read by the source's id.
     index("agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
-    // Our MCP server and the events route find the agent a runner's bearer stands for by the
-    // bearer's digest, on every call; one digest names one agent.
     uniqueIndex("agent_runner_token_hash")
       .on(table.runnerTokenHash)
       .where(sql`${table.runnerTokenHash} is not null`),
-    // A device reads the agents that should still stand on it, those pinned to it and not archived;
-    // a sandbox agent names no device, so it is left out, and no read without a device takes this.
     index("agent_device_live")
       .on(table.deviceId)
       .where(sql`${table.deviceId} is not null and ${table.archivedAt} is null`),
-    // GitHub's check and push deliveries find the agents on a branch, of any account, by the
-    // repository as GitHub matches one, its case aside, and the branch exactly
-    // (`agent-store.ts`'s `listAgentsOnBranches`); only an agent that opened a pull request has one.
     index("agent_on_branch")
       .on(sql`lower(${table.repository})`, table.branch)
       .where(sql`${table.branch} is not null`),
   ],
 );
 
-/**
- * One delegation of a coding agent's: the model and effort the agent chose
- * for the worker, keyed by the child conversation the worker's session is
- * recorded in, which is a function of the agent's conversation and the call
- * that started the worker (`@repo/database/models/ids`). The worker's own steps
- * read the pair here, since eve hands a child's resolvers no lineage and the
- * pair is per call rather than per agent. The call's own id is kept beside
- * it, since the child's id is a digest no reader can turn back into the
- * call its tool part names, and the agent's page names each worker's title
- * by that call. The row goes with its conversation, which goes with the
- * agent's.
- */
 export const agentDelegationTable = pgTable("agent_delegation", {
   childConversationId: uuid("child_conversation_id")
     .primaryKey()
     .references(() => conversations.id, { onDelete: "cascade" }),
-  /** eve's id for the delegation call; null on a row recorded before migration 0079 kept it. */
   callId: text("call_id"),
-  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: text("model").notNull(),
   effort: text("effort").notNull(),
 });

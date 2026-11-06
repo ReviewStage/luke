@@ -13,23 +13,6 @@ import { attachment } from "../schemas/attachment.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
 
-/**
- * conversation-pictures.ts -- the pictures a conversation's tools answered, kept once each beside the transcript that names them.
- *
- * A tool hands each picture in as it settles the call that answered it
- * (`show-image.ts`, `browser-tool.ts`), already sniffed and measured, and
- * writes the id this answers into the stored output in the bytes' place.
- * A picture is keyed by the hash of its bytes within its conversation, so
- * handing the same one in again answers the row already kept, and a call
- * made twice keeps nothing twice. A conversation keeps at
- * most `MAX_BYTES_PER_CONVERSATION` of pictures, read off the rows' byte
- * counts; a picture that would take it past them is not kept, and the
- * caller names it as not kept. A read names the conversation beside the
- * picture, so whoever reads has settled first that the reader may read
- * that conversation, as every transcript read does.
- */
-
-/** A picture to keep, or a video shown as one: its bytes, the type they were sniffed to be, and the size their header states. */
 export interface PictureToKeep {
   readonly bytes: Uint8Array;
   readonly contentType: ConversationMediaType;
@@ -37,7 +20,6 @@ export interface PictureToKeep {
   readonly height: number;
 }
 
-/** A kept picture as a read answers it: the type it is served under, and its bytes. */
 export interface StoredPicture {
   readonly contentType: ConversationMediaType;
   readonly bytes: Uint8Array;
@@ -122,7 +104,6 @@ const findPicture = SqlSchema.findOneOption({
     ),
 });
 
-/** A kept row as a stored output names it. */
 function keptPicture(row: typeof KeptRowSchema.Type): KeptPicture {
   return {
     id: row.id,
@@ -137,13 +118,6 @@ function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/**
- * Keeps one picture beside the conversation, and answers it as a stored
- * output names it: the row already kept for the same bytes, or a new one;
- * nothing where keeping it would take the conversation past its bytes. Note
- * that a write that raced another to the same bytes reads the winner's row,
- * because the insert stands down on the hash rather than failing.
- */
 export function keepConversationPicture(
   target: ConversationTarget,
   picture: PictureToKeep,
@@ -174,7 +148,6 @@ export function keepConversationPicture(
   });
 }
 
-/** One kept picture of the conversation: its type and its bytes; nothing where the conversation keeps no such picture. */
 export function readConversationPicture(
   conversationId: string,
   id: string,

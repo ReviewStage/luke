@@ -1,7 +1,3 @@
-/**
- * host-service.test.ts -- the unit or LaunchAgent that runs an account install's daemon, read off what its service manager hands it.
- */
-
 import { describe, expect, it } from "@effect/vitest";
 import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOST_SERVICE, hostServiceOf } from "./host-service.js";

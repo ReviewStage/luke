@@ -18,23 +18,6 @@ import {
   rememberMemory,
 } from "../memory-store.js";
 
-/**
- * A workspace's shared memories as its coding agents keep and correct
- * them and Settings reads and forgets them, over a real dialect: every
- * member keeps into and reads the same memory, and nothing crosses into
- * another workspace; the same words kept twice stand once and stay the
- * words of whoever kept them first; a correction rewrites the memory in
- * place as the corrector's words; two corrections at once leave one memory;
- * a forgotten memory is gone for good, and only the member whose words it
- * holds or one who manages the workspace may forget it; the bound refuses a
- * new memory and never a correction; and a memory outlives the member who
- * said it, as git history outlives its committers: one who leaves leaves
- * their memories with the workspace, and an account deleted leaves them too,
- * named by nobody, which then only a manager may forget.
- *
- * Synthetic accounts, workspaces, and words throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -42,7 +25,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A workspace with its owner and one more member. */
 const openTeam = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
@@ -55,7 +37,6 @@ const TESTS_RUN = "The web server's store tests run on PGlite through test:store
 const DEPLOYS = "Deployments go out from the main branch through Vercel.";
 const DEPLOYS_CORRECTED = "Deployments go out from the release branch through Vercel.";
 
-/** The id of the memory a keep or a correction wrote. */
 function keptId(outcome: MemoryOutcome): string {
   assert.ok("memory" in outcome, `nothing was written: ${outcome.kind}`);
   return outcome.memory.id;
@@ -78,7 +59,6 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
         yield* TestClock.adjust(Duration.seconds(1));
         yield* rememberMemory(workspaceId, teammate, DEPLOYS, undefined);
         yield* TestClock.adjust(Duration.seconds(1));
-        // A teammate's call settling the same fact, spelled a little differently, is the same memory.
         const again = yield* rememberMemory(
           workspaceId,
           teammate,
@@ -162,7 +142,6 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
   it.effect("another workspace's memory is never listed, corrected, or forgotten", () =>
     Effect.gen(function* () {
       const { owner, workspaceId } = yield* openTeam;
-      // The same account in a second workspace of its own still reaches none of the first's memories.
       const elsewhere = yield* openWorkspace(owner);
       const id = keptId(yield* rememberMemory(workspaceId, owner, DEPLOYS, undefined));
 
@@ -211,7 +190,6 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
       const by = { userId: owner, manages: false };
 
       assert.equal((yield* forgetMemory(workspaceId, id, by)).outcome, MEMORY_FORGET.FORGOTTEN);
-      // Forgetting twice, or by an id that is no memory's, answers the same and fails nothing.
       assert.equal((yield* forgetMemory(workspaceId, id, by)).outcome, MEMORY_FORGET.FORGOTTEN);
       assert.equal(
         (yield* forgetMemory(workspaceId, "not-a-memory", by)).outcome,

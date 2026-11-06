@@ -42,74 +42,14 @@ import {
 } from "./workspace-seams.js";
 import { formerSlugHeld } from "./workspace-slug-store.js";
 
-/**
- * workspace-store.ts -- the workspaces an account is a member of, and the first one, made for it.
- *
- * A workspace is a Better Auth `organization` and its team the `member` rows,
- * read here through Drizzle over the plugin's own tables, since a desktop
- * caller holds an OAuth token and no session the plugin's endpoints would
- * take. A workspace is made through the plugin's server-only
- * `createOrganization` (`workspace-seams.ts`), so the organization and its
- * owner are the plugin's own rows. The account's first workspace is made the
- * first time it is asked for, under the account's name and a slug spelled
- * from it (`personalSlugsOf`), its metadata marked personal, and named the
- * account's in `personal_workspace`. That row, never the slug, is how a
- * start or a listing finds the account's default, and how every read
- * names the workspace for its owner as the owner is called now
- * (`WORKSPACE_NAME`) and lists it as personal, so it has no name of its own
- * and is never renamed; the mark is read only by a racing ensure, to know
- * its own, and it is otherwise a workspace like any other. That write is
- * no transaction: Better Auth writes over its own pool, outside the fiber's
- * `SqlClient`, so two Macs
- * ensuring at once settle on unique keys instead, the workspace's slug and
- * the account's row, and the one that loses adopts what the other made.
- * Whether an account is in a workspace is one condition, its `member` row,
- * which a statement elsewhere joins into its own where clause: a task is
- * read and written by every member of the workspace it names, so a store
- * gates a task through `taskReachableBy` and `reachableTask` rather than by
- * the account that started it.
- * A task or a coding agent reached on its owner's own GitHub token
- * (`github_access = 'token'`) is narrower: beside its owner, it is seen only
- * by a member whose own verified token GitHub last answered with its
- * repository, as the service wrote that answer in `github_repository_read`;
- * this module asks GitHub nothing.
- * A workspace's photo is the plugin's own `organization.logo`, kept as a
- * `data:` URL of one of `WORKSPACE_PHOTO_TYPE`; a list names only a digest of
- * it, and its bytes are read apart, by a member alone. The account's own
- * first workspace with no photo lists the account's sign-in picture, where
- * the renderer may draw it.
- * Every function is an effect over the ambient `Database`.
- */
-
-/** How many hex characters of the account's id digest suffix its first workspace's slug where the readable one is taken. */
 const PERSONAL_SUFFIX_CHARS = 8;
 
-/** How many hex characters of a photo's digest name its version: enough that two photos of one workspace never share one. */
 const PHOTO_VERSION_CHARS = 16;
 
-/**
- * One workspace as its members see it: the account's role in it and the
- * GitHub accounts its connected installations are on, the first linked
- * first.
- */
 export type Workspace = WireWorkspace;
 
-/** What a workspace read answers: an effect over the ambient database. */
-/**
- * A workspace's name as its members read it: an account's first workspace is
- * called by that account's name as it stands now, so a renamed account
- * renames it, and any other by its own. Note that the owner is read by the
- * workspace alone, never the account asking, because a teammate in someone's
- * first workspace reads it under the owner's name too; the workspace's own
- * name is what stands once the account is gone.
- */
 export const WORKSPACE_NAME = sql<string>`coalesce((select "owner"."name" from ${personalWorkspace} as "personal" inner join ${user} as "owner" on "owner"."id" = "personal"."user_id" where "personal"."organization_id" = ${organization.id}), ${organization.name})`;
 
-/**
- * The slugs a workspace stood under before its owner changed it, by name,
- * as one text with a space between each, empty for none: one value a live
- * row carries as it carries any other, and no slug holds a space.
- */
 const FORMER_SLUGS = sql<string>`coalesce((select string_agg("former"."slug", ' ' order by "former"."slug") from ${workspaceFormerSlug} as "former" where "former"."organization_id" = ${organization.id}), '')`;
 
 export type WorkspaceStoreEffect<A, E = never> = Effect.Effect<
@@ -124,30 +64,20 @@ const WorkspaceRowSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   slug: Schema.String,
-  /** The account's own id where this workspace is the first one made for it, else null. */
   personalOf: Schema.NullOr(Schema.String),
-  /** Whether this workspace is the first one made for any account, the asking one or another. */
   personal: Schema.Boolean,
-  /** The plugin's role text, which may list several roles comma-separated. */
   role: Schema.String,
-  /** How many members the workspace has, the account among them. */
   memberCount: Schema.Number,
-  /** The plugin's `logo` text, which holds the workspace's photo as a `data:` URL where it has one. */
   logo: Schema.NullOr(Schema.String),
-  /** The account's own sign-in picture where this workspace is the first one made for it, else null. */
   ownerImage: Schema.NullOr(Schema.String),
-  /** The slugs it stood under before, `FORMER_SLUGS` spells them. */
   formerSlugs: Schema.String,
 });
 
 const InstallationRowSchema = Schema.Struct({
   organizationId: Schema.String,
   installationId: Schema.Number,
-  /** GitHub's numeric id of the account the installation is on, which outlives a rename of its login. */
   accountId: Schema.Number,
-  /** The login of the GitHub account the installation is on. */
   login: Schema.String,
-  /** The installation's status as its webhook, or a read of GitHub, last wrote it. */
   status: Schema.String,
 });
 
@@ -240,11 +170,6 @@ const insertPersonalWorkspace = SqlSchema.void({
     ),
 });
 
-/**
- * The condition that a membership's role, the plugin's text, which may name
- * several roles comma-separated as `roleOf` reads it, names one of `roles`:
- * read on `member.role` wherever a statement reads `member`.
- */
 export function roleAmong(roles: readonly WorkspaceRole[]): SQL {
   return sql`string_to_array(replace(${member.role}, ' ', ''), ',') && array[${sql.join(
     roles.map((role) => sql`${role}`),
@@ -252,11 +177,6 @@ export function roleAmong(roles: readonly WorkspaceRole[]): SQL {
   )}]::text[]`;
 }
 
-/**
- * The condition that the account is a member of the workspace: a literal id,
- * or the column of a row the statement reads, such as a task's own
- * `organization_id`, so a statement gates on membership in its own where clause.
- */
 function memberOfWorkspace(userId: string, organizationId: string | SQLWrapper): SQL {
   return exists(
     queryBuilder
@@ -321,7 +241,6 @@ const findWorkspaceFace = SqlSchema.findOneOption({
     ),
 });
 
-/** The workspaces the account is a member of, or the one named among them, as rows, each with how many members it has, counted apart from the account's own row the read joins. */
 function workspaceRows(db: DatabaseShape, userId: string, organizationId?: string) {
   return db
     .select({
@@ -355,12 +274,6 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
     .orderBy(asc(WORKSPACE_NAME), asc(organization.id));
 }
 
-/**
- * The installations connected to the workspaces the account is a member of,
- * or to the one named among them, each workspace's first linked first. A
- * read of its own rather than a join on the workspaces', because a
- * workspace holding several would otherwise be listed once for each.
- */
 function installationRows(db: DatabaseShape, userId: string, organizationId?: string) {
   return db
     .select({
@@ -396,7 +309,6 @@ const findInstallations = SqlSchema.findAll({
     Database.use((db) => installationRows(db, userId, organizationId)),
 });
 
-/** The installation rows by the workspace they stand for, each list in the order read. */
 function installationsByWorkspace(
   rows: readonly InstallationRow[],
 ): ReadonlyMap<string, readonly InstallationRow[]> {
@@ -422,16 +334,10 @@ const findWorkspace = SqlSchema.findOneOption({
     Database.use((db) => workspaceRows(db, userId, organizationId)),
 });
 
-/** The photo a workspace's `logo` holds, where it is a `data:` URL of a photo's type whose bytes read; nothing for any other text. */
 function photoOfLogo(logo: string | null): WorkspacePhoto | undefined {
   return logo === null ? undefined : workspacePhotoOfDataUrl(logo);
 }
 
-/**
- * What a row shows of the workspace's face: a digest of its photo where it
- * holds one, else, on the account's own first workspace, the account's
- * sign-in picture where the renderer may draw it, else nothing.
- */
 function faceOfRow(
   row: typeof WorkspaceRowSchema.Type,
 ): Pick<Workspace, "photoVersion" | "pictureUrl"> {
@@ -443,11 +349,6 @@ function faceOfRow(
   return pictureUrl === undefined ? {} : { pictureUrl };
 }
 
-/**
- * One row as the wire carries the workspace, with its installations: every
- * one, and again the first linked that is still active, else the first
- * linked, as the one a desktop from before several reads.
- */
 function workspaceOfRow(
   row: typeof WorkspaceRowSchema.Type,
   installations: readonly InstallationRow[],
@@ -457,8 +358,6 @@ function workspaceOfRow(
     login: installation.login,
     active: installation.status === GITHUB_INSTALLATION_STATUS.ACTIVE,
   }));
-  // Note that a desktop from before several reads one account alone, so it reads the first one
-  // still active, because the first linked may have lapsed while another runs.
   const first = githubInstallations.find((one) => one.active) ?? githubInstallations[0];
   const workspace: Workspace = {
     id: row.id,
@@ -474,11 +373,6 @@ function workspaceOfRow(
   return row.personal ? { ...workspace, personal: true } : workspace;
 }
 
-/**
- * A slug spelled from a name: lowercase letters and digits, a hyphen between
- * runs of them, and never one an account's first workspace falls back to or
- * one our own pages stand under; empty where the name has no letter or digit.
- */
 function spelledSlugOf(name: string): string {
   const spelled = name
     .normalize("NFKD")
@@ -488,28 +382,17 @@ function spelledSlugOf(name: string): string {
     .slice(0, WORKSPACE_BOUNDS.MAX_SLUG_CHARS)
     .replace(/-+$/u, "");
   if (spelled === "") return "";
-  // Note that no name takes the slug an account's first workspace falls back to, so an ensure finds its own there, nor a step of our own paths.
   const own =
     spelled.startsWith(PERSONAL_WORKSPACE_SLUG_PREFIX) || RESERVED_WORKSPACE_SLUGS.has(spelled);
   return own ? `workspace-${spelled}` : spelled;
 }
 
-/** A workspace's slug spelled from its name, "workspace" where the name has none. */
 function slugOf(name: string): string {
   return spelledSlugOf(name) || "workspace";
 }
 
-/** Whether an organization already stands for what a workspace is being made for, as the caller reads it. */
 type OrganizationLinked = (organizationId: string) => WorkspaceStoreEffect<boolean>;
 
-/**
- * The slugs an account's first workspace is tried under, in order: spelled
- * from the account's name, else its GitHub login, then that with a suffix
- * of the account's own, then `personal-<id>`, and last that with a suffix
- * nobody can know beforehand. Note that every slug but the last is the
- * same for every ensure of the account, so two racing ensures meet on one
- * and the loser adopts the winner's, rather than each making its own.
- */
 function personalSlugsOf(
   userId: string,
   name: string,
@@ -523,16 +406,6 @@ function personalSlugsOf(
   return [readable, `${readable}-${suffix}`, fallback, last];
 }
 
-/**
- * A workspace made under the first of the slugs the plugin takes, with the
- * account as its owner. A slug the plugin refuses as taken is adopted only
- * where the organization under it is already linked to what the workspace
- * stands for, which is a racing call having made it first; an organization
- * anyone else made under the slug is never adopted, and the next slug is
- * tried. Nothing under the slug means the plugin refused for another
- * reason, and that refusal, or the last slug's, is answered as it was. A
- * slug some workspace stood under before is passed over, but for the last.
- */
 function createLinkedOrganization(
   creation: Omit<WorkspaceCreation, "slug">,
   slugs: readonly [string, ...string[]],
@@ -541,7 +414,6 @@ function createLinkedOrganization(
 ): WorkspaceStoreEffect<string, Cause.UnknownError> {
   const [slug, ...rest] = slugs;
   const [next, ...after] = rest;
-  // Note that a slug some workspace stood under before stays that workspace's, so none is made under it while another is left to try.
   if (next !== undefined) {
     return Effect.flatMap(formerSlugHeld(slug), (held) =>
       held
@@ -552,7 +424,6 @@ function createLinkedOrganization(
   return madeOrAdopted(creation, slug, [], linked, seams);
 }
 
-/** The workspace made under the slug, or adopted where a racing call made it first, else the next slug tried, as `createLinkedOrganization` says. */
 function madeOrAdopted(
   creation: Omit<WorkspaceCreation, "slug">,
   slug: string,
@@ -577,15 +448,6 @@ function madeOrAdopted(
   );
 }
 
-/**
- * Whether the organization under one of the account's first workspace's
- * slugs is its own: the account is its owner member and its metadata marks
- * it personal, which a racing ensure makes it before it writes the row
- * naming it the account's, and no row names it another account's. Note
- * that the mark is asked as well as the owner, because a readable slug is
- * one a workspace the account made itself may stand under, which is never
- * its first.
- */
 function isOwnPersonalOrganization(
   userId: string,
   organizationId: string,
@@ -593,28 +455,18 @@ function isOwnPersonalOrganization(
   return Effect.map(findOwnedPersonalOrganization({ userId, organizationId }), Option.isSome);
 }
 
-/** The condition that the account is a member of the workspace a statement names, by its id or a column standing for it. */
 export function workspaceReachableBy(userId: string, organizationId: string | SQLWrapper): SQL {
   return memberOfWorkspace(userId, organizationId);
 }
 
-/** A coding agent row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
 export const AGENT_WORKSPACE = sql<string>`${agentTable.organizationId}`;
 
-/** How a task or an agent row was reached on GitHub, whose it is, and its repository, as `seenThroughGitHub` reads them. */
 interface GitHubReachedColumns {
   readonly access: SQLWrapper;
   readonly owner: SQLWrapper;
   readonly repository: SQLWrapper;
 }
 
-/**
- * The condition that the account sees a row as the way it reached GitHub
- * allows: one reached through the workspace's App by every member, and one
- * reached on its owner's own token by that owner and by any other member
- * whose own token stands verified and was last answered with the row's
- * repository.
- */
 function seenThroughGitHub(userId: string, row: GitHubReachedColumns): SQL {
   const readsRepository = exists(
     queryBuilder
@@ -633,7 +485,6 @@ function seenThroughGitHub(userId: string, row: GitHubReachedColumns): SQL {
   return sql`(${eq(row.access, GITHUB_ACCESS.APP)} or ${eq(row.owner, userId)} or ${readsRepository})`;
 }
 
-/** The condition that the account sees the coding agent row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */
 export function agentSeenBy(userId: string): SQL {
   return seenThroughGitHub(userId, {
     access: agentTable.githubAccess,
@@ -642,29 +493,10 @@ export function agentSeenBy(userId: string): SQL {
   });
 }
 
-/**
- * The condition that the account reaches the coding agent row itself: it is
- * a member of the agent's workspace, an agent with no task as much as one on
- * a task, and sees it as its GitHub access allows. It gates
- * what an agent does as itself, under the member who started it: its own
- * writes and reads by its id or its conversation, and its posts. What a
- * member, or another agent, reads or does to an agent keeps `agentVisibleTo`.
- */
 export function agentReachableBy(userId: string): SQL {
   return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)})`;
 }
 
-/**
- * The condition that the account may read and write the coding agent row a
- * statement reads, the one rule a member, or another agent, keeps for every
- * list of agents and every read or write by id: it reaches the agent
- * (`agentReachableBy`), and for an agent on a task that task too
- * (`taskReachableBy`). Note that the task is asked as well, because a read
- * of an agent by its id would otherwise skip the GitHub visibility of its
- * task, which a list of the task's agents keeps. An agent acting as itself
- * keeps `agentReachableBy` alone, so its starter losing the task's
- * visibility never leaves a working agent mute.
- */
 export function agentVisibleTo(userId: string): SQL {
   const taskReached = exists(
     queryBuilder
@@ -675,7 +507,6 @@ export function agentVisibleTo(userId: string): SQL {
   return sql`(${agentReachableBy(userId)} and (${agentTable.taskId} is null or ${taskReached}))`;
 }
 
-/** The condition that the account sees the task row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */
 export function taskSeenBy(userId: string): SQL {
   return seenThroughGitHub(userId, {
     access: task.githubAccess,
@@ -684,17 +515,14 @@ export function taskSeenBy(userId: string): SQL {
   });
 }
 
-/** The condition that the account may read and write the task row a statement reads: it is a member of the task's workspace, and sees it as its GitHub access allows. */
 export function taskReachableBy(userId: string): SQL {
   return sql`(${memberOfWorkspace(userId, task.organizationId)} and ${taskSeenBy(userId)})`;
 }
 
-/** The task under this id, where the account is a member of its workspace; any other id reads as no task. */
 export function reachableTask(userId: string, taskId: string): SQL | undefined {
   return and(eq(task.id, taskId), taskReachableBy(userId));
 }
 
-/** The account's first workspace, by id; nothing before it was ever ensured. */
 export function personalWorkspaceOf(userId: string): WorkspaceStoreEffect<Option.Option<string>> {
   return Effect.map(
     findPersonalWorkspace(userId),
@@ -702,14 +530,6 @@ export function personalWorkspaceOf(userId: string): WorkspaceStoreEffect<Option
   );
 }
 
-/**
- * The account's first workspace, made the first time it is asked for:
- * the plugin creates the organization with the account as its owner, and
- * the row naming it the account's is written once, so the second ensure
- * makes nothing. The row is read back rather than taken from the insert,
- * because where two ensures race the row that stands may be the other's.
- * Nothing for an account gone.
- */
 export function ensurePersonalWorkspace(
   userId: string,
   seams: WorkspaceSeams,
@@ -732,7 +552,6 @@ export function ensurePersonalWorkspace(
   });
 }
 
-/** Whether the account is a member of the workspace; a workspace that names nothing has none. */
 export function isWorkspaceMember(
   userId: string,
   organizationId: string,
@@ -740,20 +559,12 @@ export function isWorkspaceMember(
   return Effect.map(findMemberWorkspace({ userId, organizationId }), Option.isSome);
 }
 
-/** The ids of every workspace the account is a member of, in no order. */
 export function memberWorkspaceIds(userId: string): WorkspaceStoreEffect<readonly string[]> {
   return Effect.map(findMemberWorkspaceIds(userId), (rows) =>
     rows.map((row) => row.organizationId),
   );
 }
 
-/**
- * Every workspace the account is a member of, its first one first and the
- * rest by name, each once however many installations it holds. An
- * installation suspended or removed is listed inactive rather than left
- * out, so its workspace's tasks stay reachable; GitHub refuses its
- * repository work on its own.
- */
 export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Workspace[]> {
   return Effect.gen(function* () {
     const rows = yield* findWorkspaces(userId);
@@ -765,53 +576,22 @@ export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Wo
   });
 }
 
-/** The statements the account's workspaces are followed by live: the workspaces, and the installations connected to them. */
 export type WorkspacesLiveStatements = Readonly<
   Record<"workspaces" | "installations", LiveStatement>
 >;
 
-/**
- * A logo's text as its bytes, the ones the held read digests. Note that it
- * is `decode(…, 'escape')` over the text with each backslash doubled, rather
- * than `convert_to`, because Realtime refuses any function Postgres does not
- * mark immutable, and `convert_to` and `textsend` are only stable.
- */
 const LOGO_BYTES = sql`decode(replace(${organization.logo}, ${"\\"}, ${"\\\\"}), 'escape')`;
 
-/** The base64 a logo's `data:` URL carries, after its comma. */
 const LOGO_PAYLOAD = sql`substring(${organization.logo} from position(',' in ${organization.logo}) + 1)`;
 
-/** The first bytes of a logo's photo, which name its image type (`sniffImageType`). */
 const LOGO_HEAD = sql`decode(left(${LOGO_PAYLOAD}, 16), 'base64')`;
 
-/**
- * A logo that holds a photo, as the held read reads one
- * (`workspacePhotoOfDataUrl`): a `data:` URL of one of
- * `WORKSPACE_PHOTO_TYPE` whose base64 reads whole, and whose bytes are the
- * image its label names. Note that the base64 is only decoded once it is
- * known to read, inside the outer case, so a logo of any other text answers
- * false rather than failing the statement.
- */
 const LOGO_IS_PHOTO = sql<boolean>`case when coalesce(${organization.logo} ~ ${`^data:(${Object.values(WORKSPACE_PHOTO_TYPE).join("|")});base64,[A-Za-z0-9+/]+={0,2}$`}, false) and length(${LOGO_PAYLOAD}) % 4 = 0 then case split_part(substring(${organization.logo} from 6), ';', 1)
   when ${WORKSPACE_PHOTO_TYPE.PNG} then substring(${LOGO_HEAD} from 1 for 8) = '\\x89504e470d0a1a0a'::bytea
   when ${WORKSPACE_PHOTO_TYPE.JPEG} then substring(${LOGO_HEAD} from 1 for 3) = '\\xffd8ff'::bytea
   when ${WORKSPACE_PHOTO_TYPE.WEBP} then substring(${LOGO_HEAD} from 1 for 4) = '\\x52494646'::bytea and substring(${LOGO_HEAD} from 9 for 4) = '\\x57454250'::bytea
   else false end else false end`;
 
-/**
- * The account's workspaces written for Neon Realtime: the same rows, joins,
- * and rule of who may read them as `listWorkspaces`, each column under the
- * key `live-wire.ts` reads it by. What the held read works out from a row
- * here is worked out in the statement, so a row carries no photo's bytes:
- * its digest, and an installation's standing. Note that a photo is told by
- * its `data:` label alone, where the held read also reads its bytes,
- * because a photo is checked when it is set. Note too that `linearActive`
- * is still answered, as null, because a desktop from v0.22.0 fails its
- * follow on a row without it: no workspace connects Linear any more. The key
- * goes with the minimum supported desktop version, not with a service
- * deploy. The order is the reader's to keep, since Realtime keeps none.
- * None where a statement names a value Realtime cannot carry.
- */
 export function workspacesLiveStatements(userId: string): Option.Option<WorkspacesLiveStatements> {
   const workspaces = queryBuilder
     .select(
@@ -863,7 +643,6 @@ export function workspacesLiveStatements(userId: string): Option.Option<Workspac
   });
 }
 
-/** One workspace the account is a member of, as its list carries it; nothing for one it is not in. */
 export function workspaceOf(
   userId: string,
   organizationId: string,
@@ -876,12 +655,6 @@ export function workspaceOf(
   });
 }
 
-/**
- * The GitHub account a workspace is seen as, by GitHub's numeric id, to a
- * member of it alone: the first linked installation still active, else the
- * first linked, as the list's `github` names it; nothing for a workspace it
- * is not in, or one with no installation.
- */
 export function workspaceGitHubAccountId(
   userId: string,
   organizationId: string,
@@ -892,7 +665,6 @@ export function workspaceGitHubAccountId(
   });
 }
 
-/** One workspace's photo as its bytes, to a member of it alone; nothing for a workspace it is not in, or one that holds no photo. */
 export function readWorkspacePhoto(
   userId: string,
   organizationId: string,
@@ -902,26 +674,14 @@ export function readWorkspacePhoto(
   );
 }
 
-/** A workspace's name, as its members read it, and when it was made. */
 export type WorkspaceFace = typeof WorkspaceFaceSchema.Type;
 
-/**
- * One workspace's name and creation, by its id alone, for the service's own
- * analytics to name the workspace a count is grouped under; nothing for an
- * id no workspace holds. No account gates it, because no member asks for it.
- */
 export function readWorkspaceFace(
   organizationId: string,
 ): WorkspaceStoreEffect<Option.Option<WorkspaceFace>> {
   return findWorkspaceFace(organizationId);
 }
 
-/**
- * A workspace created with the name given, the account its owner, through
- * the plugin's server-only create; its slug is spelled from the name, and a
- * slug the plugin refuses as taken is never adopted: the workspace takes the
- * same slug with a suffix nobody can know beforehand.
- */
 export function createWorkspace(
   userId: string,
   name: string,
@@ -936,11 +696,6 @@ export function createWorkspace(
   );
 }
 
-/**
- * The name each account named holds now, by its id, for the window to say
- * who did a piece of work: a member who has since left a workspace is still
- * named, and an account that is gone is left out.
- */
 export function readAccountNames(
   ids: readonly string[],
 ): WorkspaceStoreEffect<ReadonlyMap<string, string>> {

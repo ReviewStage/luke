@@ -14,14 +14,6 @@ import {
 } from "../workspace-slug-store.js";
 import { listWorkspaces } from "../workspace-store.js";
 
-/**
- * A workspace's slug changed over a real dialect: the slug it leaves stays
- * its own, read back to its members alone, so another workspace is refused
- * it, whatever its case, while the workspace itself takes it back.
- *
- * Synthetic accounts and workspaces throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;

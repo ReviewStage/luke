@@ -14,21 +14,10 @@ import {
   replaceAgentWakeups,
 } from "../agent-wakeups.js";
 
-/**
- * The wakeups a native agent's released wait left, over a real dialect: a
- * release replaces the agent's wakeups whole and a Stop's empty list deletes
- * them, a claim takes each wakeup once it is due and once only until its
- * next delivery, a delivered one is gone, and one claimed past the bound or
- * of an archived agent is deleted rather than claimed. The claim is the
- * deployment's, so each test reads back only the agents it made. Synthetic
- * accounts and prompts throughout.
- */
-
 const NOW = new Date("2026-10-21T12:00:00Z");
 const NEXT = new Date("2026-10-21T12:05:00Z");
 const EARLIER = new Date("2026-10-21T11:58:00Z");
 const LATER = new Date("2026-10-21T12:30:00Z");
-/** Larger than every wakeup the file's tests make, so a claim takes them all. */
 const EVERY = 100;
 const MAX_ATTEMPTS = 3;
 
@@ -55,7 +44,6 @@ const openAgent = (userId: string) =>
     return Option.getOrThrow(started).agent.id;
   });
 
-/** The prompts a claim at `now` took of the agents named, in the order claimed. */
 const claimedOf = (now: Date, agentIds: readonly string[]) =>
   Effect.map(claimDueAgentWakeups(now, NEXT, EVERY, MAX_ATTEMPTS), (claimed) =>
     claimed.filter((each) => agentIds.includes(each.agentId)),

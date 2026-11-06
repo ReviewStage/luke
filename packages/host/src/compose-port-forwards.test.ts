@@ -16,28 +16,16 @@ import {
 } from "./compose-port-forwards.js";
 import type { TerminalSocketArrival, TerminalSocketFrame } from "./compose-terminals.js";
 
-/**
- * A coding agent's cloud ports forwarded to the Mac's loopback, over a
- * service whose port reads answer from a script, a loopback whose taken
- * ports the test names, and a relay whose sockets the test drives, on the
- * test clock: a port taken locally is listened on at the next free one; the
- * forwarded ports follow each read, for one agent at a time; and each
- * accepted connection is a channel on its port's tunnel, a closed tunnel
- * opened again by the next connection. Synthetic ids and bytes throughout.
- */
-
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER_AGENT_ID = "1d2f3a4b-5c6d-4c6b-9e0a-8b3c7a1e2f4d";
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 const encode = (text: string) => new TextEncoder().encode(text);
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
-/** Lets every fiber the last step woke run to its next wait. */
 const settle = Effect.forEach(Array.from({ length: 20 }), () => Effect.yieldNow, {
   discard: true,
 });
 
-/** One accepted connection as a test drives it: what its far side sends pushed in, and what was written to it and whether it closed, kept. */
 const scriptedConnection = Effect.gen(function* () {
   const inbound = yield* Queue.unbounded<Uint8Array, Cause.Done>();
   const written: string[] = [];
@@ -55,20 +43,16 @@ const scriptedConnection = Effect.gen(function* () {
   return { connection, send: (text: string) => Queue.offer(inbound, encode(text)), written, state };
 });
 
-/** The composer over the scripted service, loopback, and relay. */
 function subject(options: { taken?: number[] } = {}) {
   return Effect.gen(function* () {
     const ports = new Map<string, number[]>([[AGENT_ID, []]]);
     const taken = new Set(options.taken);
-    /** Each listener standing, by the local port it holds: what it accepts. */
     const listeners = new Map<number, Queue.Queue<LoopbackConnection, Cause.Done>>();
-    /** Each relay socket opened, in order: its address, what the host sent on it, and its arrivals. */
     const tunnels: {
       url: string;
       sent: TerminalSocketFrame[];
       inbound: Queue.Queue<TerminalSocketArrival, Cause.Done>;
     }[] = [];
-    /** What the concern last told the windows of how forwarding stands. */
     const told: { last?: unknown } = {};
     const composer = yield* composePortForwards({
       kernel: {
@@ -119,14 +103,11 @@ function subject(options: { taken?: number[] } = {}) {
     };
     return {
       call,
-      /** How forwarding stands, as the windows were last told. */
       told: () => told.last,
       composer,
       listeners,
       tunnels,
-      /** The ports the service reads in an agent's sandbox from now on. */
       serve: (agentId: string, listening: number[]) => void ports.set(agentId, listening),
-      /** A connection made to a local port, as a browser on the Mac would. */
       connect: (localPort: number, connection: LoopbackConnection) => {
         const listener = listeners.get(localPort);
         assert.ok(listener, `nothing listens on ${localPort}`);
@@ -136,7 +117,6 @@ function subject(options: { taken?: number[] } = {}) {
   });
 }
 
-/** A channel frame as the relay reads it, its bytes as text. */
 function readFrame(frame: TerminalSocketFrame) {
   assert.ok("text" in frame);
   const read = JSON.parse(frame.text);
@@ -175,13 +155,11 @@ it.effect("the forwarded ports follow each read, for one agent at a time", () =>
     yield* settle;
     assert.deepEqual([...listeners.keys()].sort(), [3000, 5173]);
 
-    // The server on 3000 stopped and one on 4000 started: the next read lets one go and listens on the other.
     serve(AGENT_ID, [4000, 5173]);
     yield* TestClock.adjust(PORT_FORWARD.LOOK_EVERY);
     yield* settle;
     assert.deepEqual([...listeners.keys()].sort(), [4000, 5173]);
 
-    // Forwarding another agent lets every port of the first go.
     const other = yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, {
       agentId: OTHER_AGENT_ID,
       on: true,
@@ -239,7 +217,6 @@ it.effect(
       yield* settle;
       assert.deepEqual(browser.written, ["HTTP/1.1 200 OK"]);
 
-      // The relay closed as idle: the connection it carried closes, and the listener stays for the next.
       yield* Queue.offer(tunnel.inbound, { close: TUNNEL_CLOSE.IDLE });
       yield* Queue.end(tunnel.inbound);
       yield* settle;

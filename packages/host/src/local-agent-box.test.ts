@@ -1,6 +1,3 @@
-/**
- * local-agent-box.test.ts -- an agent's folders as a host makes them on a real temporary folder: settings it wrote itself are kept, and an agent on the box's own GitHub sign-in reads the box user's Git and gh as real Git reads them, its commit identity its repository's own.
- */
 import { execFileSync } from "node:child_process";
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
@@ -17,7 +14,6 @@ import {
   agentOwnSignInWritten,
 } from "./local-agent-box.js";
 
-/** Who the box's user is in their own Git settings, and the credential helper they keep there. */
 const BOX_GITCONFIG = [
   "[user]",
   "\tname = Box User",
@@ -27,16 +23,12 @@ const BOX_GITCONFIG = [
   "",
 ].join("\n");
 
-/** Who the agent's commits are by, as its launch line names it. */
 const IDENTITY = { name: "Ada Lovelace", email: "7001+ada@users.noreply.github.com" };
 
-/** The box user's gh sign-in, a synthetic one. */
 const BOX_GH_HOSTS = "github.com:\n    user: box-user\n";
 
-// Note that a test here runs real Git, which a macOS runner has taken past vitest's 5s default.
 const GIT_DEADLINE = 30_000;
 
-/** What an agent wrote into its own `.npmrc`, a registry of its project's. */
 const OWN_NPMRC = "registry=https://npm.example.test/\n";
 
 describe("an agent's folders made on the box", () => {
@@ -100,7 +92,6 @@ describe("an agent on the box's own GitHub sign-in", () => {
         );
 
         yield* agentGithubForgotten(folder);
-        // Note that a token written for the agent after, as an App launch would, lands in its own folder.
         yield* agentGithubWritten(folder, "ghs_fixture_token");
 
         expect(yield* fileSystem.readFileString(`${boxHome}/.config/gh/hosts.yml`)).toBe(

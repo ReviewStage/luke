@@ -21,23 +21,8 @@ import {
 } from "./terminal-procedures.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
-/**
- * The Terminal tab's acts as a platform carries them, over a host and ports
- * that answer from a script: each call answers what the host said, or the
- * kind's own refusal where it had nothing; an attach posts a port to the
- * asking panel alone, and what the host hears of that connection reaches
- * that port and no other; what the panel sends on it reaches the host by
- * connection; a second attach of the same shell, a detach, and the page's
- * end each close the port and let the connection go; an attach the host
- * refused after a newer one leaves the newer standing; and only a panel is
- * answered. A window is an inert object of its own, as the platform's handle
- * on one is to these procedures. Synthetic ids and bytes throughout.
- */
-
-/** A platform's handle on a window, which the procedures read by identity alone. */
 type Window = { readonly window: number };
 
-/** Every act port a fixture opened, closed once its test is done. */
 const ports: TestActPort<Window>[] = [];
 
 afterEach(() => {
@@ -51,7 +36,6 @@ const ATTACH = { agentId: AGENT_ID, terminalId: SHELL_ID, cols: 120, rows: 32 };
 
 let windows = 0;
 
-/** A panel of a window of its own. */
 const panelOf = (): ActSender<Window> => ({
   sender: { window: ++windows },
   panel: true,
@@ -59,7 +43,6 @@ const panelOf = (): ActSender<Window> => ({
 
 type Listener<Event> = (event: Event) => void;
 
-/** One port the host opened, as the test watches it: where it went, what the host posted on it, and whether it closed. */
 interface ScriptedPort {
   readonly sender: Window;
   readonly ticket: TerminalPortTicket;
@@ -153,30 +136,25 @@ function fixture(
     actPort,
     asked,
     opened,
-    /** The host's events, as the operator would hand them up. */
     hostSays: {
       output: (connectionId: string, text: string) =>
         outputListener?.({ connectionId, data: new TextEncoder().encode(text) }),
       state: (connectionId: string, state: TerminalConnection, code?: number) =>
         stateListener?.({ connectionId, state, ...(code === undefined ? undefined : { code }) }),
     },
-    /** The page behind a panel going away. */
     pageGone: (sender: Window) => gone.get(sender)?.(),
-    /** What the ports' callbacks handed to the runtime, run now. */
     drain: Effect.suspend(() => Effect.all(pending.splice(0), { discard: true })),
   };
 }
 
 const DETACH = { agentId: AGENT_ID, terminalId: SHELL_ID };
 
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [ACT_KIND.TERMINAL_LIST]: "Could not reach this agent's sandbox.",
   [ACT_KIND.TERMINAL_RENAME]: "Could not rename that shell.",
   [ACT_KIND.TERMINAL_ATTACH]: "Could not open that shell.",
 } as const;
 
-/** The kind's own refusal, as the asking window hears it. */
 const refusedAs = (kind: keyof typeof REFUSAL) => ({ refused: REFUSAL[kind] });
 
 it.effect(

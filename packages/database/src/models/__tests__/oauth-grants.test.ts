@@ -13,23 +13,11 @@ import {
 import { getTestDB } from "../../testing/index.js";
 import { listOAuthGrants, revokeOAuthClientTokens } from "../oauth-grants.js";
 
-/**
- * A member's OAuth grants over a real dialect, as the provider leaves its
- * rows: a member lists only their own consents, less the clients left out,
- * each with its client's name and redirects and its newest refresh, and a
- * client named that skipped consent by the live token it holds for them,
- * until it is revoked, but never one not named; and a revoke deletes that member's tokens for that client
- * and nobody else's.
- *
- * Synthetic accounts, clients, and tokens throughout.
- */
-
 const DESKTOP = "desktop";
 const ALLOWED_AT = new Date("2026-11-03T10:00:00Z");
 const REFRESHED_AT = new Date("2026-11-04T09:00:00Z");
 const MINTED_AT = new Date("2026-11-04T08:00:00Z");
 
-/** Two accounts, and two outside clients beside a desktop client, as the provider registers them. */
 const openGrants = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -53,7 +41,6 @@ const openGrants = Effect.gen(function* () {
   return { owner, other, claude, codex };
 });
 
-/** The member's Allow of a client, as the consent page leaves it. */
 const allow = (userId: string, clientId: string) =>
   Database.use((db) =>
     db.insert(oauthConsent).values({
@@ -66,11 +53,6 @@ const allow = (userId: string, clientId: string) =>
     }),
   );
 
-/**
- * A refresh token the client holds for the member, minted and rotated where
- * given, with an access token naming it; a rotated one is revoked, as the
- * provider marks the token a refresh spends.
- */
 const mint = (
   userId: string,
   clientId: string,
@@ -99,7 +81,6 @@ const mint = (
     });
   });
 
-/** How many refresh and access tokens the client holds for the member. */
 const held = (userId: string, clientId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -116,7 +97,6 @@ it.layer(getTestDB())("a member's OAuth grants", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, other, claude, codex } = yield* openGrants;
-        // Only claude is listed by its tokens alone, so owner's live codex token with no consent stays off the list.
         const listed = { except: [DESKTOP], tokenOnly: [claude] };
         yield* allow(owner, claude);
         yield* allow(owner, DESKTOP);

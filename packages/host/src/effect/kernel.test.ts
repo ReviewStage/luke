@@ -37,7 +37,6 @@ const seams = (overrides: Partial<TestSeams> = {}): TestSeams => ({
   ...overrides,
 });
 
-/** The kernel layer over one test's own seam values, built the way a real composition builds it. */
 const kernelLayerOver = (input: TestSeams) =>
   Layer.provideMerge(
     hostKernelLayer,

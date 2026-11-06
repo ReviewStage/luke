@@ -5,31 +5,6 @@ import { Database, type DatabaseServices, type StoreFailure } from "../core/quer
 import { oauthAccessToken, oauthClient, oauthConsent, oauthRefreshToken } from "../schemas/auth.js";
 import { InstantColumnSchema } from "./columns.js";
 
-/**
- * oauth-grants.ts -- the OAuth clients a member allowed, read from the OAuth provider's own tables, and one client's tokens for that member revoked.
- *
- * The provider (`@better-auth/oauth-provider`) keeps a member's Allow as a
- * consent row per client, and what it minted on it as refresh and access
- * token rows, each naming the member and the client. It writes them
- * itself; the read here is how a hosted route lists a member's grants under
- * the Mac's OAuth token, since every endpoint of the provider's that lists
- * them takes a Better Auth session (`apps/web/server/README.md`). The one
- * write is the revoke: the provider exports nothing that revokes one
- * member's tokens for one client, its own family teardown being internal,
- * so it is written here as that teardown writes it, the access tokens
- * first and then the refresh tokens they name, for that member and that
- * client alone. Note that an access token minted as a JWT has no row, so
- * it stands until it expires. The consent is the provider's own to delete.
- *
- * Note that a client registered to skip consent, as the seeded first-party
- * ones are, leaves no consent row: the provider mints its tokens straight
- * away. Such a client is listed by the refresh tokens it holds for the
- * member instead, for as long as one of them is live, allowed when it was
- * first minted one, but only where the caller names it, so a first-party
- * client nobody meant to show, a retired one among them, never lists.
- */
-
-/** One client the member allowed: its registered name and redirects, when they allowed it, and when it last traded a refresh token for a new one. */
 export interface OAuthGrant {
   readonly clientId: string;
   readonly name: string | null;
@@ -45,7 +20,6 @@ const ConsentedClientSchema = Schema.Struct({
   allowedAt: Schema.NullOr(InstantColumnSchema),
 });
 
-/** The member's consents, each with its client's name and redirects, newest allowed first, leaving out the clients named. */
 const findConsentedClients = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, except: Schema.Array(Schema.String) }),
   Result: ConsentedClientSchema,
@@ -72,12 +46,6 @@ const findConsentedClients = SqlSchema.findAll({
     ),
 });
 
-/**
- * The clients named that hold a live refresh token for the member with no
- * consent of theirs behind it, each allowed when its first token was
- * minted. Note that a refresh marks the token it spends revoked as it mints
- * the next, so a live token is one never spent, revoked, or rotated.
- */
 const findTokenOnlyClients = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, clients: Schema.Array(Schema.String) }),
   Result: ConsentedClientSchema,
@@ -116,11 +84,6 @@ const findTokenOnlyClients = SqlSchema.findAll({
     ),
 });
 
-/**
- * When each client last refreshed for the member: the newest rotation of
- * its refresh tokens, since a refresh marks the token it spends rotated as
- * it mints the next, so a client that never refreshed has none.
- */
 const findLastRefreshes = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
@@ -169,11 +132,6 @@ const deleteRefreshTokens = SqlSchema.void({
     ),
 });
 
-/**
- * The clients the member allowed, by consent but for those left out, and by
- * a live token for the skip-consent clients named, newest allowed first,
- * each with when it last refreshed.
- */
 export function listOAuthGrants(
   userId: string,
   clients: { readonly except: readonly string[]; readonly tokenOnly: readonly string[] },
@@ -189,12 +147,6 @@ export function listOAuthGrants(
   });
 }
 
-/**
- * Deletes every access and refresh token the client holds for the member,
- * and no one else's: its next refresh finds no token, and a call on an
- * access token kept as a row finds none. Deleting what is already gone
- * deletes nothing, so a revoke retried after it landed does the same.
- */
 export function revokeOAuthClientTokens(
   userId: string,
   clientId: string,
@@ -202,7 +154,6 @@ export function revokeOAuthClientTokens(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        // The access tokens go first, as the provider's teardown deletes them, since each may name a refresh token.
         yield* deleteAccessTokens({ userId, clientId });
         yield* deleteRefreshTokens({ userId, clientId });
       }),

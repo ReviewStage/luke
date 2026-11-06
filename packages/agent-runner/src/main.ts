@@ -1,16 +1,3 @@
-/**
- * main.ts -- the runner's process: stdin and the environment in, one launch run, and the process's exit code out; or, started as Codex's token command, the plan's access token out.
- *
- * Bundled with the SDK into one file (`pnpm --filter @repo/agent-runner
- * build`), which the service uploads to the agent's sandbox and starts there as the
- * agent user (P08). Exit 0 is a launch that ended as the service asked or as the
- * turn did; anything else is one we show as interrupted.
- *
- * Started as `node <bundle> codex-token <tokenUrl>` by app-server
- * (`codex-token.ts`), it prints the token the service answers on stdout and exits
- * 0, or says why not on stderr and exits 1.
- */
-
 import { createInterface } from "node:readline";
 import {
   NodeChildProcessSpawner,
@@ -30,8 +17,6 @@ import { runAgent } from "./runner.js";
 
 const EXIT = { ENDED: 0, FAILED: 1 } as const;
 
-// Note that the interface is made only as the stream starts, and iterated at
-// once, because readline drops every line it reads before its iterator exists.
 const stdin: AsyncIterable<string> = {
   [Symbol.asyncIterator]: () =>
     createInterface({ input: process.stdin, crlfDelay: Number.POSITIVE_INFINITY })[
@@ -58,12 +43,9 @@ const launch = runAgent({
     Layer.mergeAll(
       claudeCodeLive,
       FetchHttpClient.layer,
-      // The machine's own processes, read beside the runner's, for a wait's release (runner.ts):
-      // the sandbox's `/proc`, or on a host the box's, the agent's told apart by descent and group.
       runsOnHost(process.env)
         ? hostProcessTable(process.pid, { proc: "/proc", ps: MAC_PS })
         : processTable("/proc", process.pid),
-      // Codex's app-server, spawned as the runner's own child (codex.ts).
       NodeChildProcessSpawner.layer.pipe(
         Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
       ),
@@ -71,7 +53,6 @@ const launch = runAgent({
   ),
 );
 
-// Note that the token goes to stdout alone, for app-server, and a failure says only its words.
 const token = Effect.gen(function* () {
   if (tokenUrl === undefined) return yield* Effect.fail("no token URL was given");
   const accessToken = yield* codexToken(tokenUrl, process.env).pipe(
@@ -90,9 +71,6 @@ const token = Effect.gen(function* () {
 
 const main = mode === CODEX_TOKEN_COMMAND ? token : launch;
 
-// Note that we exit explicitly, even on success, where `runMain` would leave
-// the process to drain, because stdin, which the service may hold open, would keep
-// it alive after the launch has ended.
 NodeRuntime.runMain(main, {
   teardown: (exit) => process.exit(Exit.isSuccess(exit) ? Number(exit.value) : EXIT.FAILED),
 });

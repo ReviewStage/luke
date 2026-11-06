@@ -1,17 +1,3 @@
-/**
- * The host as it stands once every composer has started, as a `Layer` over
- * its assembly.
- *
- * The assembly is the construction the merge already performs — every
- * composer built and linked, the method tables folded, the service composed —
- * and holds nothing that has begun. The standing layer is what begins it: the
- * composers' layers in the launch's order, the arming of the loops after the
- * last of them, and the drain registered last of all, so that closing the one
- * scope the layer was built in runs the drain first, disarms the loops, and
- * stops every composer in the reverse of the order it started. That close is
- * the whole quit, and there is no other order to run it in.
- */
-
 import {
   type GatewayHost,
   type GatewayShutdownOptions,
@@ -25,7 +11,6 @@ import type { Composer } from "../composer.js";
 import type { HostConcern } from "../host-concerns.js";
 import { layersInOrder } from "./composer.js";
 
-/** The drain's steps did not run to their end; what they could not settle is what the next launch marks interrupted. */
 export class HostDrainError extends Data.TaggedError("HostDrainError")<{
   readonly cause: unknown;
 }> {
@@ -34,24 +19,11 @@ export class HostDrainError extends Data.TaggedError("HostDrainError")<{
   }
 }
 
-/**
- * The explicit quit's steps, run once whichever door asks for them: the
- * adaptor's `stop` with the caller's own deadline, or the scope's own close
- * with the defaults. A second ask joins the first rather than closing the
- * admissions and canceling the runs again.
- */
 export type HostDrain = (
   options?: GatewayShutdownOptions,
 ) => Effect.Effect<GatewayShutdownReport, HostDrainError>;
 
-/**
- * The explicit quit's steps as the one drain both doors run: the first ask
- * runs them under its own options and reports what became of them, and every
- * later ask, whatever its options, is answered with that outcome, so the
- * admissions close and the runs are canceled once however many times the
- * quit arrives.
- */
-export const hostDrain = /* @__PURE__ */ Effect.fn("host/hostDrain")(function* (
+export const hostDrain = Effect.fn("host/hostDrain")(function* (
   steps: GatewayShutdownSteps,
   report: (message: string) => void,
 ): Effect.fn.Return<HostDrain> {
@@ -59,10 +31,6 @@ export const hostDrain = /* @__PURE__ */ Effect.fn("host/hostDrain")(function* (
   const outcome = yield* Deferred.make<GatewayShutdownReport, HostDrainError>();
   const run = (options: GatewayShutdownOptions) =>
     shutdownGatewayEffect(steps, options).pipe(
-      // A step that died is a defect of the coordinator's own effect, since
-      // what the steps reach is work it did not write; it is the drain's
-      // named refusal here rather than a defect that would take the close
-      // down with it.
       Effect.catchDefect((cause) => new HostDrainError({ cause })),
       Effect.tap((settled) =>
         Effect.sync(() => {
@@ -81,22 +49,11 @@ export const hostDrain = /* @__PURE__ */ Effect.fn("host/hostDrain")(function* (
     });
 });
 
-/** Everything constructed and linked, and nothing yet begun. */
 export interface HostAssembly {
-  /** The one boundary a client reaches this host through. */
   readonly gateway: GatewayHost;
-  /** Where the client offers this machine's native capabilities and the host asks for them. */
   readonly nodes: NodeRegistry;
-  /** The concerns this host runs: every one but the platform concerns it was built without. */
   readonly concerns: ReadonlySet<HostConcern>;
-  /** The composers in the order the launch has to keep; the quit is this order reversed. */
   readonly startOrder: readonly Composer[];
-  /**
-   * What the launch arms once every owner of a cadence has started, in the
-   * scope the host stands in: the account gate opened where it already stands
-   * open, and the scope's own close is what disarms it, before any composer
-   * stops.
-   */
   readonly armed: Effect.Effect<void, never, Scope.Scope>;
   readonly drain: HostDrain;
 }
@@ -105,7 +62,6 @@ export class HostAssemblyTag extends Context.Service<HostAssemblyTag, HostAssemb
   "@repo/host/HostAssembly",
 ) {}
 
-/** The host with every composer started: what a client operates and what the quit drains. */
 export interface StandingHost {
   readonly gateway: GatewayHost;
   readonly drain: HostDrain;
@@ -113,12 +69,6 @@ export interface StandingHost {
 
 export class HostTag extends Context.Service<HostTag, StandingHost>()("@repo/host/Host") {}
 
-/**
- * The composers started in the assembly's order, the loops armed after the
- * last of them, and the drain registered as the last finalizer, so the scope
- * this layer is built in closes as the quit: drain, disarm, then every
- * composer's stop in the reverse of its start.
- */
 export const hostStandingLayer: Layer.Layer<HostTag, never, HostAssemblyTag> = Layer.unwrap(
   Effect.map(HostAssemblyTag, (assembly) => {
     const composers = layersInOrder(

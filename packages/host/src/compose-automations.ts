@@ -58,30 +58,6 @@ import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.j
 import { confirmWrite, type TxWait } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 
-/**
- * compose-automations.ts -- the account's automations, asked of the service on the window's behalf: made, changed, deleted, and run now, and a workspace's automations, its runs, and an automation's runs held for the windows that draw them.
- *
- * Every ask is one call of the service answered whole. What a window
- * draws, a workspace's automations, an automation's runs, or a workspace's
- * runs, it holds (`heldSlice`): the host follows each on the service's live
- * read (`automation-follow.ts`) for the account signed in as it started,
- * from the first window's hold, and keeps it among the few let go latest
- * after the last lets go, each laid on its app-state slice, which every
- * window draws, and told as `AUTOMATIONS_CHANGED`. A sign-out lets every
- * follow go and lays none, and the account gate opening follows the holds
- * anew (`open`). A held workspace's automations stand in the sync engine's
- * pool (`automation-collections.ts`). A new one, a change, or a deletion of
- * one is a write declared here, which the pool draws over every read
- * holding it the moment it is asked, a new one under the id the host minted
- * for it, each answered once the list drawn shows it. Behind a closed account
- * gate, or on a run that sends nothing, every ask answers unanswered. A
- * webhook's secret is the one secret answered here, by root AGENTS.md's
- * carve-out: one the service minted as a webhook was made, or one minted
- * here at the window's ask, only its hash sent to the service, goes to the
- * window that asked and nowhere else, never into a slice.
- */
-
-/** The service's side of the automations, as this concern asks it. */
 export type AutomationsClient = Pick<
   HostedAutomationClient,
   | "create"
@@ -99,39 +75,28 @@ export interface AutomationsDependencies {
     runMode: Pick<RunMode, "sendsNetwork">;
   };
   account: Pick<AccountComposer, "capabilitiesActive">;
-  /** The account signed in now, which a follow names from its start; none where nobody is. */
   accountId: () => string | undefined;
   client: AutomationsClient;
-  /** The sync engine's pool, which a held workspace's automations stand in. */
   pool: EntityPool;
-  /** The signed-in account's lists kept on disk, which a workspace's automations are drawn from before its read first answers, and each answer is kept in; none where nothing keeps them. */
   entities?: () => EntityStore | undefined;
 }
 
 export interface AutomationsComposer extends Composer {
-  /** Every held read followed anew, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
-  /** Every follow let go and no read laid, as a sign-out lets them go; the windows' holds stand. */
   readonly reset: Effect.Effect<void>;
 }
 
-/** One value for each kind of what the windows hold, by its kind. */
 type ByKind<Value> = Readonly<Record<AutomationFollow["kind"], Value>>;
 
-/** Each held read's standing wait for a write's transaction, by what it holds and then its id. */
 type Waits = ByKind<Map<string, TxWait>>;
 
-/** What the composer holds for the windows: each held read, the windows' hold on each key, the follows' waits, and the list collections standing. */
 interface Held {
   readonly slices: ByKind<HeldSlice<string>>;
-  /** The windows' hold on each key, one fiber standing until let go. */
   readonly holds: ByKind<FiberMap.FiberMap<string>>;
   readonly waits: Waits;
-  /** Each followed workspace's automations standing in the pool, by the workspace's id, for as long as its follow stands. */
   readonly lists: Map<string, AutomationListCollections>;
 }
 
-/** Each held read's follow of one key, its rows told through `answers`, by what it holds. */
 interface AutomationFollows {
   readonly [AUTOMATION_FOLLOW.WORKSPACE]: (
     workspaceId: string,
@@ -147,22 +112,18 @@ interface AutomationFollows {
   ) => Effect.Effect<void>;
 }
 
-/** A call of the service asked behind the gate, or unanswered where the gate stands closed. */
 type Asked = <Answer>(
   call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
 ) => Effect.Effect<Answer | typeof UNANSWERED>;
 
 const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
-/** The bytes of randomness in a webhook secret the host mints, as many as the service's own. */
 const WEBHOOK_SECRET_BYTES = 32;
 
-/** A fresh webhook secret: its random bytes as unpadded URL-safe Base64. */
 function mintedWebhookSecret(): string {
   return Base64Url.encode(crypto.getRandomValues(new Uint8Array(WEBHOOK_SECRET_BYTES)));
 }
 
-/** The secret's SHA-256 as lowercase hex, the one form of it the service holds. */
 function webhookSecretHash(secret: string): Effect.Effect<string, WebhookSecretHashFailed> {
   return Effect.map(
     Effect.tryPromise({
@@ -173,16 +134,10 @@ function webhookSecretHash(secret: string): Effect.Effect<string, WebhookSecretH
   );
 }
 
-/** Web Crypto refused to hash a minted webhook secret. */
 class WebhookSecretHashFailed extends Data.TaggedError("WebhookSecretHashFailed")<{
   readonly cause: unknown;
 }> {}
 
-/**
- * A follow's hand-off of its wait for a write's transaction to the waits of
- * what it follows, and the wait it last handed. Note that a follow lets go
- * only of its own wait, since one started over may hand its wait first.
- */
 function handing(standing: Map<string, TxWait>, id: string) {
   let handed: TxWait | undefined;
   return {
@@ -195,14 +150,6 @@ function handing(standing: Map<string, TxWait>, id: string) {
   };
 }
 
-/**
- * Each held read's follow of one key, its rows told through `answers`: a
- * workspace's automations in a collection for as long as its follow
- * stands, which a write to one is drawn on, and a history built at the
- * host's own instant and again at each edge of a run's agent's grace. Each
- * names the account signed in as it starts, so one under another's session
- * is refused as signed out and ends; with nobody signed in it ends unsaid.
- */
 function automationFollows(
   dependencies: AutomationsDependencies,
   asked: Asked,
@@ -210,7 +157,6 @@ function automationFollows(
   lists: Held["lists"],
 ): AutomationFollows {
   const { kernel, client } = dependencies;
-  /** A live read for the account the follow started for, or refused as signed out where it started for nobody. */
   const sealed = <Answer>(
     userId: string | undefined,
     read: (userId: string) => Effect.Effect<Answer, never, HttpClient.HttpClient>,
@@ -229,10 +175,8 @@ function automationFollows(
             txWait: wait.handed,
           });
           lists.set(workspaceId, list);
-          // Note that the automations kept on disk are drawn as the service last answered them, until the read answers anew.
           const kept = dependencies.entities?.()?.storedIn(KEPT_READ.AUTOMATIONS, workspaceId);
           if (kept !== undefined) yield* list.answer(kept);
-          // Note that a follow lets go only of its own list, since one started over may stand first.
           yield* Effect.addFinalizer(() =>
             Effect.sync(() => {
               if (lists.get(workspaceId) === list) lists.delete(workspaceId);
@@ -317,7 +261,6 @@ export function composeAutomations(
     const follows = automationFollows(dependencies, asked, waits, lists);
     const told = (held: Partial<AppAutomationReads>) =>
       kernel.emit(GATEWAY_EVENT.AUTOMATIONS_CHANGED, carried(held));
-    // Note that each held read is keyed by one id, its slice laid whole as it moves.
     const slices: Held["slices"] = yield* Effect.all({
       [AUTOMATION_FOLLOW.WORKSPACE]: heldSlice<typeof LIVE_READ.AUTOMATIONS, string>({
         empty: NO_KEYS_HELD,
@@ -353,7 +296,6 @@ export function composeAutomations(
   });
 }
 
-/** The composer's one table, built from its seams; nothing here starts anything but what a window holds. */
 function composed(
   dependencies: AutomationsDependencies,
   gate: () => boolean,
@@ -362,7 +304,6 @@ function composed(
 ): AutomationsComposer {
   const { kernel, client } = dependencies;
 
-  /** The held list that holds an automation, and the workspace it is of; none where no held list holds it. */
   const listShowing = (automationId: string) => {
     for (const [workspaceId, list] of lists) {
       if (list.holds(automationId)) return { workspaceId, list };
@@ -370,12 +311,6 @@ function composed(
     return undefined;
   };
 
-  /**
-   * A write confirmed once its transaction arrives on every held read that
-   * would show it, so no read the window draws after the answer lacks it; a
-   * write that changed nothing, or one no held read hands a wait for, waits
-   * for nothing, and one not confirmed in time is answered all the same.
-   */
   const confirmed = (txid: string | undefined, on: readonly (TxWait | undefined)[]) =>
     Effect.suspend(() => {
       const standing = on.filter((wait): wait is TxWait => wait !== undefined);
@@ -389,14 +324,6 @@ function composed(
           );
     });
 
-  /**
-   * The waits of the held reads that show a write to an automation: its
-   * workspace's list, named or as a held list holds it, and, for a run, its
-   * runs and its workspace's runs, each of which a run moves. Note that no
-   * other read is waited on, since a read whose rows the write did not move
-   * never carries its transaction and would only hold the write to its
-   * timeout.
-   */
   const waitsShowing = (automationId: string, workspaceId: string | undefined, ran: boolean) => {
     const listed = workspaceId ?? listShowing(automationId)?.workspaceId;
     return [
@@ -406,15 +333,6 @@ function composed(
     ];
   };
 
-  /**
-   * An automation made, drawn the moment it is asked from what its create
-   * asks, under the id the host minted for it, on its workspace's held list,
-   * and taken back where the service refused it. Note that only its row
-   * reaches the list, so a webhook's secret the service minted is answered
-   * to the window alone; where the list hands no wait, or the service
-   * answers a create sent again with no transaction, the automation as the
-   * service answered it is taken in the list's place.
-   */
   const made: WriteDeclaration<
     AutomationRow,
     FieldChange<AutomationRow>,
@@ -426,7 +344,6 @@ function composed(
   > = {
     kind: AUTOMATION,
     keys: ({ request, row }) => (row === undefined ? [] : [request.id]),
-    // Note that a create that draws no row names no key, so its change is never drawn.
     change: ({ row }) => (row === undefined ? () => ({}) : { made: row }),
     send: ({ request }) =>
       Effect.map(asked(client.create(request)), (answer) =>
@@ -440,11 +357,6 @@ function composed(
       ),
   };
 
-  /**
-   * A change to an automation's fields, drawn at once over every read that
-   * holds it. Note that only the written fields reach the list, so a secret
-   * a change to a webhook minted is answered to the window alone.
-   */
   const changed: WriteDeclaration<
     AutomationRow,
     FieldChange<AutomationRow>,
@@ -466,11 +378,6 @@ function composed(
       ),
   };
 
-  /**
-   * An automation deleted, gone at once from every read that holds it. Note
-   * that a delete is confirmed on its list alone, since its runs' follow
-   * ends not found rather than carrying it.
-   */
   const deleted: WriteDeclaration<
     AutomationRow,
     FieldChange<AutomationRow>,
@@ -502,7 +409,6 @@ function composed(
           (asked) => {
             const request = { ...asked, id: asked.id ?? kernel.createId() };
             const userId = dependencies.accountId();
-            // Note that a create behind a closed gate, or for nobody, draws nothing, since it never reaches the service.
             return {
               request,
               row:
@@ -537,7 +443,6 @@ function composed(
           "a run names an automation and a key",
         );
         const answer = yield* asked(client.runNow(run));
-        // A run stands in its automation's held runs, in its workspace's held runs, and as the last run on a held list; with none of them held it answers at once.
         if ("run" in answer) {
           yield* confirmed(answer.txid, waitsShowing(run.automationId, undefined, true));
         }
@@ -551,10 +456,7 @@ function composed(
           "a new secret names an automation",
         );
         if (!gate()) return carried<AutomationView>(UNANSWERED);
-        // Note that the secret is minted here and only its hash leaves for the service, so the
-        // service never holds it, and the window that asked is the one place it is answered.
         const secret = mintedWebhookSecret();
-        // A secret that cannot be hashed is never sent, and the call is answered as unanswered.
         const hashed = yield* Effect.result(webhookSecretHash(secret));
         if (Result.isFailure(hashed)) return carried<AutomationView>(UNANSWERED);
         const replaced = yield* asked(
@@ -570,7 +472,6 @@ function composed(
         );
         return carried<AutomationView>({ automation: replaced.automation, webhookSecret: secret });
       }),
-    // Note that the windows' hold on a key is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AUTOMATIONS_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const held = yield* readParams(
@@ -609,7 +510,6 @@ function composed(
   };
 
   const kinds = Object.values(AUTOMATION_FOLLOW);
-  // Note that the windows' holds stand through a sign-out, so a session signing in follows them anew (`open`).
   const reset = Effect.forEach(kinds, (kind) => slices[kind].end, { discard: true });
   const open = Effect.forEach(kinds, (kind) => slices[kind].open, { discard: true });
 

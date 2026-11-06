@@ -94,207 +94,106 @@ import {
   taskReachableBy,
 } from "./workspace-store.js";
 
-/**
- * task-store.ts -- the named tasks of an account's workspaces, and the one document each holds.
- *
- * A task is read and written by every member of the workspace it names,
- * whichever of them started it. Every statement here names the account it
- * runs for beside the task and gates on that account's membership
- * (`workspace-store.ts`), so a task of a workspace the account is not in
- * reads, saves, changes, and deletes exactly as an id that names nothing: as
- * no plan. A pin is the reading member's
- * own (`plan-pin.ts`), so a plan of a shared workspace one member pinned
- * reads pinned for them alone, on every Mac they sign in on. A plan's repository is kept here as
- * handed and confirmed nowhere here: whether the account reaches it through
- * our GitHub App is the route's to settle before it calls, on the
- * service that reads GitHub (`github/github-app.ts`), and so is whether the
- * account is a member of the workspace a task starts in. A save is one `update` over the row that
- * stands and never an insert, so a task deleted before a save lands stays
- * deleted, and a save that fails leaves the document as it was. A task's
- * coding agents' conversations go with the task: deleting the task stamps
- * them `deleted_at`, so the purge takes their words seven days on. Every function is an effect over the ambient `SqlClient` and names
- * no database of its own.
- */
-
 export type TaskStoreFailure = StoreFailure;
 
-/** What a task store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type TaskStoreEffect<A> = Effect.Effect<A, TaskStoreFailure, DatabaseServices>;
 
-/** The member a task was to be assigned to is no member of its workspace, or of the one it moves to; nothing was written. */
 export class TaskAssigneeNotMember extends Data.TaggedError("TaskAssigneeNotMember") {}
 
-/** The change named another repository for a task that has a parent or children, which work in their tree's repository; nothing was written. */
 export class TaskTreeRepositoryLocked extends Data.TaggedError("TaskTreeRepositoryLocked") {}
 
-/** The parent named is none the account reaches in the child's workspace; nothing was written. */
 export class TaskParentUnreached extends Data.TaggedError("TaskParentUnreached") {}
 
-/** The child and the parent named work in two repositories, where a child always works in its parent's; nothing was written. */
 export class TaskParentRepositoryDiffers extends Data.TaggedError("TaskParentRepositoryDiffers")<{
-  /** The parent's repository, which the child does not hold. */
   readonly repository: string | null;
 }> {}
 
-/** The parent named is the task itself or one of its descendants, under which the task would descend from itself; nothing was written. */
 export class TaskParentCycle extends Data.TaggedError("TaskParentCycle") {}
 
-/**
- * A start named an id a task the account does not reach stands under:
- * another account's, or one the account made and reaches no more. Nothing
- * was written, and it carries nothing of that task, so a caller refuses the
- * start as it refuses any other.
- */
 export class TaskIdTaken extends Data.TaggedError("TaskIdTaken") {}
 
-/** A coding agent stands at work that a delete was not told was stopped: one started on the task, or handed a message, while it or the others were stopped. */
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
 
-/** What a delete that stopped the task's agents first tells it. */
 export interface TaskDeleteGuard {
-  /** The agents the caller stopped; any other standing refuses the delete. */
   readonly stoppedAgentIds: ReadonlySet<string>;
 }
 
-/**
- * What a change that moves a task runs first: given the repository the row
- * names under its lock, the caller's confirmation that the workspace it moves
- * to reaches it, so a repository changed while the move was asked cannot
- * ride into a workspace that does not reach it. Its failure leaves the task
- * unchanged.
- */
 export type TaskMoveGuard<E, R> = (repository: string | null) => Effect.Effect<void, E, R>;
 
-/** One of the task's standing agents as a finish reads it, under its conversation's lock. */
 export interface TaskStandingAgent {
   readonly id: string;
   readonly conversationId: string;
   readonly createdAt: Date;
-  /** Whether it was started blank, handed neither the description nor a prompt. */
   readonly blank: boolean;
 }
 
-/**
- * What a finish of a task's work runs under the task's lock: whether every
- * one of its standing agents stands idle, neither starting nor running, read
- * under their conversations' locks, all of them at once, since they share
- * the transaction's one connection.
- */
 export type TaskFinishGuard<R> = (
   agents: readonly TaskStandingAgent[],
 ) => Effect.Effect<boolean, QueryError | Schema.SchemaError, R>;
 
-/**
- * Which of the task's standing agents stand idle, neither starting nor
- * running, read under their conversations' locks as a finish reads them:
- * their ids.
- */
 type TaskIdleGuard<R> = (
   agents: readonly TaskStandingAgent[],
 ) => Effect.Effect<ReadonlySet<string>, QueryError | Schema.SchemaError, R>;
 
-/** How a task moved to Done archives its idle agents with it: as whom, and how it reads them idle. */
 export interface TaskDoneArchive<R> {
   readonly archivedBy: StoredArchive;
   readonly idle: TaskIdleGuard<R>;
 }
 
-/** One agent a task's Done archived with it: the member who started it, under whom its device lets it go, and its conversation, whose sandbox is stopped. */
 export interface TaskArchivedAgent {
   readonly id: string;
   readonly userId: string;
   readonly conversationId: string;
 }
 
-/** One save a coding agent made, with the agent named as its row names it now. */
 export interface LabeledAgentEdit extends DescriptionAgentEdit {
   readonly label: string;
 }
 
-/** A task as the service holds it: what the window reads, its text, and the saves coding agents made with their notes. */
 export interface StoredTask {
   readonly task: Task;
-  /** The account that started the task, the one that may move it to another workspace. */
   readonly ownerId: string;
-  /** How the task's repository was reached as it was named: the workspace's GitHub App, or its owner's own token. */
   readonly githubAccess: GitHubAccess;
-  /** The description's whole text. */
   readonly text: string;
   readonly agentEdits: readonly LabeledAgentEdit[];
-  /** Whether the text was ever saved since the task started: false while nobody has written it. */
   readonly saved: boolean;
-  /** Who last changed each section, by heading, as its revisions read (`readSectionWriters`). */
   readonly sectionWriters: readonly DescriptionSectionWriter[];
-  /** The developer's own words about the task as they started it; nothing for a task started with none. */
   readonly brief: string | undefined;
 }
 
-/**
- * A plan to start: the workspace it starts in, its name where one is given,
- * and the repository it is about where one is chosen. A plan started with no
- * name, or a blank one, stands as `UNTITLED_DESCRIPTION_NAME` until it is renamed. A brief is the developer's own words about the task, kept as
- * written; a blank one is none.
- */
 export interface NewTask {
   readonly organizationId: string;
   readonly name?: string;
   readonly repository?: string | null;
-  /** How the repository was reached as it was named; the App's where none is named. */
   readonly githubAccess?: GitHubAccess;
   readonly brief?: string;
-  /** Where the task stands as it starts; to do where none is named. */
   readonly status?: TaskStatus;
-  /** How much the task matters as it starts; unweighed where none is named. */
   readonly priority?: TaskPriority;
-  /** The member the task is assigned to as it starts, who must be a member of its workspace; no one where none is named. */
   readonly assigneeId?: string;
-  /** Who made the task for its member, where they did not make it by hand: the brain on their call, or a coding agent by its id. */
   readonly origin?: TaskOrigin;
-  /** The task it is a child of, which the caller confirmed it reaches in the same workspace, and whose repository it took; none for a task at the top. */
   readonly parentTaskId?: string;
-  /** How the task is worked, fixed as it starts; by its agents where none is named. */
   readonly mode?: TaskMode;
-  /** Whether `start_agent` made it for the agent it started, its caller on no task; not where none is named. */
   readonly madeByStart?: boolean;
-  /** The description's text as it starts; empty where none is named. */
   readonly text?: string;
 }
 
-/**
- * What a change to a task names: a new name, a repository or null to clear
- * it, pinned or not, the workspace it moves to, where it stands, or any of
- * them at once. A move is its owner's alone, into a workspace they are a
- * member of, which the caller confirms first.
- */
 export interface TaskChanges {
   readonly name?: string;
   readonly organizationId?: string;
   readonly repository?: string | null;
-  /** How a repository the change names was reached, written with it; the App's where it names none. */
   readonly githubAccess?: GitHubAccess;
   readonly pinned?: boolean;
-  /** Where the pin stands in the sidebar's Pinned section, which comes only with a pin. */
   readonly pinPosition?: string;
-  /** What the change makes of the account's own read mark (`READ_MARK`). */
   readonly readMark?: ReadMark;
   readonly status?: TaskStatus;
   readonly priority?: TaskPriority;
-  /** The member the task is assigned to, who must be a member of its workspace, or of the one it moves to; null for no one. */
   readonly assigneeId?: string | null;
 }
 
-/** How a task's repository was reached, as a write takes it. */
 const GitHubAccessSchema = Schema.Literals(Object.values(GITHUB_ACCESS));
 
-/** Where an agent runs, as its row holds it. */
 const MachineSchema = Schema.Literals(Object.values(AGENT_MACHINE));
 
-/**
- * The column `column` names of the task's newest agent, any member's,
- * archived ones among them; null for a task with none. Note that a task
- * holds no place of its own, so this is what a released desktop is told the
- * task runs on (`runsOnOf`).
- */
 function newestAgentColumn<T>(column: typeof agentTable.machine | typeof agentTable.deviceId) {
   const newest = queryBuilder
     .select({ value: column })
@@ -305,20 +204,12 @@ function newestAgentColumn<T>(column: typeof agentTable.machine | typeof agentTa
   return sql<T | null>`(${newest})`;
 }
 
-/** Who made a task, as its row holds it. */
 const TaskCreatorActorSchema = Schema.Literals([
   DESCRIPTION_ACTOR.DEVELOPER,
   DESCRIPTION_ACTOR.NOTETAKER,
   DESCRIPTION_ACTOR.AGENT,
 ]);
 
-/**
- * The columns a line of the list reads: none of the document. Note that the
- * list projects these alone, because a migration that reshapes the document
- * lands before the build that reads the new shape is live, and a list that
- * decoded the document would then refuse every task rather than just the one
- * opened.
- */
 const TASK_SUMMARY_COLUMNS = {
   id: task.id,
   userId: task.userId,
@@ -341,7 +232,6 @@ const TASK_SUMMARY_COLUMNS = {
   updatedAt: task.updatedAt,
 };
 
-/** The columns every other read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const TASK_COLUMNS = {
   ...TASK_SUMMARY_COLUMNS,
   agentEdits: task.agentEdits,
@@ -362,7 +252,6 @@ const TaskSummaryRowSchema = Schema.Struct({
   creatorAgentId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
-  /** Where the task's newest agent runs (`newestAgentColumn`); null for a task with none. */
   machine: Schema.NullOr(MachineSchema),
   deviceId: Schema.NullOr(Schema.String),
   parentTaskId: Schema.NullOr(Schema.String),
@@ -374,7 +263,6 @@ const TaskSummaryRowSchema = Schema.Struct({
 
 type TaskSummaryRow = typeof TaskSummaryRowSchema.Type;
 
-/** The reader's own pin of a plan: when they pinned it, and where it stands once they dragged it; null where it stands by that instant. */
 const ReaderPinSchema = Schema.Struct({
   pinnedAt: InstantColumnSchema,
   pinPosition: Schema.NullOr(Schema.String),
@@ -382,7 +270,6 @@ const ReaderPinSchema = Schema.Struct({
 
 type ReaderPin = typeof ReaderPinSchema.Type;
 
-/** The reader's own read mark of a plan: the instant they read it through, and whether they marked it unread. */
 const ReaderMarkSchema = Schema.Struct({
   readThrough: InstantColumnSchema,
   markedUnread: Schema.Boolean,
@@ -390,7 +277,6 @@ const ReaderMarkSchema = Schema.Struct({
 
 type ReaderMark = typeof ReaderMarkSchema.Type;
 
-/** A line of the list with the reader's own pin beside it; null where they hold none. */
 const TaskListRowSchema = Schema.Struct({
   ...TaskSummaryRowSchema.fields,
   pinnedAt: Schema.NullOr(InstantColumnSchema),
@@ -403,7 +289,6 @@ const TaskListRowSchema = Schema.Struct({
 const TaskRowSchema = Schema.Struct({
   ...TaskSummaryRowSchema.fields,
   agentEdits: Schema.Array(descriptionAgentEditSchema),
-  // Every task is one document since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
   brief: Schema.NullOr(Schema.String),
 });
@@ -414,28 +299,19 @@ const TaskKeySchema = Schema.Struct({ userId: Schema.String, taskId: Schema.Stri
 
 const TaskIdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** The reader's own pin of the plan the row names, as a join reads it. */
 function readersPin(userId: string): SQL | undefined {
   return and(eq(taskPin.taskId, task.id), eq(taskPin.userId, userId));
 }
 
-/** The reader's own read mark of the plan the row names, as a join reads it. */
 function readersMark(userId: string): SQL | undefined {
   return and(eq(taskRead.taskId, task.id), eq(taskRead.userId, userId));
 }
 
-/**
- * The reader's read mark as a read of the plan joined to it answers it: the
- * instant their own mark reads through, or, with none, the instant every
- * member read the plans that stood as marks moved to the service through, or
- * its start for a plan started since; and whether they marked it unread.
- */
 const READER_MARK_COLUMNS = {
   readThrough: sql<Date>`coalesce(${taskRead.readThrough}, ${task.readThrough}, ${task.createdAt})`,
   markedUnread: sql<boolean>`coalesce(${taskRead.markedUnread}, false)`,
 };
 
-/** The reader's read mark of the plan, as `READER_MARK_COLUMNS` answers it; none where the plan is gone. */
 const findMark = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: ReaderMarkSchema,
@@ -450,7 +326,6 @@ const findMark = SqlSchema.findOneOption({
     ),
 });
 
-/** The reader's own pin of the plan; none where they hold none. */
 const findPin = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: ReaderPinSchema,
@@ -464,16 +339,8 @@ const findPin = SqlSchema.findOneOption({
     ),
 });
 
-/** The reader's pin of the plan, from now; one already standing keeps its instant. */
-/**
- * The id of the transaction a write committed in, read in the write's own
- * `RETURNING`, as Neon's mutations guide says, so a client following the
- * task list waits for that transaction to arrive before it confirms the
- * write.
- */
 const TXID = sql<string>`pg_current_xact_id()::text`;
 
-/** The transaction a pin's write committed in; none where the pin stood as asked already. */
 const TxidRowSchema = Schema.Struct({ txid: Schema.String });
 
 const insertPin = SqlSchema.findOneOption({
@@ -489,7 +356,6 @@ const insertPin = SqlSchema.findOneOption({
     ),
 });
 
-/** The reader's pin of the plan at the position given, from now where it was not pinned; one already standing keeps its instant and moves. */
 const placePin = SqlSchema.findOneOption({
   Result: TxidRowSchema,
   Request: Schema.Struct({
@@ -508,7 +374,6 @@ const placePin = SqlSchema.findOneOption({
     ),
 });
 
-/** The reader's pin of the plan taken away; every other member's stands. */
 const removePin = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: TxidRowSchema,
@@ -521,7 +386,6 @@ const removePin = SqlSchema.findOneOption({
     ),
 });
 
-/** The reader's read mark of the plan read through now, a mark by hand taken back. */
 const markRead = SqlSchema.findOneOption({
   Result: TxidRowSchema,
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, now: Schema.Date }),
@@ -538,7 +402,6 @@ const markRead = SqlSchema.findOneOption({
     ),
 });
 
-/** The reader's read mark of the plan read through now, a mark by hand left standing. */
 const markSeen = SqlSchema.findOneOption({
   Result: TxidRowSchema,
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, now: Schema.Date }),
@@ -555,7 +418,6 @@ const markSeen = SqlSchema.findOneOption({
     ),
 });
 
-/** The reader's read mark of the plan marked unread, the instant it was read through left standing; nothing where it stands marked already. */
 const markUnread = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: TxidRowSchema,
@@ -573,7 +435,6 @@ const markUnread = SqlSchema.findOneOption({
     ),
 });
 
-/** The agents the journal names, as their rows name them now; a row that is gone names nothing. */
 const findAgentLabels = SqlSchema.findAll({
   Request: Schema.Struct({ agentIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
@@ -598,16 +459,6 @@ const findAgentLabels = SqlSchema.findAll({
     ),
 });
 
-/**
- * The agents the journal and the sections' writers name, by id, as their rows
- * name them now, so a renamed agent reads renamed everywhere: the label is
- * the name its tab shows (`agentName`). The row's own
- * account is the one they are read under. Note that an agent is found by
- * its id alone, wherever it works now, because an agent edits any description of
- * its workspace by naming the task (`edit_description`), and the task may move to
- * another workspace after while the agent stays with its own. The ids are
- * the service's own, written by the save, never a caller's.
- */
 function agentLabelsOf(
   row: TaskRow,
   sectionWriters: readonly DescriptionSectionWriter[],
@@ -624,11 +475,6 @@ function agentLabelsOf(
   );
 }
 
-/**
- * Who last changed one section, as its line reads it: a coding agent named by
- * its label, or as an agent whose row is gone, or whose writer was kept
- * before agents were; a member by their id and name, where one is named.
- */
 function sectionEditOf(
   writer: DescriptionSectionWriter,
   labels: ReadonlyMap<string, string>,
@@ -646,11 +492,6 @@ function sectionEditOf(
   };
 }
 
-/**
- * A coding agent's save from the journal as a description's last edit, for a description
- * whose history has not begun: an agent's save made before it is the newest
- * thing the service can name a writer for.
- */
 function journaledEdit(edit: LabeledAgentEdit): DescriptionLastEdit {
   return {
     actor: DESCRIPTION_ACTOR.AGENT,
@@ -661,19 +502,6 @@ function journaledEdit(edit: LabeledAgentEdit): DescriptionLastEdit {
   };
 }
 
-/**
- * The row's plan, as the window and the model read it for `userId`, the
- * reader, whose own pin it carries: its text as the
- * document's body with no assumptions, since they are a section of the text,
- * who last changed each section, as its revisions read, and the tasks it
- * waits on and that wait on it, each one the reader reaches
- * (`task-block-store.ts`). The row's own account is the one its
- * agents are read under. Its last edit is its newest revision, or, before its
- * history begins, the newest save a coding agent made. A task is saved once
- * a save has moved its last save past its start, which no creation and no
- * carrying over does. The reads but the agents' labels, which wait on the
- * section writers, run together outside a transaction.
- */
 function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask> {
   return Effect.gen(function* () {
     const devices = yield* devicesOf([row]);
@@ -723,12 +551,10 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
   });
 }
 
-/** The row's plan alone, as the reader reads it, for the reads and writes that answer one. */
 function taskOf(userId: string, row: TaskRow): TaskStoreEffect<Task> {
   return Effect.map(storedTaskOf(userId, row), (stored) => stored.task);
 }
 
-/** The accounts a line of the list names: each row's owner, its assignee where it has one, and the owner of the device it runs on. */
 function namedAccountsOf(
   rows: readonly TaskSummaryRow[],
   devices: ReadonlyMap<string, Device>,
@@ -741,7 +567,6 @@ function namedAccountsOf(
   });
 }
 
-/** The devices the rows run on, by id; a row in a sandbox names none. */
 function devicesOf(rows: readonly TaskSummaryRow[]): TaskStoreEffect<ReadonlyMap<string, Device>> {
   return devicesNamed(
     rows.flatMap((row) =>
@@ -750,12 +575,6 @@ function devicesOf(rows: readonly TaskSummaryRow[]): TaskStoreEffect<ReadonlyMap
   );
 }
 
-/**
- * Where a line's newest agent runs, as the wire says it for released
- * desktops: nothing for a sandbox or a task with no agent; for a device, its
- * id, its owner named by `names`, and its name, kind, platform, and last
- * beat, each left out once the device's row is gone.
- */
 function runsOnOf(
   row: TaskSummaryRow,
   names: ReadonlyMap<string, string>,
@@ -776,7 +595,6 @@ function runsOnOf(
         : {
             device: {
               name: found.name,
-              // Note that every device runs the host program, so each is named a host; the device row keeps no kind.
               kind: DEVICE_KIND.HOST,
               platform: found.platform,
               seenAt: found.lastSeenAt.getTime(),
@@ -786,15 +604,6 @@ function runsOnOf(
   };
 }
 
-/**
- * The row as one line of the list, its owner and its assignee named by `names`. Note that
- * `openedAt` is still answered, as the start, because a desktop through
- * v0.7.1 refuses a summary without it. It goes once a release whose decoder
- * treats it as optional has shipped and v0.7.1 is no longer supported. A pin,
- * the reader's own `pinnedAt` and the `pinPosition` they dragged it to, is
- * answered only where it stands, so a plan that is not pinned reads as every
- * plan did before pins; an owner whose account is gone is named by nothing.
- */
 function summaryOf(
   row: TaskSummaryRow,
   pin: ReaderPin | null,
@@ -833,7 +642,6 @@ function summaryOf(
   };
 }
 
-/** Who made a task for its member, as the wire names them: nothing for a task made by hand. */
 function originOf(row: TaskSummaryRow): { readonly origin?: TaskOrigin } {
   if (row.creatorActor === DESCRIPTION_ACTOR.DEVELOPER) return {};
   const agentId = row.creatorAgentId;
@@ -863,12 +671,10 @@ const TaskInsertSchema = Schema.Struct({
   now: Schema.Date,
 });
 
-/** When a task that now stands in `status` was finished: now where it is Done or Canceled, none where it is open. */
 function completedAtOf(status: TaskStatus, now: Date): Date | null {
   return status === TASK_STATUS.DONE || status === TASK_STATUS.CANCELED ? now : null;
 }
 
-/** A task's row as an insert writes it. */
 function taskValues(write: typeof TaskInsertSchema.Type) {
   return {
     ...(write.id === undefined ? undefined : { id: write.id }),
@@ -906,7 +712,6 @@ const insertTask = SqlSchema.findOne({
     ),
 });
 
-/** A task inserted under its id where none stands under it yet, and the transaction it was written in; nothing where one does, written by nothing. */
 const insertTaskOnce = SqlSchema.findOneOption({
   Request: TaskInsertSchema,
   Result: Schema.Struct({ ...TaskRowSchema.fields, txid: Schema.String }),
@@ -920,12 +725,6 @@ const insertTaskOnce = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The workspace's next task number, taken from its counter in one statement:
- * one for its first task, and one past the last it handed out after, so a
- * number is never handed out twice, though one taken by a write that then
- * failed is skipped.
- */
 const takeTaskNumber = SqlSchema.findOne({
   Request: Schema.String,
   Result: Schema.Struct({ lastNumber: Schema.Number }),
@@ -942,11 +741,9 @@ const takeTaskNumber = SqlSchema.findOne({
     ),
 });
 
-/** The number the workspace's next task takes. */
 function nextTaskNumber(organizationId: string): TaskStoreEffect<number> {
   return takeTaskNumber(organizationId).pipe(
     Effect.map((taken) => taken.lastNumber),
-    // An upsert that returned no row is the database breaking its own contract, not an outcome.
     Effect.catchTag("NoSuchElementError", Effect.die),
   );
 }
@@ -995,7 +792,6 @@ const findTaskWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-/** The columns of a task `readTaskHeaders` answers: every one but its description's. */
 const findTaskHeaders = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
@@ -1053,7 +849,6 @@ const replaceText = SqlSchema.findOneOption({
     ),
 });
 
-/** The task row under its own lock, so a change and a save of the same task run one after the other. */
 const lockTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: TaskRowSchema,
@@ -1063,7 +858,6 @@ const lockTask = SqlSchema.findOneOption({
     ),
 });
 
-/** Whether any task is a child of this one. */
 const hasChildren = SqlSchema.findOneOption({
   Request: Schema.Struct({ taskId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -1073,17 +867,11 @@ const hasChildren = SqlSchema.findOneOption({
     ),
 });
 
-/** Whether two repositories are one: GitHub's names match whatever their case, and none matches none. */
 function sameRepository(one: string | null, other: string | null): boolean {
   if (one === null || other === null) return one === other;
   return one.toLowerCase() === other.toLowerCase();
 }
 
-/**
- * Refuses a change that names another repository for a task in a tree: one
- * with a parent, or with children, works in its tree's repository, so only
- * the repository it already holds, spelled as GitHub spells it, may be named.
- */
 const treeRepositoryHeld = Effect.fnUntraced(function* (
   locked: Pick<TaskRow, "id" | "repository" | "parentTaskId">,
   asked: string | null,
@@ -1094,12 +882,6 @@ const treeRepositoryHeld = Effect.fnUntraced(function* (
   if (inTree) return yield* new TaskTreeRepositoryLocked();
 });
 
-/**
- * The child and the parent a parent write names, each where the account
- * reaches it, under an update lock taken in id order, so two writes joining
- * the same two tasks never wait on each other crosswise, and neither task
- * moves to another workspace while the write stands on what it read.
- */
 const lockTaskPair = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
   Result: TaskRowSchema,
@@ -1114,12 +896,6 @@ const lockTaskPair = SqlSchema.findAll({
     ),
 });
 
-/**
- * The task, where it stands among the proposed parent's ancestors, the
- * parent itself first. Note that the walk follows every row, a task the
- * account does not reach among them, because a loop through a hidden task
- * is a loop still; `union` drops a task already walked, so a walk ends.
- */
 const findAmongAncestors = SqlSchema.findOneOption({
   Request: Schema.Struct({ taskId: Schema.String, parentTaskId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -1137,7 +913,6 @@ const findAmongAncestors = SqlSchema.findOneOption({
     ),
 });
 
-/** The task row as it stands, unlocked: what a caller reads to refuse a change before it stops anything. */
 const readTaskRow = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: TaskRowSchema,
@@ -1145,13 +920,6 @@ const readTaskRow = SqlSchema.findOneOption({
     Database.use((db) => db.select(TASK_COLUMNS).from(task).where(reachableTask(userId, taskId))),
 });
 
-/**
- * Refuses, with `TaskTreeRepositoryLocked`, a repository another than the
- * one a task in a tree holds, as `updateTaskCommitted` does under the task's
- * lock; a caller that stops work before it writes asks first, so a refused
- * change stops nothing. A task the account does not reach passes, for the
- * write to answer as not found.
- */
 export function checkTreeRepository(
   userId: string,
   taskId: string,
@@ -1162,7 +930,6 @@ export function checkTreeRepository(
   );
 }
 
-/** The columns of the row a change writes: the pin is the reader's own and none of the row's. */
 const TaskColumnChangesSchema = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   organizationId: Schema.optionalKey(Schema.String),
@@ -1179,7 +946,6 @@ const TaskColumnChangesSchema = Schema.Struct({
 
 type TaskColumnChanges = typeof TaskColumnChangesSchema.Type;
 
-/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, and the assignee the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -1206,7 +972,6 @@ const removeTask = SqlSchema.findOneOption({
     ),
 });
 
-/** The conversations of the task's coding agents, read before the delete cascades the rows that name them. */
 const findAgentConversations = SqlSchema.findAll({
   Request: TaskKeySchema,
   Result: Schema.Struct({ id: Schema.String, conversationId: Schema.String }),
@@ -1220,11 +985,6 @@ const findAgentConversations = SqlSchema.findAll({
     ),
 });
 
-/**
- * The name written only where the task still stands untitled, so the check
- * and the write are one statement and a name a member gave the task
- * meanwhile is never written over.
- */
 const nameUntitled = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, name: Schema.String }),
   Result: TaskIdRowSchema,
@@ -1238,13 +998,6 @@ const nameUntitled = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * Starts a task under the account, in the workspace it was handed, as one
- * empty document, with the repository it was handed; it stands first in
- * the list. A plan handed no name, or a blank one, starts as
- * `UNTITLED_DESCRIPTION_NAME`.
- */
-/** A started task's row as it is inserted: its name, or Untitled, its description's text, empty where none is named, and its brief, or none for a blank one. */
 const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -1272,7 +1025,6 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
     };
   });
 
-/** Refuses an assignee who is no member of the workspace with `TaskAssigneeNotMember`; no one assigned passes. */
 function assigneeAdmitted(
   assigneeId: string | null | undefined,
   organizationId: string,
@@ -1283,27 +1035,16 @@ function assigneeAdmitted(
   );
 }
 
-/** A task as a write left it, and the transaction it committed in; none where it changed no row. */
 export interface TaskCommitted<A> {
   readonly task: A;
   readonly txid?: string;
 }
 
-/**
- * A task changed, as `updateTaskCommitted` answers it: with the agents its
- * move to Done archived with it, none for any other change, and whether this
- * write moved its status, read under the row's lock, so two changes naming
- * one status that race are told apart.
- */
 export interface TaskChanged extends TaskCommitted<Task> {
   readonly archived: readonly TaskArchivedAgent[];
   readonly statusMoved: boolean;
 }
 
-/**
- * Starts a task as `insertOf` writes it; an assignee who is no member of
- * its workspace refuses it with `TaskAssigneeNotMember`, nothing written.
- */
 export function createTask(
   userId: string,
   started: NewTask,
@@ -1311,15 +1052,6 @@ export function createTask(
   return Effect.map(createTaskCommitted(userId, started), (created) => created.task.task);
 }
 
-/**
- * The row a start writes, as `insertOf` makes it, once its assignee is
- * admitted and the other tasks `holding` names are held for update in id
- * order. Note that they are held once the task's number is taken and before
- * its row is written, because every start takes the workspace's number
- * before its row's reference to a parent locks that parent, and a relation
- * change locks its two tasks in id order, so a start holding them any other
- * way would hold a lock one of those waits on while it waits on theirs.
- */
 function startedValues(
   userId: string,
   started: NewTask & { readonly id?: string },
@@ -1333,13 +1065,6 @@ function startedValues(
   });
 }
 
-/**
- * A task started, as `createTask` starts one, as the service holds it, so a
- * Start on it in the same request need not read it again, and the
- * transaction its row was written in. `holding` names the other tasks the
- * caller's transaction goes on to change, held as `startedValues` holds
- * them.
- */
 export function createTaskCommitted(
   userId: string,
   started: NewTask,
@@ -1354,7 +1079,6 @@ export function createTaskCommitted(
       Effect.gen(function* () {
         const values = yield* startedValues(userId, started, holding);
         const { txid, ...row } = yield* insertTask(values).pipe(
-          // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
         return { task: yield* storedTaskOf(userId, row), txid };
@@ -1363,22 +1087,10 @@ export function createTaskCommitted(
   );
 }
 
-/** A task as a start answers it: whether this start made it, and the transaction it was written in where it did. */
 export interface TaskStartCommitted extends TaskCommitted<StoredTask> {
   readonly made: boolean;
 }
 
-/**
- * A task started as `createTaskCommitted` starts one, under the id its
- * maker chose, as a client that draws the task before the service answers
- * mints one. Where a task stands under that id already, nothing is
- * written: one the account reaches, as the same start sent again finds the
- * one it made, is answered as its read shows it, with no transaction, since
- * no write of this start's made it; any other, another account's or one
- * the account reaches no more, refuses the start with `TaskIdTaken`, which
- * carries nothing of it. The task is read before its number is taken, so a
- * start sent again skips none.
- */
 export function createTaskCommittedOnce(
   userId: string,
   started: NewTask & { readonly id: string },
@@ -1399,8 +1111,6 @@ export function createTaskCommittedOnce(
           const { txid, ...row } = inserted.value;
           return { task: yield* storedTaskOf(userId, row), txid, made: true };
         }
-        // Note that a start under the same id that committed meanwhile reads as made, because the insert
-        // waited on it, and a task the account does not reach reads as none, which the start is refused as.
         const raced = yield* readTask(userId, started.id);
         if (Option.isNone(raced)) return yield* new TaskIdTaken();
         return { task: raced.value, made: false };
@@ -1409,12 +1119,6 @@ export function createTaskCommittedOnce(
   );
 }
 
-/**
- * Starts a task under the id its maker chose, as an agent's call makes one
- * under an id drawn from its own key, its description's text the one given, where
- * no task stands under that id yet; nothing where one does, so the call run
- * again, even at once, makes one task between them.
- */
 export function createTaskOnce(
   userId: string,
   started: NewTask & { readonly id: string; readonly text: string },
@@ -1427,15 +1131,6 @@ export function createTaskOnce(
   });
 }
 
-/**
- * Every task of every workspace the account is a member of, newest started first, without their documents.
- * Nothing but starting a task moves the order: opening, reading, saving,
- * pinning, and settling one leave every row where it stood, and the order a
- * pin draws is the window's to draw from `pinPosition` and `pinnedAt`. A
- * task waiting on an open task the account reaches is marked blocked
- * (`taskBlockedFor`), and one an automation's run made for itself is marked
- * so (`taskMadeByRun`).
- */
 export function listTasks(userId: string): TaskStoreEffect<readonly TaskSummary[]> {
   return Effect.gen(function* () {
     const rows = yield* findTasks({ userId });
@@ -1455,11 +1150,6 @@ export function listTasks(userId: string): TaskStoreEffect<readonly TaskSummary[
   });
 }
 
-/**
- * The task with its saved document and its conversation, or nothing for a
- * task of a workspace the account is not in. This is the read the window opens a task
- * through and the brain starts and resumes from.
- */
 export function readTask(
   userId: string,
   taskId: string,
@@ -1469,12 +1159,6 @@ export function readTask(
   );
 }
 
-/**
- * The task as `readTask` answers it to the window, without the rest the
- * service holds beside it: what opening a description and answering one after a
- * write need. Nothing for a task of a
- * workspace the account is not in.
- */
 export function readTaskDescription(
   userId: string,
   taskId: string,
@@ -1484,11 +1168,6 @@ export function readTaskDescription(
   );
 }
 
-/**
- * The workspace of a task the account reaches, as `readTask` would name it,
- * in one statement rather than the whole task: what a GitHub read of the
- * task's repository needs, once per agent where a delivery reads several.
- */
 export function readTaskWorkspace(
   userId: string,
   taskId: string,
@@ -1499,30 +1178,18 @@ export function readTaskWorkspace(
   );
 }
 
-/** A task as `readTaskHeader` reads it: where it stands and whose it is, without its description. */
 export interface TaskHeader {
   readonly workspaceId: string;
   readonly ownerId: string;
   readonly name: string;
   readonly repository: string | null;
-  /** Where the task stands. */
   readonly status: TaskStatus;
-  /** The task it is a child of; null for a task at the top. */
   readonly parentTaskId: string | null;
-  /** How the task is worked. */
   readonly mode: TaskMode;
-  /** The member it is assigned to; null for none. */
   readonly assigneeId: string | null;
-  /** Its number in its workspace, which its links name it by (`taskLinkStep`). */
   readonly number: number;
 }
 
-/**
- * A task the account reaches, as `readTask` would answer it, in one
- * statement and without its description or its history: what a read
- * that only refuses a task, finds its workspace or its repository, or names
- * it needs. Nothing where the account reaches none.
- */
 export function readTaskHeader(
   userId: string,
   taskId: string,
@@ -1532,7 +1199,6 @@ export function readTaskHeader(
   );
 }
 
-/** The tasks among those named the account reaches, as `readTaskHeader` answers each, in one statement, keyed by id; one it reaches none of is absent. */
 export function readTaskHeaders(
   userId: string,
   taskIds: readonly string[],
@@ -1560,11 +1226,6 @@ export function readTaskHeaders(
   );
 }
 
-/**
- * The task as `readTask` reads it, held under the row's lock until the
- * enclosing transaction ends, so a save formatted from it is not crossed by
- * a rename.
- */
 export function readTaskForUpdate(
   userId: string,
   taskId: string,
@@ -1574,18 +1235,10 @@ export function readTaskForUpdate(
   );
 }
 
-/** What a save of a description's text writes beside it, where it is handed. */
 export interface DescriptionTextSaveExtras {
-  /** The coding agents' journal. */
   readonly agentEdits?: readonly DescriptionAgentEdit[];
 }
 
-/**
- * Replaces the text of a task that is one document, with the agents' journal
- * where it is handed, stamps the description's pictures the text names as saved, and answers
- * the task as saved, or nothing where the account reaches no such task; nothing
- * is ever created here.
- */
 export function saveDescriptionText(
   userId: string,
   taskId: string,
@@ -1595,21 +1248,12 @@ export function saveDescriptionText(
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const row = yield* replaceText({ userId, taskId, text, ...extras, now });
-    // The pictures the text names are saved now, so the sweep leaves them for as long as the description stands.
     if (Option.isSome(row))
       yield* stampSavedAttachments(taskId, descriptionAttachmentIdsIn(text, taskId));
     return yield* Effect.transposeOption(Option.map(row, (saved) => taskOf(userId, saved)));
   });
 }
 
-/**
- * The columns of the row the change names; none where it names only a pin.
- * A move takes `movedNumber`, the
- * next number of the workspace it moves to. A status that moves stamps when
- * the task was finished (`completedAtOf`), and who moved it to Done where
- * `doneBy` names an archiver and none otherwise; one asked for as it already
- * stands leaves both where they were.
- */
 function columnChangesOf(
   changes: TaskChanges,
   standing: TaskRow,
@@ -1640,7 +1284,6 @@ function columnChangesOf(
   };
 }
 
-/** The reader's own read mark of the plan set as asked (`READ_MARK`); every other member's stands as it was. */
 function markAsAsked(
   userId: string,
   taskId: string,
@@ -1657,11 +1300,6 @@ function markAsAsked(
   }
 }
 
-/**
- * The reader's own pin of the plan set as asked: from now, or from the
- * instant already standing, at the position given where one is; or taken
- * away. Every other member's pin stands as it was.
- */
 function pinAsAsked(
   userId: string,
   taskId: string,
@@ -1675,23 +1313,12 @@ function pinAsAsked(
     : placePin({ userId, taskId, position, now });
 }
 
-/**
- * Every member's entries for the plan taken out of their sections, as it
- * moves to another workspace: a section is one workspace's, so a plan that
- * leaves it leaves every section there, and one moved back later stands
- * under Tasks rather than where it once was kept.
- */
 const leaveSections = SqlSchema.void({
   Request: Schema.String,
   execute: (taskId) =>
     Database.use((db) => db.delete(taskSectionEntry).where(eq(taskSectionEntry.taskId, taskId))),
 });
 
-/**
- * The task's agents and inbox moved along with it to another workspace, so
- * no row of the task's stays tied to the workspace it left, whose deletion
- * would otherwise take them with it.
- */
 const followingAgentsAndInbox = Effect.fnUntraced(function* (
   taskId: string,
   organizationId: string,
@@ -1707,14 +1334,6 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
   );
 });
 
-/**
- * The task's agents still standing unarchived, or the one named among them,
- * each with its conversation locked, the lock every write of its lines and
- * turns takes, in the conversations' order, so two finishes of one task never
- * wait on each other. A line handed to an agent stands awaiting from before
- * its runtime hears it (`dispatch-claim.ts`), so the caller's guard reads
- * such an agent at work.
- */
 const lockStandingAgents = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String, agentId: Schema.optionalKey(Schema.String) }),
   Result: Schema.Struct({
@@ -1746,7 +1365,6 @@ const lockStandingAgents = SqlSchema.findAll({
     ),
 });
 
-/** The agents named archived with their task at its stamp, as the archiver given, where they still stand unarchived; who they are. */
 const stampArchivedWithTask = SqlSchema.findAll({
   Request: Schema.Struct({
     agentIds: Schema.Array(Schema.String),
@@ -1772,7 +1390,6 @@ const stampArchivedWithTask = SqlSchema.findAll({
     ),
 });
 
-/** The task's agents archived with it since its Done stamped `since`, each with its archive's stamp, locked until the caller commits. */
 const lockArchivedWithTask = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String, since: Schema.Date }),
   Result: Schema.Struct({ id: Schema.String, archivedAt: InstantColumnSchema }),
@@ -1793,7 +1410,6 @@ const lockArchivedWithTask = SqlSchema.findAll({
     ),
 });
 
-/** The agents named brought back from their archives, who archived them cleared with it. */
 const clearArchives = SqlSchema.void({
   Request: Schema.Array(Schema.String),
   execute: (agentIds) =>
@@ -1805,16 +1421,6 @@ const clearArchives = SqlSchema.void({
     ),
 });
 
-/**
- * The task's standing agents, or the one named among them, that the guard
- * reads idle under their conversations' locks, archived with the task at
- * `now` by the archiver given, marked `withTask` so the task's move off
- * Done brings them back; who they are. An agent that is the archiver itself
- * stands: one moving its own task to Done is still answering whoever asked,
- * and is never archived by that move, at once or as its turn ends. The caller
- * settles their open asks once the task's own are settled, so those read as
- * the task's.
- */
 const archivedIdleWithTask = Effect.fnUntraced(function* <R>(
   taskId: string,
   agentId: string | undefined,
@@ -1837,12 +1443,6 @@ const archivedIdleWithTask = Effect.fnUntraced(function* <R>(
   });
 });
 
-/**
- * The agents the task's Done stamped at `completedAt` archived with it, and
- * those archived with it as their turns ended since, brought back, each
- * opening again the items its archive settled (`inbox-settle.ts`); one
- * archived on its own stays archived.
- */
 const broughtBackWithTask = Effect.fnUntraced(function* (taskId: string, completedAt: Date) {
   const archived = yield* lockArchivedWithTask({ taskId, since: completedAt });
   if (archived.length === 0) return;
@@ -1852,29 +1452,6 @@ const broughtBackWithTask = Effect.fnUntraced(function* (taskId: string, complet
   });
 });
 
-/**
- * Changes the task, a new name with its document's heading, a repository or
- * none, pinned or not, read or not, its workspace, where it stands, and answers it as
- * changed, or nothing where the account reaches no such task. The changes
- * arrive already read under the wire's rules, and a repository already
- * confirmed reachable; a move runs the caller's guard under the row's lock
- * on the repository the task will name once it lands. A change is
- * not a save: the document's `updatedAt` and the list's order stand. The pin
- * and the read mark are the account's own and no other member's. A task no one is assigned to
- * that the change moves into progress is assigned to the account, unless the
- * change names an assignee of its own. A change that moves the task to Done
- * or Canceled settles its open inbox items, and one that moves it off them
- * to work again opens again the items that move settled (`inbox-settle.ts`).
- *
- * Where the caller hands `doneArchive`, a change that moves the task to Done
- * records the archiver given as who moved it there, and archives with it, at
- * its finish's stamp, every standing agent the guard reads idle, as that
- * archiver, the archiving agent itself left standing; one still at work
- * stands, and is archived as its turn ends while the task still stands Done
- * (`archiveAgentOfDoneTask`). A move to Done without one records no one, and
- * archives nothing then or later. Any change that moves the task off Done
- * brings back every agent that Done archived with it, and no other.
- */
 export function updateTask<E = never, R = never, RA = never>(
   userId: string,
   taskId: string,
@@ -1892,12 +1469,6 @@ export function updateTask<E = never, R = never, RA = never>(
   );
 }
 
-/**
- * A task changed, as `updateTask` changes one, the transaction the change
- * committed in, read from the write that changed the row or the reader's pin,
- * none where the change wrote neither, and the agents its move to Done
- * archived, which the caller lets go of as an archive by hand does.
- */
 export function updateTaskCommitted<E = never, R = never, RA = never>(
   userId: string,
   taskId: string,
@@ -1934,9 +1505,7 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
         const moved =
           changes.organizationId !== undefined &&
           changes.organizationId !== locked.value.organizationId;
-        // A task moved to another workspace takes the next number there; its old one is never handed out again.
         const movedNumber = moved ? yield* nextTaskNumber(changes.organizationId) : undefined;
-        // The number it leaves behind still opens it, as a link written with it names it.
         if (moved) {
           yield* forwardTaskNumber({
             organizationId: locked.value.organizationId,
@@ -1946,14 +1515,11 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
         }
         const landsIn = moved ? changes.organizationId : locked.value.organizationId;
         yield* assigneeAdmitted(changes.assigneeId, landsIn);
-        // A task moved where its assignee is no member goes unassigned rather than assigned to someone who cannot read it.
         const unassigned =
           moved &&
           changes.assigneeId === undefined &&
           locked.value.assigneeId !== null &&
           !(yield* isWorkspaceMember(locked.value.assigneeId, landsIn));
-        // A task no one is on is its mover's once it moves into progress, as Linear's start assigns;
-        // an assignee the change names wins, and one taken off a task already in progress stays off.
         const startedBy =
           changes.assigneeId === undefined &&
           changes.status === TASK_STATUS.IN_PROGRESS &&
@@ -1971,19 +1537,14 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
           movedNumber,
           doneArchive?.archivedBy,
         );
-        // A change that names only a pin writes nothing of the row, and an update with nothing to set is no statement.
         const { txid: written, ...row } =
           Object.keys(columns).length === 0
             ? { ...locked.value, txid: undefined }
             : yield* applyChanges({ userId, taskId, ...columns }).pipe(
-                // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
                 Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
               );
         const txid =
           written ?? Option.getOrUndefined(pinned)?.txid ?? Option.getOrUndefined(marked)?.txid;
-        // A task moved to Done archives its idle agents with it, and one moved off Done brings them back.
-        // Note that this runs before its agents and items move, so the write locks each agent's
-        // conversation before its row and agent rows before item rows, in the order an archive does.
         const archived =
           columns.status === TASK_STATUS.DONE && doneArchive !== undefined
             ? yield* archivedIdleWithTask(taskId, undefined, doneArchive, now)
@@ -2003,16 +1564,12 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
             yield* leaveTaskBlocks(taskId);
           }
         }
-        // A task moved to Done or Canceled settles its open inbox items that ask, and one moved off them
-        // to work again opens again the items that move settled, by its stamp. Note that this runs after its
-        // agents moved, so the write locks agent rows before item rows, in the order an archive does.
         if (columns.status !== undefined) {
           yield* settleTaskInboxItems(taskId, columns.status, now);
           if (!SETTLED.includes(columns.status) && finishedAt !== null) {
             yield* reopenTaskInboxItems(taskId, locked.value.status, finishedAt);
           }
         }
-        // An archived agent's asks the task's settle left open settle with its archive.
         yield* settleAgentInboxItems(
           archived.map(({ id }) => id),
           now,
@@ -2029,7 +1586,6 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
   );
 }
 
-/** The row's parent column written as asked, and the row answered as changed; the row as it stands, with no transaction, where the parent stood so already. */
 const parentWritten = (
   userId: string,
   row: TaskRow,
@@ -2038,25 +1594,11 @@ const parentWritten = (
   Effect.gen(function* () {
     if (row.parentTaskId === parentTaskId) return { task: yield* taskOf(userId, row) };
     const { txid, ...changed } = yield* applyChanges({ userId, taskId: row.id, parentTaskId }).pipe(
-      // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
       Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
     );
     return { task: yield* taskOf(userId, changed), txid };
   });
 
-/**
- * Makes the task the child of the parent named, or a task at the top with
- * null, and answers it as changed with the transaction the change committed
- * in, none where the parent stood so already; nothing where the account
- * reaches no such task. The parent must be one the account reaches in the
- * child's workspace (`TaskParentUnreached`), work in the child's repository
- * (`TaskParentRepositoryDiffers`), since a child always works in its
- * parent's, and be neither the task nor one of its descendants
- * (`TaskParentCycle`); where its agents run stays the child's own. Both
- * rows are held for update, in id order, and the workspace's parent writes
- * take turns on the lock its block writes take, so no two writes close a
- * loop between them. Clearing the parent always lands for a task reached.
- */
 export function setTaskParent(
   userId: string,
   taskId: string,
@@ -2085,7 +1627,6 @@ export function setTaskParent(
         if (!sameRepository(child.repository, parent.repository)) {
           return yield* new TaskParentRepositoryDiffers({ repository: parent.repository });
         }
-        // Note that the workspace's parent writes take turns, because two that each close half a loop would each walk past the other's unwritten row.
         yield* client`select pg_advisory_xact_lock(hashtextextended(${child.organizationId}, 0))`;
         if (Option.isSome(yield* findAmongAncestors({ taskId, parentTaskId }))) {
           return yield* new TaskParentCycle();
@@ -2096,12 +1637,6 @@ export function setTaskParent(
   );
 }
 
-/**
- * Names a task that still stands as `UNTITLED_TASK_NAME`, as its first
- * coding agent's generated title does; false, and nothing written, where
- * the task has a name of its own or is no task the account reaches. A rename, like `updateTask`'s, is not a save, so the list's
- * order and the document stand.
- */
 export function nameUntitledTask(
   userId: string,
   taskId: string,
@@ -2125,7 +1660,6 @@ const findStartMadeTask = SqlSchema.findOneOption({
     ),
 });
 
-/** Whether the task is one `start_agent` made for the agent it started, which finishes with no merge asked. */
 export function isStartTask(taskId: string): TaskStoreEffect<boolean> {
   return Effect.map(findStartMadeTask({ taskId }), Option.isSome);
 }
@@ -2143,18 +1677,10 @@ const assignUnassigned = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * Assigns a task no one is assigned to the account, as a coding agent it
- * started on the task by hand does, and answers whether it did. A task
- * already assigned, to the account or anyone else, stands as it was, and so
- * does one the account does not reach, which a member alone does; the check
- * and the write are one statement, and like any change it is not a save.
- */
 export function assignUnassignedTask(userId: string, taskId: string): TaskStoreEffect<boolean> {
   return Effect.map(assignUnassignedTaskCommitted(userId, taskId), Option.isSome);
 }
 
-/** The task assigned, as `assignUnassignedTask` assigns it, and the transaction it committed in; none where it stood as it was. */
 export function assignUnassignedTaskCommitted(
   userId: string,
   taskId: string,
@@ -2175,20 +1701,10 @@ const beginTask = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * Moves a task to in progress, as a coding agent started on it or a turn of
- * one starting on it does, and answers whether it moved: one whose work has
- * not begun, in the backlog or to do, and one settled, done or canceled,
- * which the work reopens. A task already in progress, and one the account
- * does not reach, stand as they were, so asking again moves nothing. Like
- * any change it is not a save, so the list's order stands; the check and
- * the write are one statement.
- */
 export function beginTaskWork(userId: string, taskId: string): TaskStoreEffect<boolean> {
   return Effect.map(beginTaskWorkCommitted(userId, taskId), Option.isSome);
 }
 
-/** The task moved to in progress, as `beginTaskWork` moves it, and the transaction it committed in; none where it stood as it was. */
 export function beginTaskWorkCommitted(
   userId: string,
   taskId: string,
@@ -2196,21 +1712,13 @@ export function beginTaskWorkCommitted(
   return beginTask({ userId, taskId });
 }
 
-/** The statuses a task's work is settled in, which a finish leaves as they are and a start or a turn reopens. */
 const SETTLED: readonly TaskStatus[] = [TASK_STATUS.DONE, TASK_STATUS.CANCELED];
 
-/** The pull request states under which an agent's pull request still waits on review or on being marked ready. */
 const OPEN_PULL_REQUEST_STATES: readonly string[] = [
   PULL_REQUEST_STATE.OPEN,
   PULL_REQUEST_STATE.DRAFT,
 ];
 
-/**
- * Where the pull requests of the task's standing agents stand, as their rows
- * keep them: each agent's own, then each one in a repository it works in
- * beside its own (`agent_repository`); a repository whose row keeps none has
- * no line here, so an agent in one repository reads as it always did.
- */
 const findStandingPullRequestStates = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String }),
   Result: Schema.Struct({ state: Schema.String }),
@@ -2242,12 +1750,6 @@ const findStandingPullRequestStates = SqlSchema.findAll({
     ),
 });
 
-/**
- * One inbox item of the task holding a question open for the developer:
- * open, and holding an ask open, which a notice, a post that asked nothing
- * and waits on their nod alone, never does (the inbox store's own `ASKING`,
- * `packages/service/src/inbox/inbox-store.ts`).
- */
 const findOpenQuestion = SqlSchema.findOneOption({
   Request: Schema.Struct({ taskId: Schema.String }),
   Result: TaskIdRowSchema,
@@ -2267,7 +1769,6 @@ const findOpenQuestion = SqlSchema.findOneOption({
     ),
 });
 
-/** The one write that settles a task done: the status, and when it was finished, by no one by hand, under the lock the finish holds, on a task not settled already. */
 const finishTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ taskId: Schema.String, now: Schema.Date }),
   Result: TaskIdRowSchema,
@@ -2285,29 +1786,6 @@ const finishTask = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * Moves a task whose work is finished to done, and answers whether it moved.
- * The work is finished where every standing agent of the task, the archived
- * left out, stands idle by the caller's guard, none of them has a pull
- * request still open or a draft, at least one of them has a merged one, and
- * no inbox item of the task holds a question open for the developer. A task
- * already done or canceled, one the account does not reach, and one whose
- * work is not finished stand as they were, so asking at every moment that
- * may have finished it is safe: a turn's end, a pull request first seen
- * merged, an inbox question settled. Everything is read under the task's
- * row lock, each agent under its conversation's,
- * so a start or a turn racing the finish either landed before the read,
- * which then refuses, or waits on the lock and reopens the task after.
- * Like any change it is not a save, so the list's order stands. A finish
- * settles the task's open inbox items that still ask, and leaves its
- * notices open until a member opens them (`inbox-settle.ts`). It archives
- * no agent, then or as a turn ends, since someone may be talking to one:
- * only a member's or an agent's move to Done does (`updateTaskCommitted`).
- * A task an automation's run or a Slack message made for itself asks no
- * merged pull request, `mergeRequired` false, since its agent may publish
- * nothing, and its caller's
- * guard holds its agents to having finished well instead.
- */
 export function finishTaskWork<R = never>(
   userId: string,
   taskId: string,
@@ -2338,7 +1816,6 @@ export function finishTaskWork<R = never>(
   );
 }
 
-/** Where the task stands and who moved it to Done by hand, its row locked until the caller commits; none where the account reaches no such task. */
 const lockDoneBy = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: Schema.Struct({ status: taskStatusSchema, doneBy: ArchivedByColumnSchema }),
@@ -2352,19 +1829,6 @@ const lockDoneBy = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * Archives the agent with its task where a member or an agent moved the task
- * to Done and the guard reads the agent idle under its conversation's lock,
- * as that move archived the task's idle agents, at this moment and as whoever
- * moved it: what a turn's end asks of an agent still at work when its task
- * moved to Done. A Done made by our own finish archives nothing, and neither
- * does one the agent made itself (`archivedIdleWithTask`). A turn's start
- * takes the task up again (`beginTaskWork`), which clears who moved it, so a
- * Done this reads was made while the agent's turn ran. The task is read under
- * its row's lock first, so a move off Done at once either lands before, and
- * nothing is archived, or waits and brings the agent back. Answers the agent
- * where it was archived; none otherwise.
- */
 export function archiveAgentOfDoneTask<R = never>(
   userId: string,
   taskId: string,
@@ -2390,22 +1854,6 @@ export function archiveAgentOfDoneTask<R = never>(
   );
 }
 
-/**
- * Deletes the task and its document, and stamps its coding agents'
- * conversations cleared; false where the account reached no such task. The agents'
- * conversations are read before the delete, because the delete cascades
- * the agent rows that name them.
- *
- * A caller that stopped the task's agents first names the ones it stopped,
- * and the delete fails with `TaskAgentUnstopped` where any other stands. The
- * task's row is locked before the agents are read, so a Start racing the
- * delete either landed its agent before the read, which then refuses, or
- * waits on the lock and finds no task to start on. Nothing here reaches
- * past the database, so the lock is held only for these statements: what a
- * caller does to the agents it stopped, such as retiring their sessions,
- * it does before, and the stopped set re-checked here is what keeps an
- * agent started meanwhile, whose session it never touched, standing.
- */
 export function deleteTask(
   userId: string,
   taskId: string,
@@ -2414,7 +1862,6 @@ export function deleteTask(
   return Effect.map(deleteTaskCommitted(userId, taskId, guard), Option.isSome);
 }
 
-/** A task deleted, as `deleteTask` deletes one, and the transaction its row went in; none where the account reached no such task. */
 export function deleteTaskCommitted(
   userId: string,
   taskId: string,

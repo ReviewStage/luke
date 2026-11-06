@@ -22,7 +22,6 @@ import { recordingReporter } from "./testing/recording-reporter.js";
 
 const SETTINGS: AppSettings = appSettingsWire(settingsView());
 const REPORTER = "panel-1";
-/** A task's agents run on the member's Studio. */
 const ON_STUDIO = {
   machine: AGENT_MACHINE.DEVICE,
   deviceId: "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11",
@@ -33,7 +32,6 @@ interface RecordedCall {
   readonly params: WireRecord;
 }
 
-/** A client that keeps every call it was handed and accepts each as a settings write. */
 function recordingClient() {
   const requests: RecordedCall[] = [];
   const client: GatewayClient = {
@@ -279,7 +277,6 @@ it.effect(
           call: () => Effect.succeed(answer),
           on: () => () => undefined,
         }).updateSetting(APP_SETTING_SCHEMA.theme.field, THEME.DARK, REPORTER);
-      // The router's own boundary, which every act's call through the operator runs under.
       const asked = (answer: GatewayCallResult) =>
         Effect.exit(Effect.withErrorReporting(answering(answer), { defectsOnly: true }));
       yield* asked({

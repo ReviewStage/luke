@@ -14,17 +14,6 @@ import type { ActSender } from "./base.js";
 import { type MacShell, macShellProcedures } from "./mac-shell-procedures.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
-/**
- * Shells on this Mac as main carries them, over shells and ports that answer
- * from a script: a shell belongs to the window that opened it, which alone
- * attaches to and closes it; its port carries what it printed, its exit,
- * and what the panel typed and resized; a page's end leaves it running and
- * the next attach draws what it printed meanwhile; output pauses the shell
- * past the tab's acks; and the window's end kills it. A window is an inert
- * object of its own. Synthetic ids, folders, and bytes throughout.
- */
-
-/** A platform's handle on a window, which the procedures read by identity alone. */
 type Window = { readonly window: number };
 
 const ports: TestActPort<Window>[] = [];
@@ -40,7 +29,6 @@ let windows = 0;
 
 const panelOf = (): ActSender<Window> => ({ sender: { window: ++windows }, panel: true });
 
-/** One shell the platform started, as the test drives it and watches it. */
 interface ScriptedShell {
   readonly folder: string;
   readonly heard: string[];
@@ -48,7 +36,6 @@ interface ScriptedShell {
   exit(code: number): void;
 }
 
-/** One port posted to a window, as the test watches it. */
 interface ScriptedPort {
   readonly sender: Window;
   readonly ticket: TerminalPortTicket;
@@ -136,7 +123,6 @@ const attach = (terminalId: string) => ({
 });
 const shellOf = (terminalId: string) => ({ agentId: AGENT_ID, terminalId });
 
-/** What a port carried, its bytes read as text. */
 function carried(port: ScriptedPort | undefined) {
   return port?.posted.map((message) =>
     message.type === TERMINAL_PORT_MESSAGE.OUTPUT

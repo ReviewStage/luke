@@ -18,16 +18,6 @@ import {
 } from "./experiment-write.js";
 import { type SecretCipher, SettingsStore } from "./settings-store.js";
 
-/**
- * An experiment's switch written to a scripted service and kept in a real
- * settings file: what the service answers is what the store then holds and
- * the settings carry, two presses land in the order they were made however
- * the service answers them, and a write the service did not answer, or
- * answered after the account signed out, moves no switch.
- *
- * A synthetic account throughout.
- */
-
 const ACCOUNT = {
   accessToken: "access-token",
   refreshToken: "refresh-token",
@@ -35,14 +25,12 @@ const ACCOUNT = {
   provider: "github",
 } as const;
 
-/** Stands in for Electron's Keychain-backed `safeStorage`. */
 const CIPHER: SecretCipher = {
   isAvailable: () => true,
   encrypt: (plainText) => new TextEncoder().encode(plainText),
   decrypt: (cipherText) => new TextDecoder().decode(cipherText),
 };
 
-/** A store over a directory of its own, the test's account signed in. */
 const signedInStore = Effect.gen(function* () {
   const directory = yield* temporaryDirectoryScoped("experiments-");
   const store = new SettingsStore({
@@ -55,13 +43,11 @@ const signedInStore = Effect.gen(function* () {
   return store;
 });
 
-/** Real event-loop turns until `holds`, since the fake service and the store's file I/O are real. */
 const until = (holds: () => boolean) =>
   Effect.promise(async () => {
     for (let turn = 0; turn < 2_000 && !holds(); turn += 1) await nextTurn();
   });
 
-/** A gate the fake service waits at, opened from the test. */
 function gate() {
   let open = () => {};
   const opened = new Promise<void>((resolve) => {
@@ -70,14 +56,12 @@ function gate() {
   return { opened, open };
 }
 
-/** The signed-in account's key as the desktop's session reads it: the stored account's address. */
 const storedAccountKey = (store: SettingsStore) => () =>
   Effect.map(
     Effect.orElseSucceed(store.readAccount(), () => undefined),
     (account) => account?.email,
   );
 
-/** The account's service, answering each write as `answer` decides from its body and the write's place in line. */
 function serviceAnswering(
   answer: (body: { experiments: ExperimentChoices }, at: number) => Promise<Response>,
 ) {
@@ -94,17 +78,14 @@ function serviceAnswering(
   return { client, bodies };
 }
 
-/** The service's answer: the experiments it then holds. */
 const holding = (experiments: ExperimentChoices) =>
   new Response(JSON.stringify({ preferences: {}, experiments }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
 
-/** What every test runs over: the real file system the settings store keeps its file on. */
 const onDisk = Effect.provide([NodeFileSystem.layer, NodePath.layer]);
 
-/** A writer over `client` and `store`, the account read from the store and confirmed at once. */
 const writerOver = (
   client: AccountPreferencesClient,
   store: SettingsStore,

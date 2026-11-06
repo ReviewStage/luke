@@ -13,11 +13,6 @@ import { runModeFor } from "../run-mode.js";
 import { AppStateStore, initialAppState } from "./app-state-store.js";
 import { wireGateway } from "./gateway-wiring.js";
 
-/**
- * gateway-wiring.test.ts -- what the host says reaching the document every
- * window is told from, through the one in-process Gateway a client holds.
- */
-
 const RUN = {
   launch: { profile: "idle", captureMode: false, fixtureMode: false },
   runMode: runModeFor({ capture: false, fixture: false }),

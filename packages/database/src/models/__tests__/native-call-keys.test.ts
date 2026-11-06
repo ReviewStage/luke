@@ -10,17 +10,8 @@ import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import { nativeCallKeyOf } from "../native-call-keys.js";
 
-/**
- * The key a native agent's call runs under, over a real dialect: a call of
- * the same input within the window reads the key the first was given, one
- * past the window is given a fresh one, and another conversation's call of
- * the same input, the same account's or another's, is never handed it.
- * Synthetic accounts and digests throughout.
- */
-
 const WINDOW_MS = 10 * 60_000;
 
-/** A new account with a coding agent's conversation of its own, answering both ids. */
 const openConversation = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Database.use((db) =>
@@ -52,7 +43,6 @@ it.layer(getTestDB())("native call keys", (it) => {
 
         assert.equal(retried, first);
         assert.notEqual(later, first);
-        // The fresh key opens a window of its own from its minting, not the first key's.
         assert.equal(afterLater, later);
       }),
   );

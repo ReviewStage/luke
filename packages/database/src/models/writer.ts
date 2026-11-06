@@ -91,84 +91,18 @@ import {
 } from "./dispatch-claim.js";
 import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
 
-/**
- * The store writer: the one path by which a `messages` or `turns` row is
- * written. It consumes the brain's run event stream (`RunEvent`,
- * every kind of turn) and keeps the record the plan describes: a turn row
- * from queued through running to its end, one assistant message per turn
- * that is the turn's journal while it runs — each tool call written in
- * `input-available` before it executes and moved to `output-available` or
- * `output-error` as its result lands, `finished_at` set once and the row's
- * words immutable after — the user messages the turn opened with, and a
- * compaction message where the compaction's owner hands one over. A row's
- * place in the sequence is the one thing a finished row may still lose: the
- * sequence is what a device pages by, so a row moved into a turn, or a
- * turn's work moved behind the ask it answers, takes a fresh position and is
- * read again there rather than left where a device already passed it. Every write is
- * idempotent: a message by its `(conversation_id, client_id)`, a turn by its
- * id, a tool part by its call id, so an event delivered twice writes one row
- * and a stream replayed from its start changes nothing.
- *
- * A turn's journal grows in place, and a batch of events (`consumeAll`)
- * grows it in memory under one lock and lands it once as the write ends,
- * with one move of the journal revision, so a turn whose events arrive
- * together rewrites its parts once rather than once for each.
- *
- * Every write runs under a lock on the conversation row, which serializes
- * the conversation's writers, so a check made before an insert holds when
- * the insert runs. Sequences are allocated from the row's own counters,
- * each allocation landing on the first position no row of the conversation
- * holds, so a position taken outside the counter costs nothing but a skip.
- * The unique constraint on `(conversation_id, seq)` stays the backstop: a
- * writer that still lands on a taken position is one that wrote outside
- * this lock, and its violation surfaces rather than being retried into
- * place. Nothing here reads a row back for the model: what is written is
- * held to the vocabulary before it lands, through the same reader the
- * store's reads go through, so no row can carry a tool the catalog does not
- * register, an input its schema refuses, or metadata outside the set. A
- * message refused there is refused whole and reported, never cut down to
- * the parts that would pass: a cut message says something its author did not.
- *
- * One outcome any call can have is an answer the catalog never wrote: the
- * envelope saying the call was dispatched and its effect is unknown, which
- * the runtime hands the model for a tool that did not answer and this writer
- * gives a call the turn ended without answering. A tool's declared output
- * schema therefore has to admit that envelope, or the row of such a call
- * could not be read back; the writer holds the catalog to it once, when it
- * is composed, and refuses to exist over a catalog that fails it.
- *
- * Every statement is a Drizzle builder over the tables
- * `schemas/storage.ts` declares, yielded as the `Effect` Drizzle's own driver
- * makes it over the same `PgClient` the ambient `SqlClient` is; the transaction is
- * that client's own and the driver reads it from the running fiber, which is
- * what puts the sequence allocation and the writes that follow it inside the
- * conversation's lock rather than beside it. Each row a statement answers is
- * still decoded by a `Schema` rather than trusted, and a write's `jsonb`
- * column is handed the value itself rather than its JSON text, since
- * rendering one is the column's own work. What the builder cannot spell is a
- * named `sql` fragment inside the one rendered statement: the journal
- * revision's own data-modifying CTE, the sequence high-water mark, and the
- * `jsonb` field tests a spoken row is found by. The `StoreWriter` methods are
- * effects too, so the edge that owns the connection is the one that runs
- * them and a caller composes a write into the request it is already on.
- */
-
-/** The envelope of a call whose effect is unknown: dispatched, its answer lost, so it may have happened. */
 function unknownOutcome(reason: string) {
   return { status: UNKNOWN_ACTION_STATUS, reason } as const;
 }
 
-/** The one output any tool's schema must admit: the envelope of a call whose effect is unknown. */
 const UNKNOWN_OUTCOME_PROBE = unknownOutcome("the call was dispatched and its effect is unknown");
 
-/** The tools whose declared output schema would refuse the unknown outcome's envelope. */
 const toolsRefusingUnknownOutcome = (tools: ToolSet): Effect.Effect<readonly string[]> =>
   Effect.map(
     Effect.forEach(Object.entries(tools), ([name, declared]) => {
       if (declared.outputSchema === undefined) return Effect.succeed(undefined);
       const validate = asSchema(declared.outputSchema).validate;
       if (validate === undefined) return Effect.succeed(undefined);
-      // The SDK's validate answers a value or a thenable, so the door settles either.
       return Effect.map(
         Effect.promise(() => Promise.resolve(validate(UNKNOWN_OUTCOME_PROBE))),
         (result) => (result.success ? undefined : name),
@@ -183,37 +117,23 @@ export interface ConversationTarget {
 }
 
 interface StoreWriterOptions {
-  /** The catalog's `tool()` declarations by name: what a stored tool part may name, and what its input is held to. */
   readonly tools: ToolSet;
 }
 
-/** A coding agent's turn a write settled, as the writer tells `SettledTurnListener`. */
 export interface SettledAgentTurn {
   readonly userId: string;
   readonly conversationId: string;
   readonly turnId: string;
   readonly status: TurnStatus;
-  /** The failure word a failed turn was settled with; null for any other end. */
   readonly failure: string | null;
-  /** How long the turn ran: from its start, or its queueing for one that never started, to its settle. */
   readonly ranMs: number;
 }
 
-/**
- * What hears of each coding agent turn the writer settled, once the write's
- * transaction is done: the service's analytics (`server-events.ts`). Read
- * optionally, so a runtime or a test that provides none hears nothing, and
- * what it does never fails the write it follows. Note that a write run
- * inside a caller's transaction is heard as its savepoint ends, before the
- * caller's commit, so a listener that must not hear a settle rolled back
- * reads the turn's row again once that transaction is over.
- */
 export class SettledTurnListener extends Context.Service<
   SettledTurnListener,
   { readonly heard: (turn: SettledAgentTurn) => Effect.Effect<void, never, DatabaseServices> }
 >()("SettledTurnListener") {}
 
-/** What one write did: landed, found its row already standing, or had nothing to do for this kind. */
 export const STORE_WRITE_EFFECT = {
   WRITTEN: "written",
   REPEATED: "repeated",
@@ -222,10 +142,6 @@ export const STORE_WRITE_EFFECT = {
 
 type StoreWriteEffect = (typeof STORE_WRITE_EFFECT)[keyof typeof STORE_WRITE_EFFECT];
 
-/**
- * Why a write was refused: the row it needs is not there, the row or call it
- * would change is closed, or what it carries is outside the vocabulary.
- */
 export const STORE_WRITE_REFUSAL = {
   NO_CONVERSATION: "no_conversation",
   NO_TURN: "no_turn",
@@ -237,10 +153,8 @@ export const STORE_WRITE_REFUSAL = {
 
 type StoreWriteRefusal = (typeof STORE_WRITE_REFUSAL)[keyof typeof STORE_WRITE_REFUSAL];
 
-/** Why a write did not land, by the one word the writer has for it. */
 type Refused<Refusal extends StoreWriteRefusal> = { readonly refusal: Refusal };
 
-/** A message the vocabulary refused, with where and why, so the caller can say which field. */
 type MessageRefused = Refused<typeof STORE_WRITE_REFUSAL.MESSAGE_REFUSED> & {
   readonly reason: SchemaRefusal;
   readonly path: SchemaPath;
@@ -254,12 +168,10 @@ const NO_TURN: Refused<typeof STORE_WRITE_REFUSAL.NO_TURN> = {
   refusal: STORE_WRITE_REFUSAL.NO_TURN,
 };
 
-/** Another hand-over's dispatch claim stood on the conversation past the bound this write waits for it (`dispatch-claim.ts`); nothing was written. */
 const CONVERSATION_BUSY: Refused<typeof STORE_WRITE_REFUSAL.BUSY> = {
   refusal: STORE_WRITE_REFUSAL.BUSY,
 };
 
-/** What a write did, or why it did not land: the effect, or the refusal with what is known of it. */
 export type StoreWriteResult = Result.Result<
   StoreWriteEffect,
   | Refused<
@@ -273,11 +185,8 @@ export type StoreWriteResult = Result.Result<
 
 type RunStatus = (typeof RUN_STATUS)[keyof typeof RUN_STATUS];
 
-/** A turn queued ahead of its start: what opened it and, where the caller knows them, what it will run under. */
 interface TurnEnqueue {
-  /** The turn's id where the runtime minted one already; minted here otherwise. */
   readonly turnId?: string;
-  /** eve's own id for the turn, where the relay queues the row at eve's start; the opener's inbox row names none, since eve has not yet started a turn for it. */
   readonly eveTurnId?: string;
   readonly origin: TurnOrigin;
   readonly model?: string;
@@ -289,9 +198,7 @@ interface TurnEnqueue {
 interface TurnCancelRequest {
   readonly turnId: string;
   readonly at: Date;
-  /** eve's id for the tool call the Stop is made under, where an agent's `stop_agent` made it, written beside the instant. */
   readonly key?: string;
-  /** The coding agent whose `stop_agent`, or whose Start continuing the turn's agent, made the Stop; none for the developer's or our own. */
   readonly by?: string;
 }
 
@@ -302,13 +209,6 @@ type TurnEnqueueResult = Result.Result<
   typeof NO_CONVERSATION
 >;
 
-/**
- * What sent a line to a coding agent, as its row keeps it: the member by
- * their account, the brain, an automation by its id and its name as it stands
- * at the send, GitHub by the login of who caused what it tells of, or another coding
- * agent by its name, its id, and the model it runs on, as they stand at the
- * send.
- */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
   | { readonly kind: typeof MESSAGE_SENDER.APP }
@@ -325,7 +225,6 @@ export type LineSender =
       readonly model: string;
     };
 
-/** The name a line's row keeps beside its sender's kind: an automation's or an agent's, or the GitHub login; none for any other. */
 function senderNameOf(sender: LineSender | undefined): string | null {
   switch (sender?.kind) {
     case MESSAGE_SENDER.AUTOMATION:
@@ -338,26 +237,15 @@ function senderNameOf(sender: LineSender | undefined): string | null {
   }
 }
 
-/**
- * The line to a coding agent as the message route and the queue's drain
- * write it: its words, the files attached to it, each image with what was
- * kept of it, the client's key for the send, what sent it, and what the row
- * says carried it: the developer's typed ask where it names nothing else,
- * or another coding agent's message, a thread, a description comment, a Start's
- * brief, GitHub, the brain, or an
- * automation's run.
- */
 interface AwaitingLineWrite {
   readonly text: string;
   readonly clientKey: string;
   readonly attachments?: readonly HandedFile[] | undefined;
-  /** What the line mentioned, as eve was handed it (`attached-file-parts.ts`); nothing where it mentioned nothing eve cannot read. */
   readonly mentioned?: string | undefined;
   readonly sender: LineSender;
   readonly metadata?: AwaitingLineMetadata | undefined;
 }
 
-/** What an awaiting line says carried it. */
 export type AwaitingLineMetadata =
   | TypedAskMetadata
   | AgentMessageMetadata
@@ -369,19 +257,12 @@ export type AwaitingLineMetadata =
   | AutomationLineMetadata
   | SlackLineMetadata;
 
-/** An awaiting line naming no channel is the developer's typed ask. */
 const TYPED_LINE_METADATA: TypedAskMetadata = {
   channel: MESSAGE_CHANNEL.TYPED,
 };
 
-/** A line the brain sent the agent on its own. */
 export const APP_LINE_METADATA: AppLineMetadata = { channel: MESSAGE_CHANNEL.APP };
 
-/**
- * An automation's run's prompt, saying whether what fired the run put words
- * its owner did not write beside it, which the line keeps for the rest of
- * the conversation's life, whatever becomes of the automation and its runs.
- */
 export function automationLineMetadata(firing: AutomationFiring): AutomationLineMetadata {
   return {
     channel: MESSAGE_CHANNEL.AUTOMATION,
@@ -389,108 +270,39 @@ export function automationLineMetadata(firing: AutomationFiring): AutomationLine
   };
 }
 
-/** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */
 type AwaitingLineWritten = Result.Result<
   Option.Option<{
     readonly id: string;
     readonly effect: StoreWriteEffect;
-    /** The transaction that wrote the row, where this write wrote it. */
     readonly txid?: string;
   }>,
   typeof NO_CONVERSATION | typeof CONVERSATION_BUSY | MessageRefused
 >;
 
-/**
- * The line a turn received and the turn that received it: as eve's relay
- * reads it off eve's stream, by its text parts joined (`attached-files.ts`);
- * or as a native harness's runner names it, by the
- * client id of the row it was written under, which the runner was handed
- * with the line.
- */
 type AwaitingLineTake =
   | { readonly text: string; readonly turnId: string }
   | { readonly clientId: string; readonly turnId: string };
 
-/**
- * The longest the hand-over to eve inside an awaiting line's write may take
- * before it is given up: eve answers a follow-up in well under a second and
- * its own not-ready loop ends at twenty, so one not answered in thirty is
- * not going to.
- */
 const AWAITING_LINE_DISPATCH_DEADLINE = Duration.seconds(30);
 
-/** The rows the turn took, by id, oldest first; none where no run of lines with those words awaited; or the turn does not stand. */
 type AwaitingLineTaken = Result.Result<readonly string[], typeof NO_CONVERSATION | typeof NO_TURN>;
 
-/**
- * The one path by which a conversation's rows are written, each method an
- * effect over the ambient client: a caller composes one into the request it
- * is already running rather than awaiting it out of band.
- */
 export interface StoreWriter {
-  /** Consumes one event of the run stream for the conversation it names. */
   consume(target: ConversationTarget, event: RunEvent): Write<StoreWriteResult>;
-  /**
-   * Consumes a batch of the run stream's events, in order, as one locked
-   * write: the conversation is locked once, each journal is read once, and
-   * a journal the batch grew lands once, its revision moved once, however
-   * many events grew it. Answers each event's own result, in order; a
-   * conversation that does not stand refuses every event.
-   */
   consumeAll(
     target: ConversationTarget,
     events: readonly RunEvent[],
   ): Write<readonly StoreWriteResult[]>;
-  /** Writes a turn as queued, ahead of the stream telling its start; answers the turn's id. */
   enqueueTurn(target: ConversationTarget, enqueue: TurnEnqueue): Write<TurnEnqueueResult>;
-  /** Stamps the instant a Stop was asked on a turn the conversation holds, once. */
   requestTurnCancel(target: ConversationTarget, cancel: TurnCancelRequest): Write<TurnCancelResult>;
-  /**
-   * Writes the developer's line to a coding agent as a row awaiting its
-   * turn, kept only where the dispatch handed in answers that eve took it:
-   * the dispatch is the hand-over to eve, run under the conversation's
-   * dispatch claim (`dispatch-claim.ts`) with no transaction open, after
-   * the row is written with the claim, so the take of the line into the
-   * turn eve opens on it finds the row standing; and a dispatch that
-   * answers nothing withdraws the row, which every read then leaves out
-   * unless a turn eve hands the line to after all takes it, and which a
-   * send repeated under its key writes afresh. No lock is held while eve answers,
-   * so the journal of a turn under way, and every other write of the
-   * conversation, lands meanwhile. The row stands under the client's key
-   * for the send (`sentLineId`), and a line already standing under that key
-   * is answered as repeated without the dispatch being run, so two sends
-   * carrying one key, however they race, hand eve the words once. The whole
-   * write cannot be interrupted, because eve takes the message before the
-   * claim records what it answered: a caller that went in between would
-   * leave the claim to expire and the line standing with eve's answer
-   * unread, so the dispatch is bounded by a deadline of its own instead,
-   * past which it is read as having answered nothing.
-   */
   writeAwaitingLine(
     target: ConversationTarget,
     line: AwaitingLineWrite,
     dispatch: Effect.Effect<boolean>,
   ): Write<AwaitingLineWritten>;
-  /**
-   * Takes into the turn the lines awaiting one the receipt is of: the oldest
-   * run of the conversation's user rows no turn owns whose words, joined as
-   * eve coalesces messages, are the ones received, eve having received the
-   * lines in the order they were sent. A run of one is a line eve handed
-   * the turn alone; a longer run is steers eve folded into one step's input.
-   * Each row takes the turn in place at a bumped revision, so a device
-   * reading from its revision sees the line again where it stands, now the
-   * turn's, and keeps how many of the turn's steps had begun before it, so
-   * a line that steered a turn under way is drawn among its work where it
-   * arrived rather than ahead of the turn. A take by client id takes the one awaiting row written
-   * under it. A withdrawn line is taken as any other, standing again with
-   * what carried it and who sent it, where it lengthens the run the lines
-   * eve did take make. Answers the rows taken, or none where no such run awaits, which
-   * is every line of a conversation that is no coding agent's.
-   */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
 }
 
-/** The plan's turn origin for each origin the brain's stream names: each is written as reported. */
 const TURN_ORIGIN_OF_RUN_ORIGIN = {
   [RUN_TURN_ORIGIN.TYPED]: TURN_ORIGIN.TYPED,
   [RUN_TURN_ORIGIN.SPOKEN]: TURN_ORIGIN.SPOKEN,
@@ -512,7 +324,6 @@ function turnStatusOf(status: RunStatus): TurnStatus {
   }
 }
 
-/** The longest a failed turn's detail is kept, in characters, cut from the end here whatever its teller sent. */
 const TURN_FAILURE_DETAIL = { CHARS: 2000 } as const;
 
 const TERMINAL_TURN_STATUSES: ReadonlySet<TurnStatus> = new Set([
@@ -527,12 +338,6 @@ type Parts = StoredUIMessage["parts"];
 
 const MODEL_AUTHORED = { author: MESSAGE_AUTHOR.MODEL } as const;
 
-/**
- * A row a statement had to answer. Its absence is this writer's own
- * invariant broken — a conversation that vanished under its own lock, an
- * insert that returned nothing — which is a defect rather than an outcome a
- * caller could act on, so it dies with the same words it threw before.
- */
 function required<A>(row: Option.Option<A>, absent: string): Effect.Effect<A> {
   return Option.match(row, { onNone: () => Effect.die(new Error(absent)), onSome: Effect.succeed });
 }
@@ -541,21 +346,6 @@ const readsJsonObject = Schema.is(Schema.Record(Schema.String, Schema.Unknown));
 
 const readsPartsShape = Schema.is(Schema.Array(Schema.Struct({ type: Schema.String })));
 
-/**
- * The three `jsonb` columns this writer carries whose shape belongs to a
- * vocabulary elsewhere: a message's parts and metadata, and an event's
- * payload. Each is declared here as far as a column can be held — parts an
- * array of parts, metadata a JSON object — and no further, because the
- * vocabulary is `readStoredUIMessages`'s, which `admitted` below runs over
- * every message before it lands and again before any amendment does. A
- * column's own schema is what refuses a row that could never be either.
- *
- * A write and a read name these the same way, because a `jsonb` column
- * renders its own value: the builder hands the driver the JSON text of
- * whatever a write carried and answers a read the parsed value back, so
- * neither side spells the serialization and nothing casts a parameter to
- * `jsonb` in a statement.
- */
 const StoredPartsColumnSchema: Schema.Codec<Parts> = Schema.declare((input): input is Parts =>
   readsPartsShape(input),
 );
@@ -572,18 +362,10 @@ const TurnOriginSchema = Schema.Literals(Object.values(TURN_ORIGIN));
 
 const RowIdSchema = Schema.Struct({ id: Schema.String });
 
-/** A message row as its insert answers it: its id, and the transaction that wrote it, which Neon Realtime names the change by. */
 const InsertedRowSchema = Schema.Struct({ id: Schema.String, txid: Schema.String });
 
-/** The id of the transaction a statement runs in, read in its own `RETURNING`, as a decimal string so its 64 bits stay exact. */
 const CURRENT_TXID = sql<string>`pg_current_xact_id()::text`;
 
-/**
- * The `jsonb` field a stored spoken line is told apart by, which the builder
- * has no operator for: the call it was said on, which an earlier version
- * wrote on its own metadata. One fragment, named once, so the key's
- * spelling stands in a single place.
- */
 const SPOKEN_VOICE_SESSION_ID = sql`${messages.metadata} ->> 'voice_session_id'`;
 
 const ConversationTargetSchema = Schema.Struct({
@@ -591,17 +373,8 @@ const ConversationTargetSchema = Schema.Struct({
   conversationId: Schema.String,
 });
 
-/**
- * The counter's value after an allocation moved it, which is one past the
- * position handed out. It is a 64-bit column like every instant here, so it
- * is read through the same schema they are: `@effect/sql-pg` hands an `int8`
- * back as a JS `bigint`, the `pg` driver before it as a string, PGlite as a
- * number, and a sequence position is as far inside the safe integer range as
- * a millisecond is.
- */
 const SequenceSchema = Schema.Struct({ next: EpochMillisColumnSchema });
 
-/** The message row this writer reads back to decide its next write: what stands, and whether it is closed. */
 const MessageRowSchema = Schema.Struct({
   id: Schema.String,
   parts: StoredPartsColumnSchema,
@@ -659,12 +432,6 @@ const lockConversation = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The first position of a conversation no row of the numbered table holds.
- * The counter is moved to at least this, so a position taken outside the
- * counter costs nothing but a skip; the read is served by the unique index
- * over the table's own `(conversation_id, seq)` pair.
- */
 const pastTheHighestMessageSeq = (conversationId: string) =>
   queryBuilder
     .select({ free: sql<number>`coalesce(max(${messages.seq}), 0) + 1` })
@@ -751,23 +518,6 @@ const insertMessageRow = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * A write to a numbered row in place moves the conversation's journal
- * revision and stamps the row with where it moved to, in the one statement,
- * so the change signal's head moves with the write and a messages read
- * asked from an earlier revision answers exactly the rows written since.
- * The writes below that take the bump are the only ones that change a row after it is
- * numbered; a move gives a row a fresh sequence, which the sequence counter
- * already announces.
- *
- * Note that the bump is a fragment standing as the statement's own
- * data-modifying CTE rather than a builder update, because a CTE's body is
- * the one place the builder takes no statement but a select: `$with(alias,
- * selection).as()` takes the SQL, and the update around it — the row's own
- * write, and the read of what the bump landed on — is the builder's. The
- * columns the fragment names are the schema module's, so a renamed column
- * still moves it.
- */
 const BUMPED_REVISION = "bumped";
 
 const bumpedRevision = (conversationId: string) =>
@@ -778,7 +528,6 @@ const bumpedRevision = (conversationId: string) =>
         returning ${conversations.journalRevision}`,
   );
 
-/** What the bump landed on, which is the revision the row it stamps takes. */
 const landedRevision = (bumped: ReturnType<typeof bumpedRevision>) =>
   sql<number>`(select ${bumped.journalRevision} from ${bumped})`;
 
@@ -848,12 +597,6 @@ const completeMessage = SqlSchema.void({
   },
 });
 
-/**
- * A turn's closed journal read again once its turn has settled: nothing on
- * the row changes but its revision, so a reader past the journal's own
- * cursor finds it again beside what the settled turn row now says of it,
- * its tokens and how it ended (`turn-record.ts`).
- */
 const reviseJournal = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, conversationId: Schema.String }),
   execute: (row) => {
@@ -932,14 +675,6 @@ const startTurn = SqlSchema.void({
     ),
 });
 
-/**
- * Note that the response ids no longer need the empty array written as a
- * literal: a driver infers a parameter's Postgres type from the value it is
- * handed and an empty array offers no element to infer one from, but a
- * `text[]` column renders its own value as the array literal it is, so the
- * ordinary case — a turn that called nothing and settles with no response
- * ids — is one more bound parameter.
- */
 const settleTurn = SqlSchema.void({
   Request: Schema.Struct({
     turnId: Schema.String,
@@ -975,10 +710,6 @@ function pendingToolPart(name: string, callId: string, input: UnparsedWireValue)
   };
 }
 
-/**
- * Why the record settled a call nothing answered: its turn ended or was
- * canceled first, or eve ran the step that asked for it again.
- */
 const UNANSWERED_REASON = {
   ENDED: "The turn ended before the call answered; it may have run.",
   CANCELED: "The turn was canceled before the call answered; it may have run.",
@@ -988,12 +719,6 @@ const UNANSWERED_REASON = {
 
 type UnansweredReason = (typeof UNANSWERED_REASON)[keyof typeof UNANSWERED_REASON];
 
-/**
- * A call nothing will answer, settled as the one thing the record can
- * truthfully say of it: the call was dispatched and its effect is unknown,
- * an answer whose envelope says so, never an error, which would read as a
- * refusal and license doing it again.
- */
 function unansweredToolPart(part: StoredToolPart, reason: UnansweredReason): ToolPart {
   return {
     type: part.type,
@@ -1004,13 +729,6 @@ function unansweredToolPart(part: StoredToolPart, reason: UnansweredReason): Too
   };
 }
 
-/**
- * The reasoning part the stream's summary amounts to while the turn runs: the
- * summary's words under the provider item's own id, read for identity alone
- * so a summary told twice is one part. The completed message's projection
- * carries the item's replay data in the provider's own slot and replaces this
- * part when the turn answers.
- */
 function reasoningPart(summary: string, id: string): ReasoningUIPart {
   return { type: UI_PART_TYPE.REASONING, id, text: summary, state: UI_PART_STATE.DONE };
 }
@@ -1024,7 +742,6 @@ function toolPartOf(
   return part !== undefined && isStoredToolPart(part) ? { index, part } : undefined;
 }
 
-/** A turn's journal as this locked write last read or amended it, and whether an amendment is still to land. */
 interface HeldJournal {
   readonly row: MessageRow;
   readonly dirty: boolean;
@@ -1032,41 +749,19 @@ interface HeldJournal {
 
 interface WriterContext {
   readonly tools: ToolSet;
-  /** The instant this locked write stamps every row it touches. */
   readonly now: Date;
   readonly target: ConversationTarget;
-  /** What the conversation is: a coding agent's own, whose failed turn keeps its words, or one of the brain's. */
   readonly kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
-  /**
-   * The journals this locked write has read, by their turn's id, each as it
-   * now stands in the write: read once, amended here, and written once as
-   * the write ends (`landJournals`), so a batch of events moves a journal's
-   * parts and its revision once however many of them grew it.
-   */
   readonly journals: Map<string, HeldJournal>;
-  /**
-   * The coding agent turns this write settled, each told the runtime's
-   * `SettledTurnListener` once the write's transaction is done
-   * (`settledAfterCommit`).
-   */
   readonly settled: SettledAgentTurn[];
 }
 
-/** What a locked write leaves for once its transaction is done. */
 type AfterCommit = Pick<WriterContext, "settled">;
 
-/** What one of this writer's statements answers: an effect over the transaction it runs in. */
 type Write<Result> = Effect.Effect<Result, StoreFailure, DatabaseServices>;
 
 type Admitted = Result.Result<StoredUIMessage, MessageRefused>;
 
-/**
- * Holds one message to the vocabulary before it lands, exactly as a read
- * holds a stored row: the SDK's structure, the registered tools and their
- * input schemas, this build's metadata by role and its tool-state set. The
- * row lands as JSON, so the JSON shape is what is held: a field the
- * serialization drops was never going to be stored.
- */
 function admitted(
   context: WriterContext,
   message: UIMessage | StoredUIMessage,
@@ -1091,13 +786,7 @@ function admitted(
   );
 }
 
-/**
- * The next position of the conversation's message sequence: the counter's
- * own, or one past the highest position a row already holds where the
- * counter fell behind it, and the counter moved past whichever was handed
- * out. The read of `max(seq)` is served by the unique index over the pair.
- */
-const allocateMessageSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
+const allocateMessageSeq = Effect.fnUntraced(function* (
   context: WriterContext,
 ): Effect.fn.Return<number, StoreFailure, DatabaseServices> {
   const row = yield* allocateMessageSequence({
@@ -1125,12 +814,6 @@ function messageByClientId(
   });
 }
 
-/**
- * The turn's journal as this write holds it: the row read once by its
- * client id, then whatever the write has made of it since, so the events of
- * one batch read what the ones before them amended rather than the row as
- * it last landed.
- */
 function journalRow(context: WriterContext, turnId: string): Write<Option.Option<MessageRow>> {
   const held = context.journals.get(turnId);
   if (held !== undefined) return Effect.succeed(Option.some(held.row));
@@ -1141,24 +824,15 @@ function journalRow(context: WriterContext, turnId: string): Write<Option.Option
   );
 }
 
-/** Keeps what the write made of the turn's journal: an amendment still to land, or a row a statement already wrote. */
 function holdJournal(context: WriterContext, turnId: string, row: MessageRow, dirty: boolean) {
   context.journals.set(turnId, { row, dirty });
 }
 
-/** The conversations whose journal is a transcript a coding agent's tab shows: its own and its workers'. */
 const TRANSCRIPT_KINDS: ReadonlySet<string> = new Set([
   CONVERSATION_KIND.AGENT,
   CONVERSATION_KIND.CHILD,
 ]);
 
-/**
- * What a transcript's journal growth costs to write: each amendment that
- * lands rewrites the turn's whole journal row, so its bytes climb with the
- * turn's length. Sentry's metrics layer sends it as the histogram's `.sum`,
- * `.count`, `.min`, and `.max`. It carries a size and never a row, an id, or
- * a txid.
- */
 const JOURNAL_METRIC = {
   REWRITE_BYTES: Metric.histogram("app.transcript.journal_rewrite_bytes", {
     description: "Bytes of parts a landed journal amendment wrote, as the row's whole parts",
@@ -1166,12 +840,6 @@ const JOURNAL_METRIC = {
   }),
 } as const;
 
-/**
- * Lands every journal the write amended, each in one statement that moves
- * the conversation's journal revision once: the parts as the last amendment
- * left them. A journal a later statement of the same write already wrote
- * whole (its answer, its end) has nothing left to land.
- */
 function landJournals(context: WriterContext): Write<void> {
   return Effect.forEach(
     [...context.journals.entries()],
@@ -1184,7 +852,6 @@ function landJournals(context: WriterContext): Write<void> {
               parts: held.row.parts,
             }),
             Effect.andThen(
-              // Note that only a coding agent's journal, or its worker's, is counted, since its transcript is what the measure is for; a child conversation was only ever opened for an eve agent's worker.
               TRANSCRIPT_KINDS.has(context.kind)
                 ? Metric.update(
                     JOURNAL_METRIC.REWRITE_BYTES,
@@ -1199,22 +866,19 @@ function landJournals(context: WriterContext): Write<void> {
   );
 }
 
-/** Where a row landed: its id, and the position it took. */
 interface InsertedMessage {
   readonly id: string;
   readonly seq: number;
-  /** The transaction that wrote the row. */
   readonly txid: string;
 }
 
-const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
+const insertMessage = Effect.fnUntraced(function* (
   context: WriterContext,
   row: {
     clientId: string;
     turnId: string | undefined;
     message: StoredUIMessage;
     finishedAt: Date | undefined;
-    /** What sent a developer's line to a coding agent; none for every other row. */
     sender?: LineSender;
   },
 ): Effect.fn.Return<InsertedMessage, StoreFailure, DatabaseServices> {
@@ -1251,7 +915,6 @@ type Journal = Result.Result<
   Refused<typeof STORE_WRITE_REFUSAL.NO_TURN | typeof STORE_WRITE_REFUSAL.FINISHED>
 >;
 
-/** Whether a turn may still take a new message or part: it stands, and it has not ended. */
 function openTurn(
   context: WriterContext,
   turnId: string,
@@ -1267,13 +930,7 @@ function openTurn(
   });
 }
 
-/**
- * The turn's one assistant message, the journal of the turn under way: keyed
- * by the turn's id as its client id, opened by the first part the turn
- * reports while the turn still runs, and closed by the turn's answer or its
- * end. A turn that has ended opens no journal after the fact.
- */
-const journal = /* @__PURE__ */ Effect.fnUntraced(function* (
+const journal = Effect.fnUntraced(function* (
   context: WriterContext,
   turnId: string,
 ): Effect.fn.Return<Journal, StoreFailure, DatabaseServices> {
@@ -1292,13 +949,7 @@ const journal = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed(opened);
 });
 
-/**
- * Takes the journal's parts as they now stand, held to the vocabulary first.
- * They land as the locked write ends (`landJournals`), once for every
- * amendment the write made, so an amendment the vocabulary refused never
- * stands and one it took is written with whatever followed it.
- */
-const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
+const amendJournal = Effect.fnUntraced(function* (
   context: WriterContext,
   turnId: string,
   row: MessageRow,
@@ -1315,7 +966,7 @@ const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 });
 
-const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
+const turnStarted = Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<RunEvent, { kind: typeof RUN_EVENT.TURN_STARTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
@@ -1338,7 +989,7 @@ const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 });
 
-const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
+const turnEnded = Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<RunEvent, { kind: typeof RUN_EVENT.TURN_ENDED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
@@ -1349,8 +1000,6 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   const settledAt = new Date(event.at);
   const status = turnStatusOf(event.status);
-  // A failed turn names its failure word where the run had one, and the status
-  // it ended in otherwise, so a timed-out or interrupted turn still says which.
   const failure = event.failure ?? (status === TURN_STATUS.FAILED ? event.status : undefined);
   yield* settleTurn({
     turnId: event.turnId,
@@ -1368,7 +1017,6 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
     responseIds: event.responseIds,
   });
-  // A coding agent's own turn that settled is told the runtime's listener, once the write is done.
   if (context.kind === CONVERSATION_KIND.AGENT) {
     const { startedAt, queuedAt } = standing.value;
     context.settled.push({
@@ -1380,14 +1028,6 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
       ranMs: Math.max(0, settledAt.getTime() - (startedAt ?? queuedAt).getTime()),
     });
   }
-  // A journal still open here belongs to a turn that answered nothing. A
-  // brain's keeps what it did and the words its steps formed leave it,
-  // because a new session's seed reads them as said and the voice could
-  // speak them. A coding agent's keeps its words as well, because they are
-  // the partial work its tab shows and a Continue or a Fork replays. One
-  // the answer already closed is revised in place, because a reader may
-  // have taken it before the row settled, and what the row now says of it
-  // travels with it.
   const open = yield* journalRow(context, event.turnId);
   if (Option.isSome(open) && open.value.finishedAt !== null) {
     yield* reviseJournal({ id: open.value.id, conversationId: context.target.conversationId });
@@ -1413,14 +1053,12 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 });
 
-/** The newest step's calls still unanswered, settled as an abandoned attempt's, and a coding agent's words of that attempt dropped; a journal with neither, or closed, is a repeat. */
-const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
+const settleRetriedCalls = Effect.fnUntraced(function* (
   context: WriterContext,
   turnId: string,
   row: MessageRow,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const boundary = row.parts.findLastIndex((part) => part.type === UI_PART_TYPE.STEP_START);
-  // Note that a coding agent's abandoned words leave with the attempt, since its failed turn keeps its words and the retry's own, which may be shorter, could not replace them.
   const dropsWords = context.kind === CONVERSATION_KIND.AGENT;
   const parts = row.parts.flatMap((part, index): Parts => {
     if (index <= boundary) return [part];
@@ -1435,29 +1073,7 @@ const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* amendJournal(context, turnId, row, parts);
 });
 
-/**
- * A step joins the journal as the boundary before its parts. Steps are
- * counted, not named, so the journal's own count of boundaries is what tells
- * a step told twice from the next one: a step the journal already holds is a
- * repeat, and any later step appends one boundary, whatever the stream
- * dropped between. The turn's completed projection replaces the journal
- * whole, boundaries and all, when the turn answers.
- *
- * The newest step told again is eve running it again. A step interrupted
- * part way re-runs whole, asking the model afresh, while whatever the first
- * attempt wrote stays on the stream, and the relay's state rolls back with
- * the step, so the relay tells its boundary a second time. Every call past
- * that boundary still unanswered is then the abandoned attempt's, which
- * nothing will answer, so it is settled here as a turn's end settles one,
- * rather than left running until the turn ends, which for a coding agent is
- * its whole run: a worker such a call delegated reads as starting until then.
- * A coding agent's words of the abandoned attempt leave the step too, since
- * the model never read them and the new attempt drafts its own, so a turn
- * that then fails keeps the words of the attempt it failed on.
- * Note that a call the new attempt asks for again under the same id finds it
- * settled, which no provider's fresh answer does, since each mints its own.
- */
-const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
+const stepStarted = Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<RunEvent, { kind: typeof RUN_EVENT.STEP_STARTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
@@ -1471,7 +1087,7 @@ const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* amendJournal(context, event.turnId, row, [...row.parts, STEP_START_PART]);
 });
 
-const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
+const toolCallStarted = Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<RunEvent, { kind: typeof RUN_EVENT.TOOL_CALL_STARTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
@@ -1488,7 +1104,7 @@ const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   ]);
 });
 
-const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
+const toolCallSettled = Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<RunEvent, { kind: typeof RUN_EVENT.TOOL_CALL_SETTLED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
@@ -1502,15 +1118,10 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   const row = standing.value;
   const found = toolPartOf(row.parts, event.callId);
   if (found === undefined) return Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CALL });
-  // Note that an input told with the settlement replaces the one the start
-  // recorded, in the same write, so the call stands as it answered.
   const settled = settledToolPart(
     event.input === undefined ? found.part : { ...found.part, input: event.input },
     event.settlement,
   );
-  // A call settles once. The same settlement told again is a repeat; a
-  // different one, after the turn's end already settled the call as
-  // unanswered, finds the call closed and is refused rather than rewritten.
   if (isSettledToolPartState(found.part.state)) {
     return isDeepStrictEqual(settled, found.part)
       ? Result.succeed(STORE_WRITE_EFFECT.REPEATED)
@@ -1522,13 +1133,7 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* amendJournal(context, event.turnId, row, parts);
 });
 
-/**
- * A reasoning summary joins the journal under its item's id. An item that
- * names no id is not journaled: nothing could tell its second delivery from
- * a second item, and the turn's completed projection carries every summary
- * under the id the adapter lifted for it.
- */
-const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
+const reasoningCompleted = Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<RunEvent, { kind: typeof RUN_EVENT.REASONING_COMPLETED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
@@ -1547,14 +1152,7 @@ const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   ]);
 });
 
-/**
- * A step's words so far join the journal as the one text part of that step,
- * written in place as they grow, so the voice can say a finished sentence
- * while the turn still runs. The words only grow: what the part already
- * holds, or more, is a repeat. A step the journal holds no boundary for is
- * not the journal's, and its words are left to the completed answer.
- */
-const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
+const textDrafted = Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<RunEvent, { kind: typeof RUN_EVENT.TEXT_DRAFTED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
@@ -1582,20 +1180,7 @@ const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* amendJournal(context, event.turnId, row, parts);
 });
 
-/**
- * A completed message: a user message lands as its own row by its id; the
- * turn's answer closes the turn's journal, its parts replaced whole by the
- * projection the turn told, since the projection is the message as the
- * runtime's own record has it and the journal was the record of it in flight.
- * A journal anything followed while the turn ran — the words said around
- * the ask as the brain worked, an aside, a second line of the developer's —
- * closes at a fresh position behind them, so the thread reads as it was
- * heard: what was said while he worked, then what he did and thought, then
- * what was said of it. A journal nothing followed keeps its place. A closed
- * journal takes the same projection again as a repeat and a different one as
- * the late write it is.
- */
-const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
+const messageCompleted = Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<RunEvent, { kind: typeof RUN_EVENT.MESSAGE_COMPLETED }>,
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
@@ -1630,7 +1215,6 @@ const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
     metadata: nullable(message.metadata),
     finishedAt: context.now,
   });
-  // The answer replaces the journal whole, so an amendment this write held for it has nothing left to land.
   holdJournal(
     context,
     event.turnId,
@@ -1646,13 +1230,6 @@ const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 });
 
-/**
- * The closed journal follows whatever landed after it while its turn ran:
- * where a row of the conversation stands past it, the journal moves to a
- * fresh position — past every device's cursor, so a device that previewed
- * the journal reads it again where it now stands and lets the copy go —
- * and where nothing does, it stays where it opened and moves no sequence.
- */
 function moveJournalBehindWhatFollowed(context: WriterContext, id: string): Write<void> {
   return Effect.gen(function* () {
     const followed = yield* findMessageFollowing({
@@ -1682,8 +1259,6 @@ function consume(context: WriterContext, event: RunEvent): Write<StoreWriteResul
       return messageCompleted(context, event);
     case RUN_EVENT.TEXT_DRAFTED:
       return textDrafted(context, event);
-    // The rest of the stream is the relay's, about a run's moments rather
-    // than the record.
     case RUN_EVENT.SLOW_STEP:
     case RUN_EVENT.QUESTION_QUEUED:
     case RUN_EVENT.QUESTION_WITHDRAWN:
@@ -1695,7 +1270,7 @@ function consume(context: WriterContext, event: RunEvent): Write<StoreWriteResul
   }
 }
 
-const enqueueTurn = /* @__PURE__ */ Effect.fn("web/enqueueTurn")(function* (
+const enqueueTurn = Effect.fn("web/enqueueTurn")(function* (
   context: WriterContext,
   enqueue: TurnEnqueue,
 ): Effect.fn.Return<TurnEnqueueResult, StoreFailure, DatabaseServices> {
@@ -1718,11 +1293,9 @@ const enqueueTurn = /* @__PURE__ */ Effect.fn("web/enqueueTurn")(function* (
   return Result.succeed({ turnId, effect: STORE_WRITE_EFFECT.WRITTEN });
 });
 
-/** A row of the conversation and the rows standing past it: one table under the two names the join reads it by. */
 const placed = alias(messages, "placed");
 const later = alias(messages, "later");
 
-/** The first row of the conversation standing past one row's position, where any does. */
 const findMessageFollowing = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
   Result: RowIdSchema,
@@ -1747,14 +1320,6 @@ const moveMessage = SqlSchema.void({
     Database.use((db) => db.update(messages).set({ seq: row.seq }).where(eq(messages.id, row.id))),
 });
 
-/**
- * The developer's lines of the conversation awaiting a turn, oldest first:
- * the user rows no turn owns, of a coding agent's conversation, which is
- * the one kind whose developer lines are written ahead of their turn; an
- * old task conversation's turnless user rows are its spoken asks, attached
- * by their own writer, and never match here. A line a turn already received
- * under another row awaits nothing and is not offered (`noReceiptOfLine`).
- */
 const findAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String }),
   Result: Schema.Struct({
@@ -1780,7 +1345,6 @@ const findAwaitingLines = SqlSchema.findAll({
             eq(conversations.kind, CONVERSATION_KIND.AGENT),
             eq(messages.role, MESSAGE_ROLE.USER),
             isNull(messages.turnId),
-            // A line typed into a call is its ask's, taken in by the ask's id and never by its words.
             sql`${SPOKEN_VOICE_SESSION_ID} is null`,
             noReceiptOfLine(),
           ),
@@ -1789,7 +1353,6 @@ const findAwaitingLines = SqlSchema.findAll({
     ),
 });
 
-/** A line taken by the turn that received it: the turn on the row in place, with the steps it had begun before it, its revision moved, and a withdrawn line standing again. */
 const giveLineToTurn = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
@@ -1814,12 +1377,6 @@ const giveLineToTurn = SqlSchema.void({
   },
 });
 
-/**
- * The steps a turn's journal has begun, which a line the turn takes now
- * arrived after; none where no journal stands yet, as for the line that
- * opened the turn. Note that eve hands a steer to the step it is about to
- * start, so the boundaries already standing are the steps before it.
- */
 const stepsBegun = (context: WriterContext, turnId: string): Write<number | null> =>
   Effect.map(journalRow(context, turnId), (journal) => {
     if (Option.isNone(journal)) return null;
@@ -1827,15 +1384,6 @@ const stepsBegun = (context: WriterContext, turnId: string): Write<number | null
     return steps.length === 0 ? null : steps.length;
   });
 
-/**
- * The oldest run of consecutive awaiting lines whose parts, joined as eve
- * coalesces them, are the parts received; none where no run matches. A
- * line's parts are its words and the files it carried, as eve was handed
- * them (`attached-files.ts`). Note
- * that the run is read oldest first, because every send is a steer eve
- * receives in the order sent, so two lines sharing their words are taken in
- * that order.
- */
 function coalescedRun<Row extends { readonly parts: Parts }>(
   awaiting: readonly Row[],
   received: string,
@@ -1848,21 +1396,12 @@ function coalescedRun<Row extends { readonly parts: Parts }>(
       pieces.push(...parts);
       const joined = pieces.join(COALESCED_LINE_SEPARATOR);
       if (joined === received) return awaiting.slice(start, start + offset + 1);
-      // A run whose words already part from the received ones grows no closer by a longer run.
       if (!received.startsWith(joined)) break;
     }
   }
   return [];
 }
 
-/**
- * The dispatch run to its answer or its deadline, from inside the
- * uninterruptible write: the dispatch is forked as a root fiber of its own,
- * which is interruptible as the write is not, and a second fiber interrupts
- * it at the deadline; one interrupted that way answered nothing, which is
- * logged under the conversation's id, since its sender is answered only that
- * the service was unavailable.
- */
 function dispatchedWithinDeadline(
   dispatch: Effect.Effect<boolean>,
   conversationId: string,
@@ -1884,23 +1423,13 @@ function dispatchedWithinDeadline(
   });
 }
 
-/** A line's row written and the dispatch claim its hand-over runs under; or the row a send under the same key already wrote. */
 type LineClaimed = Result.Result<
   | { readonly id: string; readonly txid: string; readonly claim: string }
   | { readonly id: string; readonly effect: typeof STORE_WRITE_EFFECT.REPEATED },
   typeof NO_CONVERSATION | typeof CONVERSATION_BUSY | MessageRefused
 >;
 
-/**
- * The line's row and the conversation's dispatch claim, written together
- * under the row lock before the line is handed over, so the take of the line
- * into the turn its runtime opens finds it standing (`dispatch-claim.ts`).
- * Another hand-over's claim standing fails the write as `DispatchClaimHeld`,
- * nothing written, for the caller to try again; it is read before the repeat
- * check, so a retry of a send still under way waits for it to be recorded
- * rather than answering a row its hand-over may yet withdraw.
- */
-const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
+const claimLine = Effect.fnUntraced(function* (
   context: WriterContext,
   line: AwaitingLineWrite,
   place: number,
@@ -1910,7 +1439,6 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   const clientId = sentLineId(line.clientKey);
   yield* deleteWithdrawnLine({ conversationId: context.target.conversationId, clientId });
-  // A line already under the key is the send a lost answer was for: eve has it, and hears nothing again.
   const standing = yield* messageByClientId(context, clientId);
   if (Option.isSome(standing)) {
     return Result.succeed({ id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED });
@@ -1933,15 +1461,6 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Result.succeed({ id, txid, claim });
 });
 
-/**
- * Stamps the line its runtime never took withdrawn, unless a turn took it
- * all the same, answering whether it was. Note that the row is kept rather
- * than deleted, because a runtime that took the line past the hand-over's
- * deadline, or before a record that failed, still hands it to a turn, which
- * takes this row with what carried it and who sent it (`takeAwaitingLine`);
- * the maintenance sweep deletes it once no turn can (`abandoned-turns.ts`'s
- * `purgeWithdrawnLines`).
- */
 const withdrawUntakenLine = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String, now: Schema.Date }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -1961,11 +1480,6 @@ const withdrawUntakenLine = SqlSchema.findAll({
     ),
 });
 
-/**
- * Deletes the withdrawn line under a send's key, which a retry of that send
- * writes afresh at the end of the conversation, as the send it now is,
- * rather than handing over a row standing among lines sent since.
- */
 const deleteWithdrawnLine = SqlSchema.void({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
   execute: ({ conversationId, clientId }) =>
@@ -1983,11 +1497,6 @@ const deleteWithdrawnLine = SqlSchema.void({
     ),
 });
 
-/**
- * Counts the conversation's journal revision up and stamps it as the one a
- * reader holding an older cursor reads the transcript afresh from, as a
- * rewind does, since a row it may already have drawn now reads nowhere.
- */
 const markLineWithdrawn = SqlSchema.void({
   Request: Schema.Struct({ conversationId: Schema.String }),
   execute: ({ conversationId }) =>
@@ -2002,13 +1511,6 @@ const markLineWithdrawn = SqlSchema.void({
     ),
 });
 
-/**
- * What the hand-over answered, written in a short transaction of its own
- * after it: the claim released, and a line the runtime did not take
- * withdrawn, tried again while the claim stands (`recordedWithinExpiry`).
- * Note that the claim goes first, because its update takes the
- * conversation's row lock, which every writer takes before a message's.
- */
 function recordedLine(
   target: ConversationTarget,
   claimed: { readonly id: string; readonly claim: string },
@@ -2033,7 +1535,7 @@ function recordedLine(
   );
 }
 
-const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
+const takeAwaitingLine = Effect.fnUntraced(function* (
   context: WriterContext,
   take: AwaitingLineTake,
 ): Effect.fn.Return<AwaitingLineTaken, StoreFailure, DatabaseServices> {
@@ -2043,9 +1545,6 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     "clientId" in take
       ? lines.filter((line) => line.clientId === take.clientId)
       : coalescedRun(lines, take.text);
-  // Note that a line whose hand-over answered nothing is taken only where it lengthens the run,
-  // because eve heard one only where its answer was lost, and one it never heard standing among the
-  // lines it took would part a run eve did coalesce; the lines it took win where the two runs tie.
   const standing = runAmong(awaiting.filter((line) => !line.withdrawn));
   const widened = runAmong(awaiting);
   const run = widened.length > standing.length ? widened : standing;
@@ -2090,15 +1589,7 @@ const stampTurnCancel = SqlSchema.findAll({
     ),
 });
 
-/**
- * The Stop on a turn's row: the instant it was asked, the key of the
- * tool call that asked it where one did, and the agent that asked it where
- * one did, written once, so the record says a
- * Stop was asked whatever eve does with it. A second Stop finds the first
- * instant standing and writes nothing, its key included; a turn the
- * conversation does not hold is refused.
- */
-const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(function* (
+const requestTurnCancel = Effect.fn("web/requestTurnCancel")(function* (
   context: WriterContext,
   cancel: TurnCancelRequest,
 ): Effect.fn.Return<TurnCancelResult, StoreFailure, DatabaseServices> {
@@ -2115,11 +1606,6 @@ const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(fun
   );
 });
 
-/**
- * The settled coding agent turns a write leaves, told the runtime's listener
- * once the write's transaction is done, so the settle never waits on what
- * hears of it; a runtime with no listener tells no one.
- */
 function settledAfterCommit(
   settled: readonly SettledAgentTurn[],
 ): Effect.Effect<void, never, DatabaseServices> {
@@ -2131,14 +1617,7 @@ function settledAfterCommit(
   );
 }
 
-/**
- * Composes the writer over one catalog, which is where the catalog is held to
- * the unknown outcome's envelope: a tool whose declared output schema refuses
- * it would leave a dispatched call's row unreadable, so the writer refuses to
- * exist over such a catalog rather than writing one.
- */
 export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreWriter> {
-  /** The context one write runs in, its instant read from the clock as the conversation is read. */
   function contextOf(
     target: ConversationTarget,
     kind: WriterContext["kind"],
@@ -2154,18 +1633,6 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
     }));
   }
 
-  /**
-   * Runs one write under the conversation's row lock, or answers that no such
-   * conversation stands for this account: none by that id, or one Clear
-   * already stamped, which is read by nothing and so written by nothing. The
-   * write's instant is read from the clock once the lock is held, so every
-   * row one write stamps carries the same one.
-   *
-   * Note that no write here waits on a hand-over to the runtime under way: a
-   * hand-over holds no lock while the runtime answers, only its dispatch
-   * claim (`dispatch-claim.ts`), and the line it hands stands before it is
-   * handed, so the turn the runtime opens on it finds it.
-   */
   function locked<A, E = never>(
     target: ConversationTarget,
     write: (context: WriterContext) => Effect.Effect<A, StoreFailure | E, DatabaseServices>,
@@ -2184,20 +1651,6 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
     });
   }
 
-  /**
-   * Writes the line's row and takes the conversation's dispatch claim in one
-   * short transaction, hands the line over with no transaction open, and
-   * writes what the runtime answered in a second: the claim released, and a
-   * line it did not take withdrawn. The claim is what keeps one hand-over at
-   * a time in the conversation, so sends reach the runtime in the order their
-   * rows are numbered and two sends under one key hand it the words once; a
-   * send finding another's claim waits for it, holding nothing, and is
-   * refused as busy past the wait. A hand-over that dies releases the claim
-   * and leaves the line standing, as a lost answer leaves it, and a holder
-   * that dies with it leaves the claim to expire. Note that a
-   * conversation Clear stamped while the runtime answered keeps the row it
-   * already had, and the send is answered as written, as the runtime took it.
-   */
   function dispatchedLine(
     target: ConversationTarget,
     line: AwaitingLineWrite,
@@ -2218,7 +1671,6 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
       if (Result.isFailure(claimed)) return Result.fail(claimed.failure);
       const written = claimed.success;
       if (!("claim" in written)) return Result.succeed(Option.some(written));
-      // A hand-over that died says nothing of whether the runtime took the line, which is kept standing.
       const taken = yield* dispatchedWithinDeadline(dispatch, target.conversationId).pipe(
         Effect.tapCause(() =>
           Effect.ignore(releaseDispatchClaim(target.conversationId, written.claim)),
@@ -2232,7 +1684,6 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
     });
   }
 
-  /** The write itself, once the conversation's row is locked or found absent: its instant read once, its journals landed after it. */
   function lockedWrite<A, E>(
     target: ConversationTarget,
     row: Option.Option<{ readonly kind: WriterContext["kind"] }>,

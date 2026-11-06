@@ -6,66 +6,7 @@ import {
 } from "@repo/features/provider-key-wire";
 import { Redacted, Result, Schema } from "effect";
 
-/**
- * provider-key-seal.ts -- an account's own provider key, or a member's GitHub token, sealed for the database, and opened again for the one call that needs it.
- *
- * Envelope encryption under AES-256-GCM. Every save draws a fresh 32-byte
- * data key, seals the provider key under it, and wraps the data key under
- * the deployment's current key-encryption key. The wrapped data key, the
- * sealed provider key, and the key-encryption key's version are what the
- * row holds; the key-encryption keys live only in the deployment's
- * environment, so a copy of the database alone opens nothing.
- *
- * Both seals bind the account and the provider as additional authenticated
- * data, and a subscription credential's its kind beside them, and the wrap
- * binds the version too, so a sealed key moved onto another account's row,
- * another provider's, another kind's, or another version fails its tag
- * rather than opening as someone else's. An API key binds no kind, as every
- * key sealed before kinds does, so those rows open as they always have. Every failure to open is one
- * answer, unreadable, which names no cause: a wrong key, a tampered byte,
- * and a version the environment no longer holds are all a key the service
- * must not use.
- *
- * A member's GitHub personal access token is sealed the same way under the
- * same ring, with purposes of its own (`luke/github-token/*`) and the
- * account alone bound beside them, so a provider key's seal never opens as
- * a token's or the reverse.
- *
- * A local agent's launch secrets, its runner's bearer and its harness's
- * credential with the first lines it is handed, are sealed the same way for
- * the seconds their launch line waits for its Mac (`device_agent_line`), with
- * purposes of their own (`luke/mac-launch/*`) and the account and the agent
- * bound beside them, so the seal opens for no other agent's line. The
- * rewrap does not visit those rows, which the Mac's claim clears.
- *
- * The swaps a cloud agent's runner launch holds at its sandbox firewall,
- * each credential behind the placeholder its runner was handed, are sealed
- * the same way for as long as the launch runs (`sandbox_firewall`), with
- * purposes of their own
- * (`luke/sandbox-firewall/*`) and the account and the sandbox session bound
- * beside them, so the seal opens for no other session's row. The rewrap
- * does not visit those rows either: the sweep drops each a day and an hour
- * after it was last written, so a version stays in the ring that long past
- * the rewrap that moved every other row off it.
- *
- * A pending ChatGPT device-code login's codes, which together claim the
- * sign-in at OpenAI, are sealed the same way for the fifteen minutes the
- * login may stand (`account_chatgpt_device_login`), with purposes of their
- * own (`luke/chatgpt-device-login/*`) and the account and the login bound
- * beside them, so the seal opens for no other login. The rewrap does not
- * visit those rows either, which a login's settling clears and the
- * account's next start replaces.
- *
- * Rotation is a new version at the head of the environment's list: new
- * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every
- * standing row onto it by unwrapping and rewrapping its data key, never
- * touching the sealed secret itself. A version stays in the list until no
- * row names it.
- */
-
-/** The environment the key-encryption keys are read from. */
 export const PROVIDER_KEY_ENCRYPTION_ENVIRONMENT = {
-  /** `<version>:<base64 of 32 random bytes>` entries, comma-separated, the current version first. */
   KEYS: "PROVIDER_KEY_ENCRYPTION_KEYS",
 } as const;
 
@@ -76,11 +17,6 @@ const SEAL = {
   TAG_BYTES: 16,
 } as const;
 
-/**
- * What each seal's additional data names first, one pair per kind of secret
- * sealed under the ring: a wrapped data key never opens as a sealed secret
- * or the reverse, and a provider key's seal never opens as a GitHub token's.
- */
 const SEAL_PURPOSE = {
   PROVIDER_KEY: { DATA_KEY: "luke/provider-key/data-key", SECRET: "luke/provider-key/key" },
   GITHUB_TOKEN: { DATA_KEY: "luke/github-token/data-key", SECRET: "luke/github-token/token" },
@@ -95,13 +31,10 @@ const SEAL_PURPOSE = {
   },
 } as const;
 
-/** One kind of secret's purposes: the data key's wrap, and the secret's own seal. */
 type SealPurpose = (typeof SEAL_PURPOSE)[keyof typeof SEAL_PURPOSE];
 
-/** One entry of the environment's list: a version of one to six digits and a 32-byte key in standard base64. */
 const KEY_ENTRY = /^(\d{1,6}):([A-Za-z0-9+/]{43}=)$/u;
 
-/** Why the environment's list is no list; it names the shape that is wrong and never a value. */
 const KEY_RING_FAULT = {
   EMPTY: "it names no key",
   MALFORMED: "an entry is not <version>:<base64 of 32 bytes>",
@@ -110,31 +43,23 @@ const KEY_RING_FAULT = {
 
 export type KeyRingFault = (typeof KEY_RING_FAULT)[keyof typeof KEY_RING_FAULT];
 
-/** The deployment's key-encryption keys: the version new seals wrap under, and every version a row may still name. */
 export interface KeyRing {
   readonly current: number;
   readonly keys: ReadonlyMap<number, Redacted.Redacted<Uint8Array>>;
 }
 
-/** What a row holds of one provider key. */
 export interface SealedProviderKey {
   readonly keyVersion: number;
-  /** base64 of nonce, ciphertext, and tag: the data key under the key-encryption key. */
   readonly sealedDataKey: string;
-  /** base64 of nonce, ciphertext, and tag: the provider key under the data key. */
   readonly sealedKey: string;
 }
 
-/** What a row holds of one member's GitHub personal access token. */
 export interface SealedGitHubToken {
   readonly keyVersion: number;
-  /** base64 of nonce, ciphertext, and tag: the data key under the key-encryption key. */
   readonly sealedDataKey: string;
-  /** base64 of nonce, ciphertext, and tag: the token under the data key. */
   readonly sealedToken: string;
 }
 
-/** What a seal kept in one text column holds, as a launch line's secrets and a sandbox firewall's launch swaps are: the version, the wrapped data key, and the seal. */
 const SealedColumnSchema = Schema.Struct({
   keyVersion: Schema.Number,
   sealedDataKey: Schema.String,
@@ -145,47 +70,39 @@ const encodeSealedColumn = Schema.encodeSync(Schema.fromJsonString(SealedColumnS
 
 const decodeSealedColumn = Schema.decodeUnknownResult(Schema.fromJsonString(SealedColumnSchema));
 
-/** Whose a local agent's launch is: its starter and the agent, which its seal binds. */
 export interface MacLaunchOwner {
   readonly userId: string;
   readonly agentId: string;
 }
 
-/** Whose sandbox firewall a seal is: the account whose agent's session it stands on, and the session, which its seal binds. */
 export interface FirewallOwner {
   readonly userId: string;
   readonly sandboxSessionId: string;
 }
 
-/** Whose pending device-code login a seal is: the account and the login, which its seal binds. */
 export interface DeviceLoginOwner {
   readonly userId: string;
   readonly loginId: string;
 }
 
-/** Whose key a seal is, and what kind of credential, which both seals bind. */
 export interface SealOwner {
   readonly userId: string;
   readonly provider: ProviderKeyProvider;
   readonly kind: ProviderKeyKind;
 }
 
-/** A sealed key the service cannot open: it is used for nothing until it is replaced. */
 export const PROVIDER_KEY_UNREADABLE = "unreadable";
 
 export type ProviderKeyUnreadable = typeof PROVIDER_KEY_UNREADABLE;
 
-/** A data key's wrap as a row holds it: the version it is wrapped under, and the wrap. */
 interface WrappedDataKey {
   readonly keyVersion: number;
   readonly sealedDataKey: string;
 }
 
-/** What a seal binds besides its purpose: the account first, then whatever else names the row, as the provider. */
 type SealNames = readonly string[];
 
 function additionalData(purpose: string, names: SealNames, version?: number): Buffer {
-  // A JSON array, so no account id can be spelled to run into the name beside it.
   const named = version === undefined ? [purpose, ...names] : [purpose, ...names, version];
   return Buffer.from(JSON.stringify(named), "utf8");
 }
@@ -198,7 +115,6 @@ function sealBytes(key: Uint8Array, plaintext: Uint8Array, aad: Buffer): string 
   return Buffer.concat([nonce, body, cipher.getAuthTag()]).toString("base64");
 }
 
-/** The plaintext, or nothing where the tag does not verify or the bytes are no seal. */
 function openBytes(key: Uint8Array, sealed: string, aad: Buffer): Buffer | undefined {
   const bytes = Buffer.from(sealed, "base64");
   if (bytes.length < SEAL.NONCE_BYTES + SEAL.TAG_BYTES) return undefined;
@@ -211,12 +127,10 @@ function openBytes(key: Uint8Array, sealed: string, aad: Buffer): Buffer | undef
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(body), decipher.final()]);
   } catch {
-    // Note that the cause is dropped on purpose: a failed tag is the one answer, and its wording is no one's to read.
     return undefined;
   }
 }
 
-/** The data key a row wraps, or nothing where its version is gone or its wrap does not open. */
 function openDataKey(
   ring: KeyRing,
   purpose: SealPurpose,
@@ -237,7 +151,6 @@ function wrapDataKey(
   dataKey: Uint8Array,
 ): WrappedDataKey {
   const wrapping = ring.keys.get(ring.current);
-  // The parse puts the current version in the map, so its absence is a ring built by hand wrongly.
   if (wrapping === undefined)
     throw new Error("The key ring names a current version it does not hold.");
   const aad = additionalData(purpose.DATA_KEY, names, ring.current);
@@ -247,7 +160,6 @@ function wrapDataKey(
   };
 }
 
-/** A secret sealed under a fresh data key, wrapped under the ring's current version, both bound to the purpose and the names. */
 function sealSecret(
   ring: KeyRing,
   purpose: SealPurpose,
@@ -265,7 +177,6 @@ function sealSecret(
   return { ...wrapped, sealed };
 }
 
-/** The secret a row seals, sealed again at once, or nothing where any part of it does not open for these names. */
 function openSecret(
   ring: KeyRing,
   purpose: SealPurpose,
@@ -283,7 +194,6 @@ function openSecret(
   return secret;
 }
 
-/** The row's data key wrapped again under the ring's current version, or nothing where its wrap does not open. */
 function rewrapSecret(
   ring: KeyRing,
   purpose: SealPurpose,
@@ -303,7 +213,6 @@ function providerNames(owner: SealOwner): SealNames {
     : [owner.userId, owner.provider, owner.kind];
 }
 
-/** The ring the environment's value names, or which shape it breaks. */
 export function parseKeyRing(value: Redacted.Redacted): Result.Result<KeyRing, KeyRingFault> {
   const entries = Redacted.value(value)
     .split(",")
@@ -326,7 +235,6 @@ export function parseKeyRing(value: Redacted.Redacted): Result.Result<KeyRing, K
   return Result.succeed({ current, keys });
 }
 
-/** The provider key sealed for its owner's row under a fresh data key, wrapped under the ring's current version. */
 export function sealProviderKey(
   ring: KeyRing,
   owner: SealOwner,
@@ -341,7 +249,6 @@ export function sealProviderKey(
   return { ...wrapped, sealedKey: sealed };
 }
 
-/** The provider key a row seals, sealed again at once, or unreadable where any part of it does not open for this owner. */
 export function openProviderKey(
   ring: KeyRing,
   owner: SealOwner,
@@ -357,7 +264,6 @@ export function openProviderKey(
   return key === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(key);
 }
 
-/** The row's data key wrapped again under the ring's current version, the provider key's seal untouched; unreadable where its wrap does not open. */
 export function rewrapProviderKey(
   ring: KeyRing,
   owner: SealOwner,
@@ -369,7 +275,6 @@ export function rewrapProviderKey(
     : Result.succeed({ ...wrapped, sealedKey: sealed.sealedKey });
 }
 
-/** A member's GitHub token sealed for their row under a fresh data key, wrapped under the ring's current version. */
 export function sealGitHubToken(
   ring: KeyRing,
   userId: string,
@@ -379,7 +284,6 @@ export function sealGitHubToken(
   return { ...wrapped, sealedToken: sealed };
 }
 
-/** The GitHub token a row seals, sealed again at once, or unreadable where any part of it does not open for this member. */
 export function openGitHubToken(
   ring: KeyRing,
   userId: string,
@@ -389,7 +293,6 @@ export function openGitHubToken(
   return token === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(token);
 }
 
-/** The row's data key wrapped again under the ring's current version, the token's seal untouched; unreadable where its wrap does not open. */
 export function rewrapGitHubToken(
   ring: KeyRing,
   userId: string,
@@ -401,7 +304,6 @@ export function rewrapGitHubToken(
     : Result.succeed({ ...wrapped, sealedToken: sealed.sealedToken });
 }
 
-/** A local agent's launch secrets sealed for its launch line under a fresh data key, wrapped under the ring's current version, as the line's one text column holds them. */
 export function sealMacLaunchSecrets(
   ring: KeyRing,
   owner: MacLaunchOwner,
@@ -411,7 +313,6 @@ export function sealMacLaunchSecrets(
   return encodeSealedColumn(sealed);
 }
 
-/** The launch secrets a launch line seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
 export function openMacLaunchSecrets(
   ring: KeyRing,
   owner: MacLaunchOwner,
@@ -429,7 +330,6 @@ export function openMacLaunchSecrets(
   return secrets === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(secrets);
 }
 
-/** The swaps a launch holds at a sandbox session's firewall sealed for its row under a fresh data key, wrapped under the ring's current version, as the row's one text column holds them. */
 export function sealFirewallEntries(
   ring: KeyRing,
   owner: FirewallOwner,
@@ -439,7 +339,6 @@ export function sealFirewallEntries(
   return encodeSealedColumn(sealSecret(ring, SEAL_PURPOSE.SANDBOX_FIREWALL, names, entries));
 }
 
-/** The swaps a sandbox firewall's row seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
 export function openFirewallEntries(
   ring: KeyRing,
   owner: FirewallOwner,
@@ -457,7 +356,6 @@ export function openFirewallEntries(
   return entries === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(entries);
 }
 
-/** A pending device-code login's codes sealed for its row under a fresh data key, wrapped under the ring's current version, as the row's one text column holds them. */
 export function sealChatGptDeviceCodes(
   ring: KeyRing,
   owner: DeviceLoginOwner,
@@ -467,7 +365,6 @@ export function sealChatGptDeviceCodes(
   return encodeSealedColumn(sealSecret(ring, SEAL_PURPOSE.CHATGPT_DEVICE_LOGIN, names, codes));
 }
 
-/** The codes a pending device-code login's row seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
 export function openChatGptDeviceCodes(
   ring: KeyRing,
   owner: DeviceLoginOwner,

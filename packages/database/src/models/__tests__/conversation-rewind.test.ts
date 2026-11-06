@@ -19,14 +19,6 @@ import {
   rewindConversation,
 } from "../conversation-rewind.js";
 
-/**
- * A coding agent's conversation cut back to just before one of the
- * developer's lines, over a real dialect: the line and everything after it
- * go, what came before stays, the harness's cut is kept for the next launch,
- * and a line inside a turn, or another account's, is never cut at.
- * Synthetic accounts and conversations throughout.
- */
-
 const openConversation = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -48,7 +40,6 @@ const openConversation = Effect.gen(function* () {
 
 type Target = Effect.Success<typeof openConversation>;
 
-/** A turn queued at the instant given, settled. */
 const turnAt = (target: Target, at: number) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -63,7 +54,6 @@ const turnAt = (target: Target, at: number) =>
     return id;
   });
 
-/** A row of the conversation at the sequence given, by the role and turn given; answers its id. */
 const rowAt = (
   target: Target,
   seq: number,
@@ -90,7 +80,6 @@ const rowAt = (
     return id;
   });
 
-/** Two answered lines and a third awaiting its turn. */
 const threeLines = (target: Target) =>
   Effect.gen(function* () {
     const first = yield* turnAt(target, 1_000);
@@ -103,7 +92,6 @@ const threeLines = (target: Target) =>
     return { first, firstLine, second, secondLine, answer };
   });
 
-/** What stands of the conversation: its rows' sequences, its turns, and how it is marked. */
 const standing = (target: Target) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -159,7 +147,6 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
 
         assert.equal(Result.getOrThrow(rewound).clientId, "client-1");
         assert.deepEqual(after.seqs, []);
-        // The first turn's row stands, settled and empty, so the agent reads as one that ran rather than one that never started.
         assert.deepEqual(after.turns, [first]);
         assert.deepEqual(after.statuses, [TURN_STATUS.SETTLED]);
         assert.deepEqual(yield* readNativeRewind(target), Option.some("client-1"));
@@ -174,14 +161,12 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
         const db = yield* Database;
         const { first, secondLine } = yield* threeLines(target);
         const before = yield* standing(target);
-        // A hand-over's claim taken now, which its holder clears once its runtime answers.
         yield* db
           .update(conversations)
           .set({ dispatchClaim: randomUUID(), dispatchClaimedAt: new Date(0) })
           .where(eq(conversations.id, target.conversationId));
 
         const cutting = yield* Effect.forkChild(rewindConversation(target, secondLine));
-        // The clock moves a step at a time, a round trip apart, so the wait passes on a real Postgres too.
         const passing = (until: () => boolean) =>
           Effect.gen(function* () {
             while (!until()) {
@@ -190,7 +175,6 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
             }
           });
         let steps = 0;
-        // Twenty seconds on, longer than a send waits for a claim, the cut is still waiting.
         yield* passing(() => cutting.pollUnsafe() !== undefined || ++steps > 200);
         const pendingMeanwhile = cutting.pollUnsafe() === undefined;
         const meanwhile = yield* standing(target);

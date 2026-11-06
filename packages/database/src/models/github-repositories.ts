@@ -14,39 +14,10 @@ import { task } from "../schemas/task.js";
 import { workspaceTokenRepository } from "../schemas/workspace-token-repository.js";
 import type { TaskStoreEffect } from "./task-store.js";
 
-/**
- * github-repositories.ts -- GitHub's repositories by their own id, and every stored name moved along when one is renamed or transferred.
- *
- * Every table names a repository by its `owner/name` text, and every reader
- * matches it by that text: a webhook's repository against an agent's, a
- * listing against a task's, an automation's against a delivery's. GitHub
- * keeps a repository's id through a rename or a transfer and changes the
- * name, so each name is kept here as a label of the id: a sighting of the
- * repository, from a delivery or a read of GitHub, records the name GitHub
- * gives it now, and where that differs from the one its id was last seen
- * under, or from the one a rename's delivery says it had, relabels every
- * stored name in the same transaction, case-insensitively as GitHub reads
- * names, unless GitHub's `updated_at` says the sighting is older than the
- * one the id was last seen in. The relabel is the one write here that names no account, as
- * GitHub's delivery names a repository and nothing of who stored it; it
- * answers nothing of any row, so no account reads another's through it.
- *
- * Nothing is backfilled: a migration cannot ask GitHub, and every repository
- * is recorded the first time it is seen afterwards. One renamed before the
- * service saw it is still relabeled, by the old name its rename's delivery
- * carries, or by the name a read of GitHub under the old name was
- * redirected from.
- */
-
-/** One sighting of a repository: GitHub's id for it, its name now, when GitHub last saw it change, and the name it went by before where the sighting says. */
 export interface RepositorySighting {
-  /** GitHub's id for the repository, which a rename or a transfer keeps. */
   readonly id: number;
-  /** `owner/name` as GitHub spelled it as of the sighting. */
   readonly fullName: string;
-  /** GitHub's `updated_at` for the repository as of the sighting, which a rename or a transfer moves; how a late delivery is told from a newer one. */
   readonly updatedAt: Date;
-  /** `owner/name` as it was before, where the sighting names it: a rename's or a transfer's delivery, or a read redirected from it. */
   readonly formerly?: string | undefined;
 }
 
@@ -69,12 +40,6 @@ const insertSeen = SqlSchema.void({
     ),
 });
 
-/**
- * The id's row, held for the transaction, where the sighting may move it:
- * where it stands under another name, or for every sighting that names a
- * name before (`named`); nothing otherwise, which locks no row, so a
- * sighting under the name the id was last seen under locks nothing.
- */
 const lockSeen = SqlSchema.findOneOption({
   Request: Schema.Struct({ ...SightingSchema.fields, named: Schema.Boolean }),
   Result: Schema.Struct({ fullName: Schema.String, githubUpdatedAt: Schema.Date }),
@@ -106,17 +71,14 @@ const updateSeen = SqlSchema.void({
     ),
 });
 
-/** Whether a column's `owner/name` is the one named, as GitHub reads a name, in any case. */
 function namedAs(column: SQLWrapper, from: string): SQL {
   return sql`lower(${column}) = ${from.toLowerCase()}`;
 }
 
-/** Whether a JSON list of `owner/name` holds the old name, in any case but the new name's own spelling. */
 function listsName(column: SQLWrapper, { from, to }: typeof RelabelSchema.Type): SQL {
   return sql`exists (select 1 from jsonb_array_elements_text(${column}) as listed(name) where lower(listed.name) = ${from.toLowerCase()} and listed.name <> ${to})`;
 }
 
-/** A JSON list of `owner/name` with the one named, in any case, given its new name, in the order it stood. */
 function relabeledList(column: SQLWrapper, { from, to }: typeof RelabelSchema.Type): SQL {
   return sql`(select coalesce(jsonb_agg(case when lower(listed.name) = ${from.toLowerCase()} then ${to} else listed.name end order by listed.place), '[]'::jsonb) from jsonb_array_elements_text(${column}) with ordinality as listed(name, place))`;
 }
@@ -165,7 +127,6 @@ const relabelAutomations = SqlSchema.void({
     ),
 });
 
-/** Each account's pin of the old name copied under the new one, the earliest instant where it pinned it in more than one case; one it already holds under the new name stands. */
 const copyPins = SqlSchema.void({
   Request: RelabelSchema,
   execute: ({ from, to }) =>
@@ -197,7 +158,6 @@ const deleteRelabeledPins = SqlSchema.void({
     ),
 });
 
-/** Each member's token read of the old name copied under the new one, kept lowercased as the table keeps it; one already asked under the new name stands. */
 const copyReads = SqlSchema.void({
   Request: RelabelSchema,
   execute: ({ from, to }) =>
@@ -231,12 +191,6 @@ const deleteRelabeledReads = SqlSchema.void({
 
 const otherChapters = alias(pullRequestChapters, "other_chapters");
 
-/**
- * The chapters of the old name that would stand twice on one head once
- * relabeled: each one where the workspace already holds that head's under
- * the new name, and of several spellings of the old name, every one but
- * the first made. The pull request's chapters stand under the new name.
- */
 const deleteDuplicateChapters = SqlSchema.void({
   Request: RelabelSchema,
   execute: ({ from, to }) =>
@@ -292,7 +246,6 @@ const relabelChapters = SqlSchema.void({
 
 const otherTokenRepository = alias(workspaceTokenRepository, "other_token_repository");
 
-/** A workspace's token repository under the old name where it already holds the new one: the new one stands, and the table holds one per name in any case. */
 const deleteDuplicateTokenRepositories = SqlSchema.void({
   Request: RelabelSchema,
   execute: ({ from, to }) =>
@@ -331,7 +284,6 @@ const relabelTokenRepositories = SqlSchema.void({
     ),
 });
 
-/** Every stored name of the repository moved from the old name to the new one, in any case, each table keeping one row where it holds one per name. */
 function relabel(move: typeof RelabelSchema.Type): TaskStoreEffect<void> {
   return Effect.gen(function* () {
     yield* relabelTasks(move);
@@ -340,7 +292,6 @@ function relabel(move: typeof RelabelSchema.Type): TaskStoreEffect<void> {
     yield* relabelAutomations(move);
     yield* copyPins(move);
     yield* deleteRelabeledPins(move);
-    // Note that the reads are keyed lowercased, so a rename that changes only the case moves none.
     if (move.from.toLowerCase() !== move.to.toLowerCase()) {
       yield* copyReads(move);
       yield* deleteRelabeledReads(move);
@@ -352,16 +303,6 @@ function relabel(move: typeof RelabelSchema.Type): TaskStoreEffect<void> {
   });
 }
 
-/**
- * Records a sighting of the repository, and where the name it was last seen
- * under, or the one the sighting says it had, is another than its name now,
- * moves every stored name from each of those to its name now, all in one
- * transaction. A sighting older than the one the id was last seen in, by
- * GitHub's own `updated_at`, moves nothing, since GitHub delivers late and
- * redelivers, and a late delivery's name may be one the repository left
- * behind. A sighting under the name it was last seen under writes nothing
- * past the first, and locks nothing.
- */
 export function noteGitHubRepository(sighting: RepositorySighting): TaskStoreEffect<void> {
   const seen = { id: sighting.id, fullName: sighting.fullName, updatedAt: sighting.updatedAt };
   const named = sighting.formerly !== undefined && sighting.formerly !== sighting.fullName;

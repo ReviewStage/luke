@@ -27,16 +27,6 @@ import { updateActsContract } from "./updates.js";
 import { windowSurfaceActsContract } from "./window-surface.js";
 import { workspaceActsContract } from "./workspaces.js";
 
-/**
- * index.ts -- the oRPC contract of the acts a window's act port answers, keyed by act kind.
- *
- * A subpath door of its own (`@repo/host/contract`), read by the panel's act
- * door and implemented by `@repo/host/act-port`, so it and everything it
- * imports stay free of Node. The router is flat and keyed by the kind
- * itself, so a window calls a kind by the name it already spells, and a kind
- * with no procedure here cannot be called on the port at all.
- */
-
 export {
   MAC_COMMAND_DECISION,
   type MacCommandAnswer,
@@ -82,7 +72,6 @@ export {
 export type { SettingUpdatePayload } from "./settings.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
 
-/** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
   ...accountActsContract,
   ...accountAskActsContract,
@@ -106,25 +95,17 @@ export const actContract = {
   ...workspaceActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 
-/**
- * Everything a window's act port answers: every act kind's procedure, and
- * beside them the stream of what main pushes the window, under a key no act
- * kind spells.
- */
 export const actPortContract = {
   ...actContract,
   ...pushesContract,
 };
 
-/** The window's typed client of the act port. */
 export type ActPortClient = ContractRouterClient<typeof actPortContract>;
 
-/** What one port kind takes. */
 export type PortActPayload<Kind extends PortActKind> = InferContractRouterInputs<
   typeof actContract
 >[Kind];
 
-/** What one port kind answers, as it crosses the port. */
 export type PortActResult<Kind extends PortActKind> = InferContractRouterOutputs<
   typeof actContract
 >[Kind];

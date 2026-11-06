@@ -8,12 +8,10 @@ import { temporaryDirectory } from "@repo/runtime/testing";
 import { test } from "vitest";
 import { AD_HOC_APP_NAME, resolveAppName, resolveInstance } from "./app-identity.js";
 
-/** `scripts/lib/workspace.sh`, which `run.sh` finds and names instances through. */
 const WORKSPACE_SCRIPT = fileURLToPath(
   new URL("../../../scripts/lib/workspace.sh", import.meta.url),
 );
 
-/** Runs `body` in bash with the workspace helpers sourced, under `home` where given. */
 function workspace(body: string, home?: string) {
   const ran = spawnSync("bash", ["-c", `source "$0"; ${body}`, WORKSPACE_SCRIPT], {
     encoding: "utf8",
@@ -77,7 +75,6 @@ test("a preview run is named for its branch, or for the host given, in a name th
 
 test("a named launch replaces only its own instance, and the plain launch never a named one", async (t) => {
   const home = await temporaryDirectory(t, "instances-");
-  // A lock held by a live process that is not the app, which the script reports rather than stops.
   const holdLock = (appName: string) => {
     const directory = join(home, "Library", "Application Support", appName);
     mkdirSync(directory, { recursive: true });

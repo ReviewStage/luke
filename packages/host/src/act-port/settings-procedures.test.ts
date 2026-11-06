@@ -11,18 +11,9 @@ import type { ClientSettingSideEffects, SettingsProceduresDependencies } from ".
 import { settingsProcedures } from "./settings-procedures.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
-/**
- * The settings writes, through the act port as a window calls them: a write
- * reaches the host under the asking window's reporter with the value its
- * field's own guard admitted; and a frame this build does not trust, a sender that is
- * no window of the platform's, or a value its field refuses is refused in
- * the kind's own words, before the host is asked.
- */
-
 const WINDOW = Symbol("window");
 const PANEL: ActSender = { sender: WINDOW, panel: true };
 
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [SETTINGS_ACT_KIND.SETTING_UPDATE]: "Could not save that setting on this system.",
   [SETTINGS_ACT_KIND.SETTINGS_RESET]: "Could not reset those settings on this system.",
@@ -42,11 +33,6 @@ afterEach(() => {
   port = undefined;
 });
 
-/**
- * A window's act port onto the settings procedures, over a host that holds
- * one settings document and answers every write accepted, recording each
- * write as it reached it: the field, the value, and the reporter.
- */
 function windowPort(
   options: {
     trusted?: boolean;
@@ -93,7 +79,6 @@ function windowPort(
   return { client, writes, stored: () => held.stored };
 }
 
-/** A call settled to the sentence of its refusal, or a failure where it answered. */
 async function refusal(call: Promise<unknown>): Promise<string> {
   const settled = await settledAct(call);
   return "refused" in settled
@@ -101,7 +86,6 @@ async function refusal(call: Promise<unknown>): Promise<string> {
     : assert.fail("the call was answered rather than refused");
 }
 
-/** Every settings kind called once, each settled to the sentence of its refusal. */
 async function everyKindRefused(client: ActPortClient) {
   return {
     [SETTINGS_ACT_KIND.SETTING_UPDATE]: await refusal(

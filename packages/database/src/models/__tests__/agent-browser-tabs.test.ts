@@ -35,20 +35,8 @@ import { createAgent } from "../agent-store.js";
 import { CLEARED_CONVERSATION_RETENTION_MS, purgeClearedConversations } from "../soft-delete.js";
 import { createTask } from "../task-store.js";
 
-/**
- * The Browser tabs open in agents' browsers, over a real dialect: an
- * agent's action writes its tab once and moves its page on; a task's tabs
- * are listed only to a member who reaches the task and sees the agent, each
- * with the coding agent whose browser holds it; a takeover is a
- * check-and-set two members never both win, which lapses on its own; and a
- * tab goes with its agent's conversation, the purge's delete among them.
- *
- * Synthetic accounts, workspaces, tasks, agents, and pages throughout.
- */
-
 const MINUTE_MS = 60_000;
 
-/** A new account, answering its id. */
 const openAccount = Effect.gen(function* () {
   const id = `user-${randomUUID()}`;
   yield* Database.use((db) =>
@@ -57,7 +45,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A starter's coding agent on the task named, its browser named by its own conversation. */
 const startAgent = (starter: string, taskId: string) =>
   Effect.map(
     createAgent(starter, {
@@ -73,7 +60,6 @@ const startAgent = (starter: string, taskId: string) =>
     (started) => Option.getOrThrow(started).agent,
   );
 
-/** A starter's task in a workspace a teammate shares, and two coding agents on it. */
 const openTask = Effect.gen(function* () {
   const [starter, teammate, outsider] = [
     yield* openAccount,
@@ -89,7 +75,6 @@ const openTask = Effect.gen(function* () {
   return { starter, teammate, outsider, taskId: started.id, agent, other };
 });
 
-/** An agent's report of a page in a tab its browser names. */
 const action = (conversationId: string, targetId: string, address: string): BrowserTabAction => ({
   conversationId,
   targetId,
@@ -243,7 +228,6 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         assert.equal(yield* handBackBrowserTab(tab.id, teammate), false);
         assert.equal(yield* driverNow, starter);
 
-        // A renewal moves the takeover on, and a slower one never moves it back.
         assert.equal(
           yield* renewBrowserTabTakeover(tab.id, starter, yield* instant(2), yield* instant(0)),
           true,
@@ -276,7 +260,6 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
     () =>
       Effect.gen(function* () {
         const { agent, teammate } = yield* openTask;
-        // The agent's `list` saw the new page in the moment before the member's open recorded it.
         const listed = yield* upsertBrowserTab(
           action(agent.conversationId, "target-new", "about:blank"),
         );
@@ -315,7 +298,6 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
           title: "Dashboard",
         });
         yield* retargetBrowserTab(agent.conversationId, tab.id, "target-1", "target-2");
-        // A view still on the old target, as one a reopening moved the tab off, notes nothing.
         const stale = yield* noteBrowserTabPage(tab.id, "target-1", {
           address: "https://shop.test/stale",
           title: "Stale",
@@ -396,7 +378,6 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         assert.ok(Option.isNone(yield* listBrowserTabs(outsider, place)));
         assert.ok(Option.isNone(yield* readBrowserTab(outsider, place, tab.id)));
 
-        // On its starter's own token, a teammate who does not read its repository no longer sees it.
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -406,7 +387,6 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         assert.ok(Option.isNone(yield* listBrowserTabs(teammate, place)));
         assert.ok(Option.isNone(yield* readBrowserTab(teammate, place, tab.id)));
 
-        // Moved onto a task, its tab is the task's though the tab was written under none.
         const moved = yield* createTask(starter, { organizationId: workspace, name: "Checkout" });
         yield* Database.use((db) =>
           db.update(agentTable).set({ taskId: moved.id }).where(eq(agentTable.id, loose.id)),
@@ -521,10 +501,8 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
           yield* pointBrowserTab(agent.conversationId, { ...move, x: 1, y: 1, at: later - 30_000 }),
           false,
         );
-        // An action reported before the move, its write landing after it, moves nothing back either.
         yield* Effect.provide(
           upsertBrowserTab(action(agent.conversationId, "target-1", "https://shop.test/next")),
-          // A clock of its own, at the epoch, well before the move.
           TestClock.layer(),
         );
         const [kept] = yield* listAgentBrowserTabs(agent.conversationId);
@@ -574,7 +552,6 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
           yield* retargetBrowserTab(agent.conversationId, tab.id, "target-1", "target-2"),
           true,
         );
-        // A second reopening that read the tab on its old target finds it moved, and moves nothing.
         assert.equal(
           yield* retargetBrowserTab(agent.conversationId, tab.id, "target-1", "target-3"),
           false,
@@ -586,7 +563,6 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         assert.equal(moved.targetId, "target-2");
         assert.equal(moved.address, "https://shop.test/");
         assert.equal(moved.driverUserId, teammate);
-        // A later report from the browser names the new target and finds the same tab.
         const again = yield* upsertBrowserTab(
           action(agent.conversationId, "target-2", "https://shop.test/cart"),
         );

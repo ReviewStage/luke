@@ -17,29 +17,6 @@ import { InstantColumnSchema } from "./columns.js";
 import type { SealedProviderKey } from "./provider-key-seal.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 
-/**
- * provider-key-store.ts -- the rows of an account's own provider keys, sealed as `provider-key-seal.ts` seals them.
- *
- * Every function is an effect over the ambient `SqlClient`, keyed by the
- * account, so no account reads, replaces, or removes another's key. What
- * goes in and out is sealed: this module never sees a key in the clear,
- * and a row read here is opened by its caller with the ring the
- * environment holds. A save replaces the provider's row whole, as a new
- * key added now and verified now, since a key is saved only once its
- * provider accepted it, with whether its organization may run fast mode as
- * the save's own fast request found it. A subscription credential is a row
- * of its own kind, saved unverified, since no provider is asked about it
- * before an agent runs on it. A provider holds one row of each kind, side by
- * side, and a save replaces only the row of its own kind. A status is written against the sealed key a step
- * ran on, so a step on a key since replaced marks nothing of its successor.
- *
- * A ChatGPT plan is a row of its own kind whose seal holds its tokens and
- * whose `access_expires_at` says when its access token lapses. Its renewal
- * runs under the row's lock (`withProviderKeyLocked`) and reseals the row in
- * place, so two renewals of one plan run one after the other and the
- * second reads what the first wrote.
- */
-
 const ProviderSchema = Schema.Literals(Object.values(PROVIDER_KEY_PROVIDER));
 
 const FastAccessSchema = Schema.Literals(Object.values(FAST_ACCESS));
@@ -62,12 +39,10 @@ const SealedRowSchema = Schema.Struct({
   createdAt: InstantColumnSchema,
 });
 
-/** One stored key as its row holds it: sealed, beside what the account is shown of it. */
 export type ProviderKeyRow = typeof SealedRowSchema.Type;
 
 const OwnedRowSchema = Schema.Struct({ userId: Schema.String, ...SealedRowSchema.fields });
 
-/** One stored key with its account, for the rewrap that walks every row. */
 export type OwnedProviderKeyRow = typeof OwnedRowSchema.Type;
 
 const KeySchema = Schema.Struct({ userId: Schema.String, provider: ProviderSchema });
@@ -134,12 +109,6 @@ const findEveryRow = SqlSchema.findAll({
     ),
 });
 
-/**
- * The row written, or written over the provider's row of the same kind.
- * Note that `forAgents` is left out of what is written, because a new row
- * takes the column's default, on, and a replaced token keeps the choice the
- * account made for the one before it.
- */
 const upsertRow = SqlSchema.void({
   Request: Schema.Struct({
     ...KindKeySchema.fields,
@@ -157,7 +126,6 @@ const upsertRow = SqlSchema.void({
       sealedDataKey: write.sealedDataKey,
       sealedKey: write.sealedKey,
       hint: write.hint,
-      // An API key is kept only once its provider accepted it; a subscription credential is kept unasked.
       status:
         write.kind === PROVIDER_KEY_KIND.API_KEY
           ? PROVIDER_KEY_STATUS.VERIFIED
@@ -199,7 +167,6 @@ const lockRow = SqlSchema.findAll({
     ),
 });
 
-/** The row's seal and expiry replaced where it still holds the seal it was read with. */
 const resealRow = SqlSchema.findAll({
   Request: Schema.Struct({
     ...KindKeySchema.fields,
@@ -270,7 +237,6 @@ const updateStatus = SqlSchema.void({
     ),
 });
 
-/** The statuses an agent's turn may write on its plan's row, as `setPlanStatus` says. */
 const PlanStatusSchema = Schema.Literals([
   PROVIDER_KEY_STATUS.VERIFIED,
   PROVIDER_KEY_STATUS.INVALID,
@@ -278,7 +244,6 @@ const PlanStatusSchema = Schema.Literals([
   PROVIDER_KEY_STATUS.INELIGIBLE,
 ]);
 
-/** A plan's status as a turn found it, on whatever credential the row holds now, as `setPlanStatus` bounds it. */
 const updatePlanStatus = SqlSchema.void({
   Request: Schema.Struct({
     ...KindKeySchema.fields,
@@ -350,7 +315,6 @@ const updateForAgents = SqlSchema.findAll({
     ),
 });
 
-/** The wrap moved only where the row still holds the seal it was read with, so a key replaced meanwhile keeps its own. */
 const rewrapRow = SqlSchema.findAll({
   Request: Schema.Struct({
     ...KindKeySchema.fields,
@@ -378,7 +342,6 @@ const rewrapRow = SqlSchema.findAll({
     ),
 });
 
-/** The account's stored keys of one kind, sealed, in the providers' order. */
 export function listProviderKeyRows(
   userId: string,
   kind: ProviderKeyKind,
@@ -386,23 +349,12 @@ export function listProviderKeyRows(
   return findRows({ userId, kind });
 }
 
-/**
- * The account's stored keys of every kind, sealed, in the providers' order,
- * in one statement: what a request that decides several things from them,
- * such as a Start's model menu and its payer, reads once.
- */
 export function listAccountProviderKeyRows(
   userId: string,
 ): TaskStoreEffect<readonly ProviderKeyRow[]> {
   return findAccountRows({ userId });
 }
 
-/**
- * Keeps the provider's credential of this kind for the account, replacing
- * the one of the kind it held, as added now: an API key verified, a
- * subscription credential unverified, with its fast access where the save
- * found it. The provider's credential of another kind stays as it is.
- */
 export function saveProviderKey(
   userId: string,
   provider: ProviderKeyProvider,
@@ -416,12 +368,6 @@ export function saveProviderKey(
   return upsertRow({ userId, provider, kind, ...sealed, hint, fastAccess, accessExpiresAt, now });
 }
 
-/**
- * Runs `body` on the account's credential of this kind, or on none where it
- * holds none, in one transaction with its row locked, so two renewals of one
- * credential run one after the other and the second reads what the first
- * wrote.
- */
 export function withProviderKeyLocked<A, E, R>(
   userId: string,
   provider: ProviderKeyProvider,
@@ -437,11 +383,6 @@ export function withProviderKeyLocked<A, E, R>(
   );
 }
 
-/**
- * Replaces the seal of the account's credential of this kind and when its
- * access lapses, together, where the row still holds the seal it was read
- * with; answers whether it did. Its status and when it was added stand.
- */
 export function resealProviderKey(
   userId: string,
   provider: ProviderKeyProvider,
@@ -456,7 +397,6 @@ export function resealProviderKey(
   );
 }
 
-/** Removes the provider's credential of this kind from the account; removing one it does not hold moves nothing. */
 export function removeProviderKey(
   userId: string,
   provider: ProviderKeyProvider,
@@ -465,11 +405,6 @@ export function removeProviderKey(
   return deleteRow({ userId, provider, kind });
 }
 
-/**
- * Turns the account's default payer for its coding agents on or off for the
- * provider's credential of this kind; whether a row held it, since a
- * credential disconnected meanwhile has no default to turn.
- */
 export function setProviderKeyForAgents(
   userId: string,
   provider: ProviderKeyProvider,
@@ -482,7 +417,6 @@ export function setProviderKeyForAgents(
   );
 }
 
-/** Writes how the provider last answered the key a step ran on, where the row still holds that key. */
 export function setProviderKeyStatus(
   userId: string,
   provider: ProviderKeyProvider,
@@ -493,20 +427,8 @@ export function setProviderKeyStatus(
   return updateStatus({ userId, provider, sealedKey, status, now });
 }
 
-/** A status a coding agent's turn found its plan in. */
 export type PlanStatus = typeof PlanStatusSchema.Type;
 
-/**
- * Writes how the provider answered a coding agent's turn on the account's
- * plan of this kind, with when its reached limit resets where it said.
- * `savedBy` is when the turn opened: a credential saved after it, as a
- * reconnect saves one, ran none of it and is not judged by it.
- * Note that a row the service cannot read keeps saying so, since only a new
- * credential mends it; that a turn that ran is no word against a renewal
- * that found the sign-in ended, so verified never lifts invalid; and that a
- * plan already verified is not written again, so every turn's success
- * costs no write.
- */
 export function setPlanStatus(
   userId: string,
   provider: ProviderKeyProvider,
@@ -527,7 +449,6 @@ export function setPlanStatus(
   });
 }
 
-/** Writes what a fast call on the key a step ran on showed of its organization, where the row still holds that key. */
 export function setProviderKeyFastAccess(
   userId: string,
   provider: ProviderKeyProvider,
@@ -537,15 +458,10 @@ export function setProviderKeyFastAccess(
   return updateFastAccess({ userId, provider, sealedKey, fastAccess });
 }
 
-/** Every stored key of every account, sealed, for the rewrap alone. */
 export function listEveryProviderKeyRow(): TaskStoreEffect<readonly OwnedProviderKeyRow[]> {
   return findEveryRow(undefined);
 }
 
-/**
- * Moves one row onto a new wrap of its data key, and answers whether it
- * did: not where the row was replaced or rewrapped since it was read.
- */
 export function rewrapProviderKeyRow(
   row: OwnedProviderKeyRow,
   rewrapped: SealedProviderKey,

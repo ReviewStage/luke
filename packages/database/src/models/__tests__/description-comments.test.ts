@@ -34,20 +34,6 @@ import {
 import { writePage } from "../task-pages.js";
 import { createTask, saveDescriptionText } from "../task-store.js";
 
-/**
- * A description's comment threads over a real dialect: started and read by every
- * member of the plan's workspace and by nobody else, anchored to the words
- * they were started on, carried with those words through every save, left
- * with their quote where the words are deleted and anchored again where the
- * editor's undo reports them back, answered, resolved, and reopened by any
- * member, and a comment edited or deleted only by its writer. A comment's
- * files are kept with it, read by every member and nobody else, and go
- * with it. A thread on one of the task's pages is read with that page's
- * alone, never the description's.
- *
- * Synthetic accounts and plans throughout.
- */
-
 const DESCRIPTION_TEXT =
   "## Goal\n\nAn admin invites a teammate by email, and the invite lands as a single-use link that expires in seven days.\n\n## Approach\n\nAdmins can withdraw an invite from the members page. A withdrawn link never grants access again.\n";
 
@@ -59,7 +45,6 @@ const openAccount = (name: string) =>
     return id;
   });
 
-/** A plan with the text above, in a workspace the owner made and the teammate joined, and an account in neither. */
 const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount("Dean Stratakos");
   const teammate = yield* openAccount("Charles Pan");
@@ -71,7 +56,6 @@ const openSharedTask = Effect.gen(function* () {
   return { owner, teammate, outsider, taskId };
 });
 
-/** How long the test that writes a thread up to its bound may take. */
 const BOUND_TIMEOUT = 60_000;
 
 const member = (userId: string): DescriptionCommentWriterRef => ({
@@ -79,7 +63,6 @@ const member = (userId: string): DescriptionCommentWriterRef => ({
   userId,
 });
 
-/** A thread started on the first place `words` stands in `text`. */
 function startOn(text: string, words: string, comment: string): DescriptionCommentStartRequest {
   const from = text.indexOf(words);
   assert.ok(from >= 0);
@@ -93,21 +76,18 @@ function startOn(text: string, words: string, comment: string): DescriptionComme
   };
 }
 
-/** The thread an outcome answered, failing the test where it answered none. */
 function threadOf(outcome: DescriptionCommentOutcome): DescriptionCommentThread {
   assert.equal(outcome.status, DESCRIPTION_COMMENT_OUTCOME.DONE);
   assert.ok("thread" in outcome.answer, JSON.stringify(outcome.answer));
   return outcome.answer.thread;
 }
 
-/** An outcome without the transaction its write committed in, which no two runs share. */
 function withoutTxid(outcome: DescriptionCommentOutcome): DescriptionCommentOutcome {
   if (outcome.status !== DESCRIPTION_COMMENT_OUTCOME.DONE) return outcome;
   const { txid: _txid, ...said } = outcome;
   return said;
 }
 
-/** The words a thread's anchor stands over in the text, or nothing where it stands nowhere. */
 function anchoredIn(
   text: string,
   thread: DescriptionCommentThread | undefined,
@@ -287,7 +267,6 @@ it.layer(getTestDB())("a description's comment threads", (it) => {
         assert.equal(gone?.section, "Approach");
         assert.equal(gone?.status, DESCRIPTION_COMMENT_STATUS.OPEN);
 
-        // Note that a save carrying the text alone never finds the words again, however they come back.
         yield* moveDescriptionCommentAnchors(taskId, deleted, moved);
         assert.equal((yield* readOne(owner, taskId))?.anchor, undefined);
 
@@ -467,7 +446,6 @@ it.layer(getTestDB())("a description's comment threads", (it) => {
         });
         assert.equal(threadOf(replied).entries.at(-1)?.words, "Still taken");
       }),
-    // Note that the bound is two hundred writes, which outlasts the default timeout on a loaded machine.
     BOUND_TIMEOUT,
   );
 
@@ -615,7 +593,6 @@ it.layer(getTestDB())("a description's comment threads", (it) => {
         const onPage = Option.getOrThrow(
           yield* readDescriptionCommentThreads(owner, taskId, shown.id),
         );
-        // Note that the two may be started in one millisecond, which orders them by their ids, so they are compared in the order of their scopes.
         const byScope = [...onPage].sort((a, b) => a.scope.localeCompare(b.scope));
         assert.deepEqual(
           byScope.map((thread) => [
@@ -706,7 +683,6 @@ it.layer(getTestDB())("a description's comment threads", (it) => {
         assert.equal(kept.contentType, AGENT_ATTACHMENT_TYPE.TEXT);
         assert.deepEqual([...kept.bytes], [...notes]);
         assert.ok(Option.isNone(yield* readDescriptionCommentFile(outsider, taskId, fileId)));
-        // A comment's file is no picture of the description's.
         assert.ok(Option.isNone(yield* readDescriptionAttachment(owner, taskId, fileId)));
 
         assert.deepEqual(

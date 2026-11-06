@@ -7,16 +7,12 @@ import type { TestContext } from "vitest";
 import { hostProcessTable } from "./host-processes.js";
 import { ProcessTable } from "./processes.js";
 
-/** The runner's own pid in the listings below, leading its own process group, as the host starts it. */
 const RUNNER = 4100;
 
-/** The harness the runner spawned. */
 const HARNESS = 4101;
 
-/** The host that started the runner. */
 const HOST = 900;
 
-/** One process of a listing: its id, parent, group, and command line. */
 interface Row {
   readonly pid: number;
   readonly parent: number;
@@ -31,7 +27,6 @@ const row = (pid: number, parent: number, group: number, command: string): Row =
   command,
 });
 
-/** What a box runs beside the runner: init, the host, and another agent's runner with a server of its own, each in a group of its own. */
 const BESIDE = [
   row(1, 0, 1, "/sbin/init"),
   row(HOST, 1, HOST, "/opt/vespin-host/node/bin/node /opt/vespin-host/lib/vespin-host.mjs run"),
@@ -40,24 +35,20 @@ const BESIDE = [
   row(5102, 5101, 5100, "node server.js"),
 ];
 
-/** The runner, its harness, and the harness's command-sandbox bridge, none of them the agent's. */
 const LAUNCH = [
   row(RUNNER, HOST, RUNNER, "/opt/vespin-host/node/bin/node /opt/vespin-host/lib/agent-runner.mjs"),
   row(HARNESS, RUNNER, RUNNER, "/state/agent-tools/claude/0.3.304/claude --output-format"),
   row(4102, HARNESS, RUNNER, "socat UNIX-LISTEN:/tmp/claude-http-3fa9.sock,fork TCP:localhost:5"),
 ];
 
-/** Whether the table answers that a process of the agent's runs, over the sources given. */
 const agentRuns = (sources: { readonly proc: string; readonly ps: string }) =>
   Effect.gen(function* () {
     const table = yield* ProcessTable;
     return yield* table.agentProcessRuns;
   }).pipe(Effect.provide(hostProcessTable(RUNNER, sources)));
 
-/** A folder of the test's own, gone once it finishes. */
 const folderOf = (ctx: TestContext) => Effect.promise(() => temporaryDirectory(ctx, "vespin-ps-"));
 
-/** A `ps` of the test's own, as a Mac lists its processes: a script printing the rows given as `ps -o pid=,ppid=,pgid=,command=` does, and exiting as told. */
 const fakePs = (ctx: TestContext, rows: readonly Row[], exitCode = 0) =>
   Effect.gen(function* () {
     const directory = yield* folderOf(ctx);
@@ -73,7 +64,6 @@ const fakePs = (ctx: TestContext, rows: readonly Row[], exitCode = 0) =>
     return { proc: join(directory, "no-proc"), ps };
   });
 
-/** A `/proc` of the test's own, as Linux lists its processes: each row's `stat`, its command's name in parentheses, and its `cmdline`. */
 const fakeProc = (ctx: TestContext, rows: readonly Row[]) =>
   Effect.gen(function* () {
     const proc = join(yield* folderOf(ctx), "proc");
@@ -82,7 +72,6 @@ const fakeProc = (ctx: TestContext, rows: readonly Row[]) =>
     for (const each of rows) {
       const folder = join(proc, String(each.pid));
       mkdirSync(folder);
-      // Note that the name holds a parenthesis and a space, as a process may name itself, which must not shift the fields after it.
       writeFileSync(
         join(folder, "stat"),
         `${each.pid} (a) b) S ${each.parent} ${each.group} ${each.group} 0 -1 4194560`,

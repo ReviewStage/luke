@@ -24,19 +24,6 @@ import type { AppInstalledSkills } from "./app-state.js";
 import { composeInstalledSkills, type InstalledSkillsClient } from "./compose-installed-skills.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 
-/**
- * Settings › Skills' asks through the host as a window makes them, over a
- * scripted service: each answer reaches the window as its view, a refusal
- * by why, with the skill it names; behind a closed
- * account gate or on a run that sends nothing the service is never asked;
- * and params of the wrong shape are refused before anything travels. A
- * workspace a window holds is laid on its app-state slice as its live read
- * stands, and a write is drawn over every held workspace that shows its
- * skill the moment it is asked, or, for an install, answered, standing until
- * each read carries its transaction and put back where the service refused
- * it. Synthetic ids and names.
- */
-
 const WORKSPACE_ID = "workspace-stage";
 const OTHER_WORKSPACE_ID = "workspace-globex";
 const ACCOUNT_ID = "user-dean";
@@ -46,7 +33,6 @@ const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERA
 
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
-/** `settled`, then the host's next poll asked, which waits half a second after the last answered (`live-follow.ts`), then `settled` again. */
 const nextPoll = Effect.andThen(
   settled,
   Effect.andThen(TestClock.adjust(Duration.millis(500)), settled),
@@ -80,20 +66,16 @@ const CONTENT = {
   files: [{ path: "SKILL.md", bytes: 58 }],
 };
 
-/** A skill as the live read delivers its row. */
 function rowOf({ workspaceId, ...skill }: InstalledSkillSummary): InstalledSkillLiveRow {
   return { ...skill, workspaceId: workspaceId ?? null };
 }
 
-/** What each write answers, once its gate lets it, which a test may replace. */
 interface Replies {
   install: Effect.Success<ReturnType<InstalledSkillsClient["install"]>>;
   remove: Effect.Success<ReturnType<InstalledSkillsClient["remove"]>>;
-  /** What a write waits on before the service answers it; nothing from the start. */
   gate: Effect.Effect<void>;
 }
 
-/** The service as a script: what it answers, every call it was asked, in order, and each workspace's live read. */
 function fakeService(options: { refuseInstall?: boolean } = {}) {
   const asked: string[] = [];
   const live: Readonly<Record<string, PolledLive<"skills", typeof LIVE_SIGNED_OUT>>> = {
@@ -111,7 +93,6 @@ function fakeService(options: { refuseInstall?: boolean } = {}) {
     remove: { ok: true, answer: { id: SKILL_ID } },
     gate: Effect.void,
   };
-  /** A write's ask written down, then answered with `reply` once the gate lets it. */
   const writing = <A>(ask: string, reply: () => A) =>
     Effect.andThen(
       Effect.sync(() => asked.push(ask)),
@@ -167,14 +148,11 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    /** Each skill a workspace's slice last showed, by its id; none where it showed no rows. */
     const shown = (workspaceId: string) => {
       const told = emitted.filter((each) => each.kind === GATEWAY_EVENT.INSTALLED_SKILLS_CHANGED);
-      // SAFETY: the host tells the skills slice whole on this event.
       const held = told.at(-1)?.payload as AppInstalledSkills | undefined;
       return held?.[workspaceId]?.rows?.map(({ id }) => id);
     };
-    /** Holds each workspace's skills, its read answering `rows` woken by a write, so it hands a wait for the next. */
     const holding = (rows: Readonly<Record<string, readonly InstalledSkillSummary[]>>) =>
       Effect.gen(function* () {
         for (const workspaceId of Object.keys(rows)) {

@@ -1,36 +1,3 @@
-/**
- * live-socket.ts -- the host's live polls sent over one WebSocket to the service rather than one held request each: an `HttpClient` that asks each live read's GET over the socket and answers it as the response its poll would have had, and passes everything else on.
- *
- * Every composer reads the service through the ambient `HttpClient`, and a
- * live read is one GET under `LIVE_SOCKET.READ_PREFIX`, so the socket stands
- * under that client rather than beside the reads: an ask is the GET's own
- * path and query, and its answer is the status and body the service's
- * procedure answered (`@repo/features/live-wire`'s `LIVE_SOCKET`), built
- * back into a response, so nothing above here knows which way a poll went.
- * A write, and any other request, goes over HTTP unchanged.
- *
- * The first ask opens a socket in the background, under the account's
- * credential as the terminals open theirs (`relay-credential.ts`), and goes
- * over HTTP itself, as does every ask until the socket stands, so no read
- * waits on an open: not at launch, and not on a cold function. A socket
- * takes asks for `ROTATE_AFTER`; the next ask after that goes over HTTP
- * while the next socket opens the same way, and the old one is closed
- * `DRAIN` later, once the asks it holds have been answered, all inside the
- * service function's 800 s bound, so a rotation fails no poll and holds
- * none. Where no socket answers, the polls go over HTTP:
- *
- * - an open refused, reaching nothing, or not done within `OPEN_WITHIN`
- *   sends every ask over HTTP for `HTTP_AFTER_FAILED_OPEN`, as a deployment
- *   serving no socket, such as the local server, does always;
- * - an ask unanswered within `ANSWER_WITHIN` takes its socket as stalled
- *   and closes it, and is asked again over HTTP, as is every ask a socket
- *   held when it ended, so a socket's end is never a poll's failure, nor
- *   the service's silence where the client keeps its reach (`ServiceReach`);
- * - a 401 closes the socket, whose credential may be one since renewed or
- *   another account's, and asks again over HTTP, where the account call
- *   renews the credential as it does for any request.
- */
-
 import { type CallCredential, readServiceAnswer, webSocketOrigin } from "@repo/features";
 import {
   LIVE_SOCKET,
@@ -44,17 +11,11 @@ import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/h
 import type { OpenTerminalSocket, TerminalSocket } from "./compose-terminals.js";
 import { openedUnderCredential } from "./relay-credential.js";
 
-/** How long each socket and each ask is given, by what bounds it. */
 const LIVE_SOCKET_BOUNDS = {
-  /** How long a socket takes new asks; with `DRAIN` after it, inside the service function's 800 s bound. */
   ROTATE_AFTER: Duration.minutes(12),
-  /** How long a socket no longer taking asks stays open for the ones it holds: past the service's 25 s hold. */
   DRAIN: Duration.seconds(40),
-  /** How long an open may take before it is taken as reaching nothing, so a handshake that hangs holds the next open off for no longer. */
   OPEN_WITHIN: Duration.seconds(10),
-  /** How long asks go over HTTP after an open was refused or reached nothing. */
   HTTP_AFTER_FAILED_OPEN: Duration.seconds(30),
-  /** How long an ask waits for its answer before its socket is taken as stalled: past the service's 25 s hold. */
   ANSWER_WITHIN: Duration.seconds(30),
 } as const;
 
@@ -64,7 +25,6 @@ const JSON_HEADERS = { "content-type": "application/json" } as const;
 
 const readAnswer = readServiceAnswer(Schema.fromJsonString(liveSocketAnswerSchema));
 
-/** One socket as it stands: what it was opened at, the asks it holds by id, and whether it ended. */
 interface StandingSocket {
   readonly socket: TerminalSocket;
   readonly scope: Scope.Closeable;
@@ -73,12 +33,10 @@ interface StandingSocket {
   ended: boolean;
 }
 
-/** Why an ask was never answered: its socket ended, or stalled, first. */
 class SocketEnded {
   readonly _tag = "SocketEnded";
 }
 
-/** What the wrapper is handed: the client it passes everything else to, how sockets open, and the account and service they open on. */
 export interface LiveSocketOptions {
   readonly http: HttpClient.HttpClient;
   readonly openSocket: OpenTerminalSocket;
@@ -86,7 +44,6 @@ export interface LiveSocketOptions {
   readonly serviceBaseUrl: string;
 }
 
-/** Whether a request is a live read's GET to the service, which is what a socket asks. */
 function isLiveRead(
   request: HttpClientRequest.HttpClientRequest,
   url: URL,
@@ -99,7 +56,6 @@ function isLiveRead(
   );
 }
 
-/** A poll's answer as the response its HTTP poll would have been: its status, and its JSON body where it has one. */
 function responseOf(
   request: HttpClientRequest.HttpClientRequest,
   answer: LiveSocketAnswer,
@@ -111,11 +67,6 @@ function responseOf(
   return HttpClientResponse.fromWeb(request, response);
 }
 
-/**
- * The client every composer reads the service through, with each live read
- * asked over one socket at a time (`live-socket.ts`'s header), standing for
- * the scope it is built in: its close closes every socket.
- */
 export function liveSocketClient(
   options: LiveSocketOptions,
 ): Effect.Effect<HttpClient.HttpClient, never, Scope.Scope> {
@@ -131,7 +82,6 @@ export function liveSocketClient(
     let httpUntil = 0;
     let nextId = 0;
 
-    /** The socket ended: every ask it holds failed, and it closed. */
     const end = (standing: StandingSocket) =>
       Effect.gen(function* () {
         if (standing.ended) return;
@@ -144,7 +94,6 @@ export function liveSocketClient(
         yield* Scope.close(standing.scope, Exit.void);
       });
 
-    /** Each answer the socket carries handed to the ask it names, until the socket ends. */
     const read = (standing: StandingSocket) =>
       Stream.runForEach(standing.socket.arrivals, (arrival) => {
         if (!("text" in arrival)) return Effect.void;
@@ -155,7 +104,6 @@ export function liveSocketClient(
         return waiting === undefined ? Effect.void : Deferred.succeed(waiting, answer.success);
       }).pipe(Effect.ensuring(end(standing)));
 
-    /** A socket opened, with its reader standing; none where the open was refused or reached nothing. */
     const open = Effect.gen(function* () {
       const socketScope = yield* Scope.fork(scope);
       const opened = yield* Scope.provide(
@@ -182,7 +130,6 @@ export function liveSocketClient(
       return standing;
     });
 
-    /** The next socket, taking asks once it stands; where its open failed, asks go over HTTP for a while. */
     const openNext = Effect.gen(function* () {
       const opened = yield* open;
       if (opened === undefined) {
@@ -198,11 +145,6 @@ export function liveSocketClient(
       ),
     );
 
-    /**
-     * The socket an ask goes over: the current one while it takes asks.
-     * Otherwise none, so the ask goes over HTTP, while the old one, past its
-     * time, drains, and the next one opens in the background.
-     */
     const socketFor = Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       const standing = current;
@@ -224,7 +166,6 @@ export function liveSocketClient(
       return undefined;
     });
 
-    /** One ask over the socket, answered, or failed where the socket ended or stalled first. */
     const ask = (standing: StandingSocket, path: string) =>
       Effect.gen(function* () {
         const id = nextId++;
@@ -242,7 +183,6 @@ export function liveSocketClient(
         );
       });
 
-    /** A live read asked over the socket where one answers, and over HTTP where none does, it ended or stalled first, or it was refused. */
     const live = (request: HttpClientRequest.HttpClientRequest, url: URL) =>
       Effect.gen(function* () {
         const standing = yield* socketFor;

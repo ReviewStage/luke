@@ -16,18 +16,6 @@ import { inboxItem } from "../schemas/inbox.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 
-/**
- * task-agents.ts -- a coding agent on a test's task, and an inbox item it holds open, written beneath the store.
- *
- * A test about a task's work or its inbox that wants an agent on the task,
- * or an item of that agent's waiting on the developer, writes the rows here
- * rather than starting a session: an agent of the member's, with its own
- * conversation, and an item open under a fresh key, holding its message's
- * ask open, or open as a notice whose message asks nothing. An agent with
- * no task is written the same way.
- */
-
-/** An agent of the member's on the task, or on none, with its own conversation; its id. */
 export const openTaskAgent = (userId: string, organizationId: string, taskId: string | null) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -50,7 +38,6 @@ export const openTaskAgent = (userId: string, organizationId: string, taskId: st
     return id;
   });
 
-/** An inbox item of the task's agent, open and holding its message's ask open, or open as a notice, its message asking nothing, where `asking` is false; its id. */
 export const openInboxItem = (
   userId: string,
   organizationId: string,
@@ -82,14 +69,12 @@ export const openInboxItem = (
       options: [{ label: INBOX_APPROVAL_OPTION.APPROVE }, { label: INBOX_APPROVAL_OPTION.DECLINE }],
       status: INBOX_ASK_STATUS.OPEN,
     } as const;
-    // Note that the message is written naming only its columns, because a migration's test writes it on a database migrated short of today's.
     const sql = yield* SqlClient.SqlClient;
     const [message] = yield* sql<{
       readonly id: string;
     }>`insert into inbox_message (item_id, author, text, ask, created_at)
       values (${id}, ${INBOX_MESSAGE_AUTHOR.AGENT}, 'Rebase onto main?', ${asking ? JSON.stringify(ask) : null}::jsonb, ${now})
       returning id`;
-    // A notice's message asks nothing, so the item names no open ask.
     if (asking) {
       yield* db
         .update(inboxItem)

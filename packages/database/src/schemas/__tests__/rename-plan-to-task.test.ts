@@ -18,16 +18,6 @@ import {
 } from "../../testing/index.js";
 import { member, organization, user } from "../auth.js";
 
-/**
- * The migration that names a plan's row a task over a database from before
- * it: a task and an agent are made, the database is walked back to the names
- * it held before (each rename undone, last first), rows are written under
- * those names as an earlier build wrote them, and the migration's own
- * statements are run over it. What was written reads back under the new
- * names. Synthetic accounts and rows throughout.
- */
-
-/** A task in a workspace the account owns, and an agent started on it with a prompt. */
 const openTask = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -70,7 +60,6 @@ it.layer(getTestDB())("the migration that names a plan's row a task", (it) => {
         const renames = replayable(yield* migrationStatements(RENAME_PLAN_TO_TASK));
         const agentTables = yield* laterRenames();
 
-        // The database as it stood before the migration, with no sync capture yet, written to as an earlier build wrote it.
         for (const statement of syncCaptureTakenOff()) yield* sql.unsafe(statement);
         for (const statement of agentTables.back) yield* sql.unsafe(statement);
         for (const statement of [...renames].reverse()) yield* sql.unsafe(undoneRename(statement));

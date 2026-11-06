@@ -4,16 +4,6 @@ import { ACCOUNT_ACT_KIND } from "../contract/index.js";
 import type { HostOperator } from "../host-operator.js";
 import { actPort } from "./base.js";
 
-/**
- * account-procedures.ts -- the account's asks, proxied to the host that owns the account.
- *
- * The sign-in flow, the refresh, the sign-out, the deletion, and the grant
- * of support access all run
- * there, and the counts of them are recorded there, ahead of the action they
- * count. What stays here is what only the client can do about them —
- * stopping the recording its renderers run before the account they file
- * under is gone.
- */
 export interface AccountProceduresDependencies {
   host: Pick<
     HostOperator,
@@ -25,32 +15,13 @@ export interface AccountProceduresDependencies {
     | "accountSnapshot"
     | "supportAccess"
   >;
-  /**
-   * Asks before a sign-out while something would be lost, unsaved work,
-   * answering whether to sign out. A shell that asks nothing
-   * first, a browser tab, leaves this out.
-   */
   askBeforeSignOut?: () => Promise<boolean>;
-  /**
-   * Stops recording before either action runs. Neither can wait for its own
-   * account transition to be relayed: a sign-out reports itself before the
-   * store clears, and a deletion awaits the hosted erasure first — so a
-   * recording still running is one filed under a person who has left, or one
-   * whose erasure is already queued, which it would recreate.
-   */
   haltSessionReplay: () => void;
-  /**
-   * Re-answers what recording may do, for an action that did not happen. A halt
-   * ahead of a refused sign-out or a failed deletion is one the account
-   * transition never follows, so without this the panel stays halted while the
-   * user is still signed in.
-   */
   resumeSessionReplay: () => void;
 }
 
 export function accountProcedures(dependencies: AccountProceduresDependencies) {
   const { host, haltSessionReplay, resumeSessionReplay, askBeforeSignOut } = dependencies;
-  /** The halt, the host's answer, and the resume an answer that never came owes. */
   const halted = (action: Effect.Effect<AccountSnapshot>): Effect.Effect<AccountSnapshot> =>
     Effect.suspend(() => {
       haltSessionReplay();
@@ -73,9 +44,6 @@ export function accountProcedures(dependencies: AccountProceduresDependencies) {
     ].effect(function* () {
       yield* host.cancelSignIn();
     }),
-    // A sign-out the developer canceled answers the account as it still
-    // stands and stops nothing; where none stands, nobody is signed in and
-    // the sign-out loses nothing.
     [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT]: actPort[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT].effect(
       function* () {
         if (askBeforeSignOut !== undefined && !(yield* Effect.promise(askBeforeSignOut))) {
@@ -85,8 +53,6 @@ export function accountProcedures(dependencies: AccountProceduresDependencies) {
         return yield* halted(host.signOut());
       },
     ),
-    // A deletion that landed stands recording down for the run; the host says
-    // so on its replay event, which follows this answer.
     [ACCOUNT_ACT_KIND.ACCOUNT_DELETE]: actPort[ACCOUNT_ACT_KIND.ACCOUNT_DELETE].effect(
       function* () {
         return yield* halted(host.deleteAccount());

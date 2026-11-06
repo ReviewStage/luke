@@ -1,18 +1,3 @@
-/**
- * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without systemd or whose user manager cannot be reached is refused with how to fix it, a run under sudo from another account is refused, lingering is turned on with sudo only where the account may not turn it on itself, a download whose SHA-256 is not the one carried is refused, a Mac's LaunchAgent is written and started only where its user is logged in, and a whole run installs the release into the account, starts its service only once the box is connected, in the layout `vespin-host uninstall` removes, and keeps the pairing when run again, while its `cli` mode installs the `vespin` command alone and asks nothing of a service. Beside it, the host's own `vespin-host uninstall` (`apps/host/scripts/vespin-host.sh`) as an account install runs it.
- *
- * The script is run by `sh` in a temporary folder; `APP_HOST_INSTALL_LIBRARY`
- * has it stop after it defines what it carries and its functions, which the
- * tests call, and `APP_HOST_SYSTEMD_RUN_DIR` points its systemd check at a
- * folder the test made. A fake `uname`, `sysctl`, `sw_vers`, `systemctl`,
- * `loginctl`, `sudo`, `launchctl` or `curl` put first on its PATH answers as
- * the computer a test means, and writes down what it was asked. A whole run is
- * handed the script with a release written in, as the route that serves it
- * writes one, whose tarball the fake `curl` copies from the test's folder: the
- * host's real launcher over a fake Node that answers `connect`. It never gets
- * as far as touching the box or the network.
- */
-
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -35,43 +20,27 @@ const SCRIPT = join(import.meta.dirname, "../../../../apps/web/install/install.s
 const UNINSTALL_SCRIPT = join(import.meta.dirname, "../../../../apps/host/scripts/vespin-host.sh");
 const CLI_LAUNCHER = join(import.meta.dirname, "../../../../apps/cli/scripts/vespin.sh");
 
-/** /proc/version as WSL2's own kernel writes it. */
 const WSL2_PROC_VERSION =
   "Linux version 6.6.87.2-microsoft-standard-WSL2 (root@439a258ad544) (gcc (GCC) 11.2.0) #1 SMP PREEMPT_DYNAMIC";
 
-/** /proc/version as WSL1 writes it, naming Windows' own build. */
 const WSL1_PROC_VERSION =
   "Linux version 4.4.0-22621-Microsoft (Microsoft@Microsoft.com) (gcc version 5.4.0 (GCC) ) #2215-Microsoft";
 
-/** /proc/version as a Linux box that is not WSL writes it. */
 const LINUX_PROC_VERSION = "Linux version 6.8.0-45-generic (buildd@ubuntu)";
 
-/**
- * The origin a run is handed, since the script as it stands here leaves its
- * own to the route that serves it (`@@ORIGIN@@`).
- */
 const ORIGIN = "https://app.test";
 const ORIGIN_ARGS = ["--origin", ORIGIN] as const;
 
-/** The SHA-256 of the three bytes "abc", from FIPS 180-2's own examples. */
 const ABC_SHA256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
-/** The SHA-256 of no bytes at all. */
 const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
-/** A Mac's LaunchAgent, by its label. */
 const LABEL = "dev.vespin.host.standalone";
 
 const OS = { LINUX: "Linux", DARWIN: "Darwin" } as const;
 
 type Os = (typeof OS)[keyof typeof OS];
 
-/**
- * The Node a release's launcher runs its bundle on, faked: it writes down
- * each command, and answers `connect` as the daemon does, at once where the
- * box's record stands, with the denial where `FAKE_CONNECT_EXIT` names a
- * code, and otherwise by writing `FAKE_PAIRING` as the record.
- */
 const FAKE_NODE = [
   "#!/bin/sh",
   "shift",
@@ -87,7 +56,6 @@ const FAKE_NODE = [
 
 const folders: string[] = [];
 
-/** A folder of the test's own. */
 const folder = () => {
   const made = mkdtempSync(join(tmpdir(), "vespin-host-install-"));
   folders.push(made);
@@ -98,7 +66,6 @@ afterEach(() => {
   for (const made of folders.splice(0)) rmSync(made, { recursive: true, force: true });
 });
 
-/** A shell run in a folder of its own, its script text and what it printed and exited with. */
 const sh = (args: readonly string[], env: Readonly<Record<string, string>>) =>
   spawnSync("sh", [...args], {
     cwd: folder(),
@@ -106,7 +73,6 @@ const sh = (args: readonly string[], env: Readonly<Record<string, string>>) =>
     encoding: "utf8",
   });
 
-/** A folder holding a command for each body given, by its name, to put first on a PATH. */
 const bin = (commands: Readonly<Record<string, string>>) => {
   const made = folder();
   for (const [name, body] of Object.entries(commands)) {
@@ -115,15 +81,9 @@ const bin = (commands: Readonly<Record<string, string>>) => {
   return made;
 };
 
-/** A `uname` that answers as the OS given on the machine given. */
 const uname = (os: Os, machine: string) =>
   `case "$1" in\n  -m) echo ${machine} ;;\n  *) echo ${os} ;;\nesac`;
 
-/**
- * A folder holding a `uname`, `sysctl` and `sw_vers` that answer as a Mac of
- * the machine given (`arm64` for Apple silicon) running the macOS given, put
- * first on the script's PATH.
- */
 const macBin = (machine: string, macos: string) =>
   bin({
     uname: uname(OS.DARWIN, machine),
@@ -131,7 +91,6 @@ const macBin = (machine: string, macos: string) =>
     sw_vers: `echo ${macos}`,
   });
 
-/** The script sourced as a library on a box whose /proc/version is the one given, then the statements given. */
 const onBox = (
   procVersion: string,
   statements: string,
@@ -142,18 +101,10 @@ const onBox = (
     ...env,
   });
 
-/** Whether anything stands at the path given, a link to nothing among it. */
 const stands = (place: string) => lstatSync(place, { throwIfNoEntry: false }) !== undefined;
 
-/** The name of the account the tests run as. */
 const accountName = () => spawnSync("id", ["-un"], { encoding: "utf8" }).stdout.trim();
 
-/**
- * Packs a release of the version given into the folder given, as CI packs one
- * under its top folder (`vespin-host`, or the command's `vespin`), with the
- * real launcher over the fake Node, and answers its tarball's address and
- * SHA-256.
- */
 function packedTarball(served: string, version: string, top: string, launcher: string) {
   const packed = folder();
   const root = join(packed, top);
@@ -170,11 +121,6 @@ function packedTarball(served: string, version: string, top: string, launcher: s
   };
 }
 
-/**
- * Packs a release of the host and of the command, of the version given, into
- * the folder given, and answers the script with both written in, each tarball
- * at one address for every target, as the route that serves it writes them.
- */
 function servedScript(served: string, version: string): string {
   const host = packedTarball(served, version, "vespin-host", UNINSTALL_SCRIPT);
   const cli = packedTarball(served, version, "vespin", CLI_LAUNCHER);
@@ -203,18 +149,6 @@ function servedScript(served: string, version: string): string {
   return file;
 }
 
-/**
- * A computer of the OS given for whole runs of the script: a home of its own,
- * and fakes first on its PATH that answer as that OS, keep what they were
- * asked in one log, and serve a release's tarball from the folder the box
- * keeps them in. Its PATH holds the folder of the command's link, as the
- * shell the script runs in may hold it while the shell a person types in
- * later does not. The account lingers unless asked otherwise; where it does
- * not, `loginctl` turns lingering on only where the account may itself, or
- * under `sudo`, which refuses where asked. Where asked, `id` answers that the
- * run is root's. `systemctl` keeps whether each unit runs by its name, and
- * where a run says `FAKE_STOP_REFUSED`, its `stop` leaves the unit running.
- */
 const box = (
   os: Os,
   options: {
@@ -288,10 +222,8 @@ const box = (
         ? join(home, ".config/systemd/user/vespin-host.service")
         : join(home, `Library/LaunchAgents/${LABEL}.plist`),
     run,
-    /** Serves the release of the version given, and runs the script it is written into. */
     install: (version: string, extra: Readonly<Record<string, string>> = {}) =>
       run([servedScript(served, version)], extra),
-    /** Serves the release of the version given, and runs the script it is written into in its `cli` mode. */
     installCli: (version: string) => run([servedScript(served, version), "cli"]),
     asked: () => readFileSync(asked, "utf8").trim().split("\n").filter(Boolean),
   };
@@ -346,7 +278,6 @@ describe("the host's install script", () => {
     ["an Intel Mac", "x86_64", "14.5", "Vespin does not run agents on Intel Macs."],
   ] as const) {
     it(`${refusal === undefined ? "lets" : "refuses"} ${computer} ${refusal === undefined ? "through, past every check of the computer" : "by name"}, before anything is changed`, () => {
-      // Note that the run has no home, which the next check refuses, so a Mac let through goes no further.
       const answer = sh([SCRIPT, ...ORIGIN_ARGS], {
         PATH: `${macBin(machine, macos)}:${process.env.PATH}`,
       });
@@ -488,7 +419,6 @@ describe("the host's install script", () => {
     expect(computer.install("0.2.9").status).toBe(0);
     const before = computer.asked().length;
 
-    // Note that a pairing made again would be written as this one, so a run that lost the box's would show.
     const answer = computer.install("0.3.0", { FAKE_PAIRING: "paired again" });
 
     expect(answer.status, answer.stderr).toBe(0);
@@ -606,7 +536,6 @@ describe("the host's install script", () => {
       const fakes = folder();
       const home = folder();
       const asked = join(folder(), "asked.log");
-      // Note that systemctl answers is-active as systemd does, launchctl print finds the agent while it is loaded, and loginctl says the account lingers.
       for (const [name, body] of Object.entries({
         uname: `echo ${os}`,
         systemctl: `printf '%s\\n' "$*" >>"${asked}"\n[ "$2" != is-active ] || echo ${stops ? "inactive" : "active"}`,
@@ -621,7 +550,6 @@ describe("the host's install script", () => {
       writeFileSync(join(release, "bin/vespin-host"), readFileSync(UNINSTALL_SCRIPT), {
         mode: 0o755,
       });
-      // Note that the release's daemon says what it was asked, and its leave answers that the service took it only while the box's record still stands.
       mkdirSync(join(release, "node/bin"), { recursive: true });
       writeFileSync(
         join(release, "node/bin/node"),
@@ -638,7 +566,6 @@ describe("the host's install script", () => {
       mkdirSync(join(state, "owned-agents"), { recursive: true });
       writeFileSync(join(state, "owned-agents/one"), "");
       writeFileSync(join(state, "device.json"), "{}");
-      // Note that agent one is this install's, by its daemon's record, and agent two another install's.
       for (const each of ["agents/one", "agents/two", "clones/acme"]) {
         mkdirSync(join(home, ".vespin", each), { recursive: true });
       }
@@ -666,7 +593,6 @@ describe("the host's install script", () => {
             : [`bootout gui/${uid}/dev.vespin.host.standalone`],
         ),
       );
-      // Note that the host leaves its account only once its service stopped, so a refused uninstall leaves it standing on both sides.
       expect(commands.includes("vespin-host leave")).toBe(stops);
       expect(
         answer.stdout.includes("Vespin host is removed from this account and from Vespin."),

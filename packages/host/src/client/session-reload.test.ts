@@ -6,14 +6,6 @@ import { runModeFor } from "../run-mode.js";
 import { AppStateStore, initialAppState } from "./app-state-store.js";
 import { linkSessionReload } from "./session-reload.js";
 
-/**
- * A browser tab loads again once the session it settled on changes: a
- * sign-out, or another account's sign-in, each once; its own first settling
- * and a sign-in from signed out load nothing.
- *
- * Accounts are synthetic.
- */
-
 const RUN = {
   launch: { profile: "idle", captureMode: false, fixtureMode: false },
   runMode: runModeFor({ capture: false, fixture: false }),
@@ -30,7 +22,6 @@ const signedIn = (id: string) =>
     provider: ACCOUNT_PROVIDER.GITHUB,
   }) as const;
 
-/** Every step the watch has to take, taken. */
 const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
 
 function linked() {

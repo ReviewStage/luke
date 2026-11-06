@@ -13,67 +13,38 @@ import { task } from "../schemas/task.js";
 import { taskBlock } from "../schemas/task-block.js";
 import { reachableTask, taskReachableBy } from "./workspace-store.js";
 
-/**
- * task-block-store.ts -- one task blocking another, read and written for the account that asks.
- *
- * A block joins two tasks of one workspace: the blocker, whose work the
- * blocked task waits on. Every statement names the account it runs for and
- * gates on its reach of each task it names (`taskReachableBy`), so a task
- * the account does not reach reads as no task and is never named in what
- * another task's blocks answer. A block is advice, as Linear's is: nothing
- * here refuses work on a blocked task, but no block may close a cycle, in
- * which a task would wait, through others, on itself. Every function is an
- * effect over the ambient `SqlClient` and names no database of its own.
- */
-
-/** What a block store operation answers: an effect over the ambient client, failing as every store does or as `E` names. */
 export type TaskBlockEffect<A, E = never> = Effect.Effect<A, StoreFailure | E, DatabaseServices>;
 
-/** The two tasks a block joins: the blocker, and the task it blocks. */
 export interface TaskBlockPair {
   readonly blockerTaskId: string;
   readonly blockedTaskId: string;
 }
 
-/** A task's blocks as its reader reads them, each task by its id, the earliest added first. */
 export interface TaskBlocks {
-  /** The tasks this one waits on. */
   readonly blockedBy: readonly string[];
-  /** The tasks that wait on this one. */
   readonly blocks: readonly string[];
 }
 
-/** What a write of a block answers: the transaction it was written in, where it changed a row; none where the block stood as asked already. */
 export interface TaskBlockWritten {
   readonly txid?: string;
 }
 
-/** The blocker and the blocked task are one task, which no task is to itself; nothing was written. */
 export class TaskBlockSelf extends Data.TaggedError("TaskBlockSelf") {}
 
-/** The blocker and the blocked task stand in two workspaces; nothing was written. */
 export class TaskBlockAcrossWorkspaces extends Data.TaggedError("TaskBlockAcrossWorkspaces") {}
 
-/** The blocked task already blocks the blocker, itself or through others, so the block would close a cycle; nothing was written. */
 export class TaskBlockCycle extends Data.TaggedError("TaskBlockCycle") {}
 
-/**
- * The id of the transaction a write committed in, read in the write's own
- * `RETURNING`, as Neon's mutations guide says, so a client following the
- * task waits for that transaction to arrive before it confirms the write.
- */
 const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
 
 const TxidRowSchema = Schema.Struct({ txid: Schema.String });
 
-/** The statuses a blocker no longer holds work up in: its work is finished, or it was cut. */
 const SETTLED = [TASK_STATUS.DONE, TASK_STATUS.CANCELED];
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
 const PairSchema = Schema.Struct({ blockerTaskId: Schema.String, blockedTaskId: Schema.String });
 
-/** The task under this id, where the account reaches it; any other id reads as no task. */
 const findReachableTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: IdRowSchema,
@@ -83,11 +54,6 @@ const findReachableTask = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The two tasks a write names, each where the account reaches it, under a
- * share lock, so neither moves to another workspace or goes while the
- * write stands on what it read.
- */
 const lockReachableTasks = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({ id: Schema.String, organizationId: Schema.String }),
@@ -102,7 +68,6 @@ const lockReachableTasks = SqlSchema.findAll({
     ),
 });
 
-/** The tasks under these ids the account reaches, under an update lock taken in id order. */
 const lockReachableTasksForUpdate = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
   Result: IdRowSchema,
@@ -117,7 +82,6 @@ const lockReachableTasksForUpdate = SqlSchema.findAll({
     ),
 });
 
-/** The tasks blocking this one that the account reaches, the earliest added first. */
 const findBlockers = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: IdRowSchema,
@@ -132,7 +96,6 @@ const findBlockers = SqlSchema.findAll({
     ),
 });
 
-/** The tasks this one blocks that the account reaches, the earliest added first. */
 const findBlocked = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: IdRowSchema,
@@ -160,12 +123,6 @@ const insertBlock = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The blocker, where the blocked task already blocks it, itself or through
- * the tasks it blocks. Note that the walk follows every block, a task the
- * account does not reach among them, because a cycle through a hidden task
- * is a cycle still; `union` drops a task already walked, so a walk ends.
- */
 const findCycle = SqlSchema.findOneOption({
   Request: PairSchema,
   Result: IdRowSchema,
@@ -200,7 +157,6 @@ const deleteBlock = SqlSchema.findOneOption({
     ),
 });
 
-/** Every block naming the task, on either side, taken away. */
 const deleteBlocksOf = SqlSchema.void({
   Request: Schema.String,
   execute: (taskId) =>
@@ -211,16 +167,10 @@ const deleteBlocksOf = SqlSchema.void({
     ),
 });
 
-/** What a write answers from the row it wrote: its transaction, or nothing where it wrote none. */
 function writtenOf(row: Option.Option<typeof TxidRowSchema.Type>): TaskBlockWritten {
   return Option.match(row, { onNone: () => ({}), onSome: ({ txid }) => ({ txid }) });
 }
 
-/**
- * The pair's two tasks, locked, and the one workspace they share, for a
- * write to run under; nothing where the account reaches either not, and a
- * failure where they are one task or stand in two workspaces.
- */
 function lockedPair(
   userId: string,
   pair: TaskBlockPair,
@@ -238,13 +188,6 @@ function lockedPair(
   });
 }
 
-/**
- * The condition that the task row a statement reads waits on a task still
- * open, neither done nor canceled, that the account reaches, as a blocked
- * task's sidebar row is marked. Note that the open tasks are read in a
- * subquery of their own over `task`, which shadows the row the statement
- * reads, so the block alone names that row.
- */
 export function taskBlockedFor(userId: string): SQL {
   const open = queryBuilder
     .select({ id: task.id })
@@ -258,11 +201,6 @@ export function taskBlockedFor(userId: string): SQL {
   );
 }
 
-/**
- * The task's blocks, as the account reads them: the tasks blocking it and
- * the tasks it blocks, each one the account reaches, the earliest added
- * first. Nothing where the account does not reach the task.
- */
 export function readTaskBlocks(
   userId: string,
   taskId: string,
@@ -281,11 +219,6 @@ export function readTaskBlocks(
   });
 }
 
-/**
- * Adds the block: the blocker blocks the blocked task. A block that stands
- * already stands as it was, and answers no transaction; one that would
- * close a cycle fails. Nothing where the account reaches either task not.
- */
 export function addTaskBlock(
   userId: string,
   pair: TaskBlockPair,
@@ -298,7 +231,6 @@ export function addTaskBlock(
       Effect.gen(function* () {
         const workspace = yield* lockedPair(userId, pair);
         if (Option.isNone(workspace)) return Option.none();
-        // Note that the workspace's adds take turns, because two adds that each close half a cycle would each walk past the other's unwritten row.
         yield* client`select pg_advisory_xact_lock(hashtextextended(${workspace.value}, 0))`;
         if (Option.isSome(yield* findCycle(pair))) return yield* new TaskBlockCycle();
         const now = yield* DateTime.nowAsDate;
@@ -308,15 +240,6 @@ export function addTaskBlock(
   );
 }
 
-/**
- * Locks for update, in id order, every task a transaction is about to
- * change and write blocks between, before the first of those writes, so
- * each write finds its rows already held. Note that a caller that changes a
- * task and then adds its blocks needs this, because the change holds that
- * task alone, and two such callers joining each other's tasks would each
- * hold a row the other's block write waits on. Answers how many of the tasks
- * the account reaches.
- */
 export function lockTasksForBlocks(
   userId: string,
   taskIds: readonly string[],
@@ -327,10 +250,6 @@ export function lockTasksForBlocks(
   );
 }
 
-/**
- * Takes the block away. A block that does not stand answers no
- * transaction. Nothing where the account reaches either task not.
- */
 export function removeTaskBlock(
   userId: string,
   pair: TaskBlockPair,
@@ -347,13 +266,6 @@ export function removeTaskBlock(
   );
 }
 
-/**
- * Takes away every block naming the task, on either side, as it moves to
- * another workspace: a block joins two tasks of one workspace, and the task
- * at its other end stays behind. Note that this runs in the move's own
- * transaction, under the task's lock, so a block added at once waits on that
- * lock and then reads the task in its new workspace and is refused.
- */
 export function leaveTaskBlocks(taskId: string): TaskBlockEffect<void> {
   return deleteBlocksOf(taskId);
 }

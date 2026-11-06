@@ -9,13 +9,6 @@ import { getTestDB, startTask } from "../../testing/index.js";
 import { claimAgentRunnerLease, releaseAgentRunnerLease } from "../agent-runner-lease.js";
 import { createAgent } from "../agent-store.js";
 
-/**
- * The lease a call holds on a native agent's runner, over a real dialect:
- * of two claims one holds it, a lapsed lease is taken over, a holder lets
- * go of its own lease alone, and one agent's lease holds no other agent's
- * runner. Synthetic accounts throughout.
- */
-
 const NOW = new Date("2026-10-22T02:00:00Z");
 const HELD_UNTIL = new Date("2026-10-22T02:05:00Z");
 const PAST_IT = new Date("2026-10-22T02:05:01Z");

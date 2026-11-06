@@ -17,22 +17,10 @@ import {
 } from "./browser-live-procedures.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
-/**
- * A cloud Browser tab's live view as main carries it, over a host and ports
- * that answer from a script: an attach posts a port to the asking panel
- * alone, under the panel's ticket, and has the host open the tab's socket;
- * what the host hears on that connection reaches that port and no other,
- * and its close closes the port after saying so; what the panel sends on it
- * reaches the host by connection; a detach and the page's end let the
- * connection go; and only a panel is answered. Synthetic ids and frames throughout.
- */
-
-/** A window, read by identity alone. */
 interface Window {
   readonly window: number;
 }
 
-/** Every act port a fixture opened, closed once its test is done. */
 const ports: TestActPort<Window>[] = [];
 
 afterEach(() => {
@@ -46,13 +34,11 @@ const REFUSED = { refused: "Could not show that tab." };
 
 let windows = 0;
 
-/** A panel of a window of its own. */
 const panelOf = (): ActSender<Window> => ({
   sender: { window: ++windows },
   panel: true,
 });
 
-/** One port main opened, as the test watches it: where it went, what main posted on it, and whether it closed. */
 interface ScriptedPort {
   readonly sender: Window;
   readonly ticket: BrowserLivePortTicket;

@@ -28,25 +28,6 @@ import { Environment, reporterLayer } from "./effect/seams.js";
 import { MAC_COMMAND_DECISION, type MacCommandDecision } from "./mac-command-ask.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
-/**
- * The concern that runs on this Mac what the account's agents queue for it,
- * against a scripted service and spawner: the live read answered polled and
- * held until the rows move. With the setting on Never, or no account, the
- * service is never read; otherwise every read names the account and the
- * kinds this Mac runs, each command waiting is claimed by its id, the
- * earliest first, and run or refused by its kind, one queued later is heard
- * within the poll's hold, one a stalled follow never hears of is claimed by
- * the next beat, and the Mac says it listens every fifteen
- * seconds until the setting is switched to Never. Under Always allow a
- * command runs as claimed; under Ask every time it is told as an ask and
- * runs only once the developer allows it, Always allow writing the setting
- * too, while Deny, or no answer before the command's own timeout, answers
- * the call as not run, and one ask holds up neither the follow nor another.
- *
- * Synthetic commands and accounts throughout.
- */
-
-/** The account signed in, which every live read names. */
 const ACCOUNT = "user-mac";
 
 const NOW = 1_800_000_000_000;
@@ -72,25 +53,15 @@ const LATER: MacCommand = {
   timeoutSeconds: 30,
 };
 
-/** How often the scripted service looks again while it holds a poll, as the service does. */
 const HOLD_LOOK = Duration.seconds(1);
 
-/** Let every fiber the step woke run to where it waits. */
 const settled = Effect.repeat(Effect.yieldNow, { times: 200 });
 
-/**
- * The service with Realtime off, as a script: the commands still waiting,
- * each with when it was queued, answered polled, and a poll past where they
- * stood held until they move; a claim granted once per command; and every
- * read, presence, and result the Mac sent, as the service would observe it.
- */
 function scriptedService(
   options: {
     readonly signedOut?: boolean;
     readonly unansweredClaims?: number;
-    /** Whether a held poll never answers, as a follow whose Realtime socket went quiet without an error hears nothing. */
     readonly followStalls?: boolean;
-    /** What happens as a claim is made, before the service grants it, such as the setting being switched off. */
     readonly duringClaim?: Effect.Effect<void>;
   } = {},
 ) {
@@ -107,7 +78,6 @@ function scriptedService(
       commands: {
         capability: "",
         queryFingerprint: "",
-        // A polled read is answered already expired, its expiry the service's now.
         expiresAt: NOW,
         digest: String(version),
         ...(rows ? { rows: [...waiting] } : undefined),
@@ -130,7 +100,6 @@ function scriptedService(
         options.duringClaim ?? Effect.void,
         Effect.sync((): MacCommand | typeof MAC_COMMAND_NOT_CLAIMED | undefined => {
           claims.push(id);
-          // A claim lost on its way, as a network fault loses one, reaches nothing.
           if (unanswered > 0) {
             unanswered -= 1;
             return undefined;
@@ -161,7 +130,6 @@ function scriptedService(
     claims,
     beats,
     settledResults,
-    /** A command queued for the account, as an agent's call queues it. */
     queue: (command: MacCommand, queuedAt: number) => {
       waiting.push({ ...command, queuedAt });
       version += 1;
@@ -182,23 +150,15 @@ const machine = (spawner: ReturnType<typeof scriptedSpawner>, reported: string[]
     noNetwork,
   );
 
-/** The operator a test answers an ask as. */
 const CONTEXT = { client: { clientId: "panel", role: GATEWAY_CLIENT_ROLE.OPERATOR } } as const;
 
-/** The gate as a test holds it: the setting, whether an account is signed in, and which. */
 interface Gate {
   mode: MacCommandMode;
   signedIn: boolean;
   account?: string;
-  /** Whether the prompt's Allow all commands fails to keep the setting, as a file that cannot be written does. */
   saveFails?: boolean;
 }
 
-/**
- * The concern composed over the scripted service, the gate as `gate` holds
- * it, with the asks it tells, as the panel would hear them, the modes the
- * prompt's Allow all commands wrote, and one ask answered as the panel answers it.
- */
 const subject = (
   service: ReturnType<typeof scriptedService>,
   spawner: ReturnType<typeof scriptedSpawner>,
@@ -237,7 +197,6 @@ const subject = (
       told,
       written,
       reported,
-      /** The asks waiting as last told. */
       asks: () => told.at(-1) ?? [],
       answer: (id: string, decision: MacCommandDecision) =>
         Effect.gen(function* () {
@@ -358,7 +317,6 @@ it.effect(
         Effect.gen(function* () {
           yield* composer.lifetime;
           yield* settled;
-          // Queued once the follow stands, and waiting twelve seconds unheard by the next beat.
           service.queue(LATER, NOW - 12_000);
           yield* TestClock.adjust("15 seconds");
           yield* settled;
@@ -426,7 +384,6 @@ it.effect(
       const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
       const gate: Gate = { mode: MAC_COMMAND_MODE.ALWAYS, signedIn: true };
       const service = scriptedService({
-        // The setting goes off as the claim leaves, and the service is slow to grant it, so a beat sees the gate shut first.
         duringClaim: Effect.andThen(
           Effect.sync(() => {
             gate.mode = MAC_COMMAND_MODE.NEVER;
@@ -479,7 +436,6 @@ it.effect(
     }),
 );
 
-/** The ask a claimed command is told as, under Ask every time, once the follow has claimed it. */
 const askedFor = (
   service: ReturnType<typeof scriptedService>,
   spawner: ReturnType<typeof scriptedSpawner>,
@@ -637,7 +593,6 @@ it.effect(
   "a command allowed late runs in what is left of its timeout, so its result still reaches the call",
   () =>
     Effect.gen(function* () {
-      // A command that would run for twenty seconds, allowed with ten left of its sixty.
       const spawner = scriptedSpawner(() => ({ exitCode: 0, after: "20 seconds" }));
       const service = scriptedService();
       yield* Effect.scoped(
@@ -694,7 +649,6 @@ it.effect(
           const built = yield* askedFor(service, spawner, [COMMAND], gate);
           assert.equal(built.asks().length, 1);
           gate.account = "user-other";
-          // The beat ends the follow, and the next turn lets the ask go.
           yield* TestClock.adjust("15 seconds");
           yield* settled;
           assert.deepEqual(built.asks(), []);

@@ -22,27 +22,8 @@ import { readMessageByClientId } from "../message-reads.js";
 import { createTask, finishTaskWork } from "../task-store.js";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
 
-/**
- * The conversation's dispatch claim against a real Postgres, with a second
- * connection beside the test's own: the one thing PGlite, a single connection
- * that runs one transaction at a time, cannot show. A hand-over to eve held
- * open on a `Deferred` holds no transaction and no lock: the run stream's
- * journal lands, the take of its line into a turn finds the row at once, a
- * second send waits on the claim holding nothing and reaches eve after it,
- * and a task's finish or an agent's delete reads the line as work under way
- * without waiting. This file runs in CI's Postgres job, where
- * `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
- */
-
 const SENDER = { kind: MESSAGE_SENDER.APP } as const;
 
-/**
- * Answers how to run an effect on a connection of its own to the test's
- * database, beside the test's one: the store's test client holds a single
- * connection. Note that the layer is built fresh, because the test's own
- * client was built from the same `Database` layer, and a memoized one would
- * run the statements on the test's connection.
- */
 const anotherConnection = Effect.gen(function* () {
   const client = yield* SqlClient.SqlClient;
   const [row] = yield* client<{ readonly name: string }>`select current_database() as name`;
@@ -63,7 +44,6 @@ const openAgentConversation = Effect.gen(function* () {
   return { userId, conversationId } satisfies ConversationTarget;
 });
 
-/** A turn queued and started in the conversation, answering its id and the run-stream address its events carry. */
 const startedTurn = (target: ConversationTarget) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: {} });
@@ -83,7 +63,6 @@ const startedTurn = (target: ConversationTarget) =>
     return { turnId, turn };
   });
 
-/** A hand-over to eve that says it began, then answers only once released. */
 const heldDispatch = <A>(answer: A) =>
   Effect.gen(function* () {
     const began = yield* Deferred.make<void>();
@@ -95,7 +74,6 @@ const heldDispatch = <A>(answer: A) =>
     return { began, release, dispatch };
   });
 
-/** Waits for the held hand-over to begin, failing where the write that would run it ended first. */
 const untilBegan = (began: Deferred.Deferred<void>, fiber: Fiber.Fiber<unknown, unknown>) =>
   Effect.race(
     Deferred.await(began),
@@ -104,17 +82,8 @@ const untilBegan = (began: Deferred.Deferred<void>, fiber: Fiber.Fiber<unknown, 
     ),
   );
 
-/** How many times the probe below looks for the other sessions to go quiet before it reads what they hold. */
 const QUIET_LOOKS = 500;
 
-/**
- * What this test's database holds while a hand-over is out: how many of its
- * sessions stand idle inside a transaction, and how many wait on a lock.
- * Read off Postgres's own tables for this database alone, since another file
- * may hold sessions of its own on the same cluster, once no other session of
- * it is running a statement, or after a bounded number of looks, so a write
- * forked a moment ago is read parked or done rather than halfway through.
- */
 const heldMeanwhile = Effect.gen(function* () {
   const client = yield* SqlClient.SqlClient;
   for (let look = 0; look < QUIET_LOOKS; look += 1) {
@@ -237,7 +206,6 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         const sendingFirst = yield* Effect.forkChild(send("first", first.dispatch));
         yield* untilBegan(first.began, sendingFirst);
         const sendingSecond = yield* Effect.forkChild(send("second", Effect.succeed(true)));
-        // The second asks for the claim once, finds the first's, and waits on the test clock for its next try.
         const meanwhile = yield* heldMeanwhile;
         const secondStillPending = sendingSecond.pollUnsafe() === undefined;
         const heardMeanwhile = yield* Ref.get(heard);
@@ -296,7 +264,6 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
           deletions: 2,
           changedFiles: 1,
         });
-        // Idle where no line of the conversation awaits a turn, as `standsStopped` reads it.
         const idleUnlessAwaiting = () =>
           Effect.map(
             readMessageByClientId(target.userId, target.conversationId, {}, sentLineId("tests")),
@@ -345,7 +312,6 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
           repository: "acme/api",
           idempotencyKey: randomUUID(),
         });
-        // Stopped where no line of the conversation awaits a turn, as `standsStopped` reads it.
         const stoppedUnlessAwaiting = () =>
           Effect.map(
             readMessageByClientId(target.userId, target.conversationId, {}, sentLineId("tests")),

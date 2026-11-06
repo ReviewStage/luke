@@ -17,25 +17,8 @@ import {
   writeAccountPreferences,
 } from "../account-store.js";
 
-/**
- * The experiments part of an account's snapshot, over a real dialect: a
- * write merges its keys over what stood rather than replacing them, the
- * other parts' writes leave it standing, a key no build lists reads as
- * nothing, it never moves the preferences' instant a Mac reads as a
- * snapshot to take, and one account's choices are no other's. The link
- * choice is a part of its own on the same terms: written alone, it moves no
- * instant, and the shared part's write leaves it standing. So is the
- * chapters model, which reads as Haiku until the account chooses and for a
- * stored value no build lists any more. The role is read off the account's
- * own row and no other's.
- *
- * Synthetic accounts throughout.
- */
-
-// SAFETY: a model a later build dropped, which the column's type no longer names, stored as an older build would have.
 const RETIRED_MODEL = "claude-retired-4-0" as typeof CHAPTERS_MODEL.HAIKU;
 
-/** A place midway through a team's setup, as setup keeps it on the account. */
 const SETUP_PLACE = '{"audience":"team","at":2,"team":"workspace-ada"}';
 
 const openAccount = Effect.gen(function* () {
@@ -55,7 +38,6 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
       });
       assert.deepEqual(turnedOn.experiments, { [EXPERIMENT.MEMORY]: true });
 
-      // An empty patch asks nothing of what stood.
       const untouched = yield* writeAccountPreferences(userId, { experiments: {} });
       assert.deepEqual(untouched.experiments, { [EXPERIMENT.MEMORY]: true });
 
@@ -77,7 +59,6 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
       const db = yield* Database;
       yield* db
         .update(accountPreference)
-        // A key written by a build that listed an experiment this one no longer does.
         .set({
           experiments: sql`${JSON.stringify({ [EXPERIMENT.MEMORY]: true, graduated: true })}::jsonb`,
         })
@@ -142,7 +123,6 @@ it.layer(getTestDB())("the account store's own-part choices and setup", (it) => 
         yield* writeAccountPreferences(userId, { agentEnter: AGENT_ENTER.QUEUE });
         yield* writeAccountPreferences(userId, { commitAuthor: COMMIT_AUTHOR.APP });
         yield* writeAccountPreferences(userId, { setupFinished: true });
-        // Note that the place is written by one machine and read by another, as setup resumed elsewhere reads it.
         yield* writeAccountPreferences(userId, { setupPlace: SETUP_PLACE });
 
         yield* writeAccountPreferences(userId, { preferences: {} });
@@ -217,7 +197,6 @@ it.layer(getTestDB())("the account store's access", (it) => {
           role: "admin",
           supportAccessUntil: until,
         });
-        // A new account holds the column's default and no grant, whatever another account was given.
         assert.deepEqual(yield* readAccountAccess(member), {
           role: "user",
           supportAccessUntil: undefined,

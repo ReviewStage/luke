@@ -1,7 +1,3 @@
-/**
- * service-layer.test.ts -- a desktop service's stop that dies at quit: reported, to Sentry as well as the line, and the close goes on.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Effect, Exit, Layer, Scope } from "effect";

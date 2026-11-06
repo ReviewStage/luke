@@ -23,16 +23,6 @@ import {
 } from "./live-follow.js";
 import { polledLive } from "./testing/polled-live.js";
 
-/**
- * A read followed over the service's held poll hands on its first answer's
- * rows, then polls past where they stood, handing on each answer that moved;
- * a poll that fails is asked again on a jittered backoff and says the rows
- * may be behind; a read refused as signed out ends. Once an answer carries
- * the snapshots its parts were read at, or the txids of the writes that
- * woke it, the read hands a wait a write is confirmed on.
- */
-
-/** Every step the read has to take, taken. */
 const settled = Effect.repeat(
   Effect.andThen(
     Effect.yieldNow,
@@ -43,12 +33,10 @@ const settled = Effect.repeat(
 
 type Part = "left" | "right";
 
-/** A part as the service answers it polled, named by its part. */
 function sealed(part: Part): SealedLiveQueryWire {
   return { capability: LIVE_POLL_URL, queryFingerprint: `fingerprint-${part}`, expiresAt: 0 };
 }
 
-/** A read as the service answers it polled: each part's rows inline under a digest of them, or the digest alone where nothing moved, the txids of the writes that woke it where any did, and the snapshot each part was read at where given. */
 function polledRead(
   left: readonly unknown[] | undefined,
   digest: string,
@@ -105,7 +93,6 @@ it.effect(
     }),
 );
 
-/** A read whose `left` part the reader follows by cursor: its rows past `past`, or whole where none is named, and the cursor to read past next; its `right` part as a snapshot's. */
 function cursorRead(
   left: readonly unknown[] | undefined,
   cursor: { readonly past?: string; readonly next: string },
@@ -168,7 +155,6 @@ it.effect(
     }),
 );
 
-/** When each poll was asked, by the test's clock, for a read whose polls answer as `answer` says, moved along in steps for `span`. */
 const askedAt = (
   answer: (asked: number) => ReturnType<LiveFollowPoll>,
   span: Duration.Duration,
@@ -199,7 +185,6 @@ const askedAt = (
 
 type LiveFollowPoll = Parameters<typeof liveRows<Part>>[0]["poll"];
 
-/** The time between each ask and the one before it. */
 const gapsOf = (asks: readonly number[]) =>
   asks.slice(1).map((at, index) => at - (asks[index] ?? 0));
 
@@ -212,7 +197,6 @@ it.effect(
         Duration.seconds(15),
         Duration.millis(100),
       ).pipe(
-        // Every wait drawn at half its bound, so the bounds read back doubled.
         Effect.provideService(Random.Random, {
           nextIntUnsafe: () => 0,
           nextDoubleUnsafe: () => 0.5,
@@ -248,7 +232,6 @@ it.effect(
       assert.equal(asks, 2, "asked again with no time passing");
       yield* Fiber.interrupt(following);
     }).pipe(
-      // Every wait drawn near its bound, so it is far from over as the service answers.
       Effect.provideService(Random.Random, {
         nextIntUnsafe: () => 0,
         nextDoubleUnsafe: () => 0.99,
@@ -276,7 +259,6 @@ it.effect(
   "a poll that fails once and whose retry answers says nothing; one that fails again says the rows may be behind, and the next poll that answers hands its rows on again, moved or not",
   () =>
     Effect.gen(function* () {
-      /** How many polls are still to fail, each in turn. */
       let failing = 0;
       let behind = 0;
       const rows: unknown[] = [];
@@ -284,7 +266,6 @@ it.effect(
         Stream.runForEach(
           liveRows<Part>(
             {
-              // A poll past a digest answers it unchanged with no rows, as the held poll does; one past none answers the rows whole.
               poll: (after) =>
                 Effect.sync(() => {
                   if (failing === 0) return polledRead(after === undefined ? [] : undefined, "1");
@@ -306,7 +287,6 @@ it.effect(
       assert.equal(rows.length, 1, "rows that did not move are handed on once");
       assert.equal(behind, 0);
 
-      // A poll a sleep cut off fails once, and its retry answers.
       failing = 1;
       yield* TestClock.adjust(Duration.seconds(5));
       yield* settled;
@@ -333,7 +313,6 @@ it.effect("a read whose session the service refuses as signed out ends, and is a
   }),
 );
 
-/** A read followed over a scripted held poll, and the wait it hands, as it stands. */
 const followedWithWait = Effect.gen(function* () {
   const live = polledLive<Part>(["left", "right"]);
   let handed: TxWait | undefined;
@@ -354,7 +333,6 @@ const followedWithWait = Effect.gen(function* () {
   return { live, following, wait: () => handed };
 });
 
-/** Whether the fiber has ended, and ended well. */
 const succeeded = <A, E>(fiber: Fiber.Fiber<A, E>) => {
   const exit = fiber.pollUnsafe();
   return exit !== undefined && Exit.isSuccess(exit);
@@ -419,7 +397,6 @@ it.effect(
   "a write waits from the first answer on for one every part of which was read at a snapshot showing its transaction, and one an answer already showed confirms at once",
   () =>
     Effect.gen(function* () {
-      // Snapshots as Postgres spells them, `xmin:xmax:xip,…`, and no txids, as an answer its clock woke carries.
       let standing = polledRead([], "1", undefined, { left: "990:990:", right: "990:990:" });
       let handed: TxWait | undefined;
       const following = yield* Effect.forkChild(

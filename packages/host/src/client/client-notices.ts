@@ -1,6 +1,3 @@
-/**
- * client-notices.ts -- the agent notices as a client links them: read from the document and the host, written back into the document, and shown through the doors and the presenter the platform hands in.
- */
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AgentAccountInboxAnswerView } from "@repo/features/agent-view";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -16,19 +13,15 @@ import { type AppTranscripts, OWN_TRANSCRIPT } from "../app-state.js";
 import type { HostOperator } from "../host-operator.js";
 import type { AppStateStore } from "./app-state-store.js";
 
-/** Where a notice's click takes the developer, as the platform brings its window forward on it. */
 interface NoticePresenter {
-  /** Brings the app's window forward, where the prompt for a command stands: a command ask's notification's click. */
   openMacCommandAsk: () => void;
 }
 
-/** What the notification of a command waiting says: nothing of the command, which the prompt shows. */
 const MAC_COMMAND_ASK_NOTICE = {
   title: "Run a command on your Mac?",
   body: "An agent is waiting for you to allow or deny a command.",
 } as const;
 
-/** The host's methods the notices read and refresh through. */
 type NoticeHost = Pick<
   HostOperator,
   | "agentList"
@@ -41,25 +34,17 @@ type NoticeHost = Pick<
 >;
 
 export interface ClientNoticesDependencies {
-  /** The document the notices read from and write the unseen agents and the inbox into. */
   state: AppStateStore;
   host: NoticeHost;
   presenter: NoticePresenter;
-  /** The panel coming forward or going behind, for as long as the subscription stands. */
   onPanelFocusChanged: AgentNoticesDependencies["onPanelFocusChanged"];
   report: (message: string) => void;
 }
 
-/** Whose account this is, as the host keys it, or nobody: what tells another account from the same one renewed. */
 function accountKey(account: AccountSnapshot): string | undefined {
   return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
 }
 
-/**
- * What waits across the account, as the host tells it, followed while the
- * stream runs: heard from before the follow is asked, so its first answer is
- * never missed, and let go as the stream ends.
- */
 function accountInboxOf(host: NoticeHost): Stream.Stream<AgentAccountInboxAnswerView> {
   return Stream.callback<AgentAccountInboxAnswerView>((queue) =>
     Effect.gen(function* () {
@@ -74,14 +59,6 @@ function accountInboxOf(host: NoticeHost): Stream.Stream<AgentAccountInboxAnswer
   );
 }
 
-/**
- * Each agent's status its own held transcript says, noted for each page read
- * since `noted` last counted its pages, as the notices take every page's,
- * and each agent whose own transcript is no longer held let go of. Note that a transcript laid anew
- * with no page read, as one held again lays what it held, says nothing of
- * the agent now: its status is the last page's, which may be a turn's the
- * agent has since moved past, and a status names no turn.
- */
 function observeTranscripts(
   held: AppTranscripts,
   noted: Map<string, number>,
@@ -92,7 +69,6 @@ function observeTranscripts(
   }
   for (const [agentId, transcripts] of Object.entries(held)) {
     const rows = transcripts[OWN_TRANSCRIPT]?.rows;
-    // Note that an own transcript let go for good is counted from its first page once it is read anew.
     if (rows === undefined) noted.delete(agentId);
     if (rows?.word === undefined || noted.get(agentId) === rows.pages) continue;
     noted.set(agentId, rows.pages);
@@ -100,28 +76,13 @@ function observeTranscripts(
   }
 }
 
-/**
- * The notices for the client's scope. They write the unseen agents and the
- * waiting inbox items into the document, and a command ask's notification's
- * click brings the window forward through the presenter. Whose inbox is
- * read follows the document's account, which the launch's bootstrap writes as
- * well as every change after it. Two rules stand beside them: the agents with
- * no plan each list read carries are the notices' to hold, and a panel coming
- * forward reads the account's workspaces again.
- *
- * A refresh a callback asks for is forked into a set this scope owns, so it
- * runs on the services the client was built with and ends with the scope, and
- * a defect in one is reported, to Sentry as well as the line, rather than left
- * in a set nobody joins.
- */
-export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNotices")(function* (
+export const linkClientNotices = Effect.fn("client/linkClientNotices")(function* (
   dependencies: ClientNoticesDependencies,
 ): Effect.fn.Return<AgentNotices, never, Scope.Scope | AgentNoticeDoors> {
   const { state, host, presenter, onPanelFocusChanged, report } = dependencies;
   const doors = yield* AgentNoticeDoors;
   const fork = yield* FiberSet.makeRuntime();
   let focused = false;
-  // Note that a defect is reported here, because nothing joins the set a refresh is forked into.
   const forkReported = (refresh: Effect.Effect<void>, what: string): void => {
     fork(
       Effect.catchDefect(Effect.withErrorReporting(refresh, { defectsOnly: true }), (defect) =>
@@ -146,7 +107,6 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     onInboxChanged: (inbox) => state.update({ inbox }),
     report,
   });
-  // A note that throws is reported rather than left to end the fiber, which would never resume.
   yield* Effect.forkScoped(
     Stream.runForEach(
       Stream.changes(Stream.map(state.changes, (document) => document.tasks.tasklessAgents)),
@@ -165,9 +125,6 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
         ),
     ),
   );
-  // Every agent on a task, the archived left out, while the list is followed
-  // live, is the notices' to hold in place of the watch's own reads, and a
-  // task the list no longer holds takes its agents with it.
   yield* Effect.forkScoped(
     Stream.runForEach(
       Stream.changes(Stream.map(state.changes, (document) => document.tasks.taskAgents)),
@@ -190,10 +147,6 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
         ),
     ),
   );
-  // An agent's own transcript a window holds says where the agent stands as
-  // each page is read, which the notices hold so an end the panel is not
-  // looking at is still announced; a worker's says where the worker stands,
-  // which is no word on the agent.
   const noted = new Map<string, number>();
   yield* Effect.forkScoped(
     Stream.runForEach(
@@ -210,10 +163,6 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
         ),
     ),
   );
-  // A command asked while the window is behind would otherwise wait unseen
-  // until its timeout denies it, so each new ask is announced once, the one
-  // notification the app posts, since Ask every time is the developer's own ask
-  // to be asked; the window in front shows the prompt itself.
   const told = new Set<string>();
   yield* Effect.forkScoped(
     Stream.runForEach(
@@ -235,8 +184,6 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
         }),
     ),
   );
-  // A teammate's change or an installation made on GitHub may have moved the
-  // workspaces; the host reads them no oftener than once a minute.
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       onPanelFocusChanged((next) => {

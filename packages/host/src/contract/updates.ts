@@ -1,29 +1,19 @@
-/**
- * updates.ts -- the updater as a window reaches it: a check, the install, the move to Applications, and the releases page and changelog opened, as procedures.
- *
- * Main answers them itself (`apps/desktop/src/main/ipc/update-acts.ts`),
- * since the updater is Electron's; a browser tab refuses every one.
- */
-
 import { UPDATE_FAILURE, UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { UPDATE_ACT_KIND } from "./kinds.js";
 
-/** What every state of the updater carries. */
 const standing = {
   currentVersion: EffectSchema.String,
   installSupported: EffectSchema.Boolean,
 };
 
-/** A download's progress, as electron-updater reports it. */
 const updateProgressSchema = EffectSchema.Struct({
   percent: EffectSchema.Number,
   transferredBytes: EffectSchema.Number,
   totalBytes: EffectSchema.Number,
 });
 
-/** Where the updater stands, one struct per state of `UpdateSnapshot`. */
 const updateSnapshotSchema: EffectSchema.Codec<UpdateSnapshot> = EffectSchema.Union([
   EffectSchema.Struct({
     status: EffectSchema.Literal(UPDATE_STATUS.IDLE),

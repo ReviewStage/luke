@@ -15,12 +15,6 @@ import {
   stampConversationsDeleted,
 } from "../soft-delete.js";
 
-/**
- * soft-delete.test.ts -- a conversation stamped deleted with every one delegated from it, and the purge seven days on queueing each one's sandbox, a worker's beside its agent's.
- *
- * Synthetic accounts and conversations throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -106,8 +100,6 @@ it.layer(getTestDB())("the soft delete's reads and the purge's cascade", (it) =>
       }),
   );
 
-  // Note that these are the statements Postgres's own foreign key triggers run for each row a
-  // purge deletes, which no store call sends and so none can be captured from.
   it.effect("the purge's cascade finds each deleted conversation's children by their parent", () =>
     Effect.gen(function* () {
       const plan = yield* planOf(

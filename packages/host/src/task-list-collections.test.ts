@@ -30,7 +30,6 @@ it.effect(
         yield* collections.answer({ plans, agents: [invites, billing] });
         const before = drawings.at(-1);
 
-        // Only the billing agent moved: a teammate renamed it.
         yield* collections.answer({
           plans,
           agents: [invites, { ...billing, title: "CSV export" }],

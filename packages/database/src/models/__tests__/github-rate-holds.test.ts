@@ -9,24 +9,13 @@ import {
   readGitHubRateHold,
 } from "../github-rate-holds.js";
 
-/**
- * The holds GitHub's rate limits put on an identity, over a real dialect: a
- * hold is never shortened by a later, shorter one; a refusal while a hold
- * stands is the strike that set it, and one after it lifted the next, held
- * for that strike's wait; and a lift lets go only of a hold that is over.
- * Each case holds an identity of its own, since the rows are the
- * deployment's.
- */
-
 const AT = Date.UTC(2026, 9, 25, 12);
 const at = (minutes: number) => new Date(AT + minutes * 60_000);
 const MINUTES = (...minutes: [number, ...number[]]) =>
   minutes.map((count) => count * 60_000) as [number, ...number[]];
 
-/** A minute, then two, then four for every strike after. */
 const BACKOFF = MINUTES(1, 2, 4);
 
-/** An instant before every hold a case writes, where the case forgets none of them. */
 const FORGOTTEN = at(-60);
 
 it.layer(getTestDB())("github rate holds", (it) => {
@@ -59,7 +48,6 @@ it.layer(getTestDB())("github rate holds", (it) => {
           [
             { heldUntil: at(1), strikes: 1 },
             { heldUntil: at(1.5), strikes: 1 },
-            // The burst's hold stood until 1.5, so the refusal at 1 is still the first strike.
             { heldUntil: at(2), strikes: 1 },
             { heldUntil: at(5), strikes: 2 },
             { heldUntil: at(11), strikes: 3 },
@@ -72,7 +60,6 @@ it.layer(getTestDB())("github rate holds", (it) => {
     Effect.gen(function* () {
       const identity = `member-${randomUUID()}`;
       yield* holdGitHubIdentity(identity, at(0), BACKOFF, at(-15));
-      // Lifted at 1, then forgotten 15 minutes on, with no answer since to lift it.
       const afresh = yield* holdGitHubIdentity(identity, at(17), BACKOFF, at(2));
 
       assert.deepEqual(afresh, { heldUntil: at(18), strikes: 1 });

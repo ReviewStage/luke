@@ -9,15 +9,6 @@ import type { IntegrationProceduresDependencies } from "./index.js";
 import { integrationProcedures } from "./integration-procedures.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
-/**
- * Settings' integration acts, through the act port as a window calls them:
- * only a panel of this build's own renderer asks; any other
- * window, and a frame this build does not trust, are refused in each
- * kind's own words before the host is asked; and a panel's ask reaches the
- * host, Try again on the held integrations with no payload at all.
- */
-
-// The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true };
@@ -29,7 +20,6 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/** A window's client of the act port serving `procedures`, standing as `actor`, trusted or not. */
 function windowClient(
   procedures: Parameters<typeof testActPort<unknown>>[0],
   actor: ActSender,
@@ -47,7 +37,6 @@ const RENAME = {
   label: "Work",
 } as const;
 
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]:
     "Could not read your integrations again on this system.",
@@ -64,7 +53,6 @@ const REFUSAL = {
 
 type Kind = keyof typeof REFUSAL;
 
-/** One call of each kind, as a panel makes it. */
 const ACTS: readonly {
   kind: Kind;
   call: (client: ActPortClient) => Promise<PortActResult<Kind>>;
@@ -100,7 +88,6 @@ const ACTS: readonly {
   },
 ];
 
-/** A window's act port over a host that answers each integration ask, and what it was asked, in order. */
 function windowPort(actor: ActSender, trusted = true) {
   const asked: string[] = [];
   const host: IntegrationProceduresDependencies["host"] = {

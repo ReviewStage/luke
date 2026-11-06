@@ -1,11 +1,3 @@
-/**
- * agent-repositories.test.ts -- the repositories an agent works in, over a real dialect: its
- * primary first, then the extras its Start named in their order; one repository or none as an
- * agent in one or none was always stored, with no extra row; and none to another account. A
- * repository added once the agent stands goes after its extras, once, and only as its account.
- * Synthetic accounts throughout.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
@@ -31,7 +23,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** An agent of the account's in its workspace with no task, in the repository named and the extras beside it; its id. */
 const startedIn = (
   userId: string,
   organizationId: string,
@@ -56,7 +47,6 @@ const startedIn = (
     (started) => Option.getOrThrow(started).agent.id,
   );
 
-/** The rows the agent's extras stand in, as the table holds them. */
 const extraRows = (agentId: string) =>
   Effect.flatMap(Database, (db) =>
     db.select().from(agentRepository).where(eq(agentRepository.agentId, agentId)),

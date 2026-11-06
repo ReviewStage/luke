@@ -7,20 +7,8 @@ import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { MAC_SHELL_ACT_KIND } from "./kinds.js";
 
-/**
- * mac-shells.ts -- a shell on this Mac, opened in a folder for the asking panel, attached, and closed, as procedures.
- *
- * Main answers them itself (`../act-port/mac-shell-procedures.ts`), and a
- * browser tab refuses them. A shell is named as a cloud shell is, by its
- * agent and its own id, so an attach takes the cloud's attach as it stands
- * and posts the same port: what the shell prints, how it stands, and what
- * the panel types, resizes, and acks travel on it, never on these.
- */
-
-/** The longest folder a shell opens in, as macOS's `PATH_MAX` bounds a path. */
 const FOLDER_MAX_CHARS = 1024;
 
-/** A shell opened for an agent, in a folder named by its absolute path. */
 const macShellOpenParamsSchema = EffectSchema.Struct({
   agentId: terminalShellParamsSchema.fields.agentId,
   folder: EffectSchema.String.check(
@@ -29,10 +17,8 @@ const macShellOpenParamsSchema = EffectSchema.Struct({
   ),
 });
 
-/** The agent's mirror, by the absolute path of its folder. */
 const macShellMirrorSchema = EffectSchema.Struct({ folder: EffectSchema.String });
 
-/** The shell opened, by the id an attach and a close name it by. */
 const macShellOpenedSchema = EffectSchema.Struct({
   terminalId: terminalShellParamsSchema.fields.terminalId,
 });

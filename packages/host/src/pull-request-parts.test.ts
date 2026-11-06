@@ -24,16 +24,11 @@ import {
 } from "./pull-request-parts.js";
 import { windowFocus } from "./window-focus.js";
 
-/**
- * pull-request-parts.test.ts -- the parts of a pull request a Pull request tab holds are asked again together as the task list says it moved, or first names the agent's own, and keep an answer over a later failure.
- */
-
 const AGENT = "3c2e1d0f-9a8b-4c7d-8e6f-5a4b3c2d1e0f";
 const REVIEWER = "7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2d";
 const OWN = "https://github.com/acme/relay/pull/42";
 const OTHER = "https://github.com/acme/relay/pull/7";
 
-/** A pull request as the task list's line for it stands. */
 function line(
   url: string,
   number: number,
@@ -53,7 +48,6 @@ function line(
   };
 }
 
-/** The pull request part as the service answers it for the pull request at `url`. */
 function overview(url: string, number: number): AgentOverviewPullRequestAnswerView {
   return {
     pullRequest: {
@@ -72,7 +66,6 @@ function overview(url: string, number: number): AgentOverviewPullRequestAnswerVi
   };
 }
 
-/** The list with the taskless agent working on its own pull request, and the reviewer's pull request beside it. */
 function listing(
   moved: { own?: Partial<AgentPullRequest>; other?: Partial<AgentPullRequest> } = {},
   status: (typeof AGENT_STATUS)[keyof typeof AGENT_STATUS] = AGENT_STATUS.RUNNING,
@@ -91,7 +84,6 @@ function listing(
 
 const PARTS = Object.values(PULL_REQUEST_PART);
 
-/** The parts asked again together as the pull request or its agent moves; the viewed marks move with its head alone, and the pickers' options with nothing. */
 const MOVING = [
   PULL_REQUEST_PART.PULL_REQUEST,
   PULL_REQUEST_PART.CHECKS,
@@ -101,7 +93,6 @@ const MOVING = [
 
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
-/** The parts over a fake service, each ask written down as `part number`, the agent's own written `own`, with the list's drawings handed through `draw`. */
 function subject(failing: Set<PullRequestPart> = new Set()) {
   return Effect.gen(function* () {
     const asked: string[] = [];
@@ -149,7 +140,6 @@ function subject(failing: Set<PullRequestPart> = new Set()) {
       asked,
       told,
       draw: (drawn: PullRequestListing) => Effect.andThen(PubSub.publish(drawings, drawn), settled),
-      /** Holds every part of the agent's own pull request, and of the reviewer's that its tab names by number. */
       holdBoth: Effect.andThen(
         Effect.forEach(PARTS, (part) =>
           Effect.andThen(

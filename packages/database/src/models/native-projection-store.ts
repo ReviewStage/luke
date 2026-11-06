@@ -7,25 +7,8 @@ import { agentTable } from "../schemas/agent.js";
 import { conversations } from "../schemas/storage.js";
 import type { ConversationTarget } from "./writer.js";
 
-/**
- * native-projection-store.ts -- where the projection of a native harness's events keeps its place between the runner's batches.
- *
- * A runner posts its events in numbered batches and posts a batch again
- * until the service takes it, so the projection keeps, on the conversation's own
- * row, the number of the last event it applied and what it holds of the
- * turn under way. Both are read under the row's lock and written in the
- * same transaction as everything the batch wrote, so a batch posted twice,
- * or two posts racing, apply each event once: the second waits on the lock
- * and finds the numbers already applied. The projection's own shape is the
- * service's; the store keeps it as the JSON it was handed and reads it back
- * unread.
- */
-
-/** What the conversation keeps for its projection: the last event applied, and the projection's own state. */
 export interface NativeProjectionRow {
-  /** The number of the last event applied; null before the first. */
   readonly sequence: number | null;
-  /** The projection's state as it was saved; null before the first save. */
   readonly projection: WireValue | null;
 }
 
@@ -56,7 +39,6 @@ const lockProjectionRow = SqlSchema.findOneOption({
             isNull(conversations.deletedAt),
           ),
         )
-        // Both rows: the conversation's for the projection, and the agent's, which a retire writes.
         .for("update"),
     ),
 });
@@ -113,22 +95,11 @@ const saveProjectionRow = SqlSchema.void({
     ),
 });
 
-/** What one application of a batch answers: its own result, and the place to keep, where it moved. */
 export interface NativeProjectionApplied<A> {
   readonly result: A;
   readonly saved?: { readonly sequence: number; readonly projection: WireValue };
 }
 
-/**
- * Runs `apply` over the conversation's projection row, under its lock, and
- * keeps the place it answers in the same transaction as every write `apply`
- * made; nothing for a conversation the account does not hold, that was
- * cleared, or whose runner holds a bearer of another digest by the time the
- * lock is taken, where `apply` never runs. Note that the digest is read
- * again under the lock, on the agent's row, which is locked with the
- * conversation's, because a bearer retired after the caller admitted it
- * takes that row's lock and must leave its runner writing nothing.
- */
 export function withNativeProjection<A, E, R>(
   target: ConversationTarget,
   runnerTokenHash: string,
@@ -146,11 +117,6 @@ export function withNativeProjection<A, E, R>(
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(locked));
 }
 
-/**
- * The number of the last event the conversation applied, which a relaunch
- * numbers its events after; nothing before the first, or for a conversation
- * the account does not hold or that was cleared.
- */
 export function readNativeSequence(
   target: ConversationTarget,
 ): Effect.Effect<Option.Option<number>, StoreFailure, DatabaseServices> {
@@ -159,12 +125,6 @@ export function readNativeSequence(
   );
 }
 
-/**
- * The projection's state as last saved, unread, for a reader outside the
- * events route (the MCP server reads which servers the turn under way took);
- * nothing before the first save, or for a conversation the account does not
- * hold or that was cleared.
- */
 export function readNativeProjection(
   target: ConversationTarget,
 ): Effect.Effect<Option.Option<WireValue>, StoreFailure, DatabaseServices> {
@@ -189,12 +149,6 @@ const dropProjectionTurn = SqlSchema.void({
     ),
 });
 
-/**
- * Drops the turn the conversation's projection holds where it is one of the
- * turns named, settled apart from the runner's own end, so the next launch's
- * events open a turn of their own. Note that the projection's shape is the
- * service's, and this reads of it only the held turn's id (`turn.id`).
- */
 export function dropNativeProjectionTurns(
   conversationId: string,
   turnIds: readonly string[],

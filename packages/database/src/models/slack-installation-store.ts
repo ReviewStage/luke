@@ -20,58 +20,14 @@ import { SLACK_THREAD_ORIGIN, type SlackThreadOrigin } from "../storage-vocabula
 import type { TaskStoreEffect } from "./task-store.js";
 import { workspaceReachableBy } from "./workspace-store.js";
 
-/**
- * slack-installation-store.ts -- the Slack team a workspace's bot is connected to, and its members' Slack user ids.
- *
- * A workspace holds at most one installation. Linking writes the team the
- * bot token answered for; linking a different team first deletes the one
- * standing, so no member's id from the old team is kept. Disconnecting
- * deletes it, and every member's id with it. A member's id is read only
- * through the installation it was looked up under, and is kept as found or
- * as a miss (`slackUserId` null), and a press in Slack finds its member
- * back by that id under the team connected. A member with no id kept may
- * still be found through a Slack account they connected themselves
- * (`slackUnresolvedConnections`), which the bot asks Slack about. Whether a member is written at all is
- * their own switch (`account_preference.slack_notifications`), on until they
- * turn it off, in every workspace alike. Whether the account may connect or
- * disconnect is the caller's to check. Every function is an effect over the
- * ambient `SqlClient`.
- *
- * A message to the bot is read against every workspace connected to its
- * team, oldest connection first, and its writer found as a member by the
- * email Slack holds for them (`slackMemberByEmail`); an agent it starts
- * works in the repository the member's latest agent in the workspace worked
- * in (`slackStartRepository`) unless the message names one. A thread that
- * speaks for an agent, one it was started from or its automation run's result
- * was sent in, is kept against it (`slackAgentThread`), and moved to the
- * agent that continues it where that one ended (`moveSlackAgentThread`). The
- * thread kept, moved, or written in latest is the agent's current one
- * (`touchSlackAgentThread`), and each of the agent's settled turns is claimed
- * there once (`claimSlackThreadTurn`); the task an agent started from Slack
- * stands on is the one its message made (`isSlackTask`).
- * An owner or admin names the repository Slack starts default to, for the
- * workspace and for each channel (`slackStartRepositories`); a channel's is
- * forgotten when the bot leaves it.
- *
- * Settings holds the installation and the channels' repositories as a live
- * read (`slackInstallationLiveStatement`,
- * `slackChannelRepositoriesLiveStatement`), so each write Settings makes
- * answers the transaction it committed in, which a reader holding them
- * waits for before it confirms the write.
- */
-
-/** The id of the transaction a write committed in, read in its own `RETURNING`. */
 const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
 
-/** What a write that answers its transaction returns. */
 const TxidSchema = Schema.Struct({ txid: Schema.String });
 
-/** The transaction the first row a write returned committed in; none where it wrote none. */
 function txidOf(rows: readonly { readonly txid: string }[]): Option.Option<string> {
   return Option.map(Option.fromNullishOr(rows[0]), (row) => row.txid);
 }
 
-/** What linking names: the workspace, the Slack team the bot answers for, and the member connecting it. */
 export interface SlackInstallationToLink {
   readonly organizationId: string;
   readonly teamId: string;
@@ -84,7 +40,6 @@ const SlackInstallationRowSchema = Schema.Struct({
   teamName: Schema.String,
 });
 
-/** The Slack team a workspace's bot is connected to. */
 export type SlackInstallation = typeof SlackInstallationRowSchema.Type;
 
 const SlackMemberRowSchema = Schema.Struct({
@@ -92,7 +47,6 @@ const SlackMemberRowSchema = Schema.Struct({
   lookedUpAt: Schema.Date,
 });
 
-/** A member's Slack user id as last looked up, or null where their email matched no one, and when. */
 export type SlackMemberLookup = typeof SlackMemberRowSchema.Type;
 
 const findNotifications = SqlSchema.findOneOption({
@@ -123,7 +77,6 @@ const upsertNotifications = SqlSchema.findOne({
     ),
 });
 
-/** Another team's installation deleted before a link, so its members' ids leave with it. */
 const deleteOtherTeam = SqlSchema.void({
   Request: Schema.Struct({ organizationId: Schema.String, teamId: Schema.String }),
   execute: ({ organizationId, teamId }) =>
@@ -208,7 +161,6 @@ const findMember = SqlSchema.findOneOption({
     ),
 });
 
-/** The member whose kept Slack id in the workspace is the one given, where the workspace's bot stands connected to the team given. */
 const findMemberBySlackId = SqlSchema.findOneOption({
   Request: Schema.Struct({
     organizationId: Schema.String,
@@ -236,7 +188,6 @@ const findMemberBySlackId = SqlSchema.findOneOption({
     ),
 });
 
-/** The workspaces connected to the Slack team, the oldest connection first. */
 const findTeamWorkspaces = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({ organizationId: Schema.String }),
@@ -250,7 +201,6 @@ const findTeamWorkspaces = SqlSchema.findAll({
     ),
 });
 
-/** The member of the workspace whose account's email is the one given, whatever its case. */
 const findMemberByEmail = SqlSchema.findOneOption({
   Request: Schema.Struct({ organizationId: Schema.String, email: Schema.String }),
   Result: Schema.Struct({ userId: Schema.String }),
@@ -270,7 +220,6 @@ const findMemberByEmail = SqlSchema.findOneOption({
     ),
 });
 
-/** The Slack accounts the workspace's members connected themselves, of each member whose Slack id is not kept: never looked up, or missed. */
 const findUnresolvedConnections = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({ userId: Schema.String, connectSubject: Schema.String }),
@@ -299,7 +248,6 @@ const findUnresolvedConnections = SqlSchema.findAll({
     ),
 });
 
-/** The repository of the member's latest agent in the workspace that worked in one. */
 const findLatestRepository = SqlSchema.findOneOption({
   Request: Schema.Struct({ organizationId: Schema.String, userId: Schema.String }),
   Result: Schema.Struct({ repository: Schema.String }),
@@ -326,16 +274,13 @@ const SlackThreadSchema = Schema.Struct({
   threadTs: Schema.String,
 });
 
-/** Where a Slack thread is: its workspace, its conversation, and its first message's timestamp. */
 export type SlackThread = typeof SlackThreadSchema.Type;
 
-/** A Slack thread that speaks for an agent: where it is, and the agent and member it was kept for. */
 export type SlackAgentThread = SlackThread & {
   readonly agentId: string;
   readonly userId: string;
 };
 
-/** A thread to keep for an agent: where it came from, and the turn its first message posted where it posted one. */
 export type NewSlackAgentThread = SlackAgentThread & {
   readonly origin: SlackThreadOrigin;
   readonly postedTurnId?: string;
@@ -430,15 +375,8 @@ const touchAgentThread = SqlSchema.void({
     ),
 });
 
-/** The agent's threads read again inside a claim, as one already posting the turn. */
 const postedThread = alias(slackAgentThread, "posted_thread");
 
-/**
- * The agent's current thread, the one active latest, where none of its
- * threads posted this turn last, marked as posting it in the same
- * statement, so a turn is posted once however often its settle is heard,
- * even after another thread became current.
- */
 const claimThreadTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ agentId: Schema.String, turnId: Schema.String }),
   Result: SlackThreadSchema,
@@ -512,7 +450,6 @@ const findSlackStart = SqlSchema.findOneOption({
     ),
 });
 
-/** The workspace's default repository for Slack starts. */
 const findDefaultRepository = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ repository: Schema.NullOr(Schema.String) }),
@@ -547,7 +484,6 @@ const ChannelRepositorySchema = Schema.Struct({
   repository: Schema.String,
 });
 
-/** One channel's default repository for Slack starts. */
 export type SlackChannelRepository = typeof ChannelRepositorySchema.Type;
 
 const findChannelRepositories = SqlSchema.findAll({
@@ -612,7 +548,6 @@ const deleteChannelRepository = SqlSchema.findAll({
     ),
 });
 
-/** A lookup kept, found or missed; the workspace's installation must stand, since the row is keyed under it. */
 const upsertMember = SqlSchema.void({
   Request: Schema.Struct({
     organizationId: Schema.String,
@@ -640,38 +575,29 @@ const upsertMember = SqlSchema.void({
     ),
 });
 
-/**
- * Connects the workspace's bot to the Slack team, answering the transaction
- * the installation was written in; a different team's installation, and its
- * members' ids, are replaced first.
- */
 export function linkSlackInstallation(link: SlackInstallationToLink): TaskStoreEffect<string> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     yield* deleteOtherTeam({ organizationId: link.organizationId, teamId: link.teamId });
     const written = yield* upsertInstallation({ ...link, now }).pipe(
-      // Note that an upsert writes its row whatever stood, so it always returns one.
       Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
     );
     return written.txid;
   });
 }
 
-/** The Slack team the workspace's bot is connected to, or nothing. */
 export function workspaceSlackInstallation(
   organizationId: string,
 ): TaskStoreEffect<Option.Option<SlackInstallation>> {
   return findInstallation(organizationId);
 }
 
-/** Disconnects the workspace's bot, forgetting every member's Slack id, answering the transaction it was deleted in; none where none was connected. */
 export function deleteSlackInstallation(
   organizationId: string,
 ): TaskStoreEffect<Option.Option<string>> {
   return Effect.map(deleteInstallation(organizationId), txidOf);
 }
 
-/** The member's Slack id as last looked up in the workspace's team, a miss included; nothing where it was never looked up. */
 export function slackMemberLookup(
   organizationId: string,
   userId: string,
@@ -679,13 +605,6 @@ export function slackMemberLookup(
   return findMember({ organizationId, userId });
 }
 
-/**
- * The member of the workspace a Slack user of its connected team is, as
- * the bot's lookups kept them; nothing where the team is not the one
- * connected, or no member was found as that user. Note that only a member
- * the bot has written is known, which is every member a DM's button can
- * reach.
- */
 export function slackMemberOf(
   organizationId: string,
   teamId: string,
@@ -697,7 +616,6 @@ export function slackMemberOf(
   );
 }
 
-/** Keeps what a lookup found for the member, or null for a miss; fails where the workspace holds no installation. */
 export function recordSlackMemberLookup(
   organizationId: string,
   userId: string,
@@ -708,7 +626,6 @@ export function recordSlackMemberLookup(
   );
 }
 
-/** Whether the member's switch lets our Slack bot write them; on where they never chose. */
 export function slackNotificationsOn(userId: string): TaskStoreEffect<boolean> {
   return Effect.map(
     findNotifications(userId),
@@ -716,21 +633,17 @@ export function slackNotificationsOn(userId: string): TaskStoreEffect<boolean> {
   );
 }
 
-/** Turns the member's switch on or off, every workspace's bot alike, answering the transaction it was written in. */
 export function writeSlackNotifications(userId: string, on: boolean): TaskStoreEffect<string> {
   return upsertNotifications({ userId, on }).pipe(
     Effect.map(({ txid }) => txid),
-    // An upsert that returned no row is the database breaking its own contract, not an outcome.
     Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
   );
 }
 
-/** The workspaces connected to the Slack team, the oldest connection first; none where no workspace connected it. */
 export function slackTeamWorkspaces(teamId: string): TaskStoreEffect<readonly string[]> {
   return Effect.map(findTeamWorkspaces(teamId), (rows) => rows.map((row) => row.organizationId));
 }
 
-/** The member of the workspace whose account's email is the one Slack holds for a user, whatever its case; nothing where none is. */
 export function slackMemberByEmail(
   organizationId: string,
   email: string,
@@ -741,20 +654,17 @@ export function slackMemberByEmail(
   );
 }
 
-/** A Slack account a member connected themselves, by the subject Connect holds its grant under. */
 export interface SlackMemberConnection {
   readonly userId: string;
   readonly connectSubject: string;
 }
 
-/** The Slack accounts the workspace's members connected under Settings › Integrations, of each member whose Slack id the bot does not keep. */
 export function slackUnresolvedConnections(
   organizationId: string,
 ): TaskStoreEffect<readonly SlackMemberConnection[]> {
   return findUnresolvedConnections(organizationId);
 }
 
-/** The repository an agent the member starts from Slack works in where the message names none: their latest agent's in the workspace; nothing where none worked in one. */
 export function slackStartRepository(
   organizationId: string,
   userId: string,
@@ -765,30 +675,22 @@ export function slackStartRepository(
   );
 }
 
-/**
- * Keeps the thread as one that speaks for the agent, made its current one,
- * with where it came from and the turn already posted in it where its first
- * message posted one; a thread already kept keeps its first agent.
- */
 export function recordSlackAgentThread(thread: NewSlackAgentThread): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     insertAgentThread({ ...thread, postedTurnId: thread.postedTurnId ?? null, now }),
   );
 }
 
-/** Moves the thread from the agent it was kept for to the one that continues it, started by the member named, as that agent's current thread, so its later messages and settled turns go there; a thread moved to another agent since stands. */
 export function moveSlackAgentThread(
   thread: SlackAgentThread & { readonly fromAgentId: string },
 ): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => updateAgentThread({ ...thread, now }));
 }
 
-/** Makes the thread its agent's current one, as a member's message in it does, so the turn it starts is posted there. */
 export function touchSlackAgentThread(thread: SlackThread): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => touchAgentThread({ ...thread, now }));
 }
 
-/** The agent the thread was started from, and the member who started it; nothing for a thread no agent was started from. */
 export function slackAgentThreadAt(
   organizationId: string,
   channelId: string,
@@ -797,7 +699,6 @@ export function slackAgentThreadAt(
   return findAgentThread({ organizationId, channelId, threadTs });
 }
 
-/** The agent's current thread where this turn has not yet been posted in it, claimed for the turn as it is read; nothing for an agent no thread speaks for, or a turn posted already. */
 export function claimSlackThreadTurn(
   agentId: string,
   turnId: string,
@@ -805,23 +706,14 @@ export function claimSlackThreadTurn(
   return claimThreadTurn({ agentId, turnId });
 }
 
-/**
- * Whether the task is one a Slack message made for the agent it started,
- * which is an agent a started thread is kept for standing on it; a Slack
- * start makes its agent's task, and its continue lands on that same task,
- * so no other task holds such an agent. A run's result thread makes no task
- * Slack's, whatever agent its run went to.
- */
 export function isSlackTask(taskId: string): TaskStoreEffect<boolean> {
   return Effect.map(findSlackMadeTask({ taskId }), Option.isSome);
 }
 
-/** Whether the agent was started from a Slack message, or continues one that was: a started thread is kept for it. */
 export function isSlackStartedAgent(agentId: string): TaskStoreEffect<boolean> {
   return Effect.map(findSlackStart({ agentId }), Option.isSome);
 }
 
-/** The workspace's default repository for Slack starts, and each channel's, as an owner or admin named them. */
 export function slackStartRepositories(organizationId: string): TaskStoreEffect<{
   readonly defaultRepository: string | null;
   readonly channels: readonly SlackChannelRepository[];
@@ -836,7 +728,6 @@ export function slackStartRepositories(organizationId: string): TaskStoreEffect<
   });
 }
 
-/** Names the workspace's default repository for Slack starts, or clears it with null, answering the transaction it was written in; none where the bot is not connected. */
 export function writeSlackDefaultRepository(
   organizationId: string,
   repository: string | null,
@@ -846,12 +737,6 @@ export function writeSlackDefaultRepository(
   );
 }
 
-/**
- * Names a channel's default repository for Slack starts, or forgets it with
- * null, answering the transaction it was written in; none where a forget
- * found none named. Fails where the bot is not connected, since the row is
- * keyed under its installation.
- */
 export function writeSlackChannelRepository(
   organizationId: string,
   channelId: string,
@@ -865,16 +750,6 @@ export function writeSlackChannelRepository(
   );
 }
 
-/**
- * The workspace's Slack bot as one member's held read answers it: the
- * workspace it stands in, the team it is connected to, and the default
- * repository for Slack starts, null where none is named; no row while it is
- * not connected, and none at all once the reader is no member of the
- * workspace, so a subscription stays bound to the rule its endpoint
- * checked. Every column is under the key the wire reads it by
- * (`@repo/features/workspace-integrations-live`). None where a statement
- * names a value Realtime cannot carry.
- */
 export function slackInstallationLiveStatement(
   readerId: string,
   organizationId: string,
@@ -899,13 +774,6 @@ export function slackInstallationLiveStatement(
   );
 }
 
-/**
- * Each Slack channel's default repository the workspace names, as one
- * member's held read answers them: Slack's id for the channel and the
- * repository, while the reader is a member of the workspace. Every column
- * is under the key the wire reads it by, and the order is the reader's to
- * keep. None where a statement names a value Realtime cannot carry.
- */
 export function slackChannelRepositoriesLiveStatement(
   readerId: string,
   organizationId: string,

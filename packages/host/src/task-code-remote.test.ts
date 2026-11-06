@@ -12,10 +12,8 @@ import {
   taskCodeProcessColoring,
 } from "./task-code-remote.js";
 
-/** The coloring process's side, run in a real Node child as the desktop runs it in a utility process. */
 const CHILD = fileURLToPath(new URL("./testing/task-code-child.mjs", import.meta.url));
 
-/** A child is started with tsx's loader and builds the highlighter, which takes a second or two. */
 const CHILD_TIMEOUT_MS = 30_000;
 
 const BLOCKS = [
@@ -24,7 +22,6 @@ const BLOCKS = [
   { language: "cobol", code: "DISPLAY 'HELLO'." },
 ] as const;
 
-/** A Node child running the coloring process's side, and `afterSend` run on it after each block it is sent. */
 function forkChild(
   listeners: TaskCodeProcessListeners,
   afterSend: (child: ChildProcess) => void = () => undefined,
@@ -51,8 +48,6 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const color = yield* taskCodeProcessColoring((listeners) => forkChild(listeners));
-        // Note that each side colors every block once first: Shiki stops a line's coloring past its
-        // time limit, and a grammar's first use compiles it, which a loaded runner can push past that.
         for (const { language, code } of BLOCKS) {
           yield* color(language, code);
           yield* highlightSnippet(language, code);
@@ -74,7 +69,6 @@ it.effect(
         let spawned = 0;
         const color = yield* taskCodeProcessColoring((listeners) => {
           spawned += 1;
-          // The first process is killed the moment it is handed its block, as a crash would end it.
           return spawned === 1
             ? forkChild(listeners, (child) => child.kill("SIGKILL"))
             : forkChild(listeners);
@@ -109,7 +103,6 @@ it.effect(
         const [block] = BLOCKS;
         yield* color(block.language, block.code);
 
-        // The first process crashes after answering, with no block in its hands.
         const [first] = children;
         assert.ok(first !== undefined);
         const exited = once(first, "exit");

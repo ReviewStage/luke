@@ -13,14 +13,6 @@ import {
   setGitHubTokenStatus,
 } from "../github-token-store.js";
 
-/**
- * A member's GitHub token row over a real dialect: one row per member, read
- * and written for that member alone, replaced whole by a save, and a status
- * written only against the seal a step ran on.
- *
- * Synthetic accounts and seals throughout.
- */
-
 const FACTS: GitHubTokenFacts = {
   hint: "ghp_…test",
   githubUserId: "7",

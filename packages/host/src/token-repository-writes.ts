@@ -1,19 +1,3 @@
-/**
- * token-repository-writes.ts -- a token repository's addition or removal drawn over its workspace's list the moment it is asked, through the sync engine's pool, over the lists the host fetches for the windows.
- *
- * A workspace's token repositories are fetched rather than followed
- * (`held-fetch.ts`), and laid whole from each addition's or removal's own
- * answer, so the fetch keeps them as it answered them: its read stands
- * beside the pool (`PoolRead.beside`), holding none of the kind's rows, and
- * every change standing is drawn over the lists it tells (`drawn`). A
- * change names its workspace, since the read beside the pool takes it with
- * no key of its own. The service answers each write with the list as it
- * then stands, which its send lays on the fetch before the write stands
- * down, so a refusal takes back only what the write drew. A write asked in
- * one session draws and lays nothing once it ends (`letGo`), so one still
- * out at a sign-out never reaches the next account's lists.
- */
-
 import type { WorkspaceTokenRepository } from "@repo/features/github-repositories-wire";
 import type { TasksWorkspaceTokenRepositorySetParams } from "@repo/features/tasks-view";
 import type {
@@ -27,13 +11,11 @@ import type {
 import { Effect, Equal, type Scope } from "effect";
 import type { AppTokenRepositories } from "./app-state.js";
 
-/** One workspace's token repositories, newest added first. */
 interface TokenRepositoriesRow {
   readonly workspaceId: string;
   readonly repositories: readonly WorkspaceTokenRepository[];
 }
 
-/** A change to one workspace's token repositories: the list as it leaves it. */
 interface TokenRepositoriesChange {
   readonly workspaceId: string;
   readonly listed: (
@@ -41,7 +23,6 @@ interface TokenRepositoriesChange {
   ) => readonly WorkspaceTokenRepository[];
 }
 
-/** A workspace's token repositories, by the workspace, every addition and removal a change of its list. */
 const TOKEN_REPOSITORIES: EntityKind<TokenRepositoriesRow, TokenRepositoriesChange> = {
   key: (row) => row.workspaceId,
   drawn: (change, row) => {
@@ -51,57 +32,40 @@ const TOKEN_REPOSITORIES: EntityKind<TokenRepositoriesRow, TokenRepositoriesChan
   },
 };
 
-/** An addition or a removal as it is asked: the repository, whether it is added, and who added it when, which an addition is drawn with. */
 export interface TokenRepositorySet extends TasksWorkspaceTokenRepositorySetParams {
   readonly addedBy: string;
   readonly addedAt: number;
-  /** The session it was asked in (`TokenRepositoryWrites.session`), which it is drawn and sent for alone. */
   readonly session: number;
 }
 
-/** What an addition's or a removal's service answered: the caller's answer and the list as it then stands, or the caller's answer for a refusal. */
 export type TokenRepositorySetWritten<Answer> =
   | { readonly answer: Answer; readonly repositories: readonly WorkspaceTokenRepository[] }
   | { readonly refused: Answer };
 
 export interface TokenRepositoryWritesDependencies {
   readonly pool: EntityPool;
-  /** The lists as the fetch last told them, with no write drawn over them. */
   readonly fetched: () => AppTokenRepositories;
-  /** Tells the lists again, as `drawn` draws them now. */
   readonly tell: Effect.Effect<void>;
-  /** Lays the list the service answered as the workspace's, as the fetch's own answer would, with whatever else the answer moves; only for the session the write was asked in. */
   readonly answered: (
     workspaceId: string,
     repositories: readonly WorkspaceTokenRepository[],
   ) => Effect.Effect<void>;
 }
 
-/** The token repository writes, and the lists drawn with them. */
 export interface TokenRepositoryWrites {
-  /** `lists` with every change standing drawn over its workspace's list. */
   readonly drawn: (lists: AppTokenRepositories) => AppTokenRepositories;
-  /**
-   * An addition or a removal sent as `send` asks, drawn on its workspace's
-   * list at once, standing until the service answers its list; one whose
-   * session ended before it was sent is refused as `unsent`, never sent.
-   */
   readonly set: <Answer>(
     send: (set: TokenRepositorySet) => Effect.Effect<TokenRepositorySetWritten<Answer>>,
     unsent: Answer,
   ) => WriteDeclaration<TokenRepositoriesRow, TokenRepositoriesChange, TokenRepositorySet, Answer>;
-  /** The session writes are asked in now. */
   readonly session: () => number;
-  /** Ends the session: every write asked in it draws, sends, and lays nothing from now on. */
   readonly letGo: Effect.Effect<void>;
 }
 
-/** Whether `repository` names `fullName`, as GitHub reads a name, whatever its case. */
 function names(repository: WorkspaceTokenRepository, fullName: string): boolean {
   return repository.fullName.toLowerCase() === fullName.toLowerCase();
 }
 
-/** The list as `set` leaves it: an addition first, as the newest, unless listed already, and a removal left out. */
 function listedAfter(set: TokenRepositorySet): TokenRepositoriesChange["listed"] {
   return (repositories) => {
     const kept = repositories.filter((each) => !names(each, set.repository));
@@ -112,12 +76,10 @@ function listedAfter(set: TokenRepositorySet): TokenRepositoriesChange["listed"]
   };
 }
 
-/** The token repository writes, their read standing beside the pool for the caller's scope. */
 export function tokenRepositoryWrites(
   dependencies: TokenRepositoryWritesDependencies,
 ): Effect.Effect<TokenRepositoryWrites, never, Scope.Scope> {
   return Effect.gen(function* () {
-    /** The session writes are asked in, moved on as each ends. */
     let session = 0;
     const beside: HeldRows<TokenRepositoriesRow, TokenRepositoriesChange> =
       yield* dependencies.pool.stand(TOKEN_REPOSITORIES, {
@@ -125,7 +87,6 @@ export function tokenRepositoryWrites(
         confirmation: () => undefined,
         beside: {
           shows: (workspaceId) => dependencies.fetched()[workspaceId]?.rows !== undefined,
-          // Note that the write's send lays the list the service answered itself (`answered`), so nothing is taken here.
           take: () => undefined,
         },
       });

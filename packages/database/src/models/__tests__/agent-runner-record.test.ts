@@ -14,16 +14,8 @@ import {
 } from "../agent-runner-record.js";
 import { createAgent } from "../agent-store.js";
 
-/**
- * Where a cloud agent's runner stands in its session's sandbox, over a real
- * dialect: an account reads its own session's record and never another's,
- * and a forget naming a session's older sandbox leaves the record of the
- * sandbox that replaced it. Synthetic accounts throughout.
- */
-
 const SESSION = "claude-code-0000019a5c3e-session";
 
-/** An account of its own with an agent of its own. */
 const openAgent = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
@@ -43,7 +35,6 @@ const openAgent = Effect.gen(function* () {
   return { userId, agentId: Option.getOrThrow(started).agent.id };
 });
 
-/** A runner running in the sandbox named, launched at event 7. */
 const runningIn = (agentId: string, sandboxName: string): AgentRunnerRecord => ({
   agentId,
   sandboxName,

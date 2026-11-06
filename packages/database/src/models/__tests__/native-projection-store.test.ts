@@ -15,17 +15,9 @@ import {
   withNativeProjection,
 } from "../native-projection-store.js";
 
-/**
- * Where a native harness's projection keeps its place, over a real dialect:
- * what one application saves the next reads back, an application that fails
- * keeps nothing, and a conversation another account holds, or one cleared,
- * is never applied to. Synthetic accounts and conversations throughout.
- */
-
 const openConversation = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
-  // Note that each agent's runner holds a digest of its own, which the store keeps unique.
   const digest = randomUUID();
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
@@ -44,7 +36,6 @@ const openConversation = Effect.gen(function* () {
   return { userId, conversationId: agent.conversationId, agentId: agent.id, digest };
 });
 
-/** What the conversation's projection reads as now, saving nothing. */
 const readBack = (target: { userId: string; conversationId: string; digest: string }) =>
   withNativeProjection(target, target.digest, (held) => Effect.succeed({ result: held }));
 

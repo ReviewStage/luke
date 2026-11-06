@@ -32,60 +32,25 @@ import {
   type TxWait,
 } from "./live-follow.js";
 
-/**
- * installed-skills-follow.ts -- the skills the account sees in each workspace the windows hold, followed over the service's held poll into the sync engine's pool by their ids, told whole on their app-state slice, and every write to one drawn over them the moment it is asked.
- *
- * Settings › Skills holds its workspace's skills, the workspace's and the
- * reader's own, and the host follows them while any window holds them and a
- * while after (`heldSlice`), so a skill a teammate installs or removes draws
- * on every open page within the service's coalesce window.
- * Each skill is one row of the pool (`@repo/sync`), by its id, however many
- * workspaces' reads hold it: a personal skill stands in every held
- * workspace's read, so one write to it draws in each. Each workspace draws
- * the rows it holds as the held read answers them
- * (`@repo/features/installed-skill-live`), but those another workspace's
- * scope names.
- *
- * A removal is a write the pool draws over its skill at once, standing
- * until every read holding it carries the transaction, and taken back where
- * the service refused it. An install draws from its answer, since the
- * service reads the paste afresh and mints the ids: its skills are made rows
- * every held read whose scope they are in shows, each standing until those
- * reads carry it.
- *
- * A read the service did not answer is told unanswered and asked for again
- * after `LIVE_RESTART`, as a follow that stops is. One of a workspace the
- * account is no member of is told unanswered and ends; one refused because
- * the session is no longer the account the follow started for ends unsaid,
- * and the next sign-in follows it again.
- */
-
-/** A skill as the pool holds it, by its id, every write to it a change of its fields, its deletion, or its making. */
 const INSTALLED_SKILL = fieldKind((row: InstalledSkillLiveRow) => row.id);
 
-/** A read the service did not answer, as the client and the gate tell it. */
 interface SkillsUnanswered {
   readonly failure: string;
 }
 
 export interface InstalledSkillsFollowDependencies {
-  /** The skills one workspace shows sealed for `userId`, its rows inline at the poll address where it polls, held past `after` where it names one. */
   readonly seal: (
     workspaceId: string,
     userId: string,
     poll: boolean,
     after?: string,
   ) => Effect.Effect<InstalledSkillsLiveAnswer | SkillsUnanswered>;
-  /** The account signed in, which every seal names; none while nobody is. */
   readonly accountId: () => string | undefined;
-  /** Whether the account gate stands open, so a follow may read. */
   readonly gate: () => boolean;
-  /** The sync engine's pool, which each held workspace's skills stand in while it is followed. */
   readonly pool: EntityPool;
   readonly tell: (held: AppInstalledSkills) => void;
 }
 
-/** A skill's row as a write's answer says it stands. */
 export function skillRowOf({
   workspaceId,
   ...skill
@@ -93,29 +58,19 @@ export function skillRowOf({
   return { ...skill, workspaceId: workspaceId ?? null };
 }
 
-/** Whether a skill is one the workspace shows: the reader's own, or the workspace's. */
 function shownIn(workspaceId: string, row: InstalledSkillLiveRow): boolean {
   return row.workspaceId === null || row.workspaceId === workspaceId;
 }
 
-/** A refusal after which the read is followed no longer: a workspace the account is no member of, or another account's session. */
 function endsFollow(failure: string): boolean {
   return failure === INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND || failure === LIVE_SIGNED_OUT.failure;
 }
 
-/**
- * Follows one workspace's skills until let go, each change told through
- * `answers`: the rows as the read last answered them, every write standing
- * drawn over them, and the skills an install made in its scope beside them.
- * Nothing is told before the read first answers, since a write drawn on no
- * skills shows nothing of the workspace.
- */
 function followSkills(
   dependencies: InstalledSkillsFollowDependencies,
   workspaceId: string,
   answers: HeldAnswers<AppHostReads[typeof LIVE_READ.INSTALLED_SKILLS]>,
 ): Effect.Effect<void> {
-  // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
   const userId = dependencies.accountId();
   const seal = (poll: boolean, after?: string) =>
     userId === undefined
@@ -131,7 +86,6 @@ function followSkills(
       }
       let wait: TxWait | undefined;
       let answered = false;
-      /** Why a poll ended the follow for good, the first such failure kept, so one the account no longer reaches is told unanswered. */
       let endedBy: string | undefined;
       const drawn: Effect.Effect<void> = Effect.sync(() => {
         if (!answered) return;
@@ -184,12 +138,6 @@ function followSkills(
   return restarting(attempt);
 }
 
-/**
- * The held lifetime over every workspace's skills the windows hold
- * (`heldSlice`), keyed by the workspace, told whole on their slice: each
- * workspace's read as its follow last told it, kept where a later read does
- * not answer, and failed where it never answered.
- */
 export function heldInstalledSkills(
   dependencies: InstalledSkillsFollowDependencies,
 ): Effect.Effect<HeldSlice<string>, never, Scope.Scope> {
@@ -202,10 +150,8 @@ export function heldInstalledSkills(
   });
 }
 
-/** A change to a skill's row. */
 type SkillChange = FieldChange<InstalledSkillLiveRow>;
 
-/** A skill removed, gone at once from every read holding it, sent as `send` asks; a refusal puts it back. */
 export function skillRemoved(
   send: (removal: InstalledSkillIdParams) => Effect.Effect<InstalledSkillRemovedView>,
 ): WriteDeclaration<InstalledSkillLiveRow, SkillChange, InstalledSkillIdParams, WireValue> {
@@ -222,11 +168,6 @@ export function skillRemoved(
   };
 }
 
-/**
- * A skill an install made, drawn on every held read whose scope it is in
- * until each carries the install's transaction, or taken as the service
- * answered it where a read hands no wait.
- */
 export const SKILL_MADE: WriteDeclaration<
   InstalledSkillLiveRow,
   SkillChange,

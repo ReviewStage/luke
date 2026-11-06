@@ -7,12 +7,6 @@ import type { AppStateDelivery } from "../app-state.js";
 import { runModeFor } from "../run-mode.js";
 import { AppStateStore, createInProcessBridge, initialAppState } from "./index.js";
 
-/**
- * The bridge a shell installs when the host runs in its own page: the
- * document is read and pushed from the store, and a subscription ended hears
- * nothing more.
- */
-
 const RUN = {
   launch: { profile: "web", captureMode: false, fixtureMode: false },
   runMode: runModeFor({ capture: false, fixture: false }),
@@ -26,7 +20,6 @@ const LINK = {
   place: { kind: LINK_PLACE.TASK, planId: "plan-1" },
 } as const;
 
-/** A bridge over a fresh store. */
 const bridgeFixture = Effect.gen(function* () {
   const state = new AppStateStore(initialAppState(RUN, false, []), Context.empty());
   const reported: string[] = [];
@@ -36,7 +29,6 @@ const bridgeFixture = Effect.gen(function* () {
     reports: { notifyReady: () => {}, recordSurfaceEvent: () => {} },
     report: (message) => reported.push(message),
   });
-  // The push's first reading is of the document as it stood, before anything subscribed.
   yield* Effect.yieldNow;
   return { ...made, state, reported };
 });

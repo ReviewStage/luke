@@ -15,55 +15,22 @@ import {
 } from "../node/open-on-mac.js";
 import type { HostOs } from "./host-os.js";
 
-/**
- * host-platform.ts -- what a host's local agent runners are started with (`LocalAgentPlatform`): each straight on the box, as a child of the host's own process and as its own user, in the agent's own folder, running the runner bundle the host's release carries on the host's own Node, and the pinned Claude Code, Codex, and GitHub CLI the host keeps.
- *
- * A host runs every agent directly, as This Mac and a Linux box alike: the
- * runner starts in the agent's folder with its home and caches there (`local-agent-box.ts`'s `agentOnBox`), with full
- * access to whatever the host's user reaches. Each agent gets a worktree of
- * the box's shared clone in its folder (`agentWorktreeScript`). Its
- * harnesses run no sandbox of their own and ask no
- * approval (`RUNNER_PLACE.HOST`), and no login left on the box reaches
- * them, so they run on the sign-ins saved in the account; its GitHub token comes
- * from the service, in gh's config in its home. Claude Code refuses to skip its
- * permissions as root unless it is told the box is a sandbox of its own, so
- * a host running as root, as a dedicated box's may, tells it so
- * (`IS_SANDBOX`). What differs by OS, the platform it registers as, its
- * name, and its check for unsaved work, comes from its description
- * (`HostOs`).
- *
- * Every host keeps its own Claude Code, Codex, and GitHub CLI, the pinned
- * builds for its OS and architecture (`HostOs.agentClis`), fetched under
- * the daemon's state before it registers ready (`clis`), which it registers
- * and its agents run on.
- */
-
-/** The runner's bundle, in the `lib/` of the host's release beside the daemon's own. */
 const RUNNER_BUNDLE = "lib/agent-runner.mjs";
 
-/** The superuser's id, as which a dedicated box's host may run. */
 const ROOT = 0;
 
-/** What tells Claude Code it runs in a sandbox of its own, the one way it skips its permissions as root (its `isRootOutsideDeliberateSandbox`). */
 const CLAUDE_CODE_SANDBOXED = "IS_SANDBOX";
 
 interface HostPlatformOptions {
-  /** The OS the host runs on, which names its platform, its name, and its check for unsaved work. */
   readonly os: HostOs;
-  /** The folder the host's release is installed in (a version folder of `~/.local/share/vespin-host`), under which the runner's bundle stands. */
   readonly installFolder: string;
-  /** The Node the host itself runs on, which every runner runs on too. */
   readonly node: string;
   readonly arch: DeviceArch;
-  /** The daemon's state, under which it keeps the agent CLIs. */
   readonly stateRoot: string;
-  /** The user the host runs as, whose every agent runs as it too: root's tells Claude Code it may skip its permissions. */
   readonly user: { readonly uid: number; readonly gid: number };
-  /** The agent CLIs where something other than the OS's pins names them: a suite's own, which fetches nothing. */
   readonly clis?: LocalAgentClis | undefined;
 }
 
-/** A host's local agent platform, for the release installed in the folder given. */
 export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSeam {
   const clis =
     options.clis ?? localAgentClis(options.stateRoot, options.os.agentClis(options.arch));
@@ -88,7 +55,6 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
     deviceName: options.os.deviceName(),
     deviceMachine: options.os.machine(),
     devicePlatform: options.os.platform,
-    // Note that a host lets go of an archived agent's folder (`discard`), and a Mac alone runs an agent on its starter's own token on its own GitHub sign-in, the machine its member signs in at themselves.
     deviceCapabilities: [
       DEVICE_CAPABILITY.DISCARD,
       ...(options.os.platform === DEVICE_PLATFORM.DARWIN ? [DEVICE_CAPABILITY.GITHUB_SIGN_IN] : []),

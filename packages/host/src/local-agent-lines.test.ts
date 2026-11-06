@@ -1,15 +1,3 @@
-/**
- * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk whatever it holds, a line of a kind it does not know is settled without holding back the lines after it, and a launch whose folder was cleared since its last turn starts afresh, told so, while one whose folder stands goes on from its session, each reporting the steps it passes, fetching only where it makes its repository.
- *
- * The follower runs over the real client, its held read and claims answered
- * by a scripted service, so an answer is decoded as the wire decodes it; on
- * a real temporary folder, so what a line leaves on the disk is what the
- * test reads; and over a scripted spawner, on the test's clock. Each test
- * waits for the service to take a line's settle, never on the clock, since
- * nothing on the way there sleeps and the disk answers in its own time.
- * Synthetic ids and tokens throughout.
- */
-
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -48,7 +36,6 @@ const DISCARD: DeviceAgentLine = {
   payload: {},
 };
 
-/** A line of a kind a service newer than this follower added. */
 const NEWER_KIND: DeviceAgentLine = {
   id: "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a",
   agentId: AGENT_ID,
@@ -57,9 +44,7 @@ const NEWER_KIND: DeviceAgentLine = {
   payload: {},
 };
 
-/** The platform's script that makes the agent's repository, named so the scripted spawner answers it. */
 const WORKTREE_SCRIPT = "make-the-agents-repository";
-/** The runner's own start on the box, as the platform launches it. */
 const RUNNER = "/opt/vespin-host/node/bin/node";
 
 const json = (body: unknown) =>
@@ -68,10 +53,8 @@ const json = (body: unknown) =>
     headers: { "content-type": "application/json" },
   });
 
-/** A fetch that never answers, as a held read the service holds past the test. */
 const held = () => new Promise<Response>(() => {});
 
-/** The platform the follower runs on: This Mac, whose agents run straight on it. */
 const directMac = () => ({
   launch: ({
     node,
@@ -101,13 +84,6 @@ const directMac = () => ({
   repositoryReachedScript: () => "exit 0",
 });
 
-/**
- * The follower on a device whose agent's folder holds a file, the agent in
- * the device's record of the agents it made as its launch left it, its held
- * read answered once with the lines given and every line claimable, with
- * the folder, the record's file for the agent, the line ids it settled, and
- * what waits for the service to take the discard's settle.
- */
 const following = (lines: readonly DeviceAgentLine[]) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("agent-lines-");
@@ -208,7 +184,6 @@ const LAUNCH: DeviceAgentLine = {
   kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
   payload: {},
 };
-/** A launch's first lines that continue a Claude Code session: its config, then the developer's message. */
 const RESUMING_LINES = [
   { harness: "claude_code", resume: "session-fixture", firstSequence: 0 },
   { type: "message", content: [{ type: "text", text: "Go on with the relay." }] },
@@ -216,7 +191,6 @@ const RESUMING_LINES = [
   .map((line) => `${JSON.stringify(line)}\n`)
   .join("");
 
-/** The lines the runner was handed first on its stdin, as the device wrote them, each read as JSON. */
 const firstLinesOf = (spawned: ScriptedSpawner["spawned"]) =>
   Effect.gen(function* () {
     const stdin = spawned.find((each) => each.program === RUNNER)?.stdin;
@@ -229,16 +203,6 @@ const firstLinesOf = (spawned: ScriptedSpawner["spawned"]) =>
       .map((line) => JSON.parse(line));
   });
 
-/**
- * The follower on a Linux host, whose agents run straight on it, one launch line
- * handed once for an agent in a repository, whose first lines continue a
- * session, and whose runner ends at once; where `workStands` says, the
- * agent's repository already stands in its folder, as its last turn left it,
- * or, where `repositoryHangs` says, its script never ends. With the
- * processes spawned, what the repository's script was asked for,
- * the steps the launch reported in the order the service had them, and what
- * waits for the launch's settle and its report that the runner starts.
- */
 const launching = (workStands: boolean, repositoryHangs = false) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("agent-launch-");

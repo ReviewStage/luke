@@ -14,16 +14,6 @@ import {
   openGitHubConnectIntent,
 } from "../github-connection-store.js";
 
-/**
- * A Mac's request to connect GitHub, over a real dialect: an intent is
- * claimed by its own account alone, as often as asked inside its ten
- * minutes, and a claim from another account's session leaves it standing;
- * and an account reads as connected only with a GitHub account row of its
- * own whose token is usable.
- *
- * Synthetic accounts throughout.
- */
-
 const openAccounts = Effect.gen(function* () {
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
@@ -34,7 +24,6 @@ const openAccounts = Effect.gen(function* () {
   return { owner, other };
 });
 
-/** A row's sealed tokens and their expiries, as the GitHub App's sign-in leaves them; every field null once revoked. */
 interface RowTokens {
   readonly accessToken: string | null;
   readonly refreshToken: string | null;
@@ -44,7 +33,6 @@ interface RowTokens {
 
 const HOUR_MS = Duration.toMillis(Duration.hours(1));
 
-/** Tokens as a fresh sign-in leaves them under the test clock's epoch: eight hours of access, six months of refresh. */
 const FRESH_TOKENS: RowTokens = {
   accessToken: "sealed-fixture-token",
   refreshToken: "sealed-fixture-refresh",
@@ -59,7 +47,6 @@ const REVOKED_TOKENS: RowTokens = {
   refreshTokenExpiresAt: null,
 };
 
-/** An account row as Better Auth leaves one for a provider, its tokens sealed and beside the point here. */
 const linkProvider = (
   userId: string,
   providerId: string,

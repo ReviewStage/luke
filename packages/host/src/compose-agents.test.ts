@@ -107,7 +107,6 @@ const AGENT: AgentSummary = {
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
-/** The agent as its own page reads it, with no task, as an automation's run leaves one. */
 const PAGE: AgentPage = {
   ...AGENT,
   planId: null,
@@ -125,7 +124,6 @@ const MODELS = [
   },
 ];
 
-/** What the agent published, as the service answers it. */
 const PUBLISHED = {
   repository: "acme/relay",
   branch: "agent/teammate-invitations",
@@ -141,8 +139,6 @@ const PUBLISHED = {
   },
 };
 
-/** The agent's changes, as the service answers them. */
-/** A pull request's chapters as the service answers them: none made yet for its head. */
 const CHAPTERS = {
   pullRequest: {
     number: 11,
@@ -169,8 +165,6 @@ const CHANGES = {
   },
 };
 
-/** That pull request itself, its checks, and its conversation, as its Pull request tab's overview reads them. */
-/** What the reviewer and label pickers offer, as the service answers it. */
 const REVIEW_OPTIONS = {
   labels: [{ name: "bug", color: "d73a4a" }],
   users: [{ login: "priyan", bot: false }],
@@ -197,11 +191,9 @@ const OVERVIEW = {
   conversation: { pullRequest: { reviewers: [], conversation: [], earlier: 0 } },
 } as const;
 
-/** A synthetic key, as Settings carries it once; nothing below may answer it back. */
 const PROVIDER_KEY = "sk-ant-api03-synthetic-0000000000000000wxyz";
 const GITHUB_TOKEN = "synthetic-classic-token-0000000000wxyz";
 
-/** What the service answers of a saved token: never the token, and a made-up hint. */
 const SAVED_TOKEN: GitHubTokenSummary = {
   login: "octo-dev",
   hint: "fake…hint",
@@ -211,7 +203,6 @@ const SAVED_TOKEN: GitHubTokenSummary = {
   expiresAt: null,
 };
 
-/** What the service answers of a kept key: never the key. */
 const MEMORY: MemorySummary = {
   id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
   text: "Deployments go out from the release branch.",
@@ -246,7 +237,6 @@ const ITEM: InboxItem = {
   updatedAt: 1_800_000_060_000,
 };
 
-/** That item as what waits across the account carries it. */
 const WAITING: AccountInboxEntry = {
   id: ITEM.id,
   planId: TASK_ID,
@@ -261,7 +251,6 @@ const WAITING: AccountInboxEntry = {
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
-/** A page with something on it, as the service answers a transcript read unless a test scripts another. */
 const SAID = {
   messages: [
     { id: "m-1", role: "assistant" as const, parts: [{ type: "text" as const, text: "Hi" }] },
@@ -270,7 +259,6 @@ const SAID = {
   title: null,
 };
 
-/** The service as a script, writing down every ask in the order it was made. */
 function fakeService() {
   const asked: string[] = [];
   let scope: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
@@ -282,14 +270,10 @@ function fakeService() {
     | undefined;
   let accountLive: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined;
   let itemsLive: typeof LIVE_ANSWERED | undefined;
-  /** What the account's items' read keeps to answer by sync id, so a read past one is answered what moved since. */
   const itemsBySync: ItemsBySync = { rows: new Map(), at: new Map() };
-  /** The sync id the account's items stand still at, as behind a long transaction; none while it moves. */
   let itemsStalledAt: string | undefined;
-  /** Each key a read mark was sent under, in order, and whether the service answers marks at all. */
   const markKeys: (string | undefined)[] = [];
   let marksAnswered = true;
-  // Each live read's rows, polled; every followed scope's inbox reads the one script.
   const live = {
     transcript: polledLive(TRANSCRIPT_PARTS),
     scope: polledLive(SCOPE_PARTS),
@@ -298,49 +282,29 @@ function fakeService() {
     memories: polledLive(MEMORIES_PARTS),
     origin: polledLive(["origin"]),
     hosts: polledLive(["hosts"]),
-    // Note that the account stored no preferences until a test sets a row, as a new account has none.
     preferences: polledLive(["preferences"], () => ({ preferences: [] })),
   };
-  /** The models the account is offered, as the service answers them; the one Claude model from the start. */
   let offeredModels: readonly CatalogModel[] = MODELS;
-  /** The account's provider keys, as the service answers them; the one Claude key from the start. */
   let keptKeys: readonly ProviderKeySummary[] = [KEPT];
-  // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
   let pageGate: Effect.Effect<void> = Effect.void;
-  // The newest page, as the follow opens with it; none answers one with something on it.
   let newestPage: AgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
-  // The transaction a pin answers it committed in, where it answers one.
   let startTxid: string | undefined;
-  // Whether a Start goes unanswered, as one sent offline does.
   let startsUnanswered = false;
-  // The transaction the service says each inbox write committed in; none says it changed nothing.
   let committedIn: { readonly txid?: string } = {};
-  /** The item as the agent changed it first, which a close is answered not taken with; none takes every close. */
   let changedFirst: InboxItem | undefined;
-  /** The transaction the service says wrote a sent message's row; none says none was written. */
   let sentTxid: string | undefined;
-  /** What a rename, an archive, a change of model, or a switch of servers waits on before the service answers it; nothing from the start. */
   let changeGate: Effect.Effect<void> = Effect.void;
-  /** What a change of an agent's queue answers, once its gate lets it; the queue empty at its first revision from the start. */
   let queueAnswer: AgentQueueAnswerView = { queue: { messages: [], revision: 1 } };
-  /** What a change of an agent's queue waits on before the service answers it; nothing from the start. */
   let queueGate: Effect.Effect<void> = Effect.void;
-  /** What a forget answers, once its gate lets it; the memories left, with no transaction, from the start. */
   let forgetAnswer: MemoriesAnswerView = { memories: [] };
-  /** What a forget waits on before the service answers it; nothing from the start. */
   let forgetGate: Effect.Effect<void> = Effect.void;
-  /** What a message on an inbox thread waits on before the service answers it; nothing from the start. */
   let messageGate: Effect.Effect<void> = Effect.void;
-  /** What a host's removal answers, once its gate lets it; unanswered from the start. */
   let removeAnswer: HostDoneAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
-  /** What a host's removal waits on before the service answers it; nothing from the start. */
   let removeGate: Effect.Effect<void> = Effect.void;
-  /** How long ago the account's devices beat, as the service answers it; unanswered until a test says, and never where it hangs. */
   let presence: Effect.Effect<DevicePresenceAnswerView> = Effect.succeed({
     failure: AGENT_CALL_FAILURE.UNANSWERED,
   });
-  /** A plan's or an agent's inbox as its live read answers it: polled from the one script, or the refusal standing. */
   const scopeLive = (poll: boolean | undefined, after: string | undefined) =>
     Effect.suspend((): ReturnType<AgentClient["taskInboxLive"]> => {
       if (scope === undefined) return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
@@ -437,7 +401,6 @@ function fakeService() {
             ? `messages-newest:${agentId}`
             : `worker-newest:${agentId}:${callId}`) + (cut === true ? ":cut" : ""),
         );
-        // Note that the service answers an agent the account does not reach not found on every read alike.
         if (typeof transcript === "object") return transcript;
         return newestPage ?? { ...SAID, cursor: "1:0" };
       }),
@@ -450,7 +413,6 @@ function fakeService() {
         );
         return { messages: SAID.messages, before: "3" };
       }),
-    // Note that a poll is counted apart from the first ask (`live.transcript.polls`), as each is held until the rows move.
     agentTranscriptLive: (agentId, _userId, callId, poll, after) =>
       Effect.suspend((): ReturnType<AgentClient["agentTranscriptLive"]> => {
         if (poll !== true) {
@@ -803,125 +765,97 @@ function fakeService() {
     client,
     asked,
     live,
-    /** Whether the service answers a transcript's live read, or that the account reaches no such agent; none answers unanswered. */
     sealTranscript: (
       next: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | typeof OFFLINE | undefined,
     ) => {
       transcript = next;
     },
-    /** The pages the service answers read at once, in turn, or that it did not answer one. */
     pageNow: (...pages: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[]) => {
       pagesNow = pages;
     },
-    /** What a page read at once waits on before the service answers it; nothing from the start. */
     holdPages: (gate: Effect.Effect<void>) => {
       pageGate = gate;
     },
-    /** The newest page the service answers. */
     pageNewest: (page: AgentNewestAnswer | { readonly failure: "unanswered" }) => {
       newestPage = page;
     },
-    /** The transaction the service answers a sent message with. */
     sendTxid: (txid: string | undefined) => {
       sentTxid = txid;
     },
     markKeys,
-    /** Whether the service answers a read mark, or no answer comes back, as offline. */
     answerMarks: (answers: boolean) => {
       marksAnswered = answers;
     },
-    /** What a change to an agent waits on before the service answers it. */
     holdChanges: (gate: Effect.Effect<void>) => {
       changeGate = gate;
     },
-    /** What a message on an inbox thread waits on before the service answers it. */
     holdMessages: (gate: Effect.Effect<void>) => {
       messageGate = gate;
     },
-    /** What a change of an agent's queue answers from now on, once `gate` lets it. */
     answerQueue: (answer: AgentQueueAnswerView, gate: Effect.Effect<void> = Effect.void) => {
       queueAnswer = answer;
       queueGate = gate;
     },
-    /** Whether the service answers a plan's or an agent's inbox's live read, or that the account reaches none; none answers unanswered. */
     sealScope: (next: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined) => {
       scope = next;
     },
-    /** The transaction the service says each inbox write committed in from now on; none says it changed nothing. */
     commitIn: (txid: string | undefined) => {
       committedIn = txid === undefined ? {} : { txid };
     },
-    /** The item as the agent changed it before any close from now on, which the service answers each close not taken with. */
     changeFirst: (item: InboxItem) => {
       changedFirst = item;
     },
-    /** Whether the service answers the account inbox's live read, or that the session signed out; none answers unanswered. */
     sealAccount: (next: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined) => {
       accountLive = next;
     },
-    /** Whether the service answers the account's items' live read; none answers unanswered. */
     sealItems: (next: typeof LIVE_ANSWERED | undefined) => {
       itemsLive = next;
     },
-    /** Holds the account items' sync id where it stands, as a long transaction does, so each read past it is answered nothing moved. */
     stallItems: () => {
       itemsStalledAt = live.items.first().queries.stamps.digest;
     },
-    /** The transaction a Start answers it committed in; none answers none. */
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
     },
-    /** Whether each Start from now on goes unanswered, as one sent offline does. */
     leaveStartsUnanswered: (unanswered: boolean) => {
       startsUnanswered = unanswered;
     },
-    /** What each host's removal answers from now on, and what it waits on before it does. */
     answerRemoves: (answer: HostDoneAnswerView, gate: Effect.Effect<void> = Effect.void) => {
       removeAnswer = answer;
       removeGate = gate;
     },
-    /** What each forget answers from now on, and what it waits on before it does. */
     answerForgets: (answer: MemoriesAnswerView, gate: Effect.Effect<void> = Effect.void) => {
       forgetAnswer = answer;
       forgetGate = gate;
     },
-    /** How long ago the account's devices beat, as the service answers from now on. */
     answerPresence: (next: DevicePresenceAnswerView) => {
       presence = Effect.succeed(next);
     },
-    /** The account's provider keys and the models it is offered as the service answers them from now on. */
     answerKeys: (keys: readonly ProviderKeySummary[], models: readonly CatalogModel[]) => {
       keptKeys = keys;
       offeredModels = models;
     },
-    /** The service never answering how long ago the devices beat, from now on. */
     hangPresence: () => {
       presence = Effect.never;
     },
   };
 }
 
-/** Now, as the host reads it in these tests. */
 const NOW = 1_800_000_100_000;
 
-/** A transcript's live read as the test scripts it. */
 type TranscriptLive = PolledLive<(typeof TRANSCRIPT_PARTS)[number]>;
 
-/** That the service answers a live read, its rows polled from the test's script (`polledLive`). */
 const LIVE_ANSWERED = "answered";
-/** A live read whose call got no answer at all, as one sent offline ends. */
 const OFFLINE = {
   failure: AGENT_CALL_FAILURE.UNANSWERED,
   cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, fault: CALL_FAULT.NETWORK },
 } as const;
 
-/** What a call the closed account gate kept from the service answers: unanswered, saying the gate stood closed for want of an account. */
 const GATE_CLOSED_SIGNED_OUT = {
   failure: AGENT_CALL_FAILURE.UNANSWERED,
   cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: GATE_CLOSED_BY.NO_ACCOUNT },
 };
 
-/** The parts of a transcript's live read, of a plan's or an agent's inbox's, and of the account inbox's. */
 const TRANSCRIPT_PARTS = [
   "messages",
   "turns",
@@ -938,40 +872,27 @@ const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"
 const ITEMS_PARTS = ["stamps", "items", "messages", "files"] as const;
 const MEMORIES_PARTS = ["memories"] as const;
 
-/** The install script's address the hosts' read answers beside them. */
 const INSTALL_SCRIPT = "https://app.test/install.sh";
 
-/** The account's items' read as the service answers it, before it is read by sync id. */
 type ItemsAnswer = Exclude<
   ReturnType<PolledLive<(typeof ITEMS_PARTS)[number]>["first"]>,
   { failure: string }
 >;
 
-/** A row's text field `name`; none where it carries none. */
 function textOf(row: unknown, name: string): string | undefined {
   const value = typeof row === "object" && row !== null ? Reflect.get(row, name) : undefined;
   return typeof value === "string" ? value : undefined;
 }
 
-/** The id a row of the account's items names its item by: its own, or the item its message is on. */
 function itemIdOf(row: unknown): string | undefined {
   return textOf(row, "itemId") ?? textOf(row, "id");
 }
 
-/** What the fake keeps of the account's items to answer them by sync id: each item's last row set, and the items as they stood at each id answered. */
 interface ItemsBySync {
   readonly rows: Map<string, unknown>;
   readonly at: Map<string, ReadonlyMap<string, string>>;
 }
 
-/**
- * The account's items' read as the service answers it by sync id. The
- * items there are are those the stamps a test set name, each its last row
- * set, its read mark the stamp's, as a service that resends an item whole
- * with its mark. Past no id it is every one, each part with the id to read
- * past next; past an id, only those that moved since, with the ids of
- * those that stand no longer, and nothing where the id stands still.
- */
 function bySyncId(
   answer: ItemsAnswer,
   past: string | undefined,
@@ -1003,7 +924,6 @@ function bySyncId(
     moved.includes(itemIdOf(row) ?? ""),
   );
   const messageIds = new Set(movedMessages.flatMap((row) => textOf(row, "id") ?? []));
-  // Note that a read answered before the test set any rows carries none, as one Realtime sealed does.
   const part = (query: SealedLiveQueryWire, rows: readonly unknown[]): SealedLiveQueryWire => ({
     ...query,
     ...(query.rows === undefined ? undefined : { rows }),
@@ -1031,10 +951,8 @@ function bySyncId(
   };
 }
 
-/** Every step a follow has to take, taken: it runs on a fiber of its own. */
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
-/** Every step taken, then the host's next poll asked, which waits half a second after the last answered (`live-follow.ts`). */
 const nextPoll = Effect.andThen(
   settled,
   Effect.andThen(TestClock.adjust(Duration.millis(500)), settled),
@@ -1052,7 +970,6 @@ function subject(
 ) {
   return Effect.gen(function* () {
     const service = fakeService();
-    // Each event with how many reads the service had been asked as it was told.
     const events: { kind: GatewayEventKind; payload: WireValue; asked: number }[] = [];
     const composer = yield* composeAgents({
       kernel: {
@@ -1076,11 +993,6 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    /**
-     * Each read of `transcript` the host laid on the held transcripts as it
-     * moved, its rows, none where it held none, and how many reads the
-     * service had been asked as each was laid, in order.
-     */
     const transcripts = (
       transcript: { readonly agentId: string; readonly callId?: string } = FOLLOWED,
     ) => {
@@ -1088,7 +1000,6 @@ function subject(
       let was: unknown;
       for (const event of events) {
         if (event.kind !== GATEWAY_EVENT.TRANSCRIPTS_CHANGED) continue;
-        // SAFETY: the held transcripts are the host's own, told as built.
         const held = event.payload as unknown as AppTranscripts;
         const read = held[transcript.agentId]?.[transcript.callId ?? OWN_TRANSCRIPT];
         if (read === was) continue;
@@ -1100,7 +1011,6 @@ function subject(
     return {
       call,
       transcripts,
-      /** Each of `transcript`'s rows the host laid, in order. */
       held: (transcript?: { readonly agentId: string; readonly callId?: string }) =>
         transcripts(transcript).map((each) => each.rows),
       asked: service.asked,
@@ -1128,57 +1038,46 @@ function subject(
       commitIn: service.commitIn,
       changeFirst: service.changeFirst,
       live: service.live,
-      /** Every answer of the followed account inbox the host told, in order. */
       accountInboxes: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED ? [event.payload] : [],
         ),
-      /** Every telling of the account's items, whole, in order. */
       accountItems: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.INBOX_ITEMS_CHANGED ? [event.payload] : [],
         ),
-      /** Every telling of the models the host holds for the windows, whole, in order. */
       models: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.MODELS_CHANGED ? [event.payload] : [],
         ),
-      /** Every telling of the account's preferences the host holds for the session, whole, in order. */
       preferences: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.ACCOUNT_PREFERENCES_CHANGED ? [event.payload] : [],
         ),
-      /** Every telling of the provider keys the host holds for the windows, whole, in order. */
       providerKeys: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.PROVIDER_KEYS_CHANGED ? [event.payload] : [],
         ),
-      /** Every telling of the hosts the host holds for the windows, whole, in order. */
       hosts: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.HOSTS_CHANGED ? [event.payload] : [],
         ),
-      /** Every telling of the GitHub token the host holds for the windows, whole, in order. */
       githubToken: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.GITHUB_TOKEN_CHANGED ? [event.payload] : [],
         ),
-      /** Every telling of the memories the host holds for the windows, whole, in order. */
       memories: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.MEMORIES_CHANGED ? [event.payload] : [],
         ),
-      /** Every telling of the beats the host holds for the windows, whole, in order. */
       beats: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED ? [event.payload] : [],
         ),
-      /** Every telling of the inboxes the host holds for the windows, whole, in order. */
       told: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.HOLDER_INBOXES_CHANGED ? [event.payload] : [],
         ),
-      /** Every telling of the agents' origins the host holds for the windows, whole, in order. */
       origins: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.AGENT_ORIGINS_CHANGED ? [event.payload] : [],
@@ -1580,9 +1479,7 @@ it.effect(
       };
       const openaiKey = { ...KEPT, provider: PROVIDER_KEY_PROVIDER.OPENAI };
       answerKeys([openaiKey], [{ ...claude, credentialMissing: true }, gpt]);
-      /** The default a surface draws from the slices the host told last. */
       const drawnDefault = () => {
-        // SAFETY: the host tells its own slices whole, as built.
         const held = preferences().at(-1) as AppAccountPreferences | undefined;
         const offered = models().at(-1) as AppModels | undefined;
         assert.ok(held?.["user-dana"]?.rows !== undefined, "the preferences answered");
@@ -1610,7 +1507,6 @@ it.effect(
   "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held once the repository lists moved, and a save the schema refuses is refused in words that hold no token",
   () =>
     Effect.gen(function* () {
-      // The token the windows held as each write's read of the repository lists landed, a turn after it was asked.
       const movedUnder: unknown[] = [];
       let held: () => unknown[] = () => [];
       const { call, asked, githubToken } = yield* subject({
@@ -1644,7 +1540,6 @@ it.effect(
     }),
 );
 
-/** The transcript's statements as they stand: `seq` its newest message, `turns` how many it has opened. */
 function transcriptRows(live: { readonly transcript: TranscriptLive }, seq: number, turns = 1) {
   live.transcript.set({
     messages: [],
@@ -1659,7 +1554,6 @@ function transcriptRows(live: { readonly transcript: TranscriptLive }, seq: numb
   });
 }
 
-/** One message of the window as its rows deliver it: a line of the agent's at `seq`, saying `text` in one part. */
 function windowRow(seq: number, text: string) {
   return {
     row: {
@@ -1703,7 +1597,6 @@ function windowRow(seq: number, text: string) {
   };
 }
 
-/** A page the service answers read at once: its messages, its cursor, its status, and whether its held read would have held. */
 function pageNow(
   cursor: string,
   options: { holds: boolean; text?: string; status?: AgentStatus },
@@ -1720,7 +1613,6 @@ function pageNow(
   };
 }
 
-/** The newest page the service answers: one message, the cursor to follow on from, and where the older page is read below. */
 function newestPage(cursor: string, text: string, before?: string): AgentNewestAnswer {
   return {
     messages: [{ id: `m-${cursor}`, role: "assistant", parts: [{ type: "text", text }] }],
@@ -1749,7 +1641,6 @@ it.effect(
       sealTranscript(LIVE_ANSWERED);
       const newest = newestPage("1:0", "Reading the invites.", "40");
       pageNewest(newest);
-      // A message written after the newest page was read, before the live read's first rows landed.
       const between = {
         ...pageNow("2:0", { holds: true, text: "Writing the expiry." }),
         wakeIn: 3_000,
@@ -1771,7 +1662,6 @@ it.effect(
         `transcript-live:${AGENT_ID}`,
       ]);
 
-      // The live read's first rows read on from the newest page's cursor, never from the start.
       transcriptRows(live, 2);
       yield* settled;
       assert.deepEqual(held()[1], {
@@ -1784,7 +1674,6 @@ it.effect(
       const reads = asked.filter((ask) => ask.startsWith("messages-"));
       assert.deepEqual(reads, [`messages-newest:${AGENT_ID}:cut`, `messages-now:${AGENT_ID}:1:0`]);
 
-      // Note that a short page is caught up, so nothing is read again until the clock reaches the edge the service named.
       yield* TestClock.adjust("2 seconds");
       yield* settled;
       assert.equal(held().length, 2);
@@ -1795,7 +1684,6 @@ it.effect(
 
       const moved = pageNow("3:0", { holds: false, text: "Testing the expiry." });
       script(moved);
-      // A turn opening is what reads the page again; its messages come as rows (see the window's own test).
       transcriptRows(live, 3, 2);
       yield* settled;
       assert.deepEqual(ids(held().at(-1)), ["m-1:0", "m-2:0", "m-3:0"]);
@@ -1838,12 +1726,10 @@ it.effect(
 
       const first = windowRow(2, "Writing the expiry.");
       const second = windowRow(3, "Testing the expiry.");
-      // The second message's part has not landed yet, so only the first is drawn.
       live.transcript.set({ window: [first.row, second.row], windowParts: [first.part] });
       yield* nextPoll;
       live.transcript.set({ windowParts: [first.part, second.part] });
       yield* nextPoll;
-      // Rows answered again alike lay nothing more.
       live.transcript.set({ window: [first.row, second.row] });
       yield* nextPoll;
 
@@ -1858,7 +1744,6 @@ it.effect(
       );
       assert.equal(reads(), readBefore);
 
-      // A turn moving reads the page past the messages the rows laid.
       transcriptRows(live, 3, 2);
       yield* nextPoll;
       assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:3:0`);
@@ -1884,7 +1769,6 @@ it.effect(
       transcriptRows(live, 1);
       yield* nextPoll;
 
-      // A queue's Resume hands on the member's line, which lands before any turn takes it.
       const line = windowRow(2, "Open the pull request.");
       live.transcript.set({
         window: [{ ...line.row, role: "user", turnStatus: null }],
@@ -1920,14 +1804,12 @@ it.effect(
       yield* settled;
       const reads = () => asked.filter((ask) => ask.startsWith("messages-now")).length;
 
-      // A message queued, edited, sent, or the queue paused: nothing but its revision moves.
       const beforeQueue = reads();
       live.transcript.set({ queueRevision: [{ revision: 1 }] });
       yield* nextPoll;
       assert.equal(reads(), beforeQueue + 1, "the queue moving reads the page");
       assert.equal(held().at(-1)?.word?.queueRevision, 1, "its queue is at least that new");
 
-      // A queue's hand-off writes the member's line before its turn is opened; the page says the agent runs.
       const beforeLine = reads();
       const line = windowRow(2, "Open the pull request.");
       live.transcript.set({
@@ -1939,28 +1821,23 @@ it.effect(
     }),
 );
 
-/** A queued message's id, as its window minted it. */
 const QUEUED_ID = "4e2d6c8a-1f3b-4a5c-9d7e-8b0a2c4e6f13";
 
-/** The agent's queue holding the one message, saying `text`, at `revision`. */
 function queueOf(text: string, revision: number) {
   return { messages: [{ id: QUEUED_ID, text, queuedBy: "user-dana" }], revision };
 }
 
-/** The words of the queued messages the held transcript last laid. */
 function queuedTexts(held: () => readonly (AppTranscript | undefined)[]) {
   return held()
     .at(-1)
     ?.word?.queue?.messages.map((message) => message.text);
 }
 
-/** An edit of the queued message, as the window asks it. */
 const EDITED = {
   agentId: AGENT_ID,
   change: { change: QUEUE_CHANGE.EDIT, messageId: QUEUED_ID, text: "Run the tests and fix them" },
 };
 
-/** A held transcript whose newest page and first page past it carry the queue holding "Run the tests" at its first revision. */
 function queueFollowed() {
   return Effect.gen(function* () {
     const harness = yield* subject();
@@ -2006,13 +1883,11 @@ it.effect(
       yield* call(GATEWAY_METHOD.AGENTS_QUEUE, EDITED);
       assert.deepEqual(queuedTexts(held), ["Run the tests and fix them"]);
 
-      // A page read before the edit landed answers after it.
       script({ ...pageNow("1:0", { holds: false }), queue: queueOf("Run the tests", 1) });
       live.transcript.set({ queueRevision: [{ revision: 1 }] });
       yield* nextPoll;
       assert.deepEqual(queuedTexts(held), ["Run the tests and fix them"]);
 
-      // A page carrying a later change of the queue is drawn as it says.
       script({
         ...pageNow("1:0", { holds: false }),
         queue: queueOf("Run the tests, then open the pull request", 3),
@@ -2023,13 +1898,6 @@ it.effect(
     }),
 );
 
-/**
- * A follow whose rows draw `m-2` as "Writing the expiry." at the
- * conversation's revision 2 while a moved turn's page is read, the page
- * answering `pageText` for it at the cursor named: every transcript laid
- * from the moment the turn moved, once the page and a delivery of the rows
- * after it landed.
- */
 function laidBesideRead(pageCursor: string, pageText: string) {
   return Effect.gen(function* () {
     const {
@@ -2057,7 +1925,6 @@ function laidBesideRead(pageCursor: string, pageText: string) {
       messages: [said(2, pageText), said(3, "Testing the expiry.")],
     };
     script(read);
-    // A turn opening reads the page, which the service is slow to answer.
     transcriptRows(live, 2, 2);
     yield* nextPoll;
     const drawn = windowRow(2, "Writing the expiry.");
@@ -2067,19 +1934,16 @@ function laidBesideRead(pageCursor: string, pageText: string) {
 
     yield* Deferred.succeed(answer, undefined);
     yield* settled;
-    // The rows answer again as they stood, which lays nothing older than the page.
     live.transcript.set({ windowParts: [drawn.part] });
     yield* nextPoll;
     return { beside, after: held().slice(laidBefore + beside.length) };
   });
 }
 
-/** One of the agent's messages, at `seq`, saying `text` in one part. */
 function said(seq: number, text: string) {
   return { id: `m-${seq}`, role: "assistant" as const, parts: [{ type: "text", text }] };
 }
 
-/** The ids of the messages a held transcript holds, in order. */
 function ids(rows: AppTranscript | undefined): readonly string[] | undefined {
   return rows?.messages.map((message) => message.id);
 }
@@ -2162,7 +2026,6 @@ it.effect(
         "the read said it got no answer, never that it gave up",
       );
 
-      // Note that the read never gave up, so its next ask, a second on, finds the service answering.
       sealTranscript(LIVE_ANSWERED);
       yield* TestClock.adjust("1 second");
       yield* settled;
@@ -2204,7 +2067,6 @@ it.effect(
       yield* settled;
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals + 1);
       assert.equal(held().at(-1)?.failure, undefined, "reading again lets the failure go");
-      // Note that the newest page laid before stands, so reading again opens on it rather than reading it anew.
       assert.equal(asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length, 1);
     }),
 );
@@ -2260,7 +2122,6 @@ it.effect(
       yield* settled;
       assert.deepEqual(ids(held().at(-1)), ["m-1", "m-2"]);
 
-      // The agent is taken back to before its second line: every page says so from now on.
       const rewound = {
         ...newestPage("3:1", "Reading the invites."),
         messages: [said(1, "Reading the invites.")],
@@ -2295,7 +2156,6 @@ it.effect(
       assert.deepEqual(ids(held().at(-1)), ["m-1", "m-1:0"]);
       assert.equal(held().at(-1)?.before, "3");
 
-      // The messages held begin below "40" now, so a page read for it would leave a gap or repeat itself.
       const laid = held().length;
       assert.deepEqual(
         yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "40" }),
@@ -2360,7 +2220,6 @@ it.effect(
     }),
 );
 
-/** A held transcript opened on its newest page and caught up past it, then let go, as a window that showed it last left it. */
 function followedOnce(
   harness: Effect.Success<ReturnType<typeof subject>>,
   transcript: { readonly kind: "agent"; readonly agentId: string } = FOLLOWED,
@@ -2386,7 +2245,6 @@ it.effect(
       const { asked, transcripts, live } = harness;
       assert.deepEqual(ids(harness.held().at(-1)), ["m-1:0", "m-2:0"], "let go, it stays held");
 
-      // Written while no window held it.
       const away = pageNow("3:0", { holds: false, text: "Written while away." });
       harness.pageNow(away);
       yield* TestClock.adjust("5 seconds");
@@ -2413,7 +2271,6 @@ it.effect(
       const harness = yield* subject();
       yield* followedOnce(harness);
       const { held, live } = harness;
-      // The service answers a message older than the cursor again once its revision passed it.
       const rewrite = {
         ...pageNow("2:1", { holds: false }),
         messages: [
@@ -2571,7 +2428,6 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      // One a window holds throughout, its tab shown.
       const shown = { kind: TRANSCRIPT_KIND.AGENT, agentId: "agent-shown" };
       yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, shown);
       yield* settled;
@@ -2598,10 +2454,8 @@ it.effect(
     }),
 );
 
-/** That item as a reader who has read it reads it live. */
 const LIVE_ITEM: InboxItem = { ...ITEM, unread: false };
 
-/** That item as its row delivers it, what it leaves out held as null. */
 const ITEM_ROW = {
   ...LIVE_ITEM,
   startedBy: "user-dana",
@@ -2617,12 +2471,10 @@ const ITEM_ROW = {
 
 const PLAN_SCOPE = { kind: "plan", id: TASK_ID } as const;
 
-/** Steps taken until the host has told `times` inboxes, since a row's digest is the platform's own promise. */
 const toldTimes = (told: () => readonly unknown[], times: number) =>
   Effect.repeat(Effect.yieldNow, { until: () => told().length >= times, times: 10_000 });
 const AGENT_SCOPE = { kind: "agent", id: AGENT_ID } as const;
 
-/** One scope's read as the host last told the held inboxes, as a wire value; none where it holds none of the scope. */
 function heldOf(
   told: () => readonly WireValue[],
   scope: { readonly kind: string; readonly id: string },
@@ -2668,7 +2520,6 @@ it.effect(
       );
       assert.deepEqual(asked, [`description-inbox-live:${TASK_ID}`]);
 
-      // Let go, the plan stays held among those let go lately, so a change still tells it.
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
       yield* settled;
       live.scope.set({ items: [ITEM_ROW] });
@@ -2698,7 +2549,6 @@ it.effect(
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
       yield* settled;
 
-      // Eight other holders held and let go push the plan out, and its read is let go with its rows.
       const others = Array.from({ length: 8 }, (_, at) => ({
         kind: "agent",
         id: `0000000${at}-1111-4a6b-9c33-0d1e2f3a4b5c`,
@@ -2841,7 +2691,6 @@ it.effect(
     }),
 );
 
-/** A run of the account's own automation that failed a second short of a week before now. */
 const FAILED_RUN = {
   id: "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
   automationId: "8d2e3f4a-5b6c-4d7e-9f8a-0b1c2d3e4f5a",
@@ -2851,7 +2700,6 @@ const FAILED_RUN = {
   failedAt: NOW - FAILED_RUN_WINDOW_MILLIS + 1_000,
 };
 
-/** Every part of the account's read delivered, the item and run given and nothing else. */
 function deliverAccount(
   live: { readonly account: PolledLive<(typeof ACCOUNT_PARTS)[number]> },
   rows: { readonly items?: readonly unknown[]; readonly failedRuns?: readonly unknown[] },
@@ -2901,7 +2749,6 @@ it.effect(
       assert.notEqual(moved.cursor, answered.cursor);
       assert.deepEqual(moved.items, [{ ...WAITING, revision: 3, updatedAt: NOW }]);
 
-      // No row moves as the run ages out of the week, and it is told all the same.
       yield* TestClock.adjust("2 seconds");
       yield* settled;
       const aged = accountInboxes().at(-1);
@@ -2910,7 +2757,6 @@ it.effect(
       assert.notEqual(aged.cursor, moved.cursor);
       assert.deepEqual(asked, ["account-inbox-live:user-dana"]);
 
-      // Let go, nothing more is told.
       yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_UNFOLLOW);
       const told = accountInboxes().length;
       deliverAccount(live, { items: [] });
@@ -2943,10 +2789,8 @@ it.effect(
     }),
 );
 
-/** The item as the account's items read sends it. */
 const HELD_ITEM: InboxItem = LIVE_ITEM;
 
-/** A second task of the account's, and an item on it changed a minute before the first. */
 const OTHER_TASK_ID = "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f";
 const OTHER_ITEM: InboxItem = {
   ...HELD_ITEM,
@@ -2956,7 +2800,6 @@ const OTHER_ITEM: InboxItem = {
   updatedAt: ITEM.updatedAt - 60_000,
 };
 
-/** Where an item on `planId` stands as its stamp carries it, waiting on Dana with nothing on its thread, unless `moved` says otherwise. */
 function stampOf(item: InboxItem, planId: string, moved: Record<string, unknown> = {}) {
   return {
     id: item.id,
@@ -2973,7 +2816,6 @@ function stampOf(item: InboxItem, planId: string, moved: Record<string, unknown>
   };
 }
 
-/** The account's items' read moved to the stamps given, the items given its rows, each as `row` writes it. */
 function deliverItems(
   live: { readonly items: PolledLive<(typeof ITEMS_PARTS)[number]> },
   stamps: readonly unknown[],
@@ -2987,7 +2829,6 @@ function deliverItems(
   });
 }
 
-/** The account's items as the window is told them, by plan, none of an agent with no task. */
 function byPlan(plans: Readonly<Record<string, readonly InboxItem[]>>) {
   return { rows: { [INBOX_SCOPE_KIND.PLAN]: plans, [INBOX_SCOPE_KIND.AGENT]: {} } };
 }
@@ -3034,7 +2875,6 @@ it.effect(
       deliverItems(live, [stampOf(HELD_ITEM, TASK_ID)], [HELD_ITEM]);
       yield* toldTimes(accountItems, 1);
 
-      // A long transaction holds the sync id, so each read past it is answered nothing moved.
       stallItems();
       const moved = { ...HELD_ITEM, revision: 3, updatedAt: HELD_ITEM.updatedAt + 1_000 };
       deliverItems(live, [stampOf(moved, TASK_ID)], [moved]);
@@ -3070,7 +2910,6 @@ it.effect(
       yield* toldTimes(harness.accountItems, 1);
       const retitled = { title: "Push to main instead?", updatedAt: ITEM.updatedAt + 1_000 };
 
-      // The plan's inbox takes the item as it moved, before the account's items hear of it.
       live.scope.set({ items: [{ ...ITEM_ROW, ...retitled }] });
       yield* nextPoll;
       const other = { ...OTHER_ITEM, revision: OTHER_ITEM.revision + 1 };
@@ -3154,7 +2993,6 @@ it.effect(
     }),
 );
 
-/** Whether the last telling of a plan's inbox, and of the account's items, holds the item as `holds` reads it. */
 function bothHold(
   harness: {
     readonly told: () => readonly WireValue[];
@@ -3164,11 +3002,9 @@ function bothHold(
 ): readonly [boolean, boolean] {
   const firstOf = (items: WireValue | undefined) => {
     const first = Array.isArray(items) ? items[0] : undefined;
-    // SAFETY: a telling's items are inbox items, as the window is told them.
     return first === undefined ? false : holds(first as InboxItem);
   };
   const plan = heldOf(harness.told, PLAN_SCOPE);
-  // SAFETY: the account's items are told as wire values.
   const account = harness.accountItems().at(-1) as WireValue | undefined;
   const plans =
     isRecord(account) && isRecord(account.rows) ? account.rows[INBOX_SCOPE_KIND.PLAN] : undefined;
@@ -3189,7 +3025,6 @@ it.effect(
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* harness.open;
       yield* settled;
-      // Each read is woken by a write once, so each hands a wait for the next.
       live.scope.set({ items: [ITEM_ROW], messages: [], files: [] }, ["9100"]);
       live.items.set(
         {
@@ -3213,7 +3048,6 @@ it.effect(
       assert.deepEqual(marked, { id: ITEM.id, unread: true, txid: "9200" });
       assert.deepEqual(bothHold(harness, unread), [true, true]);
 
-      // The account's items carry the mark first, and the plan's inbox answers once more from before it.
       live.items.set({ stamps: [stampOf(HELD_ITEM, TASK_ID, { unread: true })], items: [] }, [
         "9200",
       ]);
@@ -3275,12 +3109,10 @@ it.effect(
     }),
 );
 
-/** The plan's inbox as one telling of the held inboxes holds it, by id; none where it holds none. */
 function planInboxOf(told: WireValue | undefined): ReadonlyMap<string, InboxItem> {
   const plans = isRecord(told) ? told[PLAN_SCOPE.kind] : undefined;
   const read = isRecord(plans) ? plans[PLAN_SCOPE.id] : undefined;
   const rows = isRecord(read) ? read.rows : undefined;
-  // SAFETY: a telling's rows are inbox items, as the window is told them.
   return new Map(((Array.isArray(rows) ? rows : []) as InboxItem[]).map((item) => [item.id, item]));
 }
 
@@ -3300,7 +3132,6 @@ it.effect(
         updatedAt: ITEM.updatedAt - n * 1_000,
       }));
       const arrived = { ...ITEM_ROW, id: OTHER_ITEM.id, key: OTHER_ITEM.key };
-      // The read is woken by a write once, so it hands a wait for the marks.
       live.scope.set({ items: unread, messages: [], files: [] }, ["9100"]);
       yield* toldTimes(told, 1);
       const toldBefore = told().length;
@@ -3321,7 +3152,6 @@ it.effect(
         "every mark answers before the read carries it",
       );
 
-      // An item arrives while every mark stands, the read still holding them unread.
       live.scope.set({ items: [...unread, arrived] });
       yield* nextPoll;
       const meanwhile = planInboxOf(told().at(-1));
@@ -3384,7 +3214,6 @@ it.effect(
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* harness.open;
       yield* settled;
-      // Each read is woken by a write once, so each hands a wait for the reply.
       live.scope.set({ items: [ITEM_ROW], messages: [], files: [] }, ["9100"]);
       live.items.set(
         {
@@ -3460,7 +3289,6 @@ it.effect(
       );
       yield* settled;
 
-      // The service took the answer and the agent posted after it, opening the item again, before the answer came back.
       const later = ITEM.updatedAt + 2_000;
       live.scope.set({
         items: [{ ...ITEM_ROW, revision: ITEM.revision + 1, updatedAt: later }],
@@ -3503,7 +3331,6 @@ it.effect(
       const parts = { planless: [], automations: [], failedRuns: [] };
       live.account.set({ ...parts, items: [WAITING], plans: [plan] }, ["9100"]);
       yield* toldTimes(accountInboxes, 1);
-      /** What waits, and each task's count, as the account inbox was last told. */
       const waiting = () => {
         const told = accountInboxes().at(-1);
         assert.ok(isRecord(told) && Array.isArray(told.items) && Array.isArray(told.plans));
@@ -3523,7 +3350,6 @@ it.effect(
       yield* settled;
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
 
-      // The read answers once more from before the close, which still stands over it.
       live.account.set({ ...parts, items: [WAITING], plans: [{ ...plan, updatedAt: NOW }] });
       yield* nextPoll;
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
@@ -3650,7 +3476,6 @@ it.effect(
     }),
 );
 
-/** A second memory of the workspace, kept after `MEMORY`. */
 const OTHER_MEMORY: MemorySummary = {
   id: "9e2b3c4d-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
   text: "Tests run before every push.",
@@ -3660,7 +3485,6 @@ const OTHER_MEMORY: MemorySummary = {
   updatedAt: 4,
 };
 
-/** A memory as the workspace's live read delivers it. */
 function memoryRow(memory: MemorySummary) {
   return {
     id: memory.id,
@@ -3673,7 +3497,6 @@ function memoryRow(memory: MemorySummary) {
   };
 }
 
-/** The ids of the workspace's memories as the host last told them; none where it told none. */
 function memoryIdsOf(told: WireValue | undefined): readonly string[] | undefined {
   const read = isRecord(told) ? told[WORKSPACE_ID] : undefined;
   const rows = isRecord(read) ? read.rows : undefined;
@@ -3691,7 +3514,6 @@ it.effect(
       const shown = () => memoryIdsOf(harness.memories().at(-1));
       yield* call(GATEWAY_METHOD.MEMORIES_FOLLOW, { workspaceId: WORKSPACE_ID });
       yield* settled;
-      // The read is woken by a write once, so it hands a wait for the next.
       live.memories.set({ memories: [memoryRow(OTHER_MEMORY), memoryRow(MEMORY)] }, ["9100"]);
       yield* nextPoll;
       assert.deepEqual(shown(), [OTHER_MEMORY.id, MEMORY.id]);
@@ -3707,7 +3529,6 @@ it.effect(
 
       yield* Deferred.succeed(answering, undefined);
       assert.deepEqual(yield* Fiber.join(forgetting), { memories: [OTHER_MEMORY], txid: "9200" });
-      // The read answers once more from before the forget, which still stands over it.
       live.memories.set({ memories: [memoryRow(OTHER_MEMORY), memoryRow(MEMORY)] });
       yield* nextPoll;
       assert.deepEqual(shown(), [OTHER_MEMORY.id]);
@@ -3729,16 +3550,13 @@ it.effect(
     }),
 );
 
-/** The account's hosts the remove case lists: one kept, and one removed. */
 const KEPT_HOST = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 const GONE_HOST = "5c2d3e4f-6a7b-4c8d-9e0f-1a2b3c4d5e6f";
 
-/** A host as the account's live read delivers it. */
 function hostRow(id: string, name: string) {
   return { id, name, platform: DEVICE_PLATFORM.LINUX, machineId: null, model: null, update: null };
 }
 
-/** The ids of the account's hosts as the host last told them; none where it told none. */
 function hostIdsOf(told: WireValue | undefined): readonly string[] | undefined {
   const read = isRecord(told) ? told["user-dana"] : undefined;
   const held = isRecord(read) ? read.rows : undefined;
@@ -3758,7 +3576,6 @@ it.effect(
       const both = { hosts: [hostRow(KEPT_HOST, "ams-01"), hostRow(GONE_HOST, "fra-03")] };
       yield* call(GATEWAY_METHOD.HOSTS_FOLLOW);
       yield* settled;
-      // The read is woken by a write once, so it hands a wait for the next.
       live.hosts.set(both, ["9300"]);
       yield* nextPoll;
       assert.deepEqual(shown(), [KEPT_HOST, GONE_HOST]);
@@ -3774,7 +3591,6 @@ it.effect(
 
       yield* Deferred.succeed(answering, undefined);
       assert.deepEqual(yield* Fiber.join(removing), { done: true, txid: "9400" });
-      // The read answers once more from before the removal, which still stands over it.
       live.hosts.set(both);
       yield* nextPoll;
       assert.deepEqual(shown(), [KEPT_HOST]);
@@ -3834,7 +3650,6 @@ it.effect(
       yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW);
       yield* settled;
       assert.equal(presenceAsks(), 1);
-      // Note that the test's clock stands at 0, so a beat five seconds old beat at -5000.
       assert.deepEqual(beats().at(-1), {
         "user-dana": { rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 0 } },
       });

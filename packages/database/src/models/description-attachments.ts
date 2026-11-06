@@ -15,20 +15,6 @@ import { task } from "../schemas/task.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import { reachableTask, taskReachableBy } from "./workspace-store.js";
 
-/**
- * description-attachments.ts -- a description's pictures: keep one, read one, stamp the ones a save names, and sweep the uploads no save named.
- *
- * A picture, or a video an agent recorded, is kept under the plan row's own
- * lock, so the counts it is held to, every picture's and every video's,
- * cannot be crossed by a second upload. Every read names the account beside the
- * plan and gates on its membership of the plan's workspace, so a member
- * reads a picture a teammate pasted and a plan of a workspace the account is
- * not in reads as no plan, exactly as in `plan-store.ts`. A save stamps the
- * pictures its text names (`saveDescriptionText`), and the sweep deletes a day-old
- * picture no save ever stamped, a sweep's worth at a time.
- */
-
-/** What keeping a picture came to: kept under its new id, refused for the description's count of pictures or of videos, or no plan to keep it on. */
 export const DESCRIPTION_ATTACHMENT_KEEP = {
   KEPT: "kept",
   TOO_MANY: "too-many",
@@ -42,13 +28,10 @@ export type DescriptionAttachmentKeep =
   | { readonly status: typeof DESCRIPTION_ATTACHMENT_KEEP.TOO_MANY_VIDEOS }
   | { readonly status: typeof DESCRIPTION_ATTACHMENT_KEEP.NO_TASK };
 
-/** The most unsaved pictures one sweep deletes, so a sweep stays bounded however many piled up. */
 const PURGE_BATCH = 200;
 
-/** A description's pictures among every attachment: the ones its task owns alone. */
 const descriptionPicture = ownedByTaskAlone(attachment);
 
-/** The plan's id and workspace under its row's lock, where the account reaches it; nothing otherwise. */
 const lockOpenTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, organizationId: Schema.String }),
@@ -62,7 +45,6 @@ const lockOpenTask = SqlSchema.findOneOption({
     ),
 });
 
-/** How many pictures the description holds, and how many of them are videos. */
 const countPictures = SqlSchema.findOne({
   Request: Schema.Struct({ taskId: Schema.String }),
   Result: Schema.Struct({ count: Schema.Number, videos: Schema.Number }),
@@ -138,12 +120,6 @@ const stampSaved = SqlSchema.void({
     ),
 });
 
-/**
- * The oldest unsaved pictures uploaded before the cutoff, a sweep's worth,
- * their plans locked until the transaction ends. Note that a plan a save
- * holds locked is skipped, because the save may be stamping one of them
- * this moment; the next sweep reads it again.
- */
 const lockUnsaved = SqlSchema.findAll({
   Request: Schema.Struct({ before: Schema.Date }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -170,12 +146,6 @@ const deletePictures = SqlSchema.void({
     ),
 });
 
-/**
- * Keeps one picture or video on the description, uploaded by the account, under a
- * new id; refused where the description already holds its bound of pictures, or a
- * video where it holds its bound of videos, and nothing where the account
- * reaches no such plan.
- */
 export function keepDescriptionAttachment(
   userId: string,
   taskId: string,
@@ -186,7 +156,6 @@ export function keepDescriptionAttachment(
       Effect.gen(function* () {
         const locked = yield* lockOpenTask({ userId, taskId });
         if (Option.isNone(locked)) return { status: DESCRIPTION_ATTACHMENT_KEEP.NO_TASK } as const;
-        // A count that returned no row is the database breaking its own contract, not an outcome.
         const { count, videos } = yield* countPictures({ taskId }).pipe(
           Effect.catchTag("NoSuchElementError", Effect.die),
         );
@@ -216,7 +185,6 @@ export function keepDescriptionAttachment(
   );
 }
 
-/** One picture or video of the description, its type and bytes; nothing where the account reaches no such plan or the description no such picture. */
 export function readDescriptionAttachment(
   userId: string,
   taskId: string,
@@ -225,7 +193,6 @@ export function readDescriptionAttachment(
   return findPicture({ userId, taskId, attachmentId });
 }
 
-/** Stamps the description's pictures the saved text names as saved, the ones no save stamped before; nothing where it names none. */
 export function stampSavedAttachments(
   taskId: string,
   ids: readonly string[],
@@ -234,11 +201,6 @@ export function stampSavedAttachments(
   return Effect.flatMap(DateTime.nowAsDate, (now) => stampSaved({ taskId, ids, now }));
 }
 
-/**
- * The scheduled sweep's delete of the pictures no save named, uploaded
- * before `before`, a sweep's worth, under their plans' locks, so a save
- * stamping one cannot cross it; how many went.
- */
 export function purgeUnsavedAttachments(before: Date): TaskStoreEffect<number> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(

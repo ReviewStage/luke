@@ -15,14 +15,6 @@ import {
   publishAppStateChanges,
 } from "./app-state-store.js";
 
-/**
- * The document and the one path out of it. What is proven here is what the
- * rest of the client leans on: a patch that says nothing changes nothing, a
- * slice is replaced whole, the version only ever climbs, and `changes`
- * carries exactly one document per applied patch.
- */
-
-/** Two pages of a plan and the agent that showed them, as the store's identity test holds them. */
 const PAGE_ONE = "0b0e7c64-1d1f-4a9a-9c55-7c1e2f6a9d01";
 const PAGE_TWO = "0b0e7c64-1d1f-4a9a-9c55-7c1e2f6a9d02";
 const AGENT = "0b0e7c64-1d1f-4a9a-9c55-7c1e2f6a9d03";
@@ -44,15 +36,6 @@ function store(): AppStateStore {
   return new AppStateStore(initialAppState(RUN, true, []), Context.empty());
 }
 
-/**
- * The `count` documents `changes` carries once `act` has run, starting with
- * the one standing before it: `SubscriptionRef.changes` is the current value
- * concatenated with every value set after, so this always opens with the
- * document as it stood before `act`'s own writes. The collector is forked and
- * given one turn to reach its own subscription — a `SubscriptionRef`'s
- * `changes` only delivers a write to a subscriber already reading when it
- * happens — before `act`'s synchronous writes run.
- */
 function watchChanges(
   app: AppStateStore,
   count: number,
@@ -66,14 +49,7 @@ function watchChanges(
   });
 }
 
-/**
- * A payload the document only ever carries whole. The store never reads
- * inside one — it compares and holds — so what stands in for a settings
- * snapshot, a roster entry, or a run record is an empty record, and the one
- * assertion that says so is here rather than at each of them.
- */
 function inert<Value>(): Value {
-  // SAFETY: nothing under test reads a field of these payloads; only their identity and equality are exercised.
   return {} as Value;
 }
 
@@ -98,8 +74,6 @@ it.effect("a patch that says nothing new announces nothing on `changes`", () =>
       app.update({});
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED } });
       app.update({ network: { online: true, reachable: true } });
-      // The one real patch is the second document `changes` ever carries; the
-      // three no-ops before it wrote nothing for a collector to see.
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
     });
     assert.equal(seen.length, 2);
@@ -111,8 +85,6 @@ it.effect("a patch that says nothing new announces nothing on `changes`", () =>
 it.effect("a subscriber that patches the document as it is announced lands its patch next", () =>
   Effect.gen(function* () {
     const app = store();
-    // The subscriber is parked on `changes` when the first patch lands, so it is
-    // resumed on the writer's own stack, and answers it with a patch of its own.
     const answering = yield* Effect.forkChild(
       Stream.runForEach(Stream.take(app.changes, 2), (state) =>
         Effect.sync(() => {
@@ -166,7 +138,6 @@ it("a slice that moved keeps every part of it that did not, so what a reader hel
   app.update({ [LIVE_READ.PAGES]: held("Billing") });
   const before = rowsOf();
 
-  // The host's next pages: the same data, every object of it new, and the second page retitled.
   const next = held("Billing and plans");
   app.update({ [LIVE_READ.PAGES]: next });
   const now = rowsOf();
@@ -212,9 +183,6 @@ it("a halt outlives every host read until the host's own event stands it down", 
   const app = store();
   app.update(bootstrapPatch(app.snapshot(), BOOT));
   app.update({ sessionReplay: { ...app.snapshot().sessionReplay, halted: true } });
-  // The account is going and the host still answers `permitted` until its
-  // store has caught up; a window bootstrapping in that window must not
-  // restart a recording that was stood down.
   app.update(bootstrapPatch(app.snapshot(), BOOT));
   assert.equal(app.snapshot().sessionReplay.halted, true);
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);

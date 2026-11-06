@@ -8,14 +8,6 @@ import { user } from "../../schemas/auth.js";
 import { mutableFunctionsOf } from "../live-immutability.js";
 import { getTestDB } from "../sql-client.js";
 
-/**
- * The probe reads what a statement calls as Postgres records it, so a
- * statement Realtime would refuse is named by every function that is not
- * immutable, an aggregate's and an operator's among them, and one it would
- * take by none.
- */
-
-/** The live statement a select renders to, which every probe here can carry. */
 function statementOf(select: LiveSelect) {
   return Option.getOrThrow(liveStatementOf(select));
 }

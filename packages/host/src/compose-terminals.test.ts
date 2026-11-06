@@ -34,20 +34,6 @@ import {
   type TerminalSocketOpening,
 } from "./compose-terminals.js";
 
-/**
- * A coding agent's terminals as the host answers the desktop for them, over
- * a service and a relay that answer from a script, on the test clock: each
- * call asks the service once and answers what it said, a refusal the tab
- * reads among it; an attached shell's output and state are heard as the
- * connection's events, and typing and resizes reach its socket; the relay's
- * close says how the connection ends, and a drop is opened again after a
- * wait that doubles and starts over once the shell attaches; an agent with
- * no sandbox yet is asked after every five seconds; output past the
- * watermark pauses the socket until the tab acks; a refused bearer is
- * renewed once; a wake cuts a wait short; and a detach or a sign-out ends
- * the connection. Synthetic ids and bytes throughout.
- */
-
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const SHELL_ID = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
 const CONNECTION_ID = "connection-1";
@@ -63,7 +49,6 @@ const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERA
 const encode = (text: string) => new TextEncoder().encode(text);
 const readOutput = readEither(terminalOutputEventSchema);
 
-/** A service that answers each call from the script and keeps what it was asked. */
 function scriptedService() {
   const asked: string[] = [];
   const client: TerminalClient = {
@@ -88,7 +73,6 @@ function scriptedService() {
   return { client, asked };
 }
 
-/** One relay socket as a test drives it: arrivals pushed in, and what the host sent and did to it, kept. */
 const scriptedSocket = Effect.gen(function* () {
   const inbound = yield* Queue.unbounded<TerminalSocketArrival, Cause.Done>();
   const sent: TerminalSocketFrame[] = [];
@@ -112,12 +96,10 @@ const scriptedSocket = Effect.gen(function* () {
   };
 });
 
-/** The composer over the scripted service and a relay whose openings the test hands in, one per open, as it asks. */
 function subject(
   options: {
     signedIn?: boolean;
     bearers?: string[];
-    /** The account's credential, where it is not the desktop's bearer over `bearers`. */
     credential?: CallCredential;
     events?: { kind: GatewayEventKind; payload: WireValue }[];
   } = {},
@@ -156,12 +138,10 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    /** The states the connection was told, in order. */
     const states = () =>
       events.flatMap((event) =>
         event.kind === GATEWAY_EVENT.TERMINAL_STATE ? [event.payload] : [],
       );
-    /** The bytes the connection handed up, decoded. */
     const printed = () =>
       events.flatMap((event) => {
         if (event.kind !== GATEWAY_EVENT.TERMINAL_OUTPUT) return [];
@@ -182,7 +162,6 @@ function subject(
   });
 }
 
-/** Lets every fiber the last step woke run to its next wait. */
 const settle = Effect.forEach(Array.from({ length: 20 }), () => Effect.yieldNow, {
   discard: true,
 });
@@ -469,7 +448,6 @@ it.effect(
   "a page's cookie session opens the relay with no header of the host's own, and a signed-out one opens nothing",
   () =>
     Effect.gen(function* () {
-      // The cookie source's credentials (`cookie-account-source.ts`): signed in, no header at all; signed out, a header that reads none.
       const signedIn: CallCredential = { renew: () => Effect.void };
       const signedOut: CallCredential = { authorization: () => Effect.succeed(undefined) };
       const page = yield* subject({ credential: { resolve: () => Effect.succeed(signedIn) } });
@@ -594,7 +572,6 @@ const BROWSER_AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const TAB_ID = "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b";
 const VIEW = { connectionId: "view-1", agentId: BROWSER_AGENT_ID, tabId: TAB_ID };
 
-/** What a live view's connection was handed up, in order: each text frame, then its close. */
 function liveEvents(events: readonly { kind: GatewayEventKind; payload: WireValue }[]) {
   return events.flatMap((event) =>
     event.kind === GATEWAY_EVENT.BROWSER_LIVE_MESSAGE ||

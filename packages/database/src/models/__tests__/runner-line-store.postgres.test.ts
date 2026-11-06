@@ -11,23 +11,10 @@ import { getTestDB, STORE_TEST_DATABASE_ENVIRONMENT, startTask } from "../../tes
 import { createAgent } from "../agent-store.js";
 import { queueRunnerLine, runnerLinesPast } from "../runner-line-store.js";
 
-/**
- * An agent's runner lines queued at once against a real Postgres, with a
- * second connection beside the test's own: the one thing PGlite, a single
- * connection that runs one transaction at a time, cannot show. A line queued
- * while another's queue for the same agent is uncommitted waits for it, so
- * the agent's lines commit in the order of their places and a runner reading
- * past its cursor never passes over one. This file runs in CI's Postgres job,
- * where `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
- */
-
-/** The launch both lines are written for. */
 const LAUNCH = 1;
 
-/** How many times the probe below looks for the second queue to wait or end. */
 const LOOKS = 2000;
 
-/** Answers how to run an effect on a connection of its own to the test's database, beside the test's one. */
 const anotherConnection = Effect.gen(function* () {
   const client = yield* SqlClient.SqlClient;
   const [row] = yield* client<{ readonly name: string }>`select current_database() as name`;
@@ -37,7 +24,6 @@ const anotherConnection = Effect.gen(function* () {
   return <A, E>(effect: Effect.Effect<A, E, DatabaseServices>) => Effect.provide(effect, layer);
 });
 
-/** An account holding one agent. */
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -56,7 +42,6 @@ const openAccount = Effect.gen(function* () {
   return { userId, agentId: Option.getOrThrow(started).agent.id };
 });
 
-/** How many of the test database's sessions wait on a lock. */
 const waitingOnLocks = Effect.gen(function* () {
   const client = yield* SqlClient.SqlClient;
   const [row] = yield* client<{
@@ -65,7 +50,6 @@ const waitingOnLocks = Effect.gen(function* () {
   return row?.waiting ?? 0;
 });
 
-/** Looks until the fiber waits on a lock or has ended, whichever comes first. */
 const untilWaitingOrDone = (fiber: Fiber.Fiber<unknown, unknown>) =>
   Effect.gen(function* () {
     for (let look = 0; look < LOOKS; look += 1) {
@@ -102,8 +86,6 @@ it.layer(getTestDB())("an agent's runner lines queued at once", (it) => {
           onAnother(queueRunnerLine(userId, { agentId, launch: LAUNCH, text: "second" })),
         );
         yield* untilWaitingOrDone(second);
-        // Note that the second queue must be seen waiting on a lock, not merely unfinished, since
-        // one still connecting when the looks run out would pass for one the lock held back.
         assert.equal(second.pollUnsafe(), undefined);
         assert.ok((yield* waitingOnLocks) > 0);
         yield* Deferred.succeed(release, undefined);

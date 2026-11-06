@@ -19,15 +19,6 @@ import {
   workspaceIntegrationInstallations,
 } from "../integration-installation-store.js";
 
-/**
- * Which workspace an integration's installation stands for, over a real
- * dialect: an installation stands for one workspace and is never moved to
- * another while active, an uninstalled one finds no workspace, and an
- * install intent is spent once, inside its hour, at its own provider.
- *
- * Synthetic accounts and workspaces throughout.
- */
-
 const SENTRY = TRIGGER_PROVIDER.SENTRY;
 
 const openAccount = Effect.gen(function* () {

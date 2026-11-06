@@ -1,15 +1,3 @@
-/**
- * run-agents.ts -- the agents an automation's run made, read for an account that may read the run's automation.
- *
- * An agent names the run it belongs to (`agent.automation_run_id`): the run
- * that started it, or the run whose agent started it, so a run reads every
- * agent it made rather than the one `automation_run.agent_id` keeps. The
- * read is gated as the run's history is (`automation-store.ts`'s
- * `automationReadableBy`): an account that may not read the automation,
- * or is no longer a member of its workspace, reads none of its runs'
- * agents.
- */
-
 import { and, asc, eq } from "drizzle-orm";
 import { type Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -28,7 +16,6 @@ const RunAgentSchema = Schema.Struct({
   createdAt: InstantColumnSchema,
 });
 
-/** One agent a run made: its id, its conversation, the name it goes by, and when it was started. */
 export type RunAgent = typeof RunAgentSchema.Type;
 
 const findRunAgents = SqlSchema.findAll({
@@ -51,7 +38,6 @@ const findRunAgents = SqlSchema.findAll({
     ),
 });
 
-/** The agents the run made, in the order they were started; none for a run the account may not read. */
 export function readRunAgents(userId: string, runId: string): RunAgentsEffect<readonly RunAgent[]> {
   return findRunAgents({ userId, runId });
 }

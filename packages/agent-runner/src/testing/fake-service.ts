@@ -1,13 +1,8 @@
-/**
- * fake-service.ts -- a fake of the service's events route for the runner's tests: it applies each sequence at most once, as the real route does, and answers each post as the test scripted.
- */
-
 import assert from "node:assert/strict";
 import { type FakeResponder, fakeHttpClientLayer } from "@repo/wire/testing";
 import { Deferred, Exit } from "effect";
 import type { RunnerEvent } from "../protocol.js";
 
-/** How a fake events route answers one post: take it, fail as a server, or fail before answering. */
 export const ANSWER = {
   TAKE: "take",
   SERVER_ERROR: "server_error",
@@ -17,13 +12,6 @@ export const ANSWER = {
 } as const;
 export type Answer = (typeof ANSWER)[keyof typeof ANSWER];
 
-/**
- * A fake of the service's events route at `url`, numbering from `firstSequence`. A batch
- * posted again changes nothing; each post is answered as the next of
- * `answers` says, then every later one is taken; `seen` settles once an
- * applied message holds `watchFor`. `bodies` keeps every post's body as it
- * crossed the wire, for a test of what the runner never sends.
- */
 export function makeFakeService(options: {
   readonly url: string;
   readonly firstSequence: number;

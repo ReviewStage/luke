@@ -1,16 +1,3 @@
-/**
- * agent-inbox-procedures.test.ts -- the Inbox's acts, through the act port.
- *
- * What a task's coding agents need of the developer, through the act port
- * as a window calls them: only a panel of this build's own renderer asks;
- * any other window, and a frame this build does not trust, are
- * refused in each kind's own words before the host is asked; a panel's ask
- * reaches the host with its payload as the panel sent it, and what the host
- * answers is the panel's; a host that fails answers the kind's own
- * sentence; and a panel's inbox stream follows the inbox at the host while
- * any stream of it stands.
- */
-
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
@@ -38,7 +25,6 @@ import {
 import type { ActSender } from "./base.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
-// The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true };
@@ -66,7 +52,6 @@ const PICTURE = { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
 
 const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER]:
     "Could not acknowledge the inbox item on this system.",
@@ -82,7 +67,6 @@ const REFUSAL = {
 
 type HostAsk = AgentInboxProceduresDependencies["host"];
 
-/** Every kind, each with a payload its schema admits and the host ask it reaches. */
 const ACTS: readonly {
   kind: keyof typeof REFUSAL;
   payload: WireBoundaryInput;
@@ -136,14 +120,8 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/** What the host is asked to answer, by its ask, where a test answers one otherwise than unanswered. */
 type Answers = Partial<Record<keyof HostAsk, () => Effect.Effect<unknown>>>;
 
-/**
- * A window's act port, opened as the bridge opens one: the host answering
- * each ask unanswered unless `answers` says otherwise, and the window
- * standing as `actor`.
- */
 function windowPort(
   actor: ActSender,
   options: { trusted?: boolean; answers?: Answers; fallback?: () => Effect.Effect<unknown> } = {},
@@ -158,12 +136,10 @@ function windowPort(
           options.answers?.[name] ?? options.fallback ?? (() => Effect.succeed(UNANSWERED));
         return answer();
       });
-  // SAFETY: each fake answers what its test hands it; the port's output schema checks it.
   const host = Object.fromEntries(ACTS.map((act) => [act.ask, ask(act.ask)])) as unknown as HostAsk;
   const port = testActPort(agentInboxProcedures({ host }));
   ports.push(port);
   const trusted = options.trusted ?? true;
-  /** One kind called as this window, settled to its answer or the sentence of its refusal. */
   const call = (kind: PortActKind, payload: WireBoundaryInput) =>
     port.call(actor, kind, payload, { trusted });
   return { call, asked };
@@ -356,7 +332,6 @@ it("an answer's key its kind's view schema does not name is left out of what the
 it("a payload carrying a key its kind's schema does not name is refused in the kind's own words, and the host is not asked", async () => {
   const { call, asked } = windowPort(PANEL);
   for (const act of ACTS) {
-    // SAFETY: every payload above is an object, which the stray key is added beside.
     const payload = { ...(act.payload as Record<string, WireBoundaryInput>), stray: true };
     assert.deepEqual(await call(act.kind, payload), { refused: REFUSAL[act.kind] });
   }
@@ -405,7 +380,6 @@ it("an item whose thread carries an ask of a type this build does not know reach
   );
 });
 
-/** Turns the event loop until `ready` holds, as a page waits on its port. */
 async function until(ready: () => boolean): Promise<void> {
   for (let turn = 0; turn < 200 && !ready(); turn += 1) await nextTurn();
 }
@@ -416,7 +390,6 @@ it("a panel's hold on an inbox follows it at the host once for every stream of i
     agentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
     agentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
   };
-  // SAFETY: the hold reaches the follow asks alone.
   const host = follows as HostAsk;
   const port = testActPort(agentInboxProcedures({ host }));
   ports.push(port);
@@ -440,7 +413,6 @@ it("a panel's hold on an inbox follows it at the host once for every stream of i
 
 it("a window that is not a panel is refused an inbox stream, and the host follows nothing", async () => {
   const asked: string[] = [];
-  // SAFETY: the stream reaches the follow asks alone.
   const host = {
     agentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
     agentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),

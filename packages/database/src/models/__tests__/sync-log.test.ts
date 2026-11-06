@@ -7,19 +7,10 @@ import { syncLog } from "../../schemas/sync-log.js";
 import { getTestDB } from "../../testing/index.js";
 import { pruneSyncLog, syncStanding } from "../sync-log.js";
 
-/**
- * The sync log's pruning, over rows written straight into the log, each by
- * a transaction of its own that has ended, so the cut is bounded by age and
- * the newest transaction alone: a log gone quiet keeps its newest row, and a
- * busy one is cut up to its first young row and no further, a long
- * transaction's old row above it kept.
- */
-
 const NOW = new Date(Date.UTC(2026, 10, 3, 12));
 const OLD = new Date(NOW.getTime() - 4 * 24 * 60 * 60 * 1_000);
 const YOUNG = new Date(NOW.getTime() - 60 * 60 * 1_000);
 
-/** A row logged by a transaction begun at the instant, answering that transaction's id. */
 const logRow = (at: Date) =>
   Effect.gen(function* () {
     const db = yield* Database;

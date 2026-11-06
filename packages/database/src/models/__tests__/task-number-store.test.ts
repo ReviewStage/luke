@@ -10,15 +10,6 @@ import { taskIdOfNumber } from "../task-number-store.js";
 import { createTask, updateTask } from "../task-store.js";
 import { setWorkspaceSlug } from "../workspace-slug-store.js";
 
-/**
- * A task found by its workspace's slug and its number, as a link
- * `/<slug>/task/<number>` names it, through the store's public functions
- * over a real dialect: a member finds it, by its old number too once it
- * moved, and an account outside the workspace finds nothing.
- *
- * Synthetic accounts, workspaces, and tasks throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -56,7 +47,6 @@ it.layer(getTestDB())("a task found by its number", (it) => {
         assert.deepEqual(yield* taskIdOfNumber(stranger, slug, 2), Option.none());
         assert.deepEqual(yield* taskIdOfNumber(stranger, workspace, 2), Option.none());
         assert.deepEqual(yield* taskIdOfNumber(dean, slug, 3), Option.none());
-        // A link written under the slug the workspace stood under before still finds it.
         yield* setWorkspaceSlug(workspace, `renamed-${workspace}`);
         assert.deepEqual(yield* taskIdOfNumber(charles, slug, 2), Option.some(sidebar.id));
       }),
@@ -78,7 +68,6 @@ it.layer(getTestDB())("a task found by its number", (it) => {
 
         assert.deepEqual(yield* taskIdOfNumber(dean, from, 1), Option.some(moving.id));
         assert.deepEqual(yield* taskIdOfNumber(dean, to, 2), Option.some(moving.id));
-        // Charles is a member of the workspace it left, and no longer reaches the task where it landed.
         assert.deepEqual(yield* taskIdOfNumber(charles, from, 1), Option.none());
       }),
   );

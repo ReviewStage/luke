@@ -10,23 +10,6 @@ import { conversations, messages, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import type { HostedStoreTestRun } from "./hosted-store-database.js";
 
-/**
- * Rows over the ambient `SqlClient`, for the setup and assertions a test
- * still needs beneath the store's own effects: the same tables `writer.ts`
- * and its neighbors write, reached through the shared Drizzle handle over
- * the tables their own `schemas/*.ts` modules declare, so a column renamed
- * under `db/` is a type error in this file rather than a statement that
- * still parses. Every insert answers the row's minted id where the table has
- * one; every read answers the row (or rows) as the builder maps them, which
- * is the schema module's own field names and the column's own reading —
- * undecoded beyond what a caller's own assertion needs, and Schema-decoded
- * where a caller reads a whole row as the store's writers build it.
- *
- * A write's fields are the table's own insert type rather than loose strings,
- * which is how a vocabulary the schema module pins (`$type<>()`) is pinned
- * here too.
- */
-
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
 type ConversationInsert = typeof conversations.$inferInsert;
@@ -43,7 +26,6 @@ export interface ConversationRow {
   readonly nextMessageSeq?: number;
   readonly label?: string | null;
   readonly title?: string | null;
-  /** Whether a child's delegation waits on its completion; the column's own default, true, where absent. */
   readonly expectsCompletion?: boolean;
 }
 
@@ -96,19 +78,9 @@ export interface MessageRow {
   readonly turnId?: string | null;
   readonly clientId: string;
   readonly role: MessageInsert["role"];
-  /**
-   * The parts and the metadata stay `unknown` where every other field is the
-   * column's own type, because writing a row the column type forbids is one
-   * of the things this helper is for: `storage-reads.test.ts` writes the row
-   * a corrupt write would leave and asserts the page is refused as malformed.
-   * They are handed to the builder as the column's type on that account, and
-   * that is the whole of the trust — a column renamed under `db/` is still a
-   * type error here.
-   */
   readonly parts: unknown;
   readonly metadata?: unknown;
   readonly createdAt?: Date;
-  /** Where the row stands in the Conversation; where it was written unless the test places it elsewhere. */
   readonly placedAt?: Date;
   readonly finishedAt?: Date | null;
 }
@@ -127,13 +99,7 @@ export function insertMessage(run: HostedStoreTestRun, row: MessageRow): Promise
           turnId: row.turnId ?? null,
           clientId: row.clientId,
           role: row.role,
-          // SAFETY: the column's own type is what a well-formed row carries,
-          // and writing a row that is not one is what this helper is for —
-          // `storage-reads.test.ts` writes the row a corrupt write would leave
-          // and asserts the page is refused as malformed. Nothing reads the
-          // value back through this type.
           parts: row.parts as MessageInsert["parts"],
-          // SAFETY: the same, for the metadata beside them.
           metadata: (row.metadata ?? null) as MessageInsert["metadata"],
           createdAt,
           placedAt: row.placedAt ?? createdAt,
@@ -196,7 +162,6 @@ export function insertTurn(run: HostedStoreTestRun, row: TurnInsertRow): Promise
   );
 }
 
-/** A turn row, decoded to the same shape the store's own writer builds it under. */
 const TurnRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
@@ -241,13 +206,11 @@ export function readTurnById(run: HostedStoreTestRun, id: string): Promise<TurnR
   );
 }
 
-/** Every part this build stores carries at least a `type`, the same shape `writer.ts`'s own column schema checks. */
 const readsPartsShape = Schema.is(Schema.Array(Schema.Struct({ type: Schema.String })));
 const StoredPartsColumnSchema: Schema.Codec<StoredUIMessage["parts"]> = Schema.declare(
   (input): input is StoredUIMessage["parts"] => readsPartsShape(input),
 );
 
-/** A message row, decoded to the same shape the store's own writer builds it under. */
 const MessageRowFullSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
@@ -288,12 +251,6 @@ export function deleteUser(run: HostedStoreTestRun, id: string): Promise<void> {
   return run(Effect.asVoid(Database.use((db) => db.delete(user).where(eq(user.id, id)))));
 }
 
-/**
- * A count of the rows one column equals a value on, by the column itself
- * rather than by its name and its table's: a column carries the table it
- * belongs to, so one argument names both, and a column renamed under `db/`
- * is a type error at the call site rather than a count that reads zero.
- */
 function countRows(column: PgColumn, value: string) {
   return Effect.map(
     Database.use((db) =>
@@ -303,7 +260,6 @@ function countRows(column: PgColumn, value: string) {
   );
 }
 
-/** `countRows` through the promise door, for a suite still written against one. */
 export function countRowsWhere(
   run: HostedStoreTestRun,
   column: PgColumn,

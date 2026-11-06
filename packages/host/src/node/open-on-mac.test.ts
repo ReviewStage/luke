@@ -7,18 +7,6 @@ import { temporaryDirectory } from "@repo/runtime/testing";
 import { test } from "vitest";
 import { agentWorktreeScript, cloneFolder } from "./open-on-mac.js";
 
-/**
- * A local agent's worktree script over real Git and bash, an origin on disk standing
- * in for GitHub: an agent gets a worktree of the box's shared clone,
- * detached at its branch's head, which the clone lists; a first clone cut
- * off midway leaves nothing at the clone's place; two launches at once
- * before the clone is made each bring in their own branch, and two agents
- * fetch into the clone at once; one waits on a clone another holds while
- * it lives, and takes the lock over once it is gone; a transfer from a remote that
- * never answers fails rather than hangs; and a make that fails or was cut
- * off leaves nothing that blocks the next.
- */
-
 const GIT_ENVIRONMENT = {
   PATH: process.env.PATH ?? "/usr/bin:/bin",
   GIT_CONFIG_NOSYSTEM: "1",
@@ -30,14 +18,12 @@ const GIT_ENVIRONMENT = {
   GIT_COMMITTER_EMAIL: "fixture@app.test",
 };
 
-// Note that a test here runs real Git and bash, which a macOS runner has taken past vitest's 5s default.
 const GIT_DEADLINE = 30_000;
 
 function git(folder: string, args: readonly string[]): string {
   return execFileSync("git", args, { cwd: folder, env: GIT_ENVIRONMENT, encoding: "utf8" }).trim();
 }
 
-/** An origin with `main` and an agent's branch pushed to it, and the state root the app keeps its clone in. */
 async function fixture(t: Parameters<typeof temporaryDirectory>[0]) {
   const scratch = await temporaryDirectory(t, "open-on-mac-");
   const origin = path.join(scratch, "origin");
@@ -47,21 +33,18 @@ async function fixture(t: Parameters<typeof temporaryDirectory>[0]) {
   git(origin, ["add", "--all"]);
   git(origin, ["commit", "--quiet", "-m", "main"]);
   git(origin, ["checkout", "--quiet", "-b", "agent/fix-relay"]);
-  // Note that a clone filters blobs only from a server allowing it, as GitHub does; a local origin is asked to.
   git(origin, ["config", "uploadpack.allowFilter", "true"]);
   const push = (text: string) => {
     writeFileSync(path.join(origin, "README.md"), text);
     git(origin, ["commit", "--quiet", "-am", text.trim()]);
     return git(origin, ["rev-parse", "HEAD"]);
   };
-  // The developer's login shell, which answers as sh does.
   const shell = path.join(scratch, "login-shell");
   writeFileSync(shell, '#!/bin/sh\nexec /bin/sh "$@"\n', { mode: 0o700 });
   const state = path.join(scratch, "state");
   return { scratch, origin, push, shell, state };
 }
 
-/** The script run as the terminal would run it: what it printed, and how it ended. */
 function runEnded(scratch: string, shell: string, script: string) {
   const file = path.join(scratch, "open.sh");
   writeFileSync(file, script, { mode: 0o700 });
@@ -72,17 +55,14 @@ function runEnded(scratch: string, shell: string, script: string) {
   return { printed: ran.stdout, code: ran.status };
 }
 
-/** What the script printed, run as the terminal would run it. */
 function run(scratch: string, shell: string, script: string): string {
   return runEnded(scratch, shell, script).printed;
 }
 
-/** The folders given, each as its real path, sorted, as `worktreesListed` answers them. */
 function realPaths(folders: readonly string[]): string[] {
   return folders.map((folder) => realpathSync(folder)).sort();
 }
 
-/** The worktrees the shared clone lists, its own among them, each as its real path, sorted. */
 function worktreesListed(clone: string): string[] {
   const listed = git(clone, ["worktree", "list", "--porcelain"])
     .split("\n")
@@ -96,7 +76,6 @@ test(
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
-    // A server that takes every connection and says nothing, so the clone stands midway until it is cut off.
     const sockets = new Set<Socket>();
     const silent = createServer((socket) => sockets.add(socket));
     t.onTestFinished(() => {
@@ -125,7 +104,6 @@ test(
     });
     const ended = new Promise<void>((resolve) => child.on("exit", () => resolve()));
 
-    // Note that the launch is killed whole once its clone has begun, as a restart kills it, so nothing of it has a say in what it leaves.
     for (let waited = 0; sockets.size === 0 && waited < 20_000; waited += 100) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -165,7 +143,6 @@ test(
         }),
         { mode: 0o700 },
       );
-      // Note that each launch answers what it printed, so one that failed says which step of Git refused it.
       return new Promise<string>((resolve) =>
         execFile(
           "/bin/bash",
@@ -180,7 +157,6 @@ test(
       launching("agent/fix-relay", "one"),
       launching("agent/other", "two"),
     ]);
-    // Note that once the clone is made, six launches at once each fetch into it, which only the lock keeps from refusing each other.
     const more = ["a", "b", "c", "d", "e", "f"].map((name) => `agent/more-${name}`);
     for (const branch of more) git(origin, ["branch", branch, "main"]);
     const then = await Promise.all(more.map((branch, index) => launching(branch, `more-${index}`)));
@@ -188,7 +164,6 @@ test(
     for (const name of ["one", "two", ...more.map((_, index) => `more-${index}`)]) {
       assert.ok(existsSync(path.join(own(name), ".git")), said);
     }
-    // Note that two agents then fetch into the one clone at once, under no lock of ours.
     const fetching = (worktree: string) =>
       new Promise<string>((resolve) =>
         execFile(
@@ -259,7 +234,6 @@ test(
   "a clone from a remote that never answers fails once its transfer stalls, and the launch ends",
   async (t) => {
     const { scratch, shell, state } = await fixture(t);
-    // A server that takes every connection and says nothing, as a dead network does.
     const sockets = new Set<Socket>();
     const silent = createServer((socket) => sockets.add(socket));
     t.onTestFinished(() => {
@@ -284,7 +258,6 @@ test(
       { mode: 0o700 },
     );
 
-    // Note that a script that hangs is killed by the test's own bound, which reads as a signal rather than a code.
     const code = await new Promise<number | null>((resolve) => {
       const child = spawn("/bin/bash", [file], {
         env: { ...GIT_ENVIRONMENT, HOME: scratch, SHELL: shell },
@@ -380,7 +353,6 @@ test(
       branch: "agent/fix-relay",
       remote: origin,
     });
-    // A folder in the worktree's place holding files and no repository, which the make never takes away, so its last step fails.
     mkdirSync(own, { recursive: true });
     writeFileSync(path.join(own, "notes.md"), "kept\n");
 
@@ -413,7 +385,6 @@ test(
         remote: origin,
       });
     run(scratch, shell, script("other"));
-    // What a launch killed while Git checked its worktree out leaves: the worktree half made beside its place, its entry still locked.
     mkdirSync(path.dirname(agent("agent")), { recursive: true });
     git(clone, [
       "worktree",

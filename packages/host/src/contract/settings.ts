@@ -12,15 +12,6 @@ import { Effect, Schema as EffectSchema, SchemaGetter, SchemaIssue } from "effec
 import { actProcedure, exactInput } from "./base.js";
 import { SETTINGS_ACT_KIND } from "./kinds.js";
 
-/**
- * settings.ts -- the settings writes a window asks of the host, as procedures.
- *
- * Each answers the settings as they then stand, its schema flipped, so oRPC's
- * output check encodes the row's value into what crosses the port, the
- * convention every act contract keeps (`agents.ts`).
- */
-
-/** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
   [Field in AppSettingField]: {
     field: Field;
@@ -28,16 +19,9 @@ export type SettingUpdatePayload = {
   };
 }[AppSettingField];
 
-/** A payload this module has already read, carried on as it is. */
 const carried = <A>(): EffectSchema.Codec<A, A> =>
   EffectSchema.declare((_value): _value is A => true);
 
-/**
- * The one payload whose value is parsed by the field beside it. The parsed
- * value is what the payload carries, so the row receives the value its
- * field's own guard admitted rather than the one that arrived (a chord
- * normalized, say), and there is no second guard to disagree with this one.
- */
 const settingUpdatePayloadSchema = EffectSchema.Struct({
   field: EffectSchema.Literals(APP_SETTING_FIELDS),
   value: EffectSchema.optional(WireValueSchema),
@@ -46,8 +30,7 @@ const settingUpdatePayloadSchema = EffectSchema.Struct({
     decode: SchemaGetter.transformEffect((payload) => {
       const parsed = APP_SETTING_SCHEMA[payload.field].guard(payload.value);
       return parsed.valid
-        ? // SAFETY: the field's own guard admitted this value for this field.
-          Effect.succeed({ field: payload.field, value: parsed.value } as SettingUpdatePayload)
+        ? Effect.succeed({ field: payload.field, value: parsed.value } as SettingUpdatePayload)
         : Effect.fail(new SchemaIssue.InvalidValue(undefined, payload));
     }),
     encode: SchemaGetter.transformEffect((payload: SettingUpdatePayload) =>
@@ -65,7 +48,6 @@ export const settingsActsContract = {
       exactInput(
         EffectSchema.Struct({
           scope: EffectSchema.Literals(Object.values(SETTINGS_RESET_SCOPE)),
-          /** The group's fields the asking page does not draw, which the reset leaves as they stand. */
           kept: EffectSchema.Array(EffectSchema.Literals(APP_SETTING_FIELDS)),
         }),
       ),

@@ -17,7 +17,6 @@ const ITEM: InboxItem = {
   unread: true,
 };
 
-/** The item as a reminder asked at `at` draws it over `item`. */
 function reminded(item: InboxItem, until: number | null, at: number): InboxItem | undefined {
   const drawn = INBOX_ITEM.drawn({ kind: INBOX_CHANGE.REMINDED, itemId: item.id, until, at }, item);
   return typeof drawn === "object" ? drawn : undefined;

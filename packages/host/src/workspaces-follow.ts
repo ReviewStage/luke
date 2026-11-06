@@ -18,32 +18,13 @@ import {
   type TxWait,
 } from "./live-follow.js";
 
-/**
- * workspaces-follow.ts -- the account's workspaces and sidebar, followed by the host over the service's held poll.
- *
- * The service answers each read's statements (`workspacesLiveStatements` in
- * the database's workspace store, `workspaceMembersLiveStatements` in the
- * service's accounts) with their rows inline. The host follows them
- * (`live-follow.ts`) and answers each delivery as the held read would, in
- * its order. Only what is built from their rows leaves.
- */
-
-/** A read answered, or why the service answered none, `gone` where it names nothing the account reaches any more. */
 type Sealed<Answer> = Answer | { readonly failure: string; readonly gone?: boolean };
 
 export interface LiveReadDependencies<Answer> {
-  /** The read's rows inline, held until they move past `after`; a failure where the service answered none. */
   readonly poll: (after: string | undefined) => Effect.Effect<Sealed<Answer>>;
-  /** Hears the read's wait for a write's transaction where it has one, and none once let go (`live-follow.ts`). */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
 
-/**
- * What one live read answers each time its rows change, decoded under
- * `schema` at this boundary and built by `build`, for as long as the
- * caller's scope stands. It fails where the read is gone or a row does not
- * decode, which the caller answers by reading it again.
- */
 function liveMoves<Part extends string, Rows, Built>(
   dependencies: LiveReadDependencies<SealedRead<Part>>,
   first: SealedRead<Part>,
@@ -57,7 +38,6 @@ function liveMoves<Part extends string, Rows, Built>(
   ).pipe(Stream.map(build));
 }
 
-/** The account's workspaces each time their rows change, as the held read would list them. */
 export function workspacesMoves(
   dependencies: LiveReadDependencies<WorkspacesLiveAnswer>,
   first: WorkspacesLiveAnswer,
@@ -65,12 +45,10 @@ export function workspacesMoves(
   return liveMoves(dependencies, first, workspacesLiveRowsSchema, workspacesOfLiveRows);
 }
 
-/** The sidebar read's parts: its sections, the tasks and the agents in them, and its pinned repositories. */
 type SidebarPart = "sections" | "entries" | "agentEntries" | "pins";
 
 const decodeSidebarRows = Schema.decodeUnknownOption(sidebarLiveRowsSchema);
 
-/** An answer's rows decoded, every part's; none where it carries none inline, and failed where a row does not decode. */
 function sidebarRowsOf(read: SealedRead<SidebarPart>): Option.Option<SidebarRows> | "undecoded" {
   const { sections, entries, agentEntries, pins } = read.queries;
   if ([sections, entries, agentEntries, pins].some((part) => part.rows === undefined)) {
@@ -85,16 +63,6 @@ function sidebarRowsOf(read: SealedRead<SidebarPart>): Option.Option<SidebarRows
   return Option.isSome(rows) ? Option.some(sidebarRowsOfLive(rows.value)) : "undecoded";
 }
 
-/**
- * The account's sidebar followed until it is gone, each answer's rows,
- * every part's, decoded and handed to `take` the moment its poll answers,
- * before the follow carries the answer's txids on to a write waiting for
- * them. So a write confirmed on the sidebar finds its rows already taken
- * (`sidebar-collections.ts`), where a reader of the follow's stream may
- * not have taken them yet. An answer whose rows do not decode is a failed
- * poll, asked again; a first one fails the follow, which the caller seals
- * again.
- */
 export function followSidebarRows(
   dependencies: LiveReadDependencies<SealedRead<SidebarPart>>,
   first: SealedRead<SidebarPart>,

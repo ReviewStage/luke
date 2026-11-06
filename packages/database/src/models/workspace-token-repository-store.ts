@@ -7,34 +7,18 @@ import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import { workspaceReachableBy } from "./workspace-store.js";
 
-/**
- * workspace-token-repository-store.ts -- the repositories members added to a workspace on their own GitHub token, read and written for `/api/github/token-repositories`.
- *
- * Every function is an effect over the ambient `SqlClient`, keyed by the
- * account asking and the workspace, and touches a row only where the
- * account is a member of that workspace, so no account reads or changes
- * another workspace's. A repository is one however its name's letters are
- * cased, as GitHub's names are: adding one already added keeps the first
- * add, and removing one that is gone moves nothing. Who may remove one, its
- * adder or a workspace's owner or admin, is the caller's to decide; the
- * store answers who added it.
- */
-
 const RowSchema = Schema.Struct({
   repository: Schema.String,
   addedByUserId: Schema.String,
   addedAt: InstantColumnSchema,
 });
 
-/** One repository a member added to the workspace on their token, as its row holds it. */
 export interface WorkspaceTokenRepositoryRow {
   readonly repository: string;
   readonly addedByUserId: string;
-  /** Epoch milliseconds. */
   readonly addedAt: number;
 }
 
-/** The row naming the repository however its letters are cased, since GitHub's names ignore case. */
 function namedRepository(repository: string): SQL {
   return sql`lower(${workspaceTokenRepository.repository}) = lower(${repository})`;
 }
@@ -116,7 +100,6 @@ const deleteRow = SqlSchema.void({
     ),
 });
 
-/** The repositories members added to the workspace on their tokens, newest added first; none where the account is not a member of it. */
 export function listWorkspaceTokenRepositories(
   userId: string,
   organizationId: string,
@@ -130,11 +113,6 @@ export function listWorkspaceTokenRepositories(
   );
 }
 
-/**
- * Adds the repository to the workspace as the account's, at the instant
- * given; a repository already added keeps its first adder. The caller has
- * already checked the account is a member and its token may push to it.
- */
 export function addWorkspaceTokenRepository(
   userId: string,
   organizationId: string,
@@ -144,7 +122,6 @@ export function addWorkspaceTokenRepository(
   return insertRow({ userId, organizationId, repository, now });
 }
 
-/** Who added the repository to the workspace; nothing where it is not added, or the account is not a member. */
 export function workspaceTokenRepositoryAdder(
   userId: string,
   organizationId: string,
@@ -156,11 +133,6 @@ export function workspaceTokenRepositoryAdder(
   );
 }
 
-/**
- * Removes the repository from the workspace, where the account is a member
- * of it and it is still the adder's the caller checked, so a row added
- * again by someone else since is left standing.
- */
 export function removeWorkspaceTokenRepository(
   userId: string,
   organizationId: string,

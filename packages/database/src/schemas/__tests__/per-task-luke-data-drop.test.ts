@@ -21,34 +21,20 @@ import { user } from "../auth.js";
 import { sessionSandboxCleanup } from "../session-sandbox.js";
 import { conversations } from "../storage.js";
 
-/**
- * The migration that drops the per-task assistant's data: its conversations,
- * stamped deleted with every child under them so the sweep purges them, and
- * `task.conversation_id`. Each test
- * stands its own database where it stood before the migration, the migration
- * undone over it, and runs the migration's own statements, less those on the
- * tables a later migration dropped (`replayable`). Synthetic accounts and
- * rows throughout.
- */
-
 const MIGRATION = "20261021105816_per_task_luke_data_drop";
 
-/** The migration undone, so the database stands as one from before it. */
 const UNDO = [
   `ALTER TABLE "task" ADD COLUMN "conversation_id" uuid`,
   `ALTER TABLE "task" ADD CONSTRAINT "plan_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE set null`,
 ];
 
-/** The per-task assistant's conversation kind, as old rows store it; no code names it now. */
 const OLD_KIND = { CONVERSATION: "plan" } as const;
 
-/** The database stood where it was before the migration. */
 const undo = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   for (const statement of UNDO) yield* sql.unsafe(statement);
 });
 
-/** The migration's statements, run in one transaction as the migrator runs them; its exit. */
 const migrate = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const statements = replayable(yield* migrationStatements(MIGRATION));
@@ -57,7 +43,6 @@ const migrate = Effect.gen(function* () {
   );
 });
 
-/** An account with a workspace and a task in it. */
 const openTask = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -67,7 +52,6 @@ const openTask = Effect.gen(function* () {
   return { userId, organizationId, taskId: task.id };
 });
 
-/** A conversation of the kind given, under the parent given, stamped where a stamp is given; its id. */
 const openConversation = (
   userId: string,
   kind: string,
@@ -84,7 +68,6 @@ const openConversation = (
     return row.id;
   });
 
-/** Each conversation's stamp, as an ISO string, or null where it stands unstamped; null too for one the purge took. */
 const stampsOf = (ids: readonly string[]) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;

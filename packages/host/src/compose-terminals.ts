@@ -48,70 +48,36 @@ import type { HostKernel } from "./host-kernel.js";
 import { openedUnderCredential } from "./relay-credential.js";
 import type { RunMode } from "./run-mode.js";
 
-/**
- * compose-terminals.ts -- a coding agent's terminals, on the window's behalf: its shells listed, started, named, and ended, its sandbox resumed, and each shell a panel attached held open on the service's relay.
- *
- * The REST calls are one service call each, answered whole. An attached
- * shell is a connection the desktop named, held here on one fiber for as
- * long as the tab wants it: the fiber opens the relay socket under the
- * account's credential (`relay-credential.ts`: the desktop's bearer, or in
- * a browser tab the page's cookie, which the browser carries itself), hands
- * up what the shell printed as `TERMINAL_OUTPUT` events named by that
- * connection, and says how the connection stands as `TERMINAL_STATE`
- * events. A socket that dropped — a sleep, a network change, the relay
- * function's bound — is opened again on its own, after a wait that doubles
- * to ten seconds and starts over once the shell attaches; one whose agent
- * has not opened its sandbox is asked after every five seconds; and one the
- * relay ended as idle, stopped, gone, or exited, or one the deployment
- * serves no relay for, stays ended until the tab attaches again. A wake
- * after the Mac slept cuts every wait short. Output is paced to what the
- * tab has drawn: past `PAUSE_ABOVE_BYTES` unacked the socket is no longer
- * read, so the relay backs up rather than this process. Nothing a shell
- * printed is kept here, logged, or counted: it is handed to the event and
- * let go.
- */
-
-/** What one relay socket hands up: a binary frame's bytes, a text frame, or the close code that ended it, last. */
 export type TerminalSocketArrival =
   | { readonly bytes: Uint8Array }
   | { readonly text: string }
   | { readonly close: number };
 
-/** What the host sends on a relay socket: typed bytes, or a text frame. */
 export type TerminalSocketFrame = { readonly bytes: Uint8Array } | { readonly text: string };
 
-/** An open relay socket: what arrives on it, ending with its close, and what the host does with it. */
 export interface TerminalSocket {
   readonly arrivals: Stream.Stream<TerminalSocketArrival>;
   send(frame: TerminalSocketFrame): Effect.Effect<void>;
-  /** Stops reading the network until `resume`, so the far side holds what it has not sent. */
   readonly pause: Effect.Effect<void>;
   readonly resume: Effect.Effect<void>;
 }
 
-/** How an open ended: the socket, the status the upgrade was refused with, or nothing that answered. */
 export type TerminalSocketOpening =
   | { readonly socket: TerminalSocket }
   | { readonly refused: number }
   | { readonly unreachable: true };
 
-/** Opens one relay socket with the handshake headers given; the scope's close closes it. */
 export type OpenTerminalSocket = (
   url: string,
   headers: Readonly<Record<string, string>>,
 ) => Effect.Effect<TerminalSocketOpening, never, Scope.Scope>;
 
-/** How long a connection waits before it opens its socket again. */
 export const TERMINAL_RECONNECT = {
-  /** The first wait after a drop, doubling on each drop before the shell attaches again. */
   FIRST: Duration.millis(500),
-  /** The longest wait after a drop. */
   LONGEST: Duration.seconds(10),
-  /** The wait between asks while the agent has not opened its sandbox. */
   STARTING_EVERY: Duration.seconds(5),
 } as const;
 
-/** The service's side of the terminals, as this concern asks it. */
 export type TerminalClient = Pick<
   HostedTerminalClient,
   "list" | "create" | "rename" | "kill" | "resume"
@@ -127,20 +93,16 @@ export interface TerminalsDependencies {
 }
 
 export interface TerminalsComposer extends Composer {
-  /** Every connection ended, as a sign-out ends them; each tab hears it idle, so a key press attaches again. */
   readonly reset: Effect.Effect<void>;
 }
 
-/** The shells' own methods: the concern's, but the live view's beside them (`compose-browser-live.ts`). */
 type ShellMethods = Omit<
   PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.TERMINALS>,
   keyof BrowserLiveConcern["methods"]
 >;
 
-/** The status of an upgrade a server refused for want of itself rather than the ask: it may answer the next one. */
 const SERVER_ERROR_STATUS = 500;
 
-/** The status of an upgrade to a path the deployment does not serve, which the relay never answers of an agent or shell. */
 const NOT_FOUND_STATUS = 404;
 
 const RECONNECT_BACKOFF = Schedule.exponential(TERMINAL_RECONNECT.FIRST).pipe(
@@ -149,7 +111,6 @@ const RECONNECT_BACKOFF = Schedule.exponential(TERMINAL_RECONNECT.FIRST).pipe(
   ),
 );
 
-/** The states a relay's close ends a connection in, by its code; any other close is a drop. */
 const ENDED_BY_CLOSE: ReadonlyMap<number, TerminalConnection> = new Map([
   [TERMINAL_RELAY_CLOSE.IDLE, TERMINAL_CONNECTION.IDLE],
   [TERMINAL_RELAY_CLOSE.STOPPED, TERMINAL_CONNECTION.STOPPED],
@@ -157,49 +118,37 @@ const ENDED_BY_CLOSE: ReadonlyMap<number, TerminalConnection> = new Map([
   [TERMINAL_RELAY_CLOSE.EXITED, TERMINAL_CONNECTION.EXITED],
 ]);
 
-/** How one socket's life ended, where the connection does not try again on its own schedule. */
 const SOCKET_ENDING = {
-  /** The connection is over until the tab attaches again. */
   ENDED: "ended",
-  /** The shell had attached, and the socket dropped: the connection opens again, its wait started over. */
   DROPPED: "dropped",
 } as const;
 
 type SocketEnding = (typeof SOCKET_ENDING)[keyof typeof SOCKET_ENDING];
 
-/** The socket dropped, or never opened, before the shell attached. */
 class RelayDropped extends Data.TaggedError("RelayDropped") {}
 
-/** The agent has not opened its sandbox yet. */
 class SandboxStarting extends Data.TaggedError("SandboxStarting") {}
 
-/** One attached shell, as the desktop named it and as it stands. */
 interface Connection {
   readonly connectionId: string;
   readonly agentId: string;
   readonly terminalId: string;
   cols: number;
   rows: number;
-  /** The socket the shell is attached on; none while the connection opens or waits. */
   socket: TerminalSocket | undefined;
-  /** Bytes handed up that the tab has not acked. */
   unacked: number;
   paused: boolean;
-  /** What was typed while the connection was reopening, in order, for the socket that attaches next. */
   typedWhileAway: Uint8Array[];
 }
 
-/** The most typing a reopening connection holds for its next socket; typing past it is let go, as a terminal far behind would. */
 const TYPED_WHILE_AWAY_MAX_BYTES = 64 * 1024;
 
 const readServiceFrame = readEither(Schema.fromJsonString(terminalRelayServiceFrameSchema));
 
-/** A text frame as the relay's own, or nothing where it is not JSON this build reads. */
 function serviceFrame(text: string) {
   return Result.getOrUndefined(readServiceFrame(unparsedWire(text)));
 }
 
-/** The relay's resize frame for a connection's size as it stands. */
 function resizeFrame(connection: Pick<Connection, "cols" | "rows">): string {
   return JSON.stringify({
     type: TERMINAL_RELAY_FRAME.RESIZE,
@@ -223,7 +172,6 @@ export function composeTerminals(
   });
 }
 
-/** The composer's table and its connections, built over its seams, the map every connection's fiber is held in, and the host's HTTP client. */
 function composed(
   dependencies: TerminalsDependencies,
   fibers: FiberMap.FiberMap<string>,
@@ -246,7 +194,6 @@ function composed(
       ),
     );
 
-  /** A shell's bytes handed up, and the socket paused once the tab has fallen far enough behind. */
   const output = (connection: Connection, socket: TerminalSocket, bytes: Uint8Array) =>
     Effect.gen(function* () {
       kernel.emit(
@@ -262,12 +209,6 @@ function composed(
   const opened = (address: string) =>
     openedUnderCredential(account.credential, openSocket, address);
 
-  /**
-   * One socket's life: opened, read until it closes, and its close read as
-   * how the connection stands. A drop before the shell attached fails, for
-   * the backoff to wait on; one after it answers dropped, so the wait starts
-   * over; an agent with no sandbox yet fails as starting.
-   */
   const attempt = (connection: Connection) =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -285,7 +226,6 @@ function composed(
         if ("unreachable" in opening) return yield* drop;
         if ("refused" in opening) {
           if (opening.refused >= SERVER_ERROR_STATUS) return yield* drop;
-          // A relay this deployment does not serve is said as such, never as a shell gone, which would close the tab.
           const ended =
             opening.refused === NOT_FOUND_STATUS
               ? TERMINAL_CONNECTION.UNAVAILABLE
@@ -295,11 +235,9 @@ function composed(
         }
         const { socket } = opening;
         Object.assign(connection, { socket, unacked: 0, paused: false });
-        // A resize while the socket opened reached no socket, so the size the address carried is set right now.
         if (connection.cols !== openedAt.cols || connection.rows !== openedAt.rows) {
           yield* socket.send({ text: resizeFrame(connection) });
         }
-        // Note that only this socket is let go here, because a wake may already have opened the next one.
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
             if (connection.socket === socket) connection.socket = undefined;
@@ -318,7 +256,6 @@ function composed(
           if (frame?.type === TERMINAL_RELAY_FRAME.EXITED) exitCode = frame.code;
           if (frame?.type !== TERMINAL_RELAY_FRAME.ATTACHED) return Effect.void;
           attached = true;
-          // What was typed while the socket was away reaches the shell first, in the order it was typed.
           const typed = connection.typedWhileAway.splice(0);
           return Effect.andThen(
             tell(connection, TERMINAL_CONNECTION.ATTACHED),
@@ -344,7 +281,6 @@ function composed(
       }),
     );
 
-  /** A connection's whole life, from its first open until the relay ends it or the tab lets it go. */
   const session = (connection: Connection) =>
     Effect.gen(function* () {
       yield* tell(connection, TERMINAL_CONNECTION.CONNECTING);
@@ -365,11 +301,9 @@ function composed(
       );
     });
 
-  /** The connection's fiber started, or started over, in the map under its id. */
   const run = (connection: Connection) =>
     Effect.asVoid(FiberMap.run(fibers, connection.connectionId, session(connection)));
 
-  /** The service asked behind the gate, over the host's own HTTP client; an answer it could not give is the call's refusal. */
   const asked = <Answer extends object>(
     call: Effect.Effect<Answer | TerminalUnanswered, never, HttpClient.HttpClient>,
   ): Effect.Effect<WireValue, RefusedRefusal> =>
@@ -382,7 +316,6 @@ function composed(
       return carried(answer);
     });
 
-  /** The connection a call names, where it stands. */
   const named = (connectionId: string) => connections.get(connectionId);
 
   const encoder = new TextEncoder();
@@ -466,7 +399,6 @@ function composed(
           yield* connection.socket.send({ bytes });
           return {};
         }
-        // Note that typing on a connection that ended is let go, because the tab attaches again on a key press; one still reopening holds it.
         if (!(yield* FiberMap.has(fibers, connectionId))) return {};
         const held = connection.typedWhileAway.reduce((sum, typed) => sum + typed.length, 0);
         if (held + bytes.length <= TYPED_WHILE_AWAY_MAX_BYTES)
@@ -516,7 +448,6 @@ function composed(
       }),
     [GATEWAY_METHOD.TERMINALS_WAKE]: () =>
       Effect.gen(function* () {
-        // A connection still standing after a sleep may be waiting out a backoff, or on a socket the sleep killed without a word: each opens again now.
         for (const connection of connections.values()) {
           if (yield* FiberMap.has(fibers, connection.connectionId)) yield* run(connection);
         }

@@ -42,25 +42,12 @@ import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
 
-/**
- * mac-command-store.ts -- the commands an account's agents queued for its Mac, and when a Mac last listened for them.
- *
- * Every function is an effect over the ambient `SqlClient`, keyed by the
- * account, so no account claims, settles, or reads another's commands. A
- * command is claimed once, by the first Mac whose read names its kind and
- * takes it, and settled once, by a Mac after it was claimed; the call that
- * queued it reads the result and withdraws the row. A Mac that follows its
- * account's commands live subscribes to the unclaimed ones of its kinds
- * (`macCommandsLiveStatement`) and claims each by its id.
- */
-
 const CommandKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
 const KindSchema = Schema.Literals(Object.values(MAC_COMMAND_KIND));
 
 const KindsSchema = Schema.Array(KindSchema);
 
-/** A claimed row as the Mac is handed it: a shell command's text, and how long it may run. */
 const ClaimedSchema = Schema.Struct({
   id: Schema.String,
   kind: KindSchema,
@@ -113,13 +100,6 @@ const insertCommand = SqlSchema.void({
     ),
 });
 
-/**
- * Whether a command still waits to be claimed by a read naming the kinds
- * given: of one of them, unclaimed, and queued at or after the instant
- * given, so a command no Mac took in time, or a row a call that died left
- * behind, is never run by a Mac that reads later, and a Mac is never
- * handed a kind it did not name.
- */
 function waiting(
   userId: string,
   queuedSince: Date,
@@ -226,37 +206,23 @@ const findResult = SqlSchema.findOneOption({
     ),
 });
 
-/** A child conversation, which a worker runs in, read through to the root its lines were sent to. */
 const parent = alias(conversations, "parent");
 
-/** The agent that sent a line, read for whose it is. */
 const sendingAgent = alias(agentTable, "sending_agent");
 
-/** The root's developer lines before one of them, read for whether it is the first, the prompt the agent was started on. */
 const earlierLine = alias(messages, "earlier_line");
 
-/** The agent the root conversation is of, read for whether it was started on a prompt or a description at all, and what fired the automation's run that started it. */
 const startedAgent = alias(agentTable, "started_agent");
 
-/** The firings whose run hands its agent words its owner did not write beside the automation's prompt. */
 const OUTSIDE_FIRINGS = Object.values(AUTOMATION_FIRING).filter(
   (kind) => FIRING_HANDS_OUTSIDE_WORDS[kind],
 );
 
-/** That the automation's run that started the root's agent was fired by words its owner did not write, as the agent's origin keeps it whatever becomes of the automation. */
 const STARTED_ON_OUTSIDE_WORDS = inArray(
   sql<string | null>`${startedAgent.automationOrigin} -> 'firing' ->> 'kind'`,
   OUTSIDE_FIRINGS,
 );
 
-/**
- * That a run fired by words its owner did not write was handed to the root's
- * agent: the run that started it, or one sent to it, which is claimed for
- * the agent before its line is sent. A run that failed handed it nothing,
- * since a send refused withdraws its line, so only one that started counts.
- * Note that the runs go with their automation, so this holds only while it
- * stands.
- */
 const HANDED_OUTSIDE_RUN = exists(
   queryBuilder
     .select({ id: automationRun.id })
@@ -273,16 +239,12 @@ const HANDED_OUTSIDE_RUN = exists(
     ),
 );
 
-/** What an automation's, GitHub's, or a Slack message's line says of whether it carries words its owner did not write: `true` or `false`, or null on a line kept before it said. */
 const LINE_OUTSIDE_WORDS = sql<string | null>`${messages.metadata} ->> 'outside_words'`;
 
-/** The channel a line says carried it. */
 const LINE_CHANNEL = sql<string | null>`${messages.metadata} ->> 'channel'`;
 
-/** The logins of GitHub's Apps, every one of which ends with `[bot]`, which no person's login can spell. */
 const APP_LOGINS = "%[bot]";
 
-/** That a GitHub line carries words a person chose, what a review or a comment says or a review's inline comments, which its metadata keeps only where there are some, by no App. */
 const GITHUB_LINE_HAS_PERSONS_WORDS = and(
   or(
     isNotNull(sql`${messages.metadata} ->> 'words'`),
@@ -291,44 +253,12 @@ const GITHUB_LINE_HAS_PERSONS_WORDS = and(
   notLike(sql<string>`${messages.metadata} ->> 'by'`, APP_LOGINS),
 );
 
-/** A line another account put into a conversation: what kind of sender put it there, none for a line kept before senders were, when, and whether the transcript shows it, which a line its hand-over withdrew it does not. */
 const ForeignLineSchema = Schema.Struct({
   sender: Schema.NullOr(messageSenderSchema),
   createdAt: InstantColumnSchema,
   shown: Schema.Boolean,
 });
 
-/**
- * The first line of the conversation's root, or the root's own where it is one,
- * that another account put there: a member other than the owner, a former
- * member, or an agent that is not the owner's own or is gone. An
- * automation's line counts where what fired its run put words its owner did
- * not write beside the automation's prompt: a webhook's body, an
- * integration's event, or a GitHub event's (`FIRING_HANDS_OUTSIDE_WORDS`),
- * as the line says itself (`outside_words`); a line kept before it said
- * counts where the run that started the agent was so fired, or a run so
- * fired was sent to it while its automation stands. A schedule's run and a
- * "Run now" carry the owner's prompt alone. A Slack message's line counts
- * where its prompt carries the thread's earlier messages anyone but its
- * writer wrote (`outside_words`, `slack/slack-agent-starts.ts`); a later
- * message from another member counts as any teammate's line does. A GitHub line counts where it carries a review's or a
- * comment's words by a person other than the owner, which on a public
- * repository anyone may write, as the line says itself (`outside_words`,
- * `github/agent-wakes.ts`); an App's words never count. A line kept before
- * it said counts where it carries a person's words, whoever wrote them,
- * since nothing kept says whose GitHub account wrote them. A failed check's
- * line carries none. A developer's
- * line written before senders were kept, a `user` row with no sender, counts
- * too, because nothing says whose it was; all but the root's first where the
- * agent was started on a prompt or a description, which that first line is, written
- * untagged by eve's relay for every agent started before the start wrote it
- * with its sender (`coder-host/start.ts`), unless the automation's run that
- * started the agent was fired by words its owner did not write, which that
- * first line holds. A blank agent was started on
- * none, so its first line is whoever's first steer, and counts. A line its hand-over withdrew counts as
- * well, unlike in every read that shows a line, because eve may still hand
- * it to a turn (`writer.ts`'s `withdrawUntakenLine`).
- */
 const findForeignLine = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: ForeignLineSchema,
@@ -411,14 +341,8 @@ const findForeignLine = SqlSchema.findOneOption({
     ),
 });
 
-/** The agent whose conversation, or whose worker's, is asked after, read for its task. */
 const ownAgent = alias(agentTable, "own_agent");
 
-/**
- * The account whose Mac the conversation's commands run on: the assignee of
- * the task its agent works on, or else the agent's starter, read through a
- * worker's conversation to the agent it was delegated from.
- */
 const findMacOwner = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: Schema.Struct({ userId: Schema.String }),
@@ -446,36 +370,18 @@ const deleteCommand = SqlSchema.void({
     ),
 });
 
-/** Records that a Mac of the account is listening now, for shell commands, which every Mac runs. */
 export function markMacListening(userId: string): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => upsertListener({ userId, now }));
 }
 
-/** Whether a Mac of the account listened at or after the instant given. */
 export function macListeningSince(userId: string, since: Date): TaskStoreEffect<boolean> {
   return Effect.map(findListener({ userId, since }), Option.isSome);
 }
 
-/**
- * Whether anyone but the conversation's owner has put words into it: a line
- * another member sent, one an agent that is not the owner's own sent, one an
- * automation sent with words its owner did not write, such as a webhook's
- * body, one GitHub sent with a review or a comment by a person other than
- * the owner, or one whose sender was never kept past the opening prompt, in the conversation
- * or, for a worker's, in the agent's it was delegated from. Note that a line
- * the service itself sends, such as a wakeup or a failed check, is not
- * counted, because no other account wrote it.
- */
 export function heardFromAnotherAccount(target: ConversationTarget): TaskStoreEffect<boolean> {
   return Effect.map(findForeignLine(target), Option.isSome);
 }
 
-/**
- * The account whose Mac the conversation's `run_on_mac` runs on: the
- * assignee of its agent's task, whoever started the agent and whoever has
- * written to it since, or the conversation's own account where the agent
- * works on no task, its task is assigned to no one, or it is no agent's.
- */
 export function macOwnerOf(target: ConversationTarget): TaskStoreEffect<string> {
   return Effect.map(
     findMacOwner(target),
@@ -483,7 +389,6 @@ export function macOwnerOf(target: ConversationTarget): TaskStoreEffect<string> 
   );
 }
 
-/** Queues one command for the account's Mac, under the id its caller minted. */
 export function queueMacCommand(userId: string, queued: MacCommand): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     insertCommand({
@@ -497,10 +402,6 @@ export function queueMacCommand(userId: string, queued: MacCommand): TaskStoreEf
   );
 }
 
-/**
- * Whether any command of the account, of the kinds given, queued at or
- * after `queuedSince` waits to be claimed, which is what a held read looks at.
- */
 export function macCommandsWaiting(
   userId: string,
   queuedSince: Date,
@@ -509,10 +410,6 @@ export function macCommandsWaiting(
   return Effect.map(findWaiting({ userId, queuedSince, kinds }), (rows) => rows.length > 0);
 }
 
-/**
- * Claims every command of the account, of the kinds given, queued at or
- * after `queuedSince` that waits, for the Mac whose read this is.
- */
 export function claimMacCommands(
   userId: string,
   queuedSince: Date,
@@ -523,12 +420,6 @@ export function claimMacCommands(
   );
 }
 
-/**
- * Claims one command of the account by its id, for the Mac that asked,
- * where it is of the kinds given, still waits, and was queued at or after
- * `queuedSince`; none where another Mac took it first, its call withdrew it,
- * or it waited too long.
- */
 export function claimMacCommand(
   userId: string,
   id: string,
@@ -540,15 +431,6 @@ export function claimMacCommand(
   );
 }
 
-/**
- * The account's commands of the kinds given that no Mac has claimed yet,
- * written as a live read, each column under the key `live-wire.ts` reads it
- * by and the instant it was queued in epoch milliseconds. Note that it names
- * no claim window, because a live read measures nothing from the clock: the
- * claim (`claimMacCommand`) keeps the window, on the service's clock. The
- * order is the reader's to keep. None where the statement names a value a
- * live read cannot carry.
- */
 export function macCommandsLiveStatement(
   userId: string,
   kinds: readonly MacCommandKind[],
@@ -577,7 +459,6 @@ export function macCommandsLiveStatement(
   );
 }
 
-/** Keeps a claimed command's result; false where the account holds no such command claimed and unsettled. */
 export function settleMacCommand(
   userId: string,
   id: string,
@@ -586,7 +467,6 @@ export function settleMacCommand(
   return Effect.map(writeResult({ userId, id, result }), (rows) => rows.length > 0);
 }
 
-/** A command's result once a Mac settled it; nothing while it waits or runs. */
 export function macCommandResult(
   userId: string,
   id: string,
@@ -597,7 +477,6 @@ export function macCommandResult(
   );
 }
 
-/** Withdraws a command, settled or not, once its call stops waiting on it. */
 export function withdrawMacCommand(userId: string, id: string): TaskStoreEffect<void> {
   return deleteCommand({ userId, id });
 }

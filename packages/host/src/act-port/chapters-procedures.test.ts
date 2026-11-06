@@ -14,17 +14,6 @@ import type { ActSender } from "./base.js";
 import { chaptersProcedures } from "./chapters-procedures.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
-/**
- * The Pull request tab's chapters acts, through the act port as a window
- * calls them: a panel's Generate reaches the host with the pull request the
- * tab names, and the panel hears the chapters or why there are none; Settings' write of the chapters model reaches it the same
- * way, a model outside the set refused at the port; any other window, and a frame this build does not trust,
- * are refused in each kind's own words before the host is asked; and an
- * answer the kind's schema does not admit is refused rather than handed to
- * the tab. Synthetic ids and words.
- */
-
-// The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true };
@@ -35,7 +24,6 @@ const AGENT_ID = "6b1f3c2e-9d4a-4f1b-8c7d-2e3f4a5b6c7d";
 const RETRY_REFUSAL = "Could not read the pull request's chapters again on this system.";
 const GENERATE_REFUSAL = "Could not generate the pull request's chapters on this system.";
 
-/** Chapters made for the pull request's head. */
 const READY: PullRequestChaptersAnswerView = {
   pullRequest: {
     number: 11,
@@ -66,7 +54,6 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/** A window's act port over a host answering as told, and what it was asked, in order. */
 function windowPort(
   actor: ActSender,
   options: { trusted?: boolean; answer?: PullRequestChaptersAnswerView } = {},
@@ -127,9 +114,7 @@ it("a failure word crosses as the answer, and an answer the schema does not admi
     answer: { failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE },
   });
 
-  // A head no service names, an empty commit, which the kind's schema refuses.
   const broken = windowPort(PANEL, {
-    // SAFETY: the answer is off its schema on purpose, to be refused at the port; its type is the one the host's seam declares.
     answer: {
       pullRequest: {
         number: 11,

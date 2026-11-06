@@ -1,24 +1,3 @@
-/**
- * render-sync.ts -- writes synced tables' capture into a migration, around the statements it already holds.
- *
- * A table's capture is rendered from its declaration (`src/sync/tables.ts`)
- * and never written by hand, so a migration that syncs a table, or changes
- * the columns of one already synced, carries the capture this writes:
- *
- *     pnpm db:generate --custom --name=sync_<what>      (or a plain generate)
- *     pnpm --filter @repo/database sync:render <migration folder> <table>…
- *
- * The tables' triggers are dropped before the migration's own statements and
- * created after them, so a column a trigger's `WHEN` names can be dropped or
- * renamed, and the capture is rendered over the columns as they then stand.
- * With `--functions` only the tables' functions are replaced, after the
- * migration's own statements, for a change that leaves their columns and
- * triggers as they stand, such as logging a table:
- *
- *     pnpm --filter @repo/database sync:render <migration folder> --functions <table>…
- * The drift check (`src/sync/__tests__/capture.test.ts`) fails until the
- * migrated database carries what the declarations render.
- */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MIGRATIONS_FOLDER } from "../src/core/migrator.js";
@@ -26,10 +5,8 @@ import { syncFunctionMigration, syncFunctionName, syncMigration } from "../src/s
 import type { SyncTable } from "../src/sync/sync-table.js";
 import { SYNC_TABLES } from "../src/sync/tables.js";
 
-/** What `db:generate --custom` writes into a migration it leaves for us to fill. */
 const CUSTOM_PLACEHOLDER = "-- Custom SQL migration file, put your code below! --";
 
-/** The flag that replaces the tables' functions alone. */
 const FUNCTIONS_ONLY = "--functions";
 
 function declared(name: string): SyncTable {

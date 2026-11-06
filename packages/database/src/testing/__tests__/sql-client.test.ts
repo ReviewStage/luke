@@ -8,14 +8,11 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** The first opening migrates, about 4 s on an idle machine, so the test is held to the config's hook bar. */
 const MIGRATING_TIMEOUT_MS = 30_000;
 
-/** The PGlite calls a first opening makes that a test fails: the migration's queries, then the dump. */
 const FAILING_METHOD = { QUERY: "query", DUMP_DATA_DIR: "dumpDataDir" } as const;
 type FailingMethod = (typeof FAILING_METHOD)[keyof typeof FAILING_METHOD];
 
-/** A migrated PGlite of the test's own, closed when the test ends. */
 async function opened(t: TestContext): Promise<PGlite> {
   const client = await openMigratedPglite();
   t.onTestFinished(() => client.close());
@@ -51,11 +48,6 @@ test(
   MIGRATING_TIMEOUT_MS,
 );
 
-/**
- * Rejects the first call of `method` on a PGlite that is ready and answers
- * which PGlite that was. Note that we pass over the calls PGlite makes of its
- * own while it starts, because it dumps its own data directory then.
- */
 function failingOnce(method: FailingMethod): () => PGlite | undefined {
   let failed: PGlite | undefined;
   const refuse = (client: PGlite) => {
@@ -88,7 +80,6 @@ for (const method of Object.values(FAILING_METHOD)) {
   test(
     `a first opening whose ${method} fails is closed, and a later opening migrates afresh`,
     async (t) => {
-      // Note that we load a module of the test's own, and hide the run's dump, so no earlier opening has dumped already.
       vi.stubEnv(MIGRATED_PGLITE_ENVIRONMENT.DUMP, undefined);
       vi.resetModules();
       const fresh = await import("../sql-client.js");

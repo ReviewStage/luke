@@ -16,21 +16,9 @@ import {
   renewFirewallLaunch,
 } from "../sandbox-firewall-store.js";
 
-/**
- * The swaps a runner's launch keeps for its sandbox session, over a real
- * dialect: a launch replaces the one kept before it, a renewal writes over
- * the row as it stands and never makes one, a let-go deletes the row, one
- * account's session row is neither read, renewed, nor let go through
- * another's, and a clear and the sweep's drop delete rows by session and by
- * age. The sealed column is
- * opaque text here, as the store holds it. Synthetic accounts, sessions,
- * agents, and seals throughout.
- */
-
 const AT = new Date("2026-11-04T12:00:00Z");
 const LATER = new Date("2026-11-04T12:05:00Z");
 
-/** An account of its own and a sandbox session of its agent's. */
 const openOwner = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
@@ -39,7 +27,6 @@ const openOwner = Effect.gen(function* () {
   return { userId, sandboxSessionId: `sbx_${randomUUID()}` };
 });
 
-/** A launch under a fresh id, its seal standing in as text. */
 const launchOf = (sealedEntries: string) => ({
   version: randomUUID(),
   agentId: "agent-fixture",

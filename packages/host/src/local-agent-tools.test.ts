@@ -14,7 +14,6 @@ const NODE = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 );
 
-/** A release of the test's own: `tool-1.0/bin/tool` and a file beside it no member names, gzipped, pinned by its own size and digest. */
 const release = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const scratch = yield* temporaryDirectoryScoped("agent-tool-release-");

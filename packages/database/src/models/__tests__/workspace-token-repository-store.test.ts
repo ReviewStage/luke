@@ -12,16 +12,6 @@ import {
   workspaceTokenRepositoryAdder,
 } from "../workspace-token-repository-store.js";
 
-/**
- * The repositories members add to a workspace on their own tokens, over a
- * real dialect: every member of the workspace reads them, an account
- * outside it reads, adds, and removes none, adding twice however the name
- * is cased keeps the first adder, and a removal takes only the row of the
- * adder it names.
- *
- * Synthetic accounts, workspaces, and repositories throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;

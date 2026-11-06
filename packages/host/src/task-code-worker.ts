@@ -1,12 +1,3 @@
-/**
- * task-code-worker.ts -- the coloring process's side of `task-code-remote.ts`: each block it is sent colored in turn and answered under its id.
- *
- * The desktop's coloring process (`apps/desktop/src/utility/task-code.ts`)
- * runs this over its parent port, and so does a test over a Node child's
- * IPC channel; neither is named here. The highlighter is built in this
- * process the first time a block arrives, and a block that cannot be
- * colored is answered plain, so the asking side always hears back.
- */
 import { catchAllButInterrupt } from "@repo/runtime/effect";
 import { Effect, Option, Queue, Schema } from "effect";
 import { highlightSnippet } from "./task-code.js";
@@ -17,13 +8,11 @@ import {
   taskCodeRequestSchema,
 } from "./task-code-remote.js";
 
-/** The port the coloring process is asked over: what it is sent, and where it answers. */
 export interface TaskCodeParentPort {
   readonly onMessage: (listener: (message: unknown) => void) => void;
   readonly postMessage: (message: unknown) => void;
 }
 
-/** One block colored and answered, plain where coloring it failed. */
 function answerRequest(port: TaskCodeParentPort, request: TaskCodeRequest): Effect.Effect<void> {
   return Effect.map(
     catchAllButInterrupt(highlightSnippet(request.language, request.code), (cause) =>
@@ -36,11 +25,6 @@ function answerRequest(port: TaskCodeParentPort, request: TaskCodeRequest): Effe
   );
 }
 
-/**
- * Answers every block `port` is sent, one at a time in the order sent, for
- * as long as the process runs. Note that a message that is not a block is
- * passed over with a warning: it carries no id to answer under.
- */
 export function serveTaskCode(port: TaskCodeParentPort): Effect.Effect<never> {
   return Effect.gen(function* () {
     const sent = yield* Queue.unbounded<unknown>();

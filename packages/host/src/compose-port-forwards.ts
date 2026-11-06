@@ -1,29 +1,3 @@
-/**
- * compose-port-forwards.ts -- a coding agent's cloud ports forwarded to this Mac's `127.0.0.1`, on the window's behalf: forwarding read and turned on or off for one agent at a time, a loopback listener kept for each port the service detects, and each connection it accepts carried over the service's tunnel.
- *
- * How the forwarded agent's forwarding stands is told to the windows as
- * `PORT_FORWARDS_CHANGED` each time it moves, which the client lays in app
- * state (`portForwarding`); nothing reads it on a timer of its own.
- *
- * Turning forwarding on reads the agent's listening ports every few seconds
- * for as long as it is on, forwarding what already listens; nothing is
- * started or woken in the sandbox on its behalf, and a stopped sandbox reads
- * as not running. Each port read is listened on at `127.0.0.1` (the
- * `ListenOnLoopback` seam the desktop's launch hands over `node:net`), on
- * the same port where it is free and on the next free one where it is not;
- * a port no longer read is let go, its connections with it. Turning it on
- * for another agent turns it off for the first.
- *
- * A port's tunnel is one relay socket (`sandbox-tunnel-wire.ts`) opened
- * under the account's credential (`relay-credential.ts`) when the first
- * connection is accepted, every later connection a channel on it. A socket
- * that closes, idle, the sandbox stopped, or the relay function's bound,
- * closes the connections it carried; the listener stays, and the next
- * connection it accepts opens the socket again. That lazy open is the whole
- * of reconnecting: nothing is retried on a schedule. No byte a connection
- * carries is read beyond its channel's frame, kept, logged, or counted.
- */
-
 import { type HostedAgentPortsClient, portForwardAddress, webSocketOrigin } from "@repo/features";
 import {
   PORT_FORWARD_STATE,
@@ -51,28 +25,21 @@ import type { HostKernel } from "./host-kernel.js";
 import { openedUnderCredential } from "./relay-credential.js";
 import type { RunMode } from "./run-mode.js";
 
-/** One TCP connection a loopback listener accepted. */
 export interface LoopbackConnection {
-  /** What the connection's far side sent, ending once it closes. */
   readonly received: Stream.Stream<Uint8Array>;
   write(bytes: Uint8Array): Effect.Effect<void>;
-  /** Ends the connection once what was written is flushed. */
   readonly close: Effect.Effect<void>;
 }
 
-/** Listens on this Mac's `127.0.0.1` at the port given for the scope's life: the connections it accepts, or nothing where the port is taken. */
 export type ListenOnLoopback = (
   port: number,
 ) => Effect.Effect<Stream.Stream<LoopbackConnection> | undefined, never, Scope.Scope>;
 
 export const PORT_FORWARD = {
-  /** How often the forwarded agent's listening ports are read while forwarding is on. */
   LOOK_EVERY: Duration.seconds(3),
-  /** How many local ports, from the sandbox's own up, are tried before a port is given up. */
   LOCAL_PORT_TRIES: 20,
 } as const;
 
-/** The service's side of the forward, as this concern asks it. */
 type PortForwardClient = Pick<HostedAgentPortsClient, "list">;
 
 export interface PortForwardsDependencies {
@@ -86,18 +53,15 @@ export interface PortForwardsDependencies {
 }
 
 export interface PortForwardsComposer extends Composer {
-  /** Forwarding turned off, as a sign-out turns it off. */
   readonly reset: Effect.Effect<void>;
 }
 
-/** One port's open tunnel: its socket, and the connections it carries, by channel. */
 interface Tunnel {
   readonly socket: TerminalSocket;
   readonly channels: Map<number, LoopbackConnection>;
   nextChannel: number;
 }
 
-/** One port forwarded: the local port it is listened on, if any, and its tunnel, open or opening, where it has one. */
 interface Forward {
   readonly port: number;
   readonly localPort: number | undefined;
@@ -106,7 +70,6 @@ interface Forward {
   connected: boolean;
 }
 
-/** The one agent forwarded, everything it began in its scope. */
 interface Forwarding {
   readonly agentId: string;
   readonly scope: Scope.Closeable;
@@ -118,14 +81,12 @@ const readFrame = readEither(Schema.fromJsonString(tunnelFrameSchema), {
   excess: EXCESS_KEYS.DROP,
 });
 
-/** A channel frame as the text the relay reads, its bytes base64-encoded. */
 function frameText(frame: TunnelFrame): string {
   return JSON.stringify(
     frame.type === TUNNEL_FRAME.DATA ? { ...frame, data: Base64.encode(frame.data) } : frame,
   );
 }
 
-/** What an agent forwarding is off for answers. */
 const OFF: PortForwardingAnswer = { on: false, running: false, ports: [] };
 
 export function composePortForwards(
@@ -140,7 +101,6 @@ export function composePortForwards(
     let forwarding: Forwarding | undefined;
     let toldText = JSON.stringify(null);
 
-    /** How the forwarded agent's forwarding stands, told to the windows where it moved since it was last told. */
     const tell = Effect.sync(() => {
       const told: PortForwarding =
         forwarding === undefined
@@ -152,7 +112,6 @@ export function composePortForwards(
       kernel.emit(GATEWAY_EVENT.PORT_FORWARDS_CHANGED, carried(told));
     });
 
-    /** A text frame the relay sent: a channel's bytes written to its connection, or its close ending it. */
     const heard = (tunnel: Tunnel, text: string) => {
       const frame = Result.getOrUndefined(readFrame(unparsedWire(text)));
       const connection = frame === undefined ? undefined : tunnel.channels.get(frame.channel);
@@ -163,7 +122,6 @@ export function composePortForwards(
       return connection.close;
     };
 
-    /** One port's socket from its open until it closes, every connection it carried closed with it. */
     const tunneled = (
       agentId: string,
       forward: Forward,
@@ -200,7 +158,6 @@ export function composePortForwards(
       return Effect.ensuring(Effect.scoped(open), ended);
     };
 
-    /** The port's tunnel: the one open or opening, or one opened now; nothing where it would not open. */
     const tunnelOf = (agentId: string, forward: Forward) =>
       Effect.suspend(() => {
         if (forward.tunnel !== undefined) return Deferred.await(forward.tunnel);
@@ -212,7 +169,6 @@ export function composePortForwards(
         );
       });
 
-    /** One accepted connection carried on a channel of its port's tunnel until either side ends it. */
     const carry = (agentId: string, forward: Forward, connection: LoopbackConnection) =>
       Effect.gen(function* () {
         const tunnel = yield* tunnelOf(agentId, forward);
@@ -226,11 +182,9 @@ export function composePortForwards(
             ? send({ type: TUNNEL_FRAME.DATA, channel, data })
             : Effect.void,
         );
-        // Note that a channel the relay closed first is gone already, so nothing more is said of it.
         if (tunnel.channels.delete(channel)) yield* send({ type: TUNNEL_FRAME.CLOSE, channel });
       });
 
-    /** The first local port from the sandbox's own up that listens, and what it accepts; nothing where none of them is free. */
     const listened = (port: number) =>
       Effect.gen(function* () {
         const last = Math.min(port + PORT_FORWARD.LOCAL_PORT_TRIES - 1, FORWARD_PORT.MAX);
@@ -241,7 +195,6 @@ export function composePortForwards(
         return undefined;
       });
 
-    /** One port forwarded in a scope of its own under the agent's: its listener, and a fiber for each connection it accepts. */
     const forwarded = (current: Forwarding, port: number) =>
       Effect.gen(function* () {
         const scope = yield* Scope.fork(current.scope);
@@ -264,7 +217,6 @@ export function composePortForwards(
         return forward;
       });
 
-    /** One read of the agent's ports, the forwards made to follow it: each port read forwarded, and each no longer read let go. */
     const look = (current: Forwarding) =>
       Effect.gen(function* () {
         const answer = yield* Effect.provideService(
@@ -295,7 +247,6 @@ export function composePortForwards(
         : Effect.andThen(Scope.close(ending.scope, Exit.void), tell);
     });
 
-    /** Forwarding started for the agent, and whichever agent was forwarded before let go. */
     const turnOn = (agentId: string) =>
       Effect.gen(function* () {
         if (forwarding?.agentId === agentId) return;
@@ -314,7 +265,6 @@ export function composePortForwards(
         );
       });
 
-    /** How the agent's forwarding stands, its ports the lowest first. */
     const standing = (agentId: string): PortForwardingAnswer => {
       if (forwarding?.agentId !== agentId) return OFF;
       const forwards = [...forwarding.forwards.values()].sort((a, b) => a.port - b.port);

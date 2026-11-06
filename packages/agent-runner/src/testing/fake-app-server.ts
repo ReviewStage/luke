@@ -1,26 +1,9 @@
-/**
- * fake-app-server.ts -- a scripted `codex app-server` for the runner's tests: each spawn answers the runner's JSON-RPC from P16's recorded notifications, and keeps what the operating system would have seen.
- *
- * It is a `ChildProcessSpawner`, the door the runner spawns the real process
- * through, so a test sees what the sandbox would: the program, argv,
- * directory and environment each process was started with, every message
- * the runner wrote to its stdin in order, and whether it was ended. Each
- * spawned process plays one script: an exchange per message the runner
- * sends, matched by method, whose recorded reply is written to stdout with
- * the recorded request's id replaced by the runner's. As the real app-server
- * does (checked against codex 0.163.0, which echoes it), a `userMessage` item
- * in a turn's reply carries the `clientUserMessageId` the runner sent with
- * that `turn/start` or `turn/steer` as its `clientId`; P16's recording was
- * made without one, so its items say `null`.
- */
-
 import { readFileSync } from "node:fs";
 import { type Cause, Effect, Layer, Option, Predicate, Queue, Schema, Sink, Stream } from "effect";
 import * as PlatformError from "effect/PlatformError";
 import { type ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { RequestMethod, RequestParams } from "../app-server.js";
 
-/** One message of app-server's stdio, as P16 recorded it, every field it uses kept. */
 const RecordedMessageSchema = Schema.Struct({
   id: Schema.optionalKey(Schema.Union([Schema.Number, Schema.String])),
   method: Schema.optionalKey(Schema.String),
@@ -31,7 +14,6 @@ const RecordedMessageSchema = Schema.Struct({
 });
 export type RecordedMessage = typeof RecordedMessageSchema.Type;
 
-/** One line of P16's recording: which phase of the probe, which way it went, and what it said. */
 const RecordedLineSchema = Schema.Struct({
   phase: Schema.String,
   direction: Schema.Literals(["client", "server"]),
@@ -43,47 +25,30 @@ const decodeClientId = Schema.decodeUnknownOption(
   Schema.Struct({ clientUserMessageId: Schema.String }),
 );
 
-/** What one spawned process replies to one message of the runner's, matched by its method. */
 export interface Exchange {
   readonly method: string;
   readonly reply: readonly RecordedMessage[];
-  /** Holds the answer back, writing the reply's notifications first, until this settles. */
   readonly holdAnswer?: Effect.Effect<void>;
-  /**
-   * Runs before anything of the reply is written, with the process as the
-   * operating system saw it: what app-server does on its own meanwhile, such
-   * as running its provider's token command as a turn's requests go out.
-   */
   readonly beforeReply?: (process: Spawned) => Effect.Effect<void>;
 }
 
-/** One spawned process's script: its exchanges in order, and, where it crashes, what it last says. */
 export interface Script {
   readonly exchanges: readonly Exchange[];
-  /** Ends the process's stdout once its exchanges are played (at once, with none), with this on stderr. */
   readonly exitWith?: string;
 }
 
-/** One process as the operating system saw it. */
 export interface Spawned {
   readonly program: string;
   readonly args: readonly string[];
   readonly cwd: string | undefined;
   readonly env: Readonly<Record<string, string | undefined>>;
-  /** Every message the runner wrote to its stdin, in order. */
   readonly received: RecordedMessage[];
-  /** A message the script did not expect, by its method, where one came. */
   readonly unexpected: string[];
   ended: boolean;
 }
 
 const RECORDING = new URL("./app-server.jsonl", import.meta.url);
 
-/**
- * P16's hermetic recording of codex 0.163.0's app-server as exchanges, per
- * phase: each message the probe sent, and what app-server wrote after it
- * until the probe's next message.
- */
 export function recordedExchanges(phase: string): readonly Exchange[] {
   const exchanges: { method: string; reply: RecordedMessage[] }[] = [];
   const lines = readFileSync(RECORDING, "utf8").split("\n");
@@ -98,21 +63,15 @@ export function recordedExchanges(phase: string): readonly Exchange[] {
   return exchanges;
 }
 
-/** The params of each message of `method` a process received, in order, as the protocol types them. */
 export function received<M extends RequestMethod>(
   process: Pick<Spawned, "received"> | undefined,
   method: M,
 ): RequestParams<M>[] {
   return (process?.received ?? []).flatMap((message) =>
-    // SAFETY: the runner sends each request with the params the pinned protocol types for its method.
     message.method === method ? [message.params as RequestParams<M>] : [],
   );
 }
 
-/**
- * A reply as the lines app-server writes: the recorded request's id made the
- * runner's, and a turn's user message named by the runner's client id.
- */
 function replyLines(
   reply: readonly RecordedMessage[],
   answering: RecordedMessage,
@@ -126,7 +85,6 @@ function replyLines(
         : message;
     const line = JSON.stringify(answered);
     if (message.method === undefined) return { line, isAnswer: true };
-    // Note that only a `userMessage` item carries a `clientId` in the protocol.
     return {
       line: Option.isSome(clientId)
         ? line.replace(
@@ -141,7 +99,6 @@ function replyLines(
 
 const encoder = new TextEncoder();
 
-/** A spawner that plays `scripts[n]` for the n-th process spawned; one past the scripts fails to start. */
 export function fakeAppServer(scripts: readonly Script[]) {
   const spawned: Spawned[] = [];
   const spawn = (command: ChildProcess.Command) =>

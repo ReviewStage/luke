@@ -36,18 +36,6 @@ import {
 } from "../task-section-store.js";
 import { createTask, deleteTask, updateTask } from "../task-store.js";
 
-/**
- * A section is its maker's own: two members of one workspace share its
- * tasks, and each reads only the sections they made and the tasks they put
- * in them, through the store's public reads and writes, over a real
- * dialect. A task stands in one section at a time, deleting a section
- * deletes none of its tasks, and nobody puts a task in a section that is
- * not theirs or a task of another workspace in one. An agent with no task
- * is kept on the same terms beside the tasks.
- *
- * Synthetic accounts, workspaces, sections, and tasks throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -55,7 +43,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** Dean's workspace with Charles a member of it, and two tasks Dean started there. */
 const openSharedWorkspace = Effect.gen(function* () {
   const dean = yield* openAccount;
   const charles = yield* openAccount;
@@ -66,7 +53,6 @@ const openSharedWorkspace = Effect.gen(function* () {
   return { dean, charles, workspace, first, second };
 });
 
-/** An agent with no task the account started in the workspace, or on the task given. */
 const openAgent = (userId: string, organizationId: string, taskId?: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -90,13 +76,11 @@ const openAgent = (userId: string, organizationId: string, taskId?: string) =>
     return id;
   });
 
-/** A write the test expects taken, answering the sections as they then stand and the transaction it wrote them in. */
 const writtenWithTxid = (userId: string, write: TaskSectionWrite) =>
   Effect.map(writeTaskSections(userId, write), (answer) =>
     Option.getOrElse(answer, () => assert.fail("the write was refused")),
   );
 
-/** A write the test expects taken, answering the sections as they then stand. */
 const written = (userId: string, write: TaskSectionWrite) =>
   Effect.map(
     writtenWithTxid(userId, write),
@@ -131,7 +115,6 @@ const placeAgent = (
   ...(position === undefined ? undefined : { position }),
 });
 
-/** Every part's rows in one order, by what keys each, since the live statements keep none and the host orders them. */
 function byKey(rows: SidebarRows): SidebarRows {
   const sorted = <Row>(each: readonly Row[], key: (row: Row) => string) =>
     each.toSorted((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
@@ -143,7 +126,6 @@ function byKey(rows: SidebarRows): SidebarRows {
   };
 }
 
-/** The sidebar's rows as the host takes them from the live statements, run as the service runs them. */
 const liveSidebarOf = (userId: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -366,7 +348,6 @@ it.layer(getTestDB())("an account's task sections", (it) => {
           true,
         );
         assert.deepEqual((yield* listTaskSections(dean)).entries, []);
-        // Moved back, it stands in none of the sections it left.
         yield* updateTask(dean, first, { organizationId: workspace });
         assert.deepEqual((yield* listTaskSections(dean)).entries, []);
       }),
@@ -490,7 +471,6 @@ it.layer(getTestDB())("an account's task sections", (it) => {
           { agentId: agent, sectionId: launch, position: "a1", addedAt },
         ]);
 
-        // A teammate who reaches the agent still reads none of Dean's entries, nor puts it in his section.
         assert.deepEqual((yield* listTaskSections(charles)).agentEntries, []);
         assert.equal(yield* refused(charles, placeAgent(agent, launch)), true);
         assert.equal(yield* refused(outsider, placeAgent(agent, launch)), true);
@@ -531,7 +511,6 @@ it.layer(getTestDB())("an account's task sections", (it) => {
         yield* written(charles, create(workspace, "Mine", mine));
         yield* written(charles, placeAgent(shared, mine));
         assert.equal((yield* listTaskSections(charles)).agentEntries.length, 1);
-        // Once Charles leaves, he reads neither the section nor the agent kept in it.
         yield* leaveWorkspace(workspace, charles);
         assert.deepEqual(yield* listTaskSections(charles), {
           sections: [],

@@ -22,23 +22,11 @@ import {
 } from "../description-attachments.js";
 import { createTask, saveDescriptionText } from "../task-store.js";
 
-/**
- * A description's pictures over a real dialect: kept by a member, read by every
- * member of the plan's workspace and by nobody else, held to the description's
- * bound, a video among them to a video's bound and the description's count of
- * videos, refused on a plan the account does not reach, and swept a day
- * after upload only where no save ever named them.
- *
- * Synthetic accounts and pictures throughout.
- */
-
-/** A picture's bytes: a PNG's signature and a few more, which is all the store reads of them. */
 const PICTURE: Picture = {
   contentType: PICTURE_TYPE.PNG,
   bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]),
 };
 
-/** A recording an agent made, as small as a WebM that states its size may be. */
 const VIDEO: Picture = { contentType: PICTURE_MEDIA_TYPE.WEBM, bytes: webmBytes(1280, 800) };
 
 const openAccount = Effect.gen(function* () {
@@ -48,7 +36,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A plan in a workspace the owner made and the teammate joined, and an account in neither. */
 const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount;
   const teammate = yield* openAccount;
@@ -59,7 +46,6 @@ const openSharedTask = Effect.gen(function* () {
   return { owner, teammate, outsider, taskId };
 });
 
-/** The id a keep answered, failing the test where it kept nothing. */
 function keptId(kept: { readonly status: string; readonly id?: string }): string {
   assert.equal(kept.status, DESCRIPTION_ATTACHMENT_KEEP.KEPT);
   assert.ok(kept.id);
@@ -128,16 +114,13 @@ it.layer(getTestDB())("a description's pictures", (it) => {
         const undone = keptId(yield* keepDescriptionAttachment(owner, taskId, PICTURE));
         const address = descriptionAttachmentAddress({ taskId, attachmentId: named }, "acme");
         yield* saveDescriptionText(owner, taskId, `## Approach\n\n![The mock](${address})\n`);
-        // A later save that no longer names it leaves it saved, since a restore can bring it back.
         yield* saveDescriptionText(owner, taskId, "## Approach\n\nNo picture now.\n");
 
-        // Every picture here was uploaded at the test clock's start; the cutoff is the sweep's, a day before its own now.
         assert.equal(
           yield* purgeUnsavedAttachments(new Date(0)),
           0,
           "none was uploaded before the cutoff",
         );
-        // Note that the sweep deletes a batch at a time, and other tests' uploads share the database.
         let purged = yield* purgeUnsavedAttachments(new Date(1));
         while (purged > 0) purged = yield* purgeUnsavedAttachments(new Date(1));
 

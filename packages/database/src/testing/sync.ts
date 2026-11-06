@@ -1,21 +1,3 @@
-/**
- * sync.ts -- Sync's capture as a test reads it: the drift check, and what a write notifies.
- *
- * The drift check holds the migrated database to the declarations: every
- * function and trigger a declaration renders stands as it renders it, and
- * no sync trigger stands that none renders. It compares what Postgres
- * itself writes back for each object (`pg_get_triggerdef`,
- * `pg_get_functiondef`), so two spellings of one trigger are one: the
- * declarations' capture is installed inside a transaction that is rolled
- * back, read, and set beside what the database held before.
- *
- * `expectTopicsFire` runs a write while listening and holds the topics its
- * notifications carried to the ones a test names. Postgres delivers a
- * listener the notifications of different transactions in the order they
- * committed, so a heartbeat sent after the write is a fence: once it
- * arrives, everything the write's transactions notified has too, and a
- * write that notifies nothing is shown to by the fence alone.
- */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Data, Effect, Fiber, Schema, Stream } from "effect";
@@ -32,34 +14,25 @@ import {
 import { renderSyncTable, SYNC_TRIGGER, syncFunctionName } from "../sync/render.js";
 import { SYNC_OBJECT_PREFIX, type SyncTable } from "../sync/sync-table.js";
 
-/** Each sync trigger's definition, by its table, then its name. */
 type SyncTriggers = Map<string, Map<string, string>>;
 
-/** The sync functions and triggers a database holds, as Postgres writes each back. */
 interface SyncObjects {
   readonly triggers: SyncTriggers;
   readonly functions: Map<string, string>;
 }
 
-/** One function or trigger that is not as the declarations render it. */
 export interface SyncDrift {
   readonly table: string;
-  /** The function's or the trigger's name. */
   readonly object: string;
-  /** As the database holds it, or undefined where it holds none. */
   readonly installed: string | undefined;
-  /** As the declarations render it, or undefined where none renders it. */
   readonly rendered: string | undefined;
 }
 
-/** What the notifications a write sent carried. */
 export interface FiredTopics<A> {
   readonly value: A;
-  /** The ids of the transactions that notified, each once. */
   readonly txids: readonly string[];
 }
 
-/** Carries the capture read inside its transaction out of it, failing being what rolls the transaction back. */
 class RenderedSyncObjects extends Data.TaggedError("RenderedSyncObjects")<{
   readonly objects: SyncObjects;
 }> {}
@@ -88,7 +61,6 @@ const readSyncObjects = Effect.gen(function* () {
   return { triggers, functions } satisfies SyncObjects;
 });
 
-/** Installs each table's capture as its migration would: its drops, then its creates. */
 export const installSyncTables = (
   tables: readonly SyncTable[],
 ): Effect.Effect<void, SqlError, SqlClient.SqlClient> =>
@@ -100,7 +72,6 @@ export const installSyncTables = (
     }
   });
 
-/** The capture the declarations render, as Postgres writes it back, with the database left as it stood. */
 const renderedSyncObjects = (tables: readonly SyncTable[]) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql
@@ -113,7 +84,6 @@ const renderedSyncObjects = (tables: readonly SyncTable[]) =>
       .pipe(Effect.catchTag("RenderedSyncObjects", ({ objects }) => Effect.succeed(objects))),
   );
 
-/** Each declared table's function and triggers, as one database holds them and as the other does. */
 function declaredDrift(
   tables: readonly SyncTable[],
   installed: SyncObjects,
@@ -139,7 +109,6 @@ function declaredDrift(
   });
 }
 
-/** Every sync trigger the database holds that no declaration renders. */
 function undeclaredDrift(
   tables: readonly SyncTable[],
   installed: SyncObjects,
@@ -155,7 +124,6 @@ function undeclaredDrift(
   );
 }
 
-/** The drift check: every way the database's capture differs from the declarations', none where it matches. */
 export const syncDrift = (
   tables: readonly SyncTable[],
 ): Effect.Effect<readonly SyncDrift[], SqlError, SqlClient.SqlClient> =>
@@ -165,7 +133,6 @@ export const syncDrift = (
     return [...declaredDrift(tables, installed, rendered), ...undeclaredDrift(tables, installed)];
   });
 
-/** The topics, each once, sorted by kind and then id, so two lists of one set compare equal. */
 function topicSet(topics: readonly SyncTopic[]): readonly SyncTopic[] {
   const byKind = new Map<TopicKind, Set<string>>();
   for (const [kind, id] of topics) byKind.set(kind, (byKind.get(kind) ?? new Set()).add(id));
@@ -174,7 +141,6 @@ function topicSet(topics: readonly SyncTopic[]): readonly SyncTopic[] {
     .flatMap(([kind, ids]) => [...ids].sort().map((id): SyncTopic => [kind, id]));
 }
 
-/** Everything heard up to the fence's heartbeat. */
 function heardUntil(payloads: Stream.Stream<string, SqlError>, fence: string) {
   return payloads.pipe(
     Stream.mapEffect((payload) => decodeNotification(payload)),
@@ -185,12 +151,6 @@ function heardUntil(payloads: Stream.Stream<string, SqlError>, fence: string) {
   );
 }
 
-/**
- * Runs the write while listening, and fails unless the notifications it
- * sent carried exactly the topics named, each counted once: none, for a
- * write that must notify nothing. Answers the write's value and the ids
- * of the transactions that notified.
- */
 export const expectTopicsFire = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],

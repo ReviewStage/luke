@@ -28,23 +28,6 @@ import {
   workspaceReachableBy,
 } from "./workspace-store.js";
 
-/**
- * task-section-store.ts -- the sections an account made in its sidebars and the tasks and agents it keeps in them, read and written for `/api/task-sections`.
- *
- * Every function is an effect over the ambient `SqlClient`, keyed by the
- * account, so no account reads or moves another's sections. A section is
- * read only while the account is a member of its workspace, and an entry
- * only while the account still reaches its task in that same workspace, so
- * a task moved to another workspace leaves its section without a write. An
- * agent's entry is read on the same terms, and only while the agent stands
- * on no task, since only such an agent is a row of the sidebar of its own,
- * as its pin is (`pinAgent`).
- * Every write runs under a lock on the account's own row, so two Macs
- * writing at once land one after the other and neither slips past the
- * bound, and answers the whole as it then stands, or nothing where it was
- * refused, with nothing written.
- */
-
 const SectionRowSchema = Schema.Struct({
   id: Schema.String,
   organizationId: Schema.String,
@@ -81,7 +64,6 @@ const AGENT_ENTRY_COLUMNS = {
   addedAt: agentSectionEntry.addedAt,
 };
 
-/** The condition that the account's agent entry a statement reads stands: its agent, on no task, is one the account reaches in its section's own workspace. */
 function agentEntryStands(userId: string) {
   return and(
     eq(agentSectionEntry.userId, userId),
@@ -91,7 +73,6 @@ function agentEntryStands(userId: string) {
   );
 }
 
-/** The condition that a statement touches the account's own entry for the agent. */
 function ownAgentEntry(userId: string, agentId: string) {
   return and(eq(agentSectionEntry.userId, userId), eq(agentSectionEntry.agentId, agentId));
 }
@@ -107,20 +88,12 @@ const SECTION_COLUMNS = {
 
 const SectionKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-/**
- * The id of the transaction that made a write, read in the write's own
- * `RETURNING`, as Neon's mutations guide does it: a follower of the sidebar
- * waits for it to arrive on its live query. A write that changed no row
- * returns none, so there is nothing to wait for.
- */
 const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
 
-/** The transaction a statement wrote its rows in; no row where it changed none. */
 const WrittenSchema = Schema.Struct({ txid: Schema.String });
 
 type Written = typeof WrittenSchema.Type;
 
-/** The account's sections in the workspaces it is a member of. */
 const findSections = SqlSchema.findAll({
   Request: Schema.String,
   Result: SectionRowSchema,
@@ -139,7 +112,6 @@ const findSections = SqlSchema.findAll({
     ),
 });
 
-/** The account's entries whose task it still reaches in its section's own workspace. */
 const findEntries = SqlSchema.findAll({
   Request: Schema.String,
   Result: EntryRowSchema,
@@ -166,7 +138,6 @@ const findEntries = SqlSchema.findAll({
     ),
 });
 
-/** The account's entries whose agent, on no task, it still reaches in its section's own workspace. */
 const findAgentEntries = SqlSchema.findAll({
   Request: Schema.String,
   Result: AgentEntryRowSchema,
@@ -182,7 +153,6 @@ const findAgentEntries = SqlSchema.findAll({
     ),
 });
 
-/** One of the account's own sections in a workspace it is a member of; nothing for any other id. */
 const findSection = SqlSchema.findOneOption({
   Request: SectionKeySchema,
   Result: SectionRowSchema,
@@ -202,7 +172,6 @@ const findSection = SqlSchema.findOneOption({
     ),
 });
 
-/** How many of the account's entries stand in one of its sections. */
 const countEntriesIn = SqlSchema.findAll({
   Request: SectionKeySchema,
   Result: Schema.Struct({ held: Schema.Number }),
@@ -215,7 +184,6 @@ const countEntriesIn = SqlSchema.findAll({
     ),
 });
 
-/** How many sections the account keeps, in every workspace. */
 const countSections = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({ held: Schema.Number }),
@@ -225,7 +193,6 @@ const countSections = SqlSchema.findAll({
     ),
 });
 
-/** The account's row, held for the transaction, which is what serializes one account's writes; nothing for an account gone. */
 const lockAccount = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ id: Schema.String }),
@@ -235,7 +202,6 @@ const lockAccount = SqlSchema.findOneOption({
     ),
 });
 
-/** The task under this id, where the account reaches it in the workspace given; nothing otherwise. */
 const findTaskIn = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -259,7 +225,6 @@ const findTaskIn = SqlSchema.findOneOption({
     ),
 });
 
-/** The agent under this id, on no task, where the account reaches it in the workspace given; nothing otherwise. */
 const findAgentIn = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -284,7 +249,6 @@ const findAgentIn = SqlSchema.findOneOption({
     ),
 });
 
-/** The account's entry for an agent, whichever section it names. */
 const findAgentEntry = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: AgentEntryRowSchema,
@@ -298,7 +262,6 @@ const findAgentEntry = SqlSchema.findOneOption({
     ),
 });
 
-/** The account's entry for a task, whichever section it names. */
 const findEntry = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: EntryRowSchema,
@@ -344,7 +307,6 @@ const insertSection = SqlSchema.findAll({
     ),
 });
 
-/** A section given a new title and icon; no row where it already had them. */
 const editSection = SqlSchema.findAll({
   Request: Schema.Struct({
     ...SectionKeySchema.fields,
@@ -371,7 +333,6 @@ const editSection = SqlSchema.findAll({
     ),
 });
 
-/** A section stood at a new place among the others; no row where it already stood there. */
 const moveSection = SqlSchema.findAll({
   Request: Schema.Struct({ ...SectionKeySchema.fields, position: Schema.String }),
   Result: WrittenSchema,
@@ -403,7 +364,6 @@ const deleteSection = SqlSchema.findAll({
     ),
 });
 
-/** The task in a section from now, at the place given or by its instant; an entry standing elsewhere moves here. */
 const putEntry = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -426,7 +386,6 @@ const putEntry = SqlSchema.findAll({
     ),
 });
 
-/** The task's entry given a new place in the section it already stands in, its instant kept; no row where it already stood there. */
 const placeEntry = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, position: Schema.String }),
   Result: WrittenSchema,
@@ -458,7 +417,6 @@ const deleteEntry = SqlSchema.findAll({
     ),
 });
 
-/** The agent in a section from now, at the place given or by its instant; an entry standing elsewhere moves here. */
 const putAgentEntry = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -481,7 +439,6 @@ const putAgentEntry = SqlSchema.findAll({
     ),
 });
 
-/** The agent's entry given a new place in the section it already stands in, its instant kept; no row where it already stood there. */
 const placeAgentEntry = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -513,20 +470,16 @@ const deleteAgentEntry = SqlSchema.findAll({
     ),
 });
 
-/** What one write did: refused, with nothing written, or done, in the transaction it changed rows in, none where it changed none. */
 type Applied = Option.Option<string | undefined>;
 
-/** A write done, in the transaction its statement's rows name. */
 function done(rows: readonly Written[]): Applied {
   return Option.some(rows[0]?.txid);
 }
 
 const REFUSED: Applied = Option.none();
 
-/** A write done that changed no row. */
 const UNCHANGED: Applied = Option.some(undefined);
 
-/** A section's row as the wire reads it: an icon and a place only where they stand. */
 function sectionOf(row: SectionRow): TaskSection {
   return {
     id: row.id,
@@ -538,7 +491,6 @@ function sectionOf(row: SectionRow): TaskSection {
   };
 }
 
-/** An entry's row as the wire reads it. */
 function entryOf(row: EntryRow): TaskSectionEntry {
   return {
     taskId: row.taskId,
@@ -548,7 +500,6 @@ function entryOf(row: EntryRow): TaskSectionEntry {
   };
 }
 
-/** An agent's entry as the wire reads it. */
 function agentEntryOf(row: AgentEntryRow): AgentSectionEntry {
   return {
     agentId: row.agentId,
@@ -558,7 +509,6 @@ function agentEntryOf(row: AgentEntryRow): AgentSectionEntry {
   };
 }
 
-/** The account's sections, oldest made first, and the tasks and agents it keeps in them. */
 export function listTaskSections(userId: string): TaskStoreEffect<TaskSections> {
   return Effect.gen(function* () {
     const sections = yield* findSections(userId);
@@ -572,18 +522,10 @@ export function listTaskSections(userId: string): TaskStoreEffect<TaskSections> 
   });
 }
 
-/** The statements the account's sections are followed by live: the sections, and the tasks and agents it keeps in them. */
 export type TaskSectionsLiveStatements = Readonly<
   Record<"sections" | "entries" | "agentEntries", LiveStatement>
 >;
 
-/**
- * The account's sections written for Neon Realtime: the same rows and rule
- * of who may read them as `listTaskSections`, each column under the key
- * `live-wire.ts` reads it by and each instant in epoch milliseconds. The
- * order is the reader's to keep, since Realtime keeps none. None where a
- * statement names a value Realtime cannot carry.
- */
 export function taskSectionsLiveStatements(
   userId: string,
 ): Option.Option<TaskSectionsLiveStatements> {
@@ -647,7 +589,6 @@ export function taskSectionsLiveStatements(
   });
 }
 
-/** Makes a section, in a workspace the account is a member of and under the bound; one made under this id already is made again as nothing. */
 function createSection(
   userId: string,
   write: Extract<TaskSectionWrite, { kind: typeof TASK_SECTION_WRITE.CREATE }>,
@@ -666,17 +607,10 @@ function createSection(
       icon: write.icon ?? null,
       now,
     });
-    // Note that an id another account's section holds is written as nothing, so it is read back rather than trusted.
     return Option.isSome(yield* findSection({ userId, id: write.id })) ? done(written) : REFUSED;
   });
 }
 
-/**
- * Puts a task in one of the account's sections, at the place given, or in
- * none; nothing where the section is not the account's or the task is not
- * one it reaches in the section's workspace. A task already in the section
- * keeps the instant it was put there and only moves.
- */
 function placeTask(
   userId: string,
   write: Extract<TaskSectionWrite, { kind: typeof TASK_SECTION_WRITE.PLACE }>,
@@ -698,13 +632,6 @@ function placeTask(
   });
 }
 
-/**
- * Puts an agent with no task in one of the account's sections, at the place
- * given, or in none; nothing where the section is not the account's or the
- * agent is not one it reaches, on no task, in the section's workspace. An
- * agent already in the section keeps the instant it was put there and only
- * moves.
- */
 function placeAgent(
   userId: string,
   write: Extract<TaskSectionWrite, { kind: typeof TASK_SECTION_WRITE.PLACE_AGENT }>,
@@ -728,19 +655,12 @@ function placeAgent(
   });
 }
 
-/** A section a delete took away, how many of the account's tasks went back under Tasks with it, and the transaction it went in. */
 export interface DeletedTaskSection {
   readonly section: TaskSection;
   readonly returnedTasks: number;
   readonly txid: string | undefined;
 }
 
-/**
- * Every delete of a section, the sidebar's and an agent's alike: the
- * account's section read, held to the workspace where one is given, its
- * entries counted, and the section deleted, under the caller's lock.
- * Nothing where the account keeps no such section there, with nothing written.
- */
 function sectionTaken(
   userId: string,
   id: string,
@@ -762,7 +682,6 @@ function sectionTaken(
   });
 }
 
-/** Runs one write; none where it was refused. */
 function applyWrite(userId: string, write: TaskSectionWrite): TaskStoreEffect<Applied> {
   switch (write.kind) {
     case TASK_SECTION_WRITE.CREATE:
@@ -780,7 +699,6 @@ function applyWrite(userId: string, write: TaskSectionWrite): TaskStoreEffect<Ap
         return done(yield* moveSection({ userId, id: write.id, position: write.position }));
       });
     case TASK_SECTION_WRITE.DELETE:
-      // Deleting a section already gone moves nothing, so it is no refusal.
       return Effect.map(sectionTaken(userId, write.id), (taken) =>
         Option.isNone(taken) ? UNCHANGED : Option.some(taken.value.txid),
       );
@@ -791,13 +709,6 @@ function applyWrite(userId: string, write: TaskSectionWrite): TaskStoreEffect<Ap
   }
 }
 
-/**
- * Runs one write of the account's sections and answers them all as they
- * then stand, with the transaction the write changed rows in; nothing where
- * the write was refused, or the account is gone, with nothing written. A
- * write that changed no row, such as a section given the title it had,
- * answers no transaction, so a follower has nothing to wait for.
- */
 export function writeTaskSections(
   userId: string,
   write: TaskSectionWrite,
@@ -816,13 +727,6 @@ export function writeTaskSections(
   );
 }
 
-/**
- * Deletes one of the account's sections of the workspace given, under the
- * same lock every write takes, as the sidebar's delete does
- * (`sectionTaken`), and answers what it took away as it read it there.
- * Nothing where the account keeps no such section in that workspace, the
- * account is gone, or another write deleted it first, with nothing written.
- */
 export function deleteTaskSectionIn(
   userId: string,
   workspaceId: string,

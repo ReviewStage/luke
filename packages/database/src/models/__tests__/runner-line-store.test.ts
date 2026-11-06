@@ -15,22 +15,10 @@ import {
   runnerLinesPast,
 } from "../runner-line-store.js";
 
-/**
- * The lines queued for a cloud agent's runner, over a real dialect: a launch
- * reads its own lines past its cursor in the order they were queued, however
- * old, and a message queued again under its id is queued once; a later launch is handed
- * the message lines an earlier one never acknowledged, within the window it
- * names, and nothing else of that launch's, even under the same first event
- * number once the new launch dropped them; and no account queues for,
- * reads, or acknowledges another's agent. Synthetic accounts and agents
- * throughout.
- */
-
 const LAUNCH = { FIRST: 1, NEXT: 40 } as const;
 
 const LIMIT = 50;
 
-/** An account holding one agent. */
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -49,7 +37,6 @@ const openAccount = Effect.gen(function* () {
   return { userId, agentId: Option.getOrThrow(started).agent.id };
 });
 
-/** The texts a launch reads past its cursor, every line queued so far in the window. */
 const textsPast = (userId: string, agentId: string, launch: number, after = 0) =>
   Effect.gen(function* () {
     const since = new Date((yield* Clock.currentTimeMillis) - Duration.toMillis(Duration.hours(1)));
@@ -80,7 +67,6 @@ it.layer(getTestDB())("the runner line store", (it) => {
         launch: LAUNCH.FIRST,
         text: '{"type":"model"}',
       });
-      // Note that a launch's own lines stand past the window an earlier launch's are handed in.
       yield* TestClock.adjust(Duration.hours(2));
       assert.deepEqual(yield* textsPast(userId, agentId, LAUNCH.FIRST), [
         '{"type":"message","n":1}',

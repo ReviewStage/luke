@@ -1,4 +1,3 @@
-// cookie-account-source.test.ts -- a browser tab's account over the service's cookie session: read, signed into, signed out of, switched, lost on a refused call, recovered after a launch blip, and what settings key on.
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
@@ -39,16 +38,9 @@ import { runModeFor } from "./run-mode.js";
 import { SettingsStore } from "./settings-store.js";
 import { fixedAccountSource } from "./testing/fixed-account-source.js";
 
-/**
- * The cookie source over a scripted service on the tab's own origin. A
- * synthetic account throughout; no request carries an `Authorization`,
- * since the cookie is the browser's and rides the request on its own.
- */
-
 const ORIGIN = "https://app.example.test";
 const ACCOUNT_BASE_URL = `${ORIGIN}/api/auth`;
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
-/** A hosted route the account reaches, which refuses a request with no session behind it. */
 const HOSTED_ROUTE = HOSTED_SERVICE_PATH.ACCOUNT_ACCESS;
 const CONTEXT = { client: { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
@@ -62,25 +54,17 @@ const USER = {
 
 interface ServiceState {
   user: Record<string, string> | undefined;
-  /** The admin whose sign-in as the user the session is, where it is one. */
   impersonatedBy?: string;
-  /** How many session reads answer as an outage before the service answers again. */
   outages: number;
   experiments: Record<string, boolean>;
-  /** The preferences the account saved, and when; none for an account that saved none. */
   preferences: Record<string, string>;
   updatedAt?: number;
-  /** Where the account's app links open, a part of its own; none where it never chose. */
   linkOpen?: string;
-  /** Whether the service's sign-out is unreachable. */
   signOutDown?: boolean;
-  /** Holds the next session read's answer, as it stood when asked, until this settles. */
   heldRead?: Promise<void> | undefined;
-  /** Holds the next social sign-in's answer until this settles. */
   heldSignIn?: Promise<void> | undefined;
 }
 
-/** The service's routes over `state`, answered as Better Auth and our routes answer them. */
 function respond(
   state: ServiceState,
   request: Pick<RecordedRequest, "method" | "pathname" | "body">,
@@ -145,7 +129,6 @@ function respond(
   }
 }
 
-/** A scripted service, the tab's door, and what the account gate was asked to do. */
 function scene(initial: Partial<ServiceState> = {}) {
   const state: ServiceState = {
     user: { ...USER },
@@ -157,11 +140,8 @@ function scene(initial: Partial<ServiceState> = {}) {
   const service = recordingHttpClient((request) => respond(state, request));
   const navigated: string[] = [];
   const gate: string[] = [];
-  /** Held open where a test wants the gate's opening still under way. */
   let opening: Effect.Effect<void> = Effect.void;
-  /** Held open where a test wants the gate's closing still under way. */
   let closing: Effect.Effect<void> = Effect.void;
-  /** Held open where a test wants a departure's settings still being dropped. */
   let forgetting: Effect.Effect<void> = Effect.void;
   let revisitQueue: Queue.Queue<void> | undefined;
   const revisits = Effect.gen(function* () {
@@ -174,14 +154,11 @@ function scene(initial: Partial<ServiceState> = {}) {
     returnedFromSignIn: Effect.succeed(false),
     revisits: Stream.unwrap(Effect.map(revisits, Stream.fromQueue)),
   };
-  /** The person coming back to the tab. */
   const revisit = Effect.flatMap(revisits, (queue) => Queue.offer(queue, undefined));
   const host: AccountSourceHost = {
-    // The cookie source keeps no account in the settings file, so it never reads one.
     store: {
       readAccount: () => Effect.die("the cookie source reads no stored account"),
       setAccount: () => Effect.die("the cookie source stores no account"),
-      // A departure drops what the settings kept for the account.
       clearAccount: () =>
         Effect.suspend(() => forgetting).pipe(
           Effect.andThen(
@@ -192,7 +169,6 @@ function scene(initial: Partial<ServiceState> = {}) {
           ),
         ),
       accountSnapshot: () => Effect.die("the cookie source reads no stored account"),
-      // An arrival settles the settings on whoever arrives.
       settleSessionAccount: (email) => Effect.sync(() => void gate.push(`settle ${email}`)),
     },
     accountBaseUrl: ACCOUNT_BASE_URL,
@@ -237,17 +213,14 @@ function scene(initial: Partial<ServiceState> = {}) {
   };
 }
 
-/** The signed-in person's address, and nothing for any other status. */
 const signedInEmail = (account: AccountSnapshot) =>
   account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
 
-/** Lets `count` event-loop turns pass, for forked work that should have landed by then. */
 const turns = (count: number) =>
   Effect.gen(function* () {
     for (let turn = 0; turn < count; turn += 1) yield* Effect.promise(() => nextTurn());
   });
 
-/** A promise the test settles by hand, for an answer the service holds. */
 function heldAnswer() {
   let release: () => void = () => undefined;
   const held = new Promise<void>((resolve) => {
@@ -256,7 +229,6 @@ function heldAnswer() {
   return { held, release };
 }
 
-/** Advances the test clock a second at a time, letting each read land, until `fiber` ends. */
 const runOut = <A, E>(fiber: Fiber.Fiber<A, E>) =>
   Effect.gen(function* () {
     for (let second = 0; second < 60 && fiber.pollUnsafe() === undefined; second += 1) {
@@ -343,7 +315,6 @@ describe("the cookie account source", () => {
       assert.deepEqual(account, { status: ACCOUNT_STATUS.SIGNED_OUT });
       assert.deepEqual(session.snapshot(), account);
       assert.equal(sent("/api/auth/sign-out")[0]?.method, HTTP_METHOD.POST);
-      // The settings are dropped before the gate's closing publishes them.
       assert.deepEqual(gate.slice(1), ["forget", "close"]);
       assert.equal(yield* session.token.readAccountKey?.() ?? Effect.void, undefined);
     }).pipe(Effect.scoped),
@@ -369,7 +340,6 @@ describe("the cookie account source", () => {
       const session = yield* open;
       yield* session.initialize;
 
-      // Another tab signs in as someone else; this one hears of it on the person's return.
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
       yield* revisit;
       while (gate.at(-1) !== "open") yield* Effect.promise(() => nextTurn());
@@ -387,7 +357,6 @@ describe("the cookie account source", () => {
       yield* session.initialize;
       const call = accountCall({ baseUrl: ORIGIN, credential: session.credential });
 
-      // The session ends elsewhere, such as a sign-out in another tab.
       state.user = undefined;
       const answer = yield* Effect.provide(
         call.send({ method: HTTP_METHOD.GET, path: HOSTED_ROUTE }),
@@ -397,7 +366,6 @@ describe("the cookie account source", () => {
       assert.ok("response" in answer);
       assert.equal(answer.response.status, HTTP_STATUS.UNAUTHORIZED);
       assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
-      // Read once at launch and once more on the refusal; the refusal was not retried.
       assert.equal(sent("/api/auth/get-session").length, 2);
       assert.equal(sent(HOSTED_ROUTE).length, 1);
       assert.ok(service.requests.every((request) => request.authorization === undefined));
@@ -414,7 +382,6 @@ describe("the cookie account source", () => {
 
       assert.deepEqual(account, { status: ACCOUNT_STATUS.SIGNED_OUT });
       assert.equal(sent(HOSTED_SERVICE_PATH.ACCOUNT_DELETE)[0]?.method, HTTP_METHOD.POST);
-      // The account's settings are dropped and its gate closed, in that order.
       assert.deepEqual(gate.slice(1), ["forget", "close"]);
     }).pipe(Effect.scoped),
   );
@@ -459,12 +426,10 @@ describe("the cookie account source", () => {
       yield* sender.flush;
       assert.deepEqual(sent(HOSTED_SERVICE_PATH.EVENTS), []);
 
-      // The sign-in lands, and the tab reads it.
       state.user = { ...USER };
       yield* session.refreshOnce();
       yield* sender.flush;
 
-      // Every count the service received, whichever batches carried them.
       const received = sent(HOSTED_SERVICE_PATH.EVENTS).flatMap(
         (batch): { name: string }[] => JSON.parse(batch.body ?? "{}").events,
       );
@@ -480,10 +445,8 @@ describe("the cookie account source", () => {
       const { open, gate } = scene({ outages: 2 });
       const session = yield* open;
 
-      // The launch's read meets the outage and settles signed out.
       assert.deepEqual(yield* session.initialize, { status: ACCOUNT_STATUS.SIGNED_OUT });
 
-      // The launch's refresh meets it once more, then reads again and lands.
       const refreshed = yield* Effect.forkChild(session.refreshOnce());
       yield* runOut(refreshed);
 
@@ -498,7 +461,6 @@ describe("the cookie account source", () => {
       const session = yield* open;
       yield* session.initialize;
 
-      // Another tab signs in as someone else.
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
       yield* session.refreshOnce();
 
@@ -516,7 +478,6 @@ describe("the cookie account source", () => {
       const release = yield* Deferred.make<void>();
       holdOpening(Deferred.await(release));
 
-      // A refresh finds the session and starts opening the gate; the sign-out lands before it ends.
       state.user = { ...USER };
       const refreshed = yield* Effect.forkChild(session.refreshOnce());
       yield* Effect.promise(() => nextTurn());
@@ -527,7 +488,6 @@ describe("the cookie account source", () => {
       yield* Fiber.join(signedOut);
 
       assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
-      // The held opening finishes first; the sign-out's closing comes after it, and last.
       assert.ok(gate.indexOf("open") < gate.indexOf("close"));
       assert.equal(gate.at(-1), "close");
     }).pipe(Effect.scoped),
@@ -535,7 +495,6 @@ describe("the cookie account source", () => {
 
   it.effect("lets no launch read answered late stand over a revisit's newer one", () =>
     Effect.gen(function* () {
-      // The service's own promise, which the test resolves; nothing is run outside the test's fiber.
       let resolveHeld: () => void = () => undefined;
       const heldRead = new Promise<void>((resolve) => {
         resolveHeld = resolve;
@@ -543,7 +502,6 @@ describe("the cookie account source", () => {
       const { open, state, revisit, sent } = scene({ heldRead });
       const session = yield* open;
 
-      // The launch's read is asked as the first person and held; meanwhile another tab signs in as someone else.
       const launched = yield* Effect.forkChild(session.initialize);
       while (sent("/api/auth/get-session").length === 0) yield* Effect.promise(() => nextTurn());
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
@@ -571,7 +529,6 @@ describe("the cookie account source", () => {
 
       const account = session.snapshot();
       assert.equal(account.status === ACCOUNT_STATUS.SIGNED_IN && account.name, "Dev Renamed");
-      // Only the launch's own arrival touched the settings or the gate.
       assert.deepEqual(gate, [`settle ${USER.email}`]);
     }).pipe(Effect.scoped),
   );
@@ -587,7 +544,6 @@ describe("the cookie account source", () => {
         Effect.andThen(Deferred.succeed(closingBegan, undefined), Deferred.await(release)),
       );
 
-      // Another tab signs in as someone else; the previous person's capabilities are still stopping.
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
       const refreshed = yield* Effect.forkChild(session.refreshOnce());
       yield* Deferred.await(closingBegan);
@@ -614,13 +570,11 @@ describe("the cookie account source", () => {
         yield* turns(5);
       });
 
-      // The person is shown and their gate is still opening when the session ends elsewhere.
       state.user = { ...USER };
       yield* reread;
       assert.equal(signedInEmail(session.snapshot()), USER.email);
       state.user = undefined;
       yield* reread;
-      // A second read finds nobody again before the closing had its turn.
       yield* reread;
       yield* Deferred.succeed(release, undefined);
       yield* turns(10);
@@ -647,7 +601,6 @@ describe("the cookie account source", () => {
           yield* turns(5);
         });
 
-        // The first person's gate is still opening when another person's session is read, then ends.
         state.user = { ...USER };
         yield* reread;
         state.user = { ...USER, id: "user-2", email: "other@example.com" };
@@ -675,7 +628,6 @@ describe("the cookie account source", () => {
         Effect.andThen(Deferred.succeed(closingBegan, undefined), Deferred.await(release)),
       );
 
-      // Another person's session is read, then ends before the previous person's capabilities stopped.
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
       const refreshed = yield* Effect.forkChild(session.refreshOnce());
       yield* Deferred.await(closingBegan);
@@ -697,7 +649,6 @@ describe("the cookie account source", () => {
       const session = yield* Scope.provide(open, sessionScope);
       yield* session.initialize;
 
-      // A read is under way for another person's session when the session closes.
       state.heldRead = held;
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
       const refreshed = yield* Effect.forkChild(session.refreshOnce());
@@ -726,7 +677,6 @@ describe("the cookie account source", () => {
         yield* turns(5);
       });
 
-      // The first person's gate is still opening as a second, then a third, session is read.
       state.user = { ...USER };
       yield* reread;
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
@@ -756,7 +706,6 @@ describe("the cookie account source", () => {
         const release = yield* Deferred.make<void>();
         holdOpening(Deferred.await(release));
 
-        // The person's gate is still opening when they sign out, and a read then finds nobody.
         state.user = { ...USER };
         yield* session.token.refreshAccount();
         yield* turns(5);
@@ -779,7 +728,6 @@ describe("the cookie account source", () => {
       const { open, state, sent } = scene({ user: undefined, heldRead: held });
       const session = yield* open;
 
-      // The launch's read is held; a refused call's re-read meanwhile finds the session.
       const launched = yield* Effect.forkChild(session.initialize);
       while (sent("/api/auth/get-session").length === 0) yield* Effect.promise(() => nextTurn());
       state.user = { ...USER };
@@ -800,7 +748,6 @@ describe("the cookie account source", () => {
         const release = yield* Deferred.make<void>();
         holdForgetting(Deferred.await(release));
 
-        // The person signs out, and their settings are still being dropped when someone else's session is read.
         const signedOut = yield* Effect.forkChild(session.signOut({ revokeRemote: true }));
         while (sent("/api/auth/sign-out").length === 0) yield* Effect.promise(() => nextTurn());
         yield* turns(5);
@@ -826,7 +773,6 @@ describe("the cookie account source", () => {
         const session = yield* open;
         yield* session.initialize;
 
-        // The session ends elsewhere, and dropping the departing person's settings dies outright.
         holdForgetting(Effect.die("the settings store broke"));
         state.user = undefined;
         yield* Effect.exit(session.token.refreshAccount());
@@ -835,7 +781,6 @@ describe("the cookie account source", () => {
         assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
         assert.equal(gate.at(-1), "close");
 
-        // Someone else's session is read next, and their gate opens.
         state.user = { ...USER, id: "user-2", email: "other@example.com" };
         yield* session.token.refreshAccount();
         yield* turns(10);
@@ -850,13 +795,11 @@ describe("the cookie account source", () => {
       const session = yield* open;
       yield* session.initialize;
 
-      // Dropping the departing person's settings dies outright.
       holdForgetting(Effect.die("the settings store broke"));
       const signedOut = yield* Effect.exit(session.signOut({ revokeRemote: true }));
       assert.equal(signedOut._tag, "Failure");
       holdForgetting(Effect.void);
 
-      // Someone else's session is read next, and their gate opens after the closing.
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
       yield* session.token.refreshAccount();
       yield* turns(10);
@@ -878,18 +821,15 @@ describe("the cookie account source", () => {
           }
         });
 
-      // Another tab signs in as someone else, and the tab is shown again: it settles on them.
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
       yield* revisit;
       yield* shownAs("other@example.com");
 
-      // The focus that comes with the same return is that return, not another read.
       state.user = { ...USER, id: "user-3", email: "third@example.com" };
       yield* revisit;
       yield* turns(10);
       assert.equal(signedInEmail(session.snapshot()), "other@example.com");
 
-      // A return a while later reads again.
       yield* TestClock.adjust("2 seconds");
       yield* revisit;
       yield* shownAs("third@example.com");
@@ -902,7 +842,6 @@ describe("the cookie account source", () => {
       const session = yield* open;
       const signedIn = yield* session.initialize;
 
-      // The service is down for the return's read; it is back, naming someone else, right after.
       state.outages = 1;
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
       yield* revisit;
@@ -914,10 +853,8 @@ describe("the cookie account source", () => {
       }
       yield* turns(2);
 
-      // Nothing read again behind that return, and the outage was no sign-out.
       assert.deepEqual(session.snapshot(), signedIn);
 
-      // A later return reads again, and settles on who the session names.
       yield* revisit;
       while (signedInEmail(session.snapshot()) !== "other@example.com") {
         yield* Effect.promise(() => nextTurn());
@@ -933,12 +870,10 @@ describe("the cookie account source", () => {
       yield* session.initialize;
       assert.ok(session.confirmAccount);
 
-      // A read is under way as the first person when the sign-out is pressed.
       state.heldRead = held;
       const refreshed = yield* Effect.forkChild(session.refreshOnce());
       while (sent("/api/auth/get-session").length < 2) yield* Effect.promise(() => nextTurn());
       yield* session.signOut({ revokeRemote: true });
-      // Another tab then signs in as someone else, and a write asks who is signed in.
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
       const confirmed = yield* Effect.forkChild(session.confirmAccount());
       yield* turns(2);
@@ -979,7 +914,6 @@ describe("the cookie account source", () => {
       const session = yield* open;
       yield* session.initialize;
 
-      // The tab is focused while the service is still asked for the provider's address.
       const begun = yield* Effect.forkChild(session.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
       while (sent("/api/auth/sign-in/social").length === 0) {
         yield* Effect.promise(() => nextTurn());
@@ -1002,7 +936,6 @@ describe("the cookie account source", () => {
       yield* session.beginSignIn(ACCOUNT_PROVIDER.GITHUB);
       assert.deepEqual(navigated, [PROVIDER_CONSENT]);
 
-      // The page is restored from the back/forward cache, with no session made.
       yield* revisit;
       yield* turns(10);
 
@@ -1027,23 +960,17 @@ describe("the cookie account source", () => {
       });
       assert.deepEqual(navigated, [PROVIDER_CONSENT]);
       assert.equal(sent("/api/auth/sign-in/social").length, 0);
-      // The person stands as they were; nothing of the gate or the settings moved.
       assert.deepEqual(session.snapshot(), signedIn);
       assert.deepEqual(gate, [`settle ${USER.email}`]);
     }).pipe(Effect.scoped),
   );
 });
 
-/**
- * Real event-loop turns until `holds`, since the settings store's file I/O is
- * real; a wait that never holds is ended by the test's own timeout.
- */
 const until = (holds: () => Effect.Effect<boolean>) =>
   Effect.gen(function* () {
     while (!(yield* holds())) yield* Effect.promise(() => nextTurn());
   });
 
-/** The tab's own address, which nobody leaves or comes back to. */
 const STILL_DOOR: CookieSessionDoor = {
   currentAddress: () => "/",
   navigate: () => Effect.void,
@@ -1051,7 +978,6 @@ const STILL_DOOR: CookieSessionDoor = {
   revisits: Stream.never,
 };
 
-/** The machine a host in a tab is composed on, its account source the one given. */
 const machineOver = (stateRoot: string, accountSource: Layer.Layer<AccountSource>) =>
   Layer.mergeAll(
     Layer.succeed(
@@ -1067,7 +993,6 @@ const machineOver = (stateRoot: string, accountSource: Layer.Layer<AccountSource
       }),
     ),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-    // Packaged, as a browser tab is, so usage data is shared and the counts are sent.
     Layer.succeed(AppIdentity, {
       appVersion: "0.2.0",
       packaged: true,
@@ -1078,11 +1003,6 @@ const machineOver = (stateRoot: string, accountSource: Layer.Layer<AccountSource
     NodePath.layer,
   );
 
-/**
- * The settings and account of a tab on the cookie session over the platform
- * fetch, linked as the host links them and started; `prepare` runs on the
- * settings before the account is composed.
- */
 const composedTab = (
   stateRoot: string,
   prepare: (settings: SettingsComposer) => Effect.Effect<void> = () => Effect.void,
@@ -1111,12 +1031,10 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     user: { ...USER },
     outages: 0,
     experiments: { [EXPERIMENT.MEMORY]: true },
-    // The account chose where its links open before; this browser's own choice is another.
     preferences: {},
     updatedAt: 1,
     linkOpen: LINK_OPEN.MAC_APP,
   };
-  /** The same scripted service behind the platform fetch, which the settings' own clients ride. */
   const service: typeof globalThis.fetch = async (input, init) => {
     const request = new Request(input, init);
     return respond(state, {
@@ -1132,7 +1050,6 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     );
     assert.equal(account.signedIn(), true);
 
-    // The preferences reconcile reads the service under the session's account.
     const accountRead = Effect.map(
       Effect.orDie(settings.store.snapshot()),
       (snapshot) => snapshot.accountRead,
@@ -1144,15 +1061,12 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
       (snapshot) => snapshot.experiments,
     );
     const linkOpen = Effect.orDie(settings.store.get("linkOpen"));
-    // The account reads as read only once its choices stand, so a window waiting on them never reads this device's in their place.
     yield* until(() => accountRead);
     assert.equal(yield* linkOpen, LINK_OPEN.MAC_APP);
     assert.equal((yield* experiments)[EXPERIMENT.MEMORY], true);
-    // The choice the account made is applied here, and the service keeps it.
     assert.equal(yield* linkOpen, LINK_OPEN.MAC_APP);
     assert.equal(state.linkOpen, LINK_OPEN.MAC_APP);
 
-    // An experiment's switch is written for the same account and lands.
     const set = settings.methods[GATEWAY_METHOD.EXPERIMENTS_SET];
     assert.ok(set);
     const result = yield* Effect.orDie(set({ experiment: EXPERIMENT.MEMORY, on: true }, CONTEXT));
@@ -1161,7 +1075,6 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     assert.equal((yield* experiments)[EXPERIMENT.MEMORY], true);
     assert.equal(state.experiments[EXPERIMENT.MEMORY], true);
 
-    // Another tab signs in as someone else; a switch pressed here for the first account is sent for no one.
     state.user = { ...USER, id: "user-2", email: "other@example.com" };
     const stale = yield* Effect.orDie(set({ experiment: EXPERIMENT.PILOT, on: true }, CONTEXT));
     assert.ok(isRecord(stale));
@@ -1169,7 +1082,6 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     assert.equal(stale.reason, EXPERIMENT_ACCOUNT_CHANGED);
     assert.equal(state.experiments[EXPERIMENT.PILOT], undefined);
     assert.equal(yield* account.token.readAccountKey?.() ?? Effect.void, "other@example.com");
-    // The first account's choices are no longer drawn for the one now signed in.
     assert.equal((yield* experiments)[EXPERIMENT.MEMORY], undefined);
     assert.equal(yield* linkOpen, undefined);
     assert.equal(yield* accountRead, false);
@@ -1181,7 +1093,6 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
 
 it.effect("sends no day one person marked under the cookie another tab signed in", () => {
   const state: ServiceState = { user: { ...USER }, outages: 0, experiments: {}, preferences: {} };
-  /** Every batch of counts, by who the cookie named when it arrived and the events it carried. */
   const batches: { readonly user: string | undefined; readonly names: readonly string[] }[] = [];
   const service: typeof globalThis.fetch = async (input, init) => {
     const request = new Request(input, init);
@@ -1195,10 +1106,8 @@ it.effect("sends no day one person marked under the cookie another tab signed in
   };
   return Effect.gen(function* () {
     const stateRoot = yield* temporaryDirectoryScoped("cookie-events-");
-    // The launch counts itself and marks the day for the person signed in.
     yield* composedTab(stateRoot);
 
-    // Another tab signs in as someone else before the minute's flush.
     state.user = { ...USER, id: "user-2", email: "other@example.com" };
     while (batches.length < 1) {
       yield* Effect.promise(() => nextTurn());
@@ -1210,7 +1119,6 @@ it.effect("sends no day one person marked under the cookie another tab signed in
     assert.ok(batch?.names.includes(PRODUCT_EVENT.APP_LAUNCH));
     assert.ok(!batch?.names.includes(PRODUCT_EVENT.APP_DAY_ACTIVE));
 
-    // Day marks do travel here: the next minute marks and sends the one now signed in's own.
     while (batches.length < 2) {
       yield* Effect.promise(() => nextTurn());
       yield* TestClock.adjust("1 minute");
@@ -1223,7 +1131,6 @@ it.effect("sends no day one person marked under the cookie another tab signed in
   );
 });
 
-/** Who a store's session names, moved by the test. */
 interface SignedIn {
   email: string | undefined;
 }
@@ -1232,7 +1139,6 @@ describe("a settings store that keeps no account of its own", () => {
   const ADA = "ada@example.com";
   const BOB = "bob@example.com";
 
-  /** A cipher-less store over `directory`, its session naming whoever `signedIn` holds. */
   const storeOver = (directory: string, signedIn: SignedIn) =>
     Effect.gen(function* () {
       return new SettingsStore({
@@ -1268,16 +1174,13 @@ describe("a settings store that keeps no account of its own", () => {
         yield* store.set("linkOpen", LINK_OPEN.MAC_APP);
         yield* store.setAccountPreferencesSyncBaseline(ADA, { linkOpen: LINK_OPEN.MAC_APP });
 
-        // The same person keeps their choices.
         yield* store.settleSessionAccount(ADA);
         assert.deepEqual(yield* store.accountPreferences(), { linkOpen: LINK_OPEN.MAC_APP });
 
-        // Another person on this browser starts from none of them.
         signedIn.email = BOB;
         yield* store.settleSessionAccount(BOB);
         assert.deepEqual(yield* store.accountPreferences(), {});
 
-        // A departure drops what was kept for the one leaving.
         yield* store.set("linkOpen", LINK_OPEN.BROWSER);
         yield* store.clearAccount();
         assert.deepEqual(yield* store.accountPreferences(), {});
@@ -1291,7 +1194,6 @@ it.effect(
     const ADA = "ada@example.com";
     const BOB = "bob@example.com";
     const written: string[] = [];
-    /** Bob's service: no saved snapshot yet, and every write kept. */
     const service: typeof globalThis.fetch = async (input, init) => {
       const request = new Request(input, init);
       if (request.method === HTTP_METHOD.PUT) written.push(await request.text());
@@ -1299,8 +1201,6 @@ it.effect(
     };
     return Effect.gen(function* () {
       const stateRoot = yield* temporaryDirectoryScoped("cookie-unsettled-");
-      // The file as an earlier build left it for Ada: her link choice and her voice, which no
-      // build keeps any more, and the baseline that names her.
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       yield* fileSystem.writeFileString(
@@ -1315,7 +1215,6 @@ it.effect(
           },
         }),
       );
-      // A source keeping no account here, whose arrival settled nothing.
       const machine = machineOver(stateRoot, fixedAccountSource());
       const settings = yield* Effect.provide(composeSettings(), machine);
       yield* settings.link({

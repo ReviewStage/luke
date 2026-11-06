@@ -15,21 +15,9 @@ import {
   sandboxHeld,
 } from "../sandbox-terminal-lease.js";
 
-/**
- * The lease a developer's typing holds on a coding agent's sandbox, over a
- * real dialect: it moves on and never back and holds until its instant, it
- * goes with its conversation, and the GitHub token's renewal at its
- * firewall is claimed once while due. Every conversation is minted per test and every
- * read is of its ids, since the lease is the deployment's and not an
- * account's.
- *
- * Synthetic accounts, conversations, and sessions throughout.
- */
-
 const AT = Date.UTC(2026, 9, 14, 12);
 const at = (minutes: number) => new Date(AT + minutes * 60_000);
 
-/** A coding agent's conversation that ran in a session of its own. */
 const openAgent = () =>
   Effect.gen(function* () {
     const db = yield* Database;

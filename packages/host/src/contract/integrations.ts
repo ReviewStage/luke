@@ -11,16 +11,7 @@ import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { INTEGRATION_ACT_KIND } from "./kinds.js";
 
-/**
- * integrations.ts -- Settings' integration rows: the panel's asks of the host about the account's integrations, as procedures.
- *
- * The hold on where they stand and its Try again carry nothing, so their
- * input is `undefined` alone and a window calls each with no payload. Each
- * other output is its view schema flipped, so oRPC's output check encodes
- * the row's value into what crosses the port.
- */
 export const integrationActsContract = {
-  // Note that the hold's stream carries nothing: the held integrations reach the panel on app state, and the stream is the window's hold on them.
   [INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW]: actProcedure(
     "Could not follow your integrations on this system.",
   )
@@ -36,7 +27,6 @@ export const integrationActsContract = {
   )
     .input(exactInput(integrationProviderParamsSchema))
     .output(EffectSchema.flip(integrationConnectViewSchema)),
-  // Note that the hold's stream carries nothing: the held tools reach the panel on app state, and the stream is the window's hold on them.
   [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW]: actProcedure(
     "Could not follow that integration's tools on this system.",
   )
@@ -62,7 +52,6 @@ export const integrationActsContract = {
   )
     .input(exactInput(integrationRenameParamsSchema))
     .output(EffectSchema.flip(integrationAccountViewSchema)),
-  // Note that the hold's stream carries nothing: the held clients reach the panel on app state, and the stream is the window's hold on them.
   [INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW]: actProcedure(
     "Could not read the apps that can use your account on this system.",
   )

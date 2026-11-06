@@ -1,27 +1,3 @@
-/**
- * agent-wakeups.ts -- the wakeups a native agent's released wait left, kept until the scheduled sweep delivers each.
- *
- * A release replaces the agent's wakeups whole, since the CLI's own list as
- * it waited is the whole of what it would have fired. The same call with no
- * wakeups deletes them: on a Stop, which ends a CLI's wakeups with it, and
- * as any launch starts, since the CLI restores on resume the tasks it can
- * and the agent then owns them again, a copy we kept would fire twice or
- * after the agent canceled it (`../schemas/agent-wakeup.ts`).
- *
- * A claim takes the wakeups due, the longest due first and at most a batch,
- * under row locks a concurrent claim skips rather than waits on, and moves
- * each one's next delivery on before the locks go: Vercel may call the
- * minute's sweep twice, and the second claim must find nothing left. The
- * claim's move is the delivery's lease: a delivery asks just before it sends
- * whether its wakeup still stands, so one a Stop or a launch deleted since
- * the claim is not sent, and deletes it once the send landed. One whose send
- * failed, or whose sweep ended mid-send, stands to be claimed again at its
- * next delivery, its message sent under the same key so a send that did land
- * is told once (`native-wakeup-sweep.ts`), until `attempts` reaches the bound
- * the claim is handed, when the claim deletes it instead. An archived agent
- * takes no wakeup, so the claim deletes its wakeups too.
- */
-
 import { asc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -31,13 +7,11 @@ import { agentWakeupTable } from "../schemas/agent-wakeup.js";
 
 type WakeupEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
-/** One wakeup as a release names it: the instant it comes due and the prompt delivered then. */
 export interface AgentWakeup {
   readonly at: Date;
   readonly prompt: string;
 }
 
-/** One wakeup a claim took: its row, the agent it is for and that agent's starter, and the prompt to deliver. */
 export interface ClaimedAgentWakeup {
   readonly id: string;
   readonly agentId: string;
@@ -65,7 +39,6 @@ const insertWakeups = SqlSchema.void({
     ),
 });
 
-/** The rows no claim delivers again: given up past the bound, or of an archived agent. */
 const deleteSpent = SqlSchema.void({
   Request: Schema.Struct({ maxAttempts: Schema.Int }),
   execute: ({ maxAttempts }) =>
@@ -143,7 +116,6 @@ const deleteOne = SqlSchema.void({
     Database.use((db) => db.delete(agentWakeupTable).where(eq(agentWakeupTable.id, id))),
 });
 
-/** The agent's wakeups replaced by those given, none deleting them all. */
 export function replaceAgentWakeups(
   agentId: string,
   wakeups: readonly AgentWakeup[],
@@ -158,11 +130,6 @@ export function replaceAgentWakeups(
   );
 }
 
-/**
- * Claims at most `limit` of the wakeups due at `now`, each next delivered at
- * `next` should this delivery fail, after deleting those claimed
- * `maxAttempts` times already and an archived agent's.
- */
 export function claimDueAgentWakeups(
   now: Date,
   next: Date,
@@ -181,12 +148,10 @@ export function claimDueAgentWakeups(
   );
 }
 
-/** Whether the wakeup still stands, as a delivery asks just before it sends: a Stop or a launch since its claim deleted it. */
 export function agentWakeupStands(id: string): WakeupEffect<boolean> {
   return Effect.map(standsOne({ id }), (rows) => rows.length > 0);
 }
 
-/** The wakeup delivered, so no claim takes it again. */
 export function deleteAgentWakeup(id: string): WakeupEffect<void> {
   return deleteOne({ id });
 }

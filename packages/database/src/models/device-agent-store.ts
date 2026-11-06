@@ -1,36 +1,3 @@
-/**
- * device-agent-store.ts -- the lines and requests the service queues for a local agent's Mac, claimed, settled, answered, and withdrawn.
- *
- * Every function is an effect over the ambient `SqlClient`, keyed by the
- * account, so no account queues for, claims, settles, or reads another's
- * agent. A row is queued only for an agent of the account that runs on a
- * Mac, and goes to the Mac the agent is pinned to, which must be the
- * account's too; a Mac reads and claims only the rows naming it. A row is
- * claimed once, by the first claim that finds it waiting, and settled or
- * answered once, after it was claimed. A line's claim may carry a token its
- * Mac minted for it, and the same claim asked again under that token, as
- * after its answer was lost, is answered the line again until it is
- * settled. A launch line's sealed secrets are read by its first claim
- * alone, which clears them in the same statement, so a second claim, a
- * claim asked again, a listing, or a read after it finds none
- * (`../schemas/device-agent.ts`). The secrets are opaque here: the service
- * seals them before the queue and opens them after the claim.
- *
- * A launch line's step (`DEVICE_LAUNCH_STEP`) is kept only while its Mac
- * holds it claimed and unsettled, and only ever moved forward in the order
- * a launch passes them, so a report that lands late never takes it back.
- *
- * A line of a kind that needs a capability (`DEVICE_AGENT_LINE_CAPABILITY`)
- * is queued only where the agent's Mac registered it, since a follower that
- * predates the kind fails its whole held read on one.
- *
- * Every line queued for one agent is queued under that agent's runner
- * lease (`./agent-runner-lease.ts`), as every write to a cloud
- * runner is. That is what keeps an agent's lines committed in the order of
- * their `seq`: the sequence is shared by every agent and holds no lock, so
- * two lines queued at once outside the lease could commit out of order.
- */
-
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import {
   DEVICE_AGENT_BOUNDS,
@@ -86,7 +53,6 @@ const DeviceRowKeySchema = Schema.Struct({
   id: Schema.String,
 });
 
-/** A line as a Mac lists it: everything but its secrets. */
 const WaitingLineSchema = Schema.Struct({
   id: Schema.String,
   agentId: Schema.String,
@@ -97,22 +63,15 @@ const WaitingLineSchema = Schema.Struct({
 
 export type DeviceAgentWaitingLine = typeof WaitingLineSchema.Type;
 
-/** A line as its claim hands it over: with its sealed secrets, which no one reads after. */
 const ClaimedLineSchema = Schema.Struct({
   ...WaitingLineSchema.fields,
   sealedSecrets: Schema.NullOr(Schema.String),
 });
 
-/**
- * A line as a claim answers it: as its first claim handed it over, or, for
- * the same claim asked again, without secrets, and saying where it is a
- * launch line whose secrets the first claim took.
- */
 export type DeviceAgentClaimedLine = typeof ClaimedLineSchema.Type & {
   readonly secretsGone: boolean;
 };
 
-/** A request as a Mac lists and claims it. */
 const WaitingRequestSchema = Schema.Struct({
   id: Schema.String,
   agentId: Schema.String,
@@ -122,7 +81,6 @@ const WaitingRequestSchema = Schema.Struct({
 
 export type DeviceAgentWaitingRequest = typeof WaitingRequestSchema.Type;
 
-/** A settled request's answer columns as the row holds them. */
 const AnswerRowSchema = Schema.Struct({
   kind: RequestKindSchema,
   bytes: Schema.NullOr(Schema.Uint8Array),
@@ -130,14 +88,8 @@ const AnswerRowSchema = Schema.Struct({
 
 const decodeAnswer = Schema.decodeUnknownEffect(deviceAgentAnswerSchema);
 
-/** The line as it stood before its claim, read beside the update for the secrets the update clears. */
 const lineBefore = alias(deviceAgentLine, "line_before");
 
-/**
- * The agent of the account, running on a Mac, joined to the Mac it is
- * pinned to where the account holds that Mac too: what a queue's insert
- * selects from, so it writes nothing for anyone else's agent or Mac.
- */
 function pinnedAgent(userId: string, agentId: string) {
   return and(
     eq(agentTable.id, agentId),
@@ -147,7 +99,6 @@ function pinnedAgent(userId: string, agentId: string) {
   );
 }
 
-/** A local agent as its machine finds it: its starter, and the Mac it is pinned to, none once that Mac is gone. */
 const DeviceAgentPinSchema = Schema.Struct({
   userId: Schema.String,
   agentId: Schema.String,
@@ -156,14 +107,6 @@ const DeviceAgentPinSchema = Schema.Struct({
 
 export type DeviceAgentPin = typeof DeviceAgentPinSchema.Type;
 
-/**
- * An agent's newest launch line as its machine and its transcript read it:
- * when it was queued, whether its Mac claimed it and which step it reported
- * its launch has reached, whether it settled it and with what exit, and
- * whether a stop line followed it. Note that the step is read as the row
- * holds it, any word at all, because a row a newer build wrote must not
- * fail the read a runner's every line is queued by.
- */
 const DeviceAgentLaunchSchema = Schema.Struct({
   id: Schema.String,
   payload: deviceAgentObjectSchema,
@@ -177,7 +120,6 @@ const DeviceAgentLaunchSchema = Schema.Struct({
 
 export type DeviceAgentLaunch = typeof DeviceAgentLaunchSchema.Type;
 
-/** A line as its settle answers it: the agent it is for, and its kind. */
 const DeviceAgentSettledLineSchema = Schema.Struct({
   agentId: Schema.String,
   kind: LineKindSchema,
@@ -185,7 +127,6 @@ const DeviceAgentSettledLineSchema = Schema.Struct({
 
 export type DeviceAgentSettledLine = typeof DeviceAgentSettledLineSchema.Type;
 
-/** A line as it stands: whether its Mac settled it and with what exit, and the agent, the Mac, and the kind it is. */
 const DeviceAgentLineStandingSchema = Schema.Struct({
   ...DeviceAgentSettledLineSchema.fields,
   settled: Schema.Boolean,
@@ -195,7 +136,6 @@ const DeviceAgentLineStandingSchema = Schema.Struct({
 
 export type DeviceAgentLineStanding = typeof DeviceAgentLineStandingSchema.Type;
 
-/** The columns a pin reads off an agent. */
 const PIN_COLUMNS = {
   userId: agentTable.userId,
   agentId: agentTable.id,
@@ -246,10 +186,8 @@ const findAwaitsUpdate = SqlSchema.findAll({
     ),
 });
 
-/** A stop line queued for the agent after its launch line. */
 const stopLine = alias(deviceAgentLine, "stop_line");
 
-/** A line queued for the agent after its launch line. */
 const laterLine = alias(deviceAgentLine, "later_line");
 
 const findQueuedAfter = SqlSchema.findAll({
@@ -279,8 +217,6 @@ const findQueuedAfter = SqlSchema.findAll({
             eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
             eq(laterLine.userId, userId),
             eq(laterLine.kind, kind),
-            // Note that the payload is matched as the queue writes it, in the database, so no
-            // message's words or pictures are read back to find it.
             sql`${laterLine.payload} = ${JSON.stringify(payload)}::jsonb`,
           ),
         )
@@ -352,7 +288,6 @@ const insertLine = SqlSchema.findAll({
     kind: LineKindSchema,
     payload: deviceAgentObjectSchema,
     sealedSecrets: Schema.NullOr(Schema.String),
-    /** The capability the Mac must have registered for the line to be queued, none for a kind every Mac takes. */
     capability: Schema.UndefinedOr(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
     now: Schema.Date,
   }),
@@ -388,13 +323,6 @@ const insertLine = SqlSchema.findAll({
     ),
 });
 
-/**
- * The lines waiting for the Mac, first to last, as far as their payloads fit
- * `DEVICE_AGENT_BOUNDS.MAX_LINES_READ_BYTES`, and always the first. Note that
- * the read stops there, because a Vercel function answers 4.5 MB at most and
- * a read past it fails for every agent on the Mac; the Mac reads again for
- * the rest once it has claimed these.
- */
 const findWaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, deviceId: Schema.String }),
   Result: WaitingLineSchema,
@@ -409,7 +337,6 @@ const findWaitingLines = SqlSchema.findAll({
           kind: deviceAgentLine.kind,
           payload: deviceAgentLine.payload,
           place: sql<number>`row_number() ${inOrder}`.as("place"),
-          // The bytes of this line's payload and of every one waiting before it.
           through: sql<number>`sum(octet_length(${deviceAgentLine.payload}::text)) ${inOrder}`.as(
             "through",
           ),
@@ -467,14 +394,11 @@ const claimLine = SqlSchema.findOneOption({
           seq: deviceAgentLine.seq,
           kind: deviceAgentLine.kind,
           payload: deviceAgentLine.payload,
-          // Note that we read the secrets off the row as it stood, because
-          // `returning` reads the updated row, whose secrets are cleared.
           sealedSecrets: lineBefore.sealedSecrets,
         }),
     ),
 });
 
-/** A line the Mac claimed under the token given and has not settled, without its secrets, which its claim took. */
 const findClaimedUnder = SqlSchema.findOneOption({
   Request: Schema.Struct({ ...DeviceRowKeySchema.fields, claimToken: Schema.String }),
   Result: WaitingLineSchema,
@@ -502,7 +426,6 @@ const findClaimedUnder = SqlSchema.findOneOption({
     ),
 });
 
-/** A launch's steps in the order a launch passes them, as Postgres reads a step's place among them. */
 const LAUNCH_STEP_ORDER = sql`array[${sql.join(
   DEVICE_LAUNCH_STEPS.map((step) => sql`${step}`),
   sql`, `,
@@ -519,8 +442,6 @@ const writeLaunchStep = SqlSchema.findAll({
       db
         .update(deviceAgentLine)
         .set({
-          // Note that a step at or behind the one the line holds leaves it as it stands, because a report that lands late must never take the launch back,
-          // and so does a step held that this build cannot place, which a newer build wrote, since this build cannot tell whether it is behind.
           launchStep: sql<DeviceLaunchStep>`case
             when ${deviceAgentLine.launchStep} is not null and coalesce(
               array_position(${LAUNCH_STEP_ORDER}, ${deviceAgentLine.launchStep})
@@ -621,12 +542,6 @@ const insertRequest = SqlSchema.findAll({
     ),
 });
 
-/**
- * A request waiting for the account's Mac given, of a kind this build
- * knows. Note that a row of a kind an earlier build queued and never
- * withdrew is passed over rather than read, because one row the decode
- * refuses would fail the Mac's whole read until the expiry took it.
- */
 function requestWaiting(userId: string, deviceId: string) {
   return and(
     eq(deviceAgentRequest.userId, userId),
@@ -732,14 +647,15 @@ const deleteExpiredLines = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, before: Schema.Date }),
   execute: ({ userId, before }) =>
     Database.use((db) =>
-      db.delete(deviceAgentLine).where(
-        and(
-          eq(deviceAgentLine.userId, userId),
-          lt(deviceAgentLine.createdAt, before),
-          // A line claimed and not yet settled is a runner still at work, whose exit is still to come.
-          or(isNull(deviceAgentLine.claimedAt), isNotNull(deviceAgentLine.settledAt)),
+      db
+        .delete(deviceAgentLine)
+        .where(
+          and(
+            eq(deviceAgentLine.userId, userId),
+            lt(deviceAgentLine.createdAt, before),
+            or(isNull(deviceAgentLine.claimedAt), isNotNull(deviceAgentLine.settledAt)),
+          ),
         ),
-      ),
     ),
 });
 
@@ -792,7 +708,6 @@ const findLiveAgents = SqlSchema.findAll({
     ),
 });
 
-/** A launch line whose device's lease lapsed, with the device's name for the words its turn ends with. */
 const LapsedLaunchSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
@@ -802,7 +717,6 @@ const LapsedLaunchSchema = Schema.Struct({
 
 export type DeviceAgentLapsedLaunch = typeof LapsedLaunchSchema.Type;
 
-/** A launch line still open, claimed or not, whose device last beat before the instant given. */
 function lapsedLaunch(seenBefore: Date) {
   return and(
     eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
@@ -847,8 +761,6 @@ const writeLapsedSettled = SqlSchema.findAll({
         .set({
           settledAt: now,
           exitCode: null,
-          // Note that a line still waiting is marked claimed and its secrets cleared too, because
-          // a device that comes back must never take a launch whose run was already taken from it.
           claimedAt: sql`coalesce(${deviceAgentLine.claimedAt}, ${now}::timestamptz)`,
           sealedSecrets: null,
         })
@@ -891,7 +803,6 @@ const writeGoneSettled = SqlSchema.void({
     ),
 });
 
-/** A warm launch the sweep may retire: its agent's starter, the agent, and the session its conversation runs in, which its place is found by. */
 const WarmLaunchSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
@@ -901,7 +812,6 @@ const WarmLaunchSchema = Schema.Struct({
 
 export type DeviceAgentWarmLaunch = typeof WarmLaunchSchema.Type;
 
-/** A launch line of the same agent queued after another. */
 const newerLaunch = alias(deviceAgentLine, "newer_launch");
 
 const findWarmLaunches = SqlSchema.findAll({
@@ -914,7 +824,6 @@ const findWarmLaunches = SqlSchema.findAll({
   Result: WarmLaunchSchema,
   execute: ({ seenSince, endedBefore, waitingEndedBefore, limit }) =>
     Database.use((db) => {
-      // The conversation's newest turn, as `agent-store.ts`'s `readNativeRunStanding` reads whether its run ended.
       const newestTurn = db
         .select({ status: turns.status, settledAt: turns.settledAt })
         .from(turns)
@@ -922,7 +831,6 @@ const findWarmLaunches = SqlSchema.findAll({
         .orderBy(desc(turns.queuedAt), desc(turns.id))
         .limit(1)
         .as("newest_turn");
-      // Note that an ended turn with no settle time stamped reads as ended long ago, as the run's standing reads it.
       const endedBy = (instant: Date) =>
         or(isNull(newestTurn.settledAt), lt(newestTurn.settledAt, instant));
       return db
@@ -988,18 +896,9 @@ const deleteExpiredRequests = SqlSchema.void({
     ),
 });
 
-/**
- * Queues one line for the account's agent, to the Mac it is pinned to, at
- * the next place in the order every line is queued in, with the sealed
- * secrets a launch line carries, its caller holding the agent's runner
- * lease; its id and place, or none where the account holds no such agent
- * running on a Mac of its own, or the Mac never registered the capability
- * the line's kind needs.
- */
 export function queueDeviceAgentLine(
   userId: string,
   line: {
-    /** The id its caller minted, so it can name the line before it is queued; a fresh one where none is named. */
     readonly id?: string;
     readonly agentId: string;
     readonly kind: DeviceAgentLineKind;
@@ -1024,28 +923,16 @@ export function queueDeviceAgentLine(
   );
 }
 
-/**
- * The local agent whose conversation runs in the session named, its starter
- * and its Mac; nothing where no agent on a Mac runs in it. Read with no
- * account in hand, because a machine is asked by the session alone; only
- * for a session id the service minted, which answers nothing a member wrote.
- */
 export function deviceAgentOfSession(
   runtimeSessionId: string,
 ): DeviceAgentEffect<Option.Option<DeviceAgentPin>> {
   return findPinOfSession({ runtimeSessionId });
 }
 
-/** The local agent under the id, its starter and its Mac; nothing for an agent in a sandbox. Read with no account in hand, as above, only for an id a machine's place carries. */
 export function deviceAgentPin(agentId: string): DeviceAgentEffect<Option.Option<DeviceAgentPin>> {
   return findPin({ agentId });
 }
 
-/**
- * Whether the account's local agent's device last beat that it waits to
- * switch release (`HOST_UPDATE.WAITING`); false for an agent in a sandbox,
- * one pinned to no device of the account's, and another account's agent.
- */
 export function deviceAgentAwaitsUpdate(
   userId: string,
   agentId: string,
@@ -1053,12 +940,6 @@ export function deviceAgentAwaitsUpdate(
   return Effect.map(findAwaitsUpdate({ userId, agentId }), (rows) => rows.length > 0);
 }
 
-/**
- * Whether a line of the kind and payload given was queued after the
- * account's launch line named, for the same agent: what a later call reads
- * of what was written to the runner that launch started. False where no
- * such launch line of the account's stands.
- */
 export function deviceAgentLineQueuedAfter(
   userId: string,
   launchId: string,
@@ -1070,7 +951,6 @@ export function deviceAgentLineQueuedAfter(
   );
 }
 
-/** The account's agent's newest launch line, as its machine reads whether its runner runs and its transcript where its launch stands; nothing where none stands. */
 export function latestDeviceAgentLaunch(
   userId: string,
   agentId: string,
@@ -1078,7 +958,6 @@ export function latestDeviceAgentLaunch(
   return findLatestLaunch({ userId, agentId });
 }
 
-/** Whether the account's line was settled and with what exit, and whose it is; nothing where no such line stands. */
 export function deviceAgentLineStanding(
   userId: string,
   id: string,
@@ -1086,7 +965,6 @@ export function deviceAgentLineStanding(
   return findLineStanding({ userId, id });
 }
 
-/** The lines waiting for the account's Mac, in the order they were queued, without their secrets, as far as one read's budget goes. */
 export function deviceAgentLinesWaiting(
   userId: string,
   deviceId: string,
@@ -1094,18 +972,6 @@ export function deviceAgentLinesWaiting(
   return findWaitingLines({ userId, deviceId });
 }
 
-/**
- * Claims one line for the account's Mac under the token its Mac minted for
- * it, where it names one, handing over its sealed secrets and clearing them
- * in the same statement. The same claim asked again under the same token is
- * answered the line again, without its secrets, until the line is settled.
- * None where it is not that Mac's, another claim took it first, it was
- * settled, or the expiry withdrew it.
- *
- * Note that the claim asked again is a read beside the claim rather than a
- * wider claim, because only the statement that takes a waiting line ever
- * reads its secrets, so no two answers can both carry them.
- */
 export function claimDeviceAgentLine(
   userId: string,
   deviceId: string,
@@ -1127,14 +993,6 @@ export function claimDeviceAgentLine(
   });
 }
 
-/**
- * Keeps the step the account's Mac reported its launch of a launch line it
- * claimed and has not settled has reached, where it moves the line's step
- * forward, and leaves it as it stands where it does not, or where the line
- * holds a step a newer build wrote that this build cannot place; whether the Mac
- * holds such a line, which is false for another Mac's or account's line, a
- * line of any other kind, one waiting, and one settled.
- */
 export function stepDeviceAgentLaunch(
   userId: string,
   deviceId: string,
@@ -1144,11 +1002,6 @@ export function stepDeviceAgentLaunch(
   return Effect.map(writeLaunchStep({ userId, deviceId, id, step }), (rows) => rows.length > 0);
 }
 
-/**
- * Settles a line the account's Mac claimed, with its runner's exit code
- * where it is a launch line whose runner exited, answering the line's agent
- * and kind; none where that Mac holds no such line claimed and unsettled.
- */
 export function settleDeviceAgentLine(
   userId: string,
   deviceId: string,
@@ -1163,7 +1016,6 @@ export function settleDeviceAgentLine(
   );
 }
 
-/** A line's exit code once its Mac settled it, null for one settled with none; nothing while it waits or runs. */
 export function deviceAgentLineSettlement(
   userId: string,
   id: string,
@@ -1171,12 +1023,6 @@ export function deviceAgentLineSettlement(
   return findLineSettled({ userId, id });
 }
 
-/**
- * The ids of the account's launch lines to the device given that are still
- * open, claimed or not, with no stop queued after them, oldest first: the
- * runs the service holds the device to, which its beat answers so it stops
- * what it holds no longer and settles what it runs nothing for.
- */
 export function openDeviceAgentLaunches(
   userId: string,
   deviceId: string,
@@ -1184,12 +1030,6 @@ export function openDeviceAgentLaunches(
   return Effect.map(findOpenLaunches({ userId, deviceId }), (rows) => rows.map((row) => row.id));
 }
 
-/**
- * The ids of the account's agents pinned to its device given and not
- * archived, oldest first: what should still stand on that device, whatever
- * its task's status. A deleted task's agents are gone with it, so none is
- * named; none for another account's device.
- */
 export function liveDeviceAgents(
   userId: string,
   deviceId: string,
@@ -1197,12 +1037,6 @@ export function liveDeviceAgents(
   return Effect.map(findLiveAgents({ userId, deviceId }), (rows) => rows.map((row) => row.id));
 }
 
-/**
- * The launch lines still open, claimed or not, of every account's devices
- * that last beat before `seenBefore`, oldest first, at most `limit`: the runs
- * whose device's lease lapsed (`DEVICE_LEASE`). Read with no account in hand,
- * because the maintenance sweep reads every account's.
- */
 export function lapsedDeviceAgentLaunches(
   seenBefore: Date,
   limit: number,
@@ -1210,13 +1044,6 @@ export function lapsedDeviceAgentLaunches(
   return findLapsedLaunches({ seenBefore, limit });
 }
 
-/**
- * Settles the account's launch line as its runner gone, with no exit code,
- * while it is still open and its device still last beat before
- * `seenBefore`, answering the line's agent; none where the device settled it
- * first, or beat since. A line its device never claimed is marked claimed and
- * its secrets cleared in the same statement, so no device takes it after.
- */
 export function settleLapsedDeviceAgentLine(
   userId: string,
   id: string,
@@ -1229,14 +1056,6 @@ export function settleLapsedDeviceAgentLine(
   );
 }
 
-/**
- * Settles every launch line still open, claimed or not, to the account's
- * devices given as its runner gone, as `settleLapsedDeviceAgentLine` settles
- * one, whatever their last beat: what a host folded into another can no
- * longer run (`./host-store.ts`). Note that this is what lets an agent moved
- * off such a device launch again on its new one, since its machine reads
- * the agent's newest launch open as its runner still live.
- */
 export function settleGoneDeviceAgentLaunches(
   userId: string,
   deviceIds: readonly string[],
@@ -1244,17 +1063,6 @@ export function settleGoneDeviceAgentLaunches(
   return Effect.flatMap(DateTime.nowAsDate, (now) => writeGoneSettled({ userId, deviceIds, now }));
 }
 
-/**
- * The newest launch lines of every account's local agents whose runner may
- * still be warm, oldest first, at most `limit`: the line open, claimed or
- * not, with no stop queued after it, as the machine reads a runner live
- * (`device-machine.ts`'s `findPlaces`), on a device that beat since
- * `seenSince`, so a device whose lease lapsed is left to the lease sweep;
- * and the agent's run ended, its newest turn settled, canceled, or failed
- * before `endedBefore`, or before `waitingEndedBefore` where its device last
- * beat that it waits to switch release (`HOST_UPDATE.WAITING`). Read with no
- * account in hand, because the maintenance sweep reads every account's.
- */
 export function warmDeviceAgentLaunches(read: {
   readonly seenSince: Date;
   readonly endedBefore: Date;
@@ -1264,11 +1072,6 @@ export function warmDeviceAgentLaunches(read: {
   return findWarmLaunches(read);
 }
 
-/**
- * Queues one request for the account's agent, to the Mac it is pinned to,
- * under the id its caller minted; false where the account holds no such
- * agent running on a Mac of its own.
- */
 export function queueDeviceAgentRequest(
   userId: string,
   request: {
@@ -1283,7 +1086,6 @@ export function queueDeviceAgentRequest(
   );
 }
 
-/** The requests waiting for the account's Mac, oldest first. */
 export function deviceAgentRequestsWaiting(
   userId: string,
   deviceId: string,
@@ -1291,7 +1093,6 @@ export function deviceAgentRequestsWaiting(
   return findWaitingRequests({ userId, deviceId });
 }
 
-/** Claims one request for the account's Mac; none where it is not that Mac's, another claim took it first, or it was withdrawn. */
 export function claimDeviceAgentRequest(
   userId: string,
   deviceId: string,
@@ -1300,11 +1101,6 @@ export function claimDeviceAgentRequest(
   return Effect.flatMap(DateTime.nowAsDate, (now) => claimRequest({ userId, deviceId, id, now }));
 }
 
-/**
- * Keeps the answer to a request the account's Mac claimed; false where that
- * Mac holds no such request claimed and unanswered. An answer past the
- * bound fails its decode and writes nothing.
- */
 export function answerDeviceAgentRequest(
   userId: string,
   deviceId: string,
@@ -1316,7 +1112,6 @@ export function answerDeviceAgentRequest(
   );
 }
 
-/** A request's answer once its Mac answered it; nothing while it waits or runs. */
 export function deviceAgentRequestAnswer(
   userId: string,
   id: string,
@@ -1330,16 +1125,10 @@ export function deviceAgentRequestAnswer(
   );
 }
 
-/** Withdraws a request, answered or not, once its caller stops waiting on it. */
 export function withdrawDeviceAgentRequest(userId: string, id: string): DeviceAgentEffect<void> {
   return deleteRequest({ userId, id });
 }
 
-/**
- * Withdraws the account's lines and requests queued before the instant
- * given: every request, and every line but one claimed and not yet
- * settled, whose runner is still at work and whose exit is still to come.
- */
 export function withdrawExpiredDeviceAgentRows(
   userId: string,
   before: Date,

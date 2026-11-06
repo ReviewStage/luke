@@ -37,7 +37,6 @@ describe("mirror-disk", () => {
       ]) {
         assert.equal(yield* mirrorWritten(root, { path: refused, mode, bytes }), false, refused);
       }
-      // Note that a link the checkout holds beside the target is never written through.
       yield* fileSystem.makeDirectory(path.join(root, "bin"));
       yield* fileSystem.symlink(path.join(outside, "x"), path.join(root, "bin", "run.mirroring"));
       assert.equal(yield* mirrorWritten(root, { path: "bin/run", mode, bytes }), true);
@@ -62,7 +61,6 @@ describe("mirror-disk", () => {
       for (const [file, text] of Object.entries(own)) {
         yield* fileSystem.writeFileString(path.join(root, file), text);
       }
-      // Note that a link the worktree checked out is no file of the mirror's, as the bridge lists none.
       yield* fileSystem.symlink("same.txt", path.join(root, "link"));
 
       const requested = yield* mirrorMatched(

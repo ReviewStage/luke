@@ -15,16 +15,6 @@ import {
 } from "../task-block-store.js";
 import { createTask, deleteTask, readTaskDescription, updateTask } from "../task-store.js";
 
-/**
- * One task blocking another, read and written through the store's public
- * functions over a real dialect: a block reads on both of its tasks, the
- * task's own read among them, goes with either task, joins only two tasks
- * of one workspace, and is read and written only by an account that reaches
- * both its tasks.
- *
- * Synthetic accounts, workspaces, and tasks throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -32,7 +22,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** Dean's workspace with Charles a member of it, and two tasks Dean started there. */
 const openSharedWorkspace = Effect.gen(function* () {
   const dean = yield* openAccount;
   const charles = yield* openAccount;
@@ -43,7 +32,6 @@ const openSharedWorkspace = Effect.gen(function* () {
   return { dean, charles, workspace, schema, sidebar };
 });
 
-/** The task's blocks as the account reads them, which the test expects it to reach. */
 const blocksOf = (userId: string, taskId: string) =>
   Effect.map(readTaskBlocks(userId, taskId), (read) =>
     Option.getOrElse(read, () => assert.fail("the task was not reached")),
@@ -113,7 +101,6 @@ it.layer(getTestDB())("one task blocking another", (it) => {
     () =>
       Effect.gen(function* () {
         const { dean, charles, workspace, schema, sidebar } = yield* openSharedWorkspace;
-        // Dean's own token reached this repository, which Charles's never read.
         const { id: hidden } = yield* createTask(dean, {
           name: "Hidden",
           organizationId: workspace,
@@ -157,7 +144,6 @@ it.layer(getTestDB())("one task blocking another", (it) => {
         const { dean, charles, workspace, schema, sidebar } = yield* openSharedWorkspace;
         const outsider = yield* openAccount;
         yield* openWorkspace(outsider);
-        // Dean's own token reached this repository, which Charles's never read.
         const { id: hidden } = yield* createTask(dean, {
           name: "Hidden",
           organizationId: workspace,

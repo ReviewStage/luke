@@ -10,15 +10,6 @@ import { recordingReporter } from "../testing/recording-reporter.js";
 import { AppStateStore, initialAppState } from "./app-state-store.js";
 import { linkNetworkWatch } from "./network-watch.js";
 
-/**
- * What a window reads of the network: the document's `network` slice follows
- * the platform's probe within one interval, either way, and the service's
- * reach as its calls set it, moves the version only when the answer moved,
- * runs what catches up once each time the app can reach the service again,
- * survives a probe that throws, and stops following once the client's scope
- * closes.
- */
-
 const RUN = {
   launch: { profile: "idle", captureMode: false, fixtureMode: false },
   runMode: runModeFor({ capture: false, fixture: false }),
@@ -27,13 +18,6 @@ const RUN = {
   platform: "darwin",
 } as const;
 
-/**
- * A store, a probe whose answer the test sets, first `online`, which throws
- * `fault` once where one is set, and the service's reach its calls would
- * set, first answered at the clock's start, the watch linked into `scope`,
- * how many times it ran `regained`, which reads again as `reRead` does, and
- * what the watch reported.
- */
 function watched(
   scope: Scope.Closeable,
   online = true,
@@ -133,7 +117,6 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const scope = yield* Scope.make();
-      // The service fails one call, answers the next, and then answers nothing.
       let asked = 0;
       const service = recordingHttpClient(() => {
         asked += 1;

@@ -10,17 +10,6 @@ import { Database } from "../../core/query.js";
 import { getTestDB } from "../../testing/index.js";
 import { user } from "../auth.js";
 
-/**
- * The migration that makes an integration row one account's, over a
- * database from before it, the one after it that keeps the primary flag's
- * column standing, and the one that drops it once nothing reads it: an account connected at two providers keeps both rows, each its
- * provider's first account, asking under the account's own user id, though
- * the two share that subject; and the migrations run again, as a run that
- * stopped partway is finished by the next, change nothing. The table is put back as it stood before the
- * migration, and the migration's own statements are run over it. Synthetic
- * accounts throughout.
- */
-
 const MIGRATIONS = [
   "20261015191901_integration_connection_accounts",
   "20261015212606_integration_connection_primary_kept",
@@ -29,7 +18,6 @@ const MIGRATIONS = [
 
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
 
-/** The migrations' statements, in order, as the migrator runs them. */
 const statements = Effect.promise(async () =>
   (
     await Promise.all(
@@ -43,12 +31,6 @@ const statements = Effect.promise(async () =>
   ),
 );
 
-/**
- * The table as the migration before it left it: one row per account and
- * provider, keyed by the pair. Note that Sync's capture of the table, which
- * a later migration adds and which names the columns dropped here, goes
- * first, since nothing captured the table back then.
- */
 const BEFORE = [
   `DROP TRIGGER IF EXISTS "app_sync_update" ON "integration_connection"`,
   `DROP TRIGGER IF EXISTS "app_sync_write" ON "integration_connection"`,

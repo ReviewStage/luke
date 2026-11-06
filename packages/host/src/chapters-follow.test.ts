@@ -8,17 +8,8 @@ import type { AppChapters } from "./app-state.js";
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import { polledLive } from "./testing/polled-live.js";
 
-/**
- * chapters-follow.test.ts -- a pull request's held chapters take whether the
- * reader can generate them, and on what, from every answer: a key the reader
- * saves or swaps while the chapters are held draws at the next answer, though the chapters it
- * carries stand as they did, which no answer of rows alone would tell.
- * Synthetic ids, commits, and words.
- */
-
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-/** The newest claim as the statement selects it, made and ready. */
 const READY_ROW = {
   status: "ready",
   headSha: "c0ffee1",
@@ -29,7 +20,6 @@ const READY_ROW = {
   startedAt: 1_762_214_400_000,
 } as const;
 
-/** Every step a follow has to take, taken, then its next poll asked, which waits half a second after the last answered (`live-follow.ts`). */
 const nextPoll = Effect.andThen(
   Effect.repeat(Effect.yieldNow, { times: 100 }),
   Effect.andThen(

@@ -18,32 +18,6 @@ import { agentTable } from "./agent.js";
 import { organization, user } from "./auth.js";
 import { task } from "./task.js";
 
-/**
- * automation.ts -- an account's automations, each a trigger and a coding agent to start in a workspace, and every run one made.
- *
- * An automation is its account's and works in its workspace: the trigger, the
- * action, and the guards are the wire's own JSON
- * (`@repo/features/automation-wire`), so a trigger kind added later is a
- * member of that JSON rather than a column. Two things are columns because a
- * statement reads them: `trigger_kind`, which a GitHub delivery finds its
- * automations by, and `next_run_at`, the instant a schedule is next due,
- * which the minute sweep claims by (null for every other trigger and while
- * paused). `webhook_secret_hash` is the SHA-256 of the secret a webhook
- * trigger's address carries, never the secret itself, and null for every
- * other trigger. `enabled` false is turned off, by the developer alone:
- * nothing pauses an automation for its failures. The row goes with its
- * account and its workspace alike.
- *
- * An automation belongs to a workspace (`organization_id`), as its owner's
- * (`scope` personal) or the workspace's own (`scope` workspace), and works
- * in `repositories`, an ordered list of `owner/name` whose first is where
- * the agent starts; one entry until full multi-repo. `target_kind` says
- * where a run lands: a new agent each run, or the agent `target_agent_id`
- * names, which goes null where that agent is deleted. `archive_successful`
- * archives a new agent once its run finishes without failing.
- * `slack_delivery` sends each run's result to the automation's owner as a
- * Slack message from the workspace's own bot once the run's agent ends.
- */
 export const automation = pgTable(
   "automation",
   {
@@ -59,20 +33,15 @@ export const automation = pgTable(
     enabled: boolean("enabled").notNull(),
     triggerKind: text("trigger_kind").$type<AutomationTriggerKind>().notNull(),
     trigger: jsonb("trigger").$type<AutomationTrigger>().notNull(),
-    // Note that the column holds the action as JSON writes it, its servers not yet read against the providers known.
     action: jsonb("action").$type<AutomationActionJson>().notNull(),
     guards: jsonb("guards").$type<AutomationGuards>().notNull(),
-    /** When a schedule is next due; null for any other trigger and while paused. */
     nextRunAt: timestamptz("next_run_at"),
-    /** The SHA-256 of a webhook trigger's secret, hex; null for any other trigger. */
     webhookSecretHash: text("webhook_secret_hash"),
-    /** Where the agent works, `owner/name` each, the first where it starts. */
     repositories: jsonb("repositories").$type<readonly string[]>().notNull().default([]),
     targetKind: text("target_kind")
       .$type<AutomationTargetKind>()
       .notNull()
       .default(AUTOMATION_TARGET.NEW_AGENT),
-    /** The agent a run continues where `target_kind` is the same agent; null otherwise or once it is deleted. */
     targetAgentId: uuid("target_agent_id").references(() => agentTable.id, {
       onDelete: "set null",
     }),
@@ -82,30 +51,13 @@ export const automation = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    // The settings list reads one account's automations newest first.
     index("automation_user_created").on(table.userId, table.createdAt),
-    // The sweep claims the schedules due, soonest first.
     index("automation_next_run").on(table.nextRunAt).where(sql`${table.nextRunAt} is not null`),
-    // A delivery finds the automations of its trigger kind, then reads each one's repositories.
     index("automation_trigger_kind").on(table.triggerKind),
-    // A workspace's automations, each scope newest first.
     index("automation_org_scope_created").on(table.organizationId, table.scope, table.createdAt),
   ],
 );
 
-/**
- * One firing of an automation: what fired it, in brief, and what came of
- * it. `dedupe_key` is the firing's own identity, unique per automation, so
- * a schedule claimed twice, a webhook GitHub delivers again, or a caller's
- * retry under the same key records one run: the due instant for a
- * schedule, GitHub's delivery id for an event, the caller's idempotency key
- * for a webhook or a "Run now". A webhook's body is kept beside it as
- * `payload`, since the sweep that starts the run's agent comes after the
- * request that brought it. The status is the firing's; how the agent it
- * started is doing is the agent's own, read through `agent_id`,
- * which goes null where the agent is deleted while the run stays in the
- * history. The row goes with its automation.
- */
 export const automationRun = pgTable(
   "automation_run",
   {
@@ -118,57 +70,25 @@ export const automationRun = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     dedupeKey: text("dedupe_key").notNull(),
     firing: jsonb("firing").$type<AutomationFiring>().notNull(),
-    /** A webhook firing's body as its caller sent it, bounded, for the agent's prompt; null for every other firing. */
     payload: text("payload"),
     status: text("status").$type<AutomationRunStatus>().notNull(),
-    /** Why it was skipped or failed, or, on one that started, that it started a fresh agent in place of a gone one; null otherwise. */
     reason: text("reason").$type<AutomationRunReason>(),
-    /** The coding agent it started; null before, and where that agent is gone. */
     agentId: uuid("agent_id").references(() => agentTable.id, {
       onDelete: "set null",
     }),
     firedAt: timestamptz("fired_at").notNull(),
-    /** When it was started, skipped, or failed; null while queued. */
     settledAt: timestamptz("settled_at"),
-    /**
-     * The agent a run of an automation that hands every run to the same
-     * agent was claimed to send its task to, as it was at the claim, so the
-     * run is recovered by that agent's line whatever the automation names
-     * since; null for any other run, and once that agent is deleted.
-     */
     claimedAgentId: uuid("claimed_agent_id").references(() => agentTable.id, {
       onDelete: "set null",
     }),
-    /**
-     * The task the run's agent works on: the one the run made for itself, or,
-     * where every run goes to the same agent, that agent's task; null before
-     * the run is acted on, for a run whose agent works on no task, and once
-     * the task is deleted.
-     */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
-    /**
-     * When the sweep settled what becomes of the agent a run started for an
-     * automation that archives its successful runs: archived once it
-     * finished well, or left standing for good as failed, stopped, or put
-     * away by hand; null until then, and for every other run.
-     */
     archiveSettledAt: timestamptz("archive_settled_at"),
-    /**
-     * When the run's result was claimed for its owner's Slack message, for
-     * an automation that delivers to Slack, so a run sends it once however
-     * often its agent's turns settle; null until then, and for every other run.
-     */
     slackDeliveredAt: timestamptz("slack_delivered_at"),
   },
   (table) => [
-    // One run per firing: a second claim of the same firing finds this row.
     uniqueIndex("automation_run_dedupe").on(table.automationId, table.dedupeKey),
-    // The history reads one automation's runs newest first, and the guards count its recent ones.
     index("automation_run_automation_fired").on(table.automationId, table.firedAt),
-    // The sweep starts the queued runs oldest first and fails the ones queued too long.
     index("automation_run_status_fired").on(table.status, table.firedAt),
-    // The sweep recovers the started runs no agent was recorded for, oldest claim first.
-    // A task's finish asks whether a run made it, and a task's delete clears the runs that name it.
     index("automation_run_task").on(table.taskId).where(sql`${table.taskId} is not null`),
     index("automation_run_unrecorded_settled")
       .on(table.status, table.settledAt)

@@ -21,19 +21,6 @@ import {
   workspaceProcedures,
 } from "./workspace-procedures.js";
 
-/**
- * The workspace acts, through the act port as a window calls them: only a
- * panel of this build's own renderer asks; any other window, and
- * a frame this build does not trust, are refused in each kind's own words
- * before the host is asked; a panel's ask reaches the host with its payload
- * as the kind's schema read it, and answers what the host answered; a write
- * the account's role does not allow and an address already invited are
- * refused in words that say so; and an
- * address the service named opens only where it is the one kind its
- * connection may open.
- */
-
-// The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true };
@@ -47,7 +34,6 @@ const INVITATION = {
   acceptUrl: "https://app.test/accept-invitation.html?id=inv-1",
 };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
-/** A workspace's photo as the window sends it: a WebP's `data:` URL. */
 const PHOTO_URL = "data:image/webp;base64,UklGRgAAAABXRUJQ";
 const ACME = {
   id: "workspace-acme",
@@ -65,7 +51,6 @@ const GRACE = {
 const SENTRY_INSTALL_URL = "https://sentry.io/sentry-apps/luke/external-install/?state=fixture";
 const SENTRY_INSTALLATION = { installationId: "installation-1", account: "acme" };
 
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: "Could not make that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_RENAME]: "Could not rename that workspace on this system.",
@@ -97,12 +82,10 @@ const REFUSAL = {
 
 type WorkspaceKind = keyof typeof REFUSAL;
 
-/** What any port kind takes, the union a test hands one kind or refuses on purpose. */
 type AnyPayload = PortActPayload<PortActKind>;
 
 const WORKSPACE = { workspaceId: ACME.id };
 
-/** One ask of every workspace kind, with a payload its schema admits. */
 const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_CREATE, payload: { name: "Relay Labs" } },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_RENAME, payload: { ...WORKSPACE, name: "Acme Labs" } },
@@ -132,15 +115,10 @@ const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET, payload: { ...WORKSPACE, slug: "acme-labs" } },
 ];
 
-/** What the fake host answers, set by each test before it asks. */
 interface Script {
-  /** Whether every write is refused as the account's role not allowing it. */
   notPermitted: boolean;
-  /** Whether an invitation is refused as the address already invited. */
   alreadyInvited: boolean;
-  /** The address a GitHub connection answers to open. */
   connectUrl: string;
-  /** The address a Sentry install answers to open. */
   sentryInstallUrl: string;
 }
 
@@ -150,11 +128,6 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/**
- * A window's act port, opened as the bridge opens one, over a fake host
- * holding the Acme workspace with Grace in it: the window standing as
- * `actor`, trusted or not.
- */
 function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   const asked: string[] = [];
   const browsed: string[] = [];
@@ -304,12 +277,9 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   return { client, asked, browsed, script };
 }
 
-/** Any port kind's procedure, erased to the union of what every one takes and answers. */
 type PortCall = (payload: PortActPayload<PortActKind>) => Promise<PortActResult<PortActKind>>;
 
-/** One act called on the port, settled to its answer or the sentence of its refusal. */
 async function settled(client: ActPortClient, kind: WorkspaceKind, payload: AnyPayload) {
-  // SAFETY: each test pairs a kind with the payload its own procedure takes, or one it refuses on purpose.
   const call = client[kind] as PortCall;
   try {
     return { answer: await call(payload) };
@@ -507,14 +477,12 @@ it("a workspace write the account's role does not allow is refused in words that
   assert.deepEqual(browsed, []);
 });
 
-/** A role no workspace has. */
 const EMPEROR: string = "emperor";
 
 it("a payload its kind's schema refuses is refused in the kind's own words, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
 
   assert.deepEqual(
-    // SAFETY: a role the schema does not name, refused on purpose.
     await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITE, {
       ...WORKSPACE,
       email: INVITATION.email,
@@ -529,7 +497,6 @@ it("a payload carrying a key its kind's schema does not name is refused, and the
   const { client, asked } = windowPort(PANEL);
 
   assert.deepEqual(
-    // SAFETY: a key the schema does not name, refused on purpose.
     await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_LEAVE, {
       ...WORKSPACE,
       extra: true,

@@ -1,12 +1,7 @@
-/**
- * task-list-rows.ts -- the task list's rows as its statements deliver them, for a host test.
- */
-
 import { AGENT_BRIEF } from "@repo/features/agent-wire";
 import { TASK_PRIORITY, TASK_STATUS } from "@repo/features/task-wire";
 import type { AgentRow, PlanRow } from "../task-list-collections.js";
 
-/** One plan as the plans statement delivers its row, unpinned, unassigned, and still to do. */
 export function planListRow(id: string, name: string): PlanRow {
   return {
     id,
@@ -27,7 +22,6 @@ export function planListRow(id: string, name: string): PlanRow {
   };
 }
 
-/** One agent of the plan, or of none, as the agents statement delivers its row, started at `createdAt`, with no turn yet. */
 export function agentListRow(planId: string | null, createdAt: number): AgentRow {
   return {
     id: "3f1d2c4b-5a6e-4f70-8a91-b2c3d4e5f607",

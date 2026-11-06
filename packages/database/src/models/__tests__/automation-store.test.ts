@@ -42,16 +42,6 @@ import {
   updateAutomation,
 } from "../automation-store.js";
 
-/**
- * An account's automations and their runs, over a real dialect: made only
- * on a task the account reaches, read and changed by that account alone
- * while it still reaches the task, one run per firing however often it is
- * claimed, a run settled once, and a schedule claimed once when due, its
- * backlog moved on rather than run.
- *
- * Synthetic accounts, workspaces, and tasks throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -59,7 +49,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A workspace the account owns, as the organization plugin would leave the rows. */
 const openWorkspace = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -95,7 +84,6 @@ it.layer(getTestDB())("the automation store", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const workspaceId = yield* openWorkspace(owner);
-        // Never due, so no other test's claim finds it.
         const existing = Option.getOrThrow(
           yield* createAutomation(owner, { ...nightly(workspaceId), nextRunAt: null }),
         );
@@ -163,7 +151,6 @@ it.layer(getTestDB())("the automation store", (it) => {
           [workspace, ["acme/api", "acme/web"]],
         );
         assert.ok(Option.isNone(refused), "an account outside the workspace makes nothing there");
-        // Note that the two were made in one instant, so their order is their ids', and read as a set.
         assert.deepEqual(
           (yield* listAutomations(owner, { organizationId: workspace }))
             .map((each) => each.id)
@@ -397,7 +384,6 @@ it.layer(getTestDB())("the automation store", (it) => {
           "a schedule whose owner left still fires, so its run fails and says why",
         );
 
-        // A second claim that read the row at its old instant records no second run.
         yield* updateAutomation(owner, due.id, { nextRunAt: due.nextRunAt });
         assert.deepEqual(yield* claimDueAutomations(claim), []);
         assert.equal((yield* listAutomationRuns(owner, due.id)).length, 1);
@@ -549,7 +535,6 @@ it.layer(getTestDB())("the automation store", (it) => {
           );
         yield* TestClock.setTime(Date.parse("2026-10-15T12:00:00Z"));
         const started = yield* fireOn("4001");
-        // The sweep starts it three quarters of an hour after it fired; a claim is a start, its agent still to come.
         yield* TestClock.adjust(Duration.minutes(45));
         yield* claimAutomationRun(started.id);
         const skipped = yield* fireOn("4002");
@@ -614,7 +599,6 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
         const sweep = yield* made(owner, workspaceId, "Nightly flaky-test sweep");
         const digest = yield* made(owner, workspaceId, "Morning digest");
         const theirs = yield* made(other, theirTask, "Their sweep");
-        /** A run of the automation, settled as it came out, a second after the one before. */
         const ran = (
           automation: typeof sweep,
           outcome:
@@ -681,7 +665,6 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
           yield* createAutomation(owner, { ...nightly(workspaceId), id }),
         );
 
-        // A make run again under the same id writes nothing, and the first stands.
         const again = yield* createAutomation(owner, {
           ...nightly(workspaceId),
           id,

@@ -11,25 +11,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-/**
- * Every instant the auth tables hold is `timestamp with time zone`, which is
- * what migration 0026 made the columns. Drizzle reads a column declared
- * without the flag by appending a UTC offset to the driver's text, so on a
- * `timestamptz` value the read would stand on the date parser discarding the
- * second offset rather than on the declared type.
- */
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true });
 
-/**
- * The account. Its `role` is the admin plugin's, and so are `banned`,
- * `ban_reason`, and `ban_expires`, which nothing of ours writes but which the
- * plugin writes on every new account and reads on every sign-in; its
- * `support_access_until` is the support-access plugin's
- * (`@repo/service`'s `auth/support-access.ts`), the moment the member's grant
- * of support access runs out, null while none stands. Those five are as
- * Better Auth's CLI generates them for 1.7.7 with instants through
- * `timestamptz()`, and `role` keeps the default it shipped with.
- */
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -39,7 +22,7 @@ export const user = pgTable("user", {
   createdAt: timestamptz("created_at").defaultNow().notNull(),
   updatedAt: timestamptz("updated_at")
     .defaultNow()
-    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .$onUpdate(() => new Date())
     .notNull(),
   lastLoginMethod: text("last_login_method"),
   role: text("role").default("user"),
@@ -57,7 +40,7 @@ export const session = pgTable(
     token: text("token").notNull().unique(),
     createdAt: timestamptz("created_at").defaultNow().notNull(),
     updatedAt: timestamptz("updated_at")
-      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .$onUpdate(() => new Date())
       .notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
@@ -65,8 +48,6 @@ export const session = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     activeOrganizationId: text("active_organization_id"),
-    // The admin plugin's, as its CLI generates it for 1.7.7: the maintainer
-    // a support sign-in was started by, null on every other session.
     impersonatedBy: text("impersonated_by"),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
@@ -90,7 +71,7 @@ export const account = pgTable(
     password: text("password"),
     createdAt: timestamptz("created_at").defaultNow().notNull(),
     updatedAt: timestamptz("updated_at")
-      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .$onUpdate(() => new Date())
       .notNull(),
   },
   (table) => [index("account_userId_idx").on(table.userId)],
@@ -106,7 +87,7 @@ export const verification = pgTable(
     createdAt: timestamptz("created_at").defaultNow().notNull(),
     updatedAt: timestamptz("updated_at")
       .defaultNow()
-      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .$onUpdate(() => new Date())
       .notNull(),
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
@@ -258,11 +239,6 @@ export const oauthConsent = pgTable(
   ],
 );
 
-/**
- * Better Auth 1.7's tables, and the 1.7 columns above, are declared ahead of
- * the upgrade (migration 0081): 1.6 ignores them, and the deployment that
- * moves to 1.7 finds every one it writes already standing.
- */
 export const oauthResource = pgTable("oauth_resource", {
   id: text("id").primaryKey(),
   identifier: text("identifier").notNull().unique(),
@@ -309,12 +285,6 @@ export const oauthClientAssertion = pgTable("oauth_client_assertion", {
   expiresAt: timestamptz("expires_at").notNull(),
 });
 
-/**
- * Better Auth's rate limiter's counters, one row per address and path, as
- * its database storage keeps them (`rateLimit.storage: "database"` in
- * `auth.ts`): the count in the window that `lastRequest`, epoch millis,
- * opened. The limiter prunes rows past its longest window as it writes.
- */
 export const rateLimit = pgTable("rate_limit", {
   id: text("id").primaryKey(),
   key: text("key").notNull().unique(),
@@ -322,13 +292,6 @@ export const rateLimit = pgTable("rate_limit", {
   lastRequest: bigint("last_request", { mode: "number" }).notNull(),
 });
 
-/**
- * The organization plugin's tables, as Better Auth's CLI generates them for
- * 1.6.29 with instants through `timestamptz()`. A workspace is an
- * organization, its team the `member` rows; `invitation` is
- * declared because the plugin's schema names it, and stays empty while the
- * invitation endpoints are disabled (`auth-policy.ts`).
- */
 export const organization = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -354,7 +317,6 @@ export const member = pgTable(
   (table) => [
     index("member_organizationId_idx").on(table.organizationId),
     index("member_userId_idx").on(table.userId),
-    // Not Better Auth's: every membership check of the service names both the account and the workspace.
     index("member_userId_organizationId_idx").on(table.userId, table.organizationId),
   ],
 );

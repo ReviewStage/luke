@@ -12,28 +12,12 @@ import type { WorkspaceSeams } from "../models/workspace-seams.js";
 import { member, organization } from "../schemas/auth.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 
-/**
- * workspaces.ts -- workspaces for a test, the plugin's write faked over them, and a task started in one.
- *
- * Every task belongs to a workspace, a Better Auth `organization` the
- * account is a `member` of. A test that is about something else starts its
- * tasks through `startTask`, which puts them in one workspace the account
- * owns, made the first time it is asked for. The rows are written straight
- * over the plugin's tables, as the plugin would leave them, since a test
- * stands no Better Auth, and `fakeWorkspaceSeams` is the plugin's
- * server-only create over the same tables; a test of the plugin's own write
- * is `workspace-store.test.ts`.
- */
-
-/** A task to start in the account's test workspace: what `createTask` takes, without the workspace. */
 export type TestTask = Omit<NewTask, "organizationId">;
 
 export { WORKSPACE_ROLE };
 
-/** What a test workspace is called; the column is not null and no test reads it. */
 const TEST_WORKSPACE_NAME = "Test Workspace";
 
-/** Adds the account to the workspace under the role, as the plugin's `addMember` would. */
 export const joinWorkspace = (
   organizationId: string,
   userId: string,
@@ -47,7 +31,6 @@ export const joinWorkspace = (
       .values({ id: randomUUID(), organizationId, userId, role, createdAt: now });
   });
 
-/** Takes the account out of the workspace, as the plugin's `removeMember` would. */
 export const leaveWorkspace = (organizationId: string, userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -56,7 +39,6 @@ export const leaveWorkspace = (organizationId: string, userId: string) =>
       .where(and(eq(member.organizationId, organizationId), eq(member.userId, userId)));
   });
 
-/** A new workspace the account owns, answering its id. */
 export const openWorkspace = (ownerId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -69,14 +51,12 @@ export const openWorkspace = (ownerId: string) =>
     return id;
   });
 
-/** The installation a test workspace stands for: GitHub's ids for it and its account, and the account's login. */
 export interface TestInstallation {
   readonly installationId: number;
   readonly accountId: number;
   readonly accountLogin: string;
 }
 
-/** A new workspace the account owns with the installation connected to it, active; answers its id. */
 export const openInstallationWorkspace = (ownerId: string, installation: TestInstallation) =>
   Effect.gen(function* () {
     const id = yield* openWorkspace(ownerId);
@@ -94,11 +74,6 @@ export const openInstallationWorkspace = (ownerId: string, installation: TestIns
     return id;
   });
 
-/**
- * The plugin's server-only create, over the test's own database: the
- * organization, then its owner, refusing a slug that is taken as the plugin
- * does.
- */
 export const fakeWorkspaceSeams = Effect.gen(function* () {
   const db = yield* Database;
   const seams: WorkspaceSeams = {
@@ -134,16 +109,11 @@ export const fakeWorkspaceSeams = Effect.gen(function* () {
   return seams;
 });
 
-/**
- * The plugin's create for a test that signs no account up, as a route that
- * takes it is handed one: reached, it fails as the plugin's outage would.
- */
 export const unreachedWorkspaceSeams: WorkspaceSeams = {
   createOrganization: () =>
     Effect.fail(new Cause.UnknownError(undefined, "No workspace is made in this test")),
 };
 
-/** The workspace the account owns that its test tasks start in, made the first time it is asked for. */
 const workspaceOf = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -156,7 +126,6 @@ const workspaceOf = (userId: string) =>
     return yield* openWorkspace(userId);
   });
 
-/** Starts a task under the account in its test workspace. */
 export const startTask = (userId: string, started: TestTask) =>
   Effect.flatMap(workspaceOf(userId), (organizationId) =>
     createTask(userId, { ...started, organizationId }),

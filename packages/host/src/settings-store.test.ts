@@ -55,7 +55,6 @@ import { TEST_CIPHER_PREFIX, testCipher } from "./testing/test-cipher.js";
 
 const SETTINGS_FILE_NAME = "settings.json";
 
-/** The account every test that needs one signs in, tokens and display identity together. */
 const TEST_ACCOUNT = {
   accessToken: "access-token-secret",
   refreshToken: "refresh-token-secret",
@@ -64,33 +63,18 @@ const TEST_ACCOUNT = {
   provider: "github",
 } as const satisfies StoredAccount;
 
-/** Text sealed by `testCipher` as an earlier build kept it at rest: Node's standard base64 of the cipher's bytes. */
 function sealed(plainText: string): string {
   return Buffer.from(`${TEST_CIPHER_PREFIX}${plainText}`, "utf8").toString("base64");
 }
 
-/** The file system every store this suite opens reads and writes through. */
 const FILE_SYSTEM: FileSystem.FileSystem = Effect.runSync(
   Effect.provide(FileSystem.FileSystem, NodeFileSystem.layer),
 );
 
-/** The path service beside it, on the same terms. */
 const PATH: Path.Path = Effect.runSync(Effect.provide(Path.Path, NodePath.layer));
 
-/**
- * The services this suite's own promise face runs the store's effects under: the
- * store's own methods are effects, and this suite holds them as the promises
- * its assertions are written against. `settings-store-awaited.ts` once
- * answered production callers the same shape by name and is now deleted;
- * this is that shape kept for the suite alone, where the run-outside-an-edge
- * rule does not reach (tests are exempt by extension).
- */
 const SERVICES: Context.Context<never> = Context.empty();
 
-/**
- * The store's own methods, as this suite's assertions are written against
- * them — every one this file calls, never the store's whole face.
- */
 interface PromisedSettingsStore {
   get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>>;
   set<Field extends AppSettingField>(
@@ -173,30 +157,16 @@ async function readSettingsFile(directory: string): Promise<string> {
   return fs.readFile(path.join(directory, SETTINGS_FILE_NAME), "utf8");
 }
 
-/**
- * A value each setting can hold that is not the value it falls back to, so a
- * write can be told from the state it replaced. The table is total over
- * `APP_SETTING_FIELDS`, so a setting added without one fails to compile rather
- * than going quietly untested.
- */
 const SAMPLE_VALUE = {
-  // System is what an absent theme falls back to, so Dark is the explicit
-  // choice that has to survive a reopen as itself.
   theme: THEME.DARK,
   zoom: 150,
   openAtLogin: false,
   preferBuiltInMicrophone: false,
-  // Ask is the default, so Never is the choice that has to survive a reopen.
   macCommands: MAC_COMMAND_MODE.NEVER,
-  // Steer is the default, so Queue is the choice that has to survive a reopen.
   agentEnter: AGENT_ENTER.QUEUE,
-  // You with our bot as co-author is the default, so the bot alone is the choice that has to survive a reopen.
   commitAuthor: COMMIT_AUTHOR.APP,
-  // Not yet is the default, so finished is the state that has to survive a reopen.
   setupFinished: true,
-  // Not yet started is the default, so a place midway through a team's setup is the state that has to survive a reopen.
   setupPlace: '{"audience":"team","at":2,"team":"workspace-ada"}',
-  // Each diff setting away from its default, the look a review tool's reader picked.
   lineNumbers: false,
   wordWrap: false,
   diffLayout: DIFF_LAYOUT.SPLIT,
@@ -212,7 +182,6 @@ const SAMPLE_VALUE = {
   diffMinimizeComments: true,
   linkOpen: LINK_OPEN.MAC_APP,
   openNewTask: false,
-  // A packaged build shares usage data unless told not to, so Off is the choice.
   usageData: false,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
@@ -239,8 +208,6 @@ test("every setting starts at its default, survives a reopen, and can be cleared
       `${field} was not drawn as it was stored`,
     );
 
-    // Clearing is the absence of a choice, not a stored empty value, so a
-    // setting that can be unset reads as unset again from a reopened file.
     if (APP_SETTING_SCHEMA[field].guard(undefined).valid) {
       await store.set(field, undefined);
       assert.deepEqual(
@@ -272,7 +239,6 @@ it.effect(
 
       assert.equal(reset.reason, undefined);
       const reopened = opened();
-      // The theme's choice is forgotten, so it reads as no choice at all.
       assert.equal(yield* reopened.get("theme"), undefined);
       assert.equal(yield* reopened.get("zoom"), 125);
     }).pipe(Effect.provide(NodeFileSystem.layer)),
@@ -445,7 +411,6 @@ test("round-trips an encrypted account without exposing either token in snapshot
     provider: TEST_ACCOUNT.provider,
   });
   assert.deepEqual(await reopened.readAccount(), TEST_ACCOUNT);
-  // At rest the tokens are ciphertext, private to the owner, and never plain.
   assert.equal(stats.mode & 0o777, 0o600);
   assert.equal(contents.includes(TEST_ACCOUNT.accessToken), false);
   assert.equal(contents.includes(TEST_ACCOUNT.refreshToken), false);
@@ -479,7 +444,6 @@ test("the Mac's session rides sealed beside the OAuth tokens, and reads back wit
   assert.deepEqual(await reopened.readAccount(), withSession);
   assert.equal(contents.includes(withSession.sessionToken), false);
   assert.equal(JSON.stringify(await reopened.snapshot()).includes(withSession.sessionToken), false);
-  // A sign-in that stores no session leaves none behind from the last.
   await reopened.setAccount(TEST_ACCOUNT);
   assert.deepEqual(await storeIn(directory).readAccount(), TEST_ACCOUNT);
 });
@@ -523,7 +487,6 @@ it.effect(
     }).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
-/** Preferences as they cross the wire: split into the snapshot's parts, through JSON, and joined again. */
 function throughSnapshot(preferences: AccountPreferences): AccountPreferences | undefined {
   const wire = unparsedWire(JSON.parse(JSON.stringify(accountPreferencesParts(preferences))));
   return isRecord(wire) ? accountPreferencesFromParts(wire) : undefined;
@@ -579,7 +542,6 @@ test("a first link choice made before the first sync is kept to be written, whet
     const mac = storeIn(await temporaryDirectory(t, "settings-"));
     await mac.setAccount(TEST_ACCOUNT);
     await mac.set("linkOpen", LINK_OPEN.MAC_APP);
-    // Note that a first hydration takes the Mac's preferences as they stand for its baseline.
     const baseline = await mac.accountPreferences();
 
     await mac.applyAccountPreferences(
@@ -610,7 +572,6 @@ test("the experiments the service answered stand for the account signed in, acro
   assert.deepEqual((await store.snapshot()).experiments, memoryOn);
   assert.deepEqual((await storeIn(directory).snapshot()).experiments, memoryOn);
 
-  // The same answer again changes nothing, and an answer for an account not signed in is no choice of this one's.
   assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, memoryOn), false);
   assert.equal(await store.cacheExperiments("someone-else@example.com", {}), false);
   assert.deepEqual((await store.snapshot()).experiments, memoryOn);
@@ -639,7 +600,6 @@ test("a sign-out, or another account's sign-in, leaves no experiment of the last
 it.effect("two stores on one file, as two browser tabs are, each keep the other's change", () =>
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("settings-tabs-");
-    // A browser tab's store: the cookie session hands it no cipher.
     const tab = () =>
       new SettingsStore({
         directory: () => directory,
@@ -649,7 +609,6 @@ it.effect("two stores on one file, as two browser tabs are, each keep the other'
       });
     const first = tab();
     const second = tab();
-    // Both tabs have read the file before either writes.
     yield* first.snapshot();
     yield* second.snapshot();
 
@@ -662,7 +621,6 @@ it.effect("two stores on one file, as two browser tabs are, each keep the other'
   }).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
-/** The suite's file system, but with every read of a file failing while `failing.reads` is set, as a disk's transient error does. */
 function flakyReads(failing: { reads: boolean }): FileSystem.FileSystem {
   return {
     ...FILE_SYSTEM,

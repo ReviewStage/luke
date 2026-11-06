@@ -2,11 +2,6 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { ACT_PORT, actPortForwarder } from "./kinds.js";
 
-/**
- * The preload's half of the act port's handshake: one page forwards one
- * port to main, the first it posts to itself, and nothing else it hears.
- */
-
 const PAGE = Symbol("page");
 const FRAME = Symbol("another frame");
 

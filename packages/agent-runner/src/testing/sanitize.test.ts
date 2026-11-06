@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findLeaks, type KnownSecret, Sanitizer, SECRET_KIND } from "./sanitize.js";
 
-// Note that these shapes are assembled at run time, because the repository check refuses a
-// tracked literal shaped like a provider's credential.
 const JWT = ["eyJhbGciOiJSUzI1NiJ9", "eyJzdWIiOiJ4In0", "c2lnbmF0dXJlLXZhbHVl"].join(".");
 const ISSUED = ["oaiapp", "abc123"].join("_");
 const SECRETS: readonly KnownSecret[] = [

@@ -1,15 +1,3 @@
-/**
- * tasks-procedures.test.ts -- the task list, lifecycle, and content acts, through the act port as a window calls them.
- *
- * Only a panel of this build's own renderer asks; any other
- * window, and a frame this build does not trust, are refused in each
- * kind's own words before the host is asked; a panel's ask reaches the host
- * with its payload as the kind's schema read it, and answers what the host
- * answered; the browser opens only the addresses each kind may open; and what a task
- * holds is read through the host, a page's source colored, and a pull
- * request or an issue the service did not answer refused.
- */
-
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { ORPCError } from "@orpc/client";
@@ -55,7 +43,6 @@ import type { ActSender } from "./base.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
-// The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true };
@@ -65,7 +52,6 @@ const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SERVICE = "https://app.test";
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
 
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_REFRESH]: "Could not read your tasks on this system.",
   [TASKS_ACT_KIND.TASKS_SELECT]: "Could not open that task on this system.",
@@ -109,15 +95,12 @@ const REFUSAL = {
 
 type TasksKind = keyof typeof REFUSAL;
 
-/** What any port kind takes, the union a test hands one kind or refuses on purpose. */
 type AnyPayload = PortActPayload<PortActKind>;
 
 const TASK = { taskId: TASK_ID };
 const EDIT = { ...TASK, edit: { document: { base: "", value: "Invites expire." } } };
 
-/** A comment thread's id, as the service spells one. */
 const THREAD_ID = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
-/** The one picture the fake host holds. */
 const PICTURE_ID = "picture-1";
 const PLAN = { planId: "plan-1" };
 const PLACE = { workspaceId: "workspace-acme", repository: "acme/relay" };
@@ -139,7 +122,6 @@ const COMMENT_ACT = {
   action: { action: DESCRIPTION_COMMENT_ACTION.RESOLVE },
 };
 
-/** One Browser tab in a coding agent's browser on the task. */
 const BROWSER_TAB = {
   id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
   agentId: "1e2d3c4b-5a6f-4e7d-8c9b-0a1f2e3d4c5b",
@@ -151,25 +133,20 @@ const BROWSER_TAB = {
   lastActedAt: 2_000,
 } as const;
 
-/** A tab a member opens in a coding agent's browser. */
 const BROWSER_TAB_OPEN = {
   agentId: "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a",
   address: "https://example.com/sign-in",
 };
 
-/** A coding agent whose browser the service could not reach. */
 const AGENT_UNREACHABLE = "7b6a5f4e-3d2c-4b1a-9f8e-7d6c5b4a3f2e";
 
-/** One admin read, of the roster at a week, admins counted. */
 const ADMIN_READ_PARAMS = {
   procedure: ADMIN_READ.USERS,
   query: { [ADMIN_QUERY.WINDOW]: "7", [ADMIN_QUERY.SCOPE]: "all" },
 };
-/** The one account the fake service names, and the roster it answers for it. */
 const ADMIN_ACCOUNT_ID = "user-ada";
 const ADMIN_ROSTER = { total: 1, rows: [{ id: ADMIN_ACCOUNT_ID, name: "Ada" }] };
 
-/** One ask of every task kind, with a payload its schema admits. */
 const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_REFRESH, payload: undefined },
   { kind: TASKS_ACT_KIND.TASKS_SELECT, payload: TASK },
@@ -221,19 +198,12 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_COMMENT_ACT, payload: COMMENT_ACT },
 ];
 
-/** What the fake host and the window's process answer, set by each test before it asks. */
 interface Script {
-  /** What a start answers. */
   start: TasksStartAnswer;
-  /** The page the host names to connect the account's own GitHub, or none. */
   connectPage: string | undefined;
-  /** Whether GitHub is the account's only way to sign in. */
   lastSignIn: boolean;
-  /** A key the host's start answer carries beside what the window reads, as a newer host might. */
   startExtra: boolean;
-  /** The HTML the service answers for a page's version, none where it does not answer. */
   pageHtml: string | undefined;
-  /** What an admin read answers. */
   adminRead: AdminReadAnswer;
 }
 
@@ -243,10 +213,6 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/**
- * A window's act port serving the task procedures alone, opened as the bridge opens one, over a fake host:
- * the window standing as `actor`, trusted or not.
- */
 function windowPort(
   actor: ActSender,
   options: { trusted?: boolean; serviceBaseUrl?: string } = {},
@@ -281,7 +247,6 @@ function windowPort(
       ask(`section:${params.writes.map((write) => write.kind).join(",")}`, () => true),
     tasksStart: (request) =>
       ask(`start:${request.name ?? ""}`, () =>
-        // A key no start answer names, carried on purpose to show the port drops it.
         script.startExtra ? Object.assign({ extra: true }, script.start) : script.start,
       ),
     tasksRepositoriesFollow: (params) => ask(`repositories:${params.workspaceId}`, () => undefined),
@@ -423,12 +388,9 @@ function windowPort(
   return { client, asked, browsed, script };
 }
 
-/** Any port kind's procedure, erased to the union of what every one takes and answers. */
 type PortCall = (payload: PortActPayload<PortActKind>) => Promise<PortActResult<PortActKind>>;
 
-/** One act called on the port, settled to its answer or the sentence of its refusal. */
 async function settled(client: ActPortClient, kind: TasksKind, payload: AnyPayload) {
-  // SAFETY: each test pairs a kind with the payload its own procedure takes, or one it refuses on purpose.
   const call = client[kind] as PortCall;
   try {
     return { answer: await call(payload) };
@@ -675,7 +637,6 @@ it("an admin read naming no procedure the service serves is refused in its own w
   const { client, asked } = windowPort(PANEL);
 
   assert.deepEqual(
-    // SAFETY: a procedure no admin read is served under, sent on purpose to be refused.
     await settled(client, TASKS_ACT_KIND.ADMIN_READ, {
       procedure: "secrets",
       query: {},
@@ -707,11 +668,9 @@ it("a payload its kind's schema refuses is refused in the kind's own words, and 
   assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_SELECT, { taskId: "   " }), {
     refused: REFUSAL[TASKS_ACT_KIND.TASKS_SELECT],
   });
-  assert.deepEqual(
-    // SAFETY: a payload sent to a kind that takes none, refused on purpose.
-    await settled(client, TASKS_ACT_KIND.TASKS_REFRESH, TASK as AnyPayload),
-    { refused: REFUSAL[TASKS_ACT_KIND.TASKS_REFRESH] },
-  );
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_REFRESH, TASK as AnyPayload), {
+    refused: REFUSAL[TASKS_ACT_KIND.TASKS_REFRESH],
+  });
   assert.deepEqual(asked, []);
 });
 
@@ -719,12 +678,10 @@ it("a payload carrying a key its kind's schema does not name is refused, and the
   const { client, asked } = windowPort(PANEL);
 
   assert.deepEqual(
-    // SAFETY: a key the schema does not name, refused on purpose.
     await settled(client, TASKS_ACT_KIND.TASKS_EDIT, { ...EDIT, extra: true } as AnyPayload),
     { refused: REFUSAL[TASKS_ACT_KIND.TASKS_EDIT] },
   );
   assert.deepEqual(
-    // SAFETY: a key the schema does not name, refused on purpose.
     await settled(client, TASKS_ACT_KIND.TASKS_DELETE, { ...TASK, extra: true } as AnyPayload),
     { refused: REFUSAL[TASKS_ACT_KIND.TASKS_DELETE] },
   );
@@ -796,7 +753,6 @@ it("a page's source is read through the host for a panel, line by line and plain
   const plain = await source();
 
   assert.deepEqual(unanswered, { answer: { failure: TASK_CALL_FAILURE.UNANSWERED } });
-  // SAFETY: the page-source procedure answers a page source, which the assertion below reads.
   const answer = ("answer" in read ? read.answer : undefined) as TasksPageSourceAnswer | undefined;
   assert.ok(answer !== undefined && "lines" in answer);
   assert.deepEqual(answer.lines, [[{ text: "<h1>Invites</h1>" }], [], [{ text: "<p>sent</p>" }]]);
@@ -871,14 +827,11 @@ it("a content act's payload carrying a key its schema does not name, or past its
   for (const act of ACTS.slice(
     ACTS.findIndex((each) => each.kind === TASKS_ACT_KIND.TASKS_SET_STANDING),
   )) {
-    // SAFETY: every content kind but the two earlier-page presses takes an object payload, which ACTS gives it.
     const payload =
       act.payload === undefined ? { extra: true } : { ...(act.payload as object), extra: true };
-    assert.deepEqual(
-      // SAFETY: a key the schema does not name, refused on purpose.
-      await settled(client, act.kind, payload as AnyPayload),
-      { refused: REFUSAL[act.kind] },
-    );
+    assert.deepEqual(await settled(client, act.kind, payload as AnyPayload), {
+      refused: REFUSAL[act.kind],
+    });
   }
   assert.deepEqual(
     await settled(client, TASKS_ACT_KIND.TASKS_COLOR_CODE, {
@@ -897,10 +850,8 @@ it("a content act's payload carrying a key its schema does not name, or past its
   assert.deepEqual(asked, []);
 });
 
-/** A window's act port as `windowPort` opens it. */
 type WindowClient = ReturnType<typeof windowPort>["client"];
 
-/** The holds a panel keeps on a plan's reads the host lays on app state, each opened as the window opens its stream, and the line the fake host notes it by. */
 const HOLDS = [
   {
     what: "pages",
@@ -926,7 +877,6 @@ it.each(HOLDS)(
 
     const one = await hold(client);
     const other = await hold(client);
-    // Note that a stream is read so its hold opens, though nothing is ever heard down it.
     void one.next();
     void other.next();
     await vi.waitFor(() => assert.deepEqual(asked, [`${line}-follow:${TASK_ID}`]));

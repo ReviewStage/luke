@@ -8,15 +8,7 @@ import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { CHAPTERS_ACT_KIND } from "./kinds.js";
 
-/**
- * chapters.ts -- a coding agent's Pull request tab's asks of the host about a pull request's chapters, as procedures.
- *
- * Each output but the hold's is its view schema flipped, so oRPC's output check encodes the
- * row's value into what crosses the port, the convention the hosted contract
- * keeps (`@repo/features/contract`).
- */
 export const chaptersActsContract = {
-  // Note that the hold's stream carries nothing: the held chapters reach the panel on app state, and the stream is the window's hold on them.
   [CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW]: actProcedure(
     "Could not follow the pull request's chapters on this system.",
   )

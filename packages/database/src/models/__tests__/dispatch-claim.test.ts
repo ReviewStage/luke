@@ -21,16 +21,6 @@ import {
   storeWriter,
 } from "../writer.js";
 
-/**
- * The conversation's dispatch claim over a real dialect: a hand-over to the
- * runtime runs with no transaction open, a send meeting another's claim
- * waits for it and is refused as busy past the wait, and a claim whose
- * holder died is taken over past its expiry without what it handed over
- * being handed over again. Time is the test clock's, so a wait or an
- * expiry passes only as the test moves it. Synthetic accounts and
- * conversations throughout.
- */
-
 const SENDER = { kind: MESSAGE_SENDER.APP } as const;
 
 const openAgentConversation = Effect.gen(function* () {
@@ -44,7 +34,6 @@ const openAgentConversation = Effect.gen(function* () {
   return { userId, conversationId } satisfies ConversationTarget;
 });
 
-/** The claim a holder took at the test clock's instant and never cleared, as one that died between its claim and its record leaves it. */
 const claimLeftBy = (target: ConversationTarget, claim: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -55,7 +44,6 @@ const claimLeftBy = (target: ConversationTarget, claim: string) =>
       .where(eq(conversations.id, target.conversationId));
   });
 
-/** A hand-over that counts itself and answers as given. */
 const countedDispatch = Effect.gen(function* () {
   const handed = yield* Ref.make(0);
   const dispatch = (taken: boolean) =>
@@ -66,18 +54,12 @@ const countedDispatch = Effect.gen(function* () {
   return { handed, dispatch };
 });
 
-/** How many rows stand under the send's key. */
 const rowsUnder = (target: ConversationTarget, clientKey: string) =>
   Effect.map(
     readMessageByClientId(target.userId, target.conversationId, {}, sentLineId(clientKey)),
     (read) => (read.ok ? read.value.length : -1),
   );
 
-/**
- * Whether two statements run one after the other are transactions of their
- * own, which they are where no transaction stands open around them: each is
- * then given an id of its own, where inside one they share its id.
- */
 const inNoTransaction = Effect.flatMap(SqlClient.SqlClient, (sql) =>
   Effect.gen(function* () {
     const xid = sql<{ readonly xid: string }>`select txid_current()::text as xid`;
@@ -87,12 +69,6 @@ const inNoTransaction = Effect.flatMap(SqlClient.SqlClient, (sql) =>
   }),
 );
 
-/**
- * The fiber's end, with the test clock moved on a step at a time, a round
- * trip to the database apart, until it ends: a wait it sleeps on the clock
- * passes however long its statements take on a real Postgres, without the
- * clock running so far ahead of them that a claim expires meanwhile.
- */
 const joinedAsTimePasses = <A, E>(fiber: Fiber.Fiber<A, E>) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -103,7 +79,6 @@ const joinedAsTimePasses = <A, E>(fiber: Fiber.Fiber<A, E>) =>
     return yield* Fiber.join(fiber);
   });
 
-/** The test clock moved on by the time given, a step at a time, a round trip to the database apart, so what waits on it keeps pace. */
 const timePasses = (millis: number) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -113,11 +88,6 @@ const timePasses = (millis: number) =>
     }
   });
 
-/**
- * The conversation's next clearing of its dispatch claim fails, once, as a
- * passing store failure would: a trigger counts on a sequence, which a
- * rolled-back transaction does not take back.
- */
 const releaseFailsOnce = (target: ConversationTarget) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -131,7 +101,6 @@ const releaseFailsOnce = (target: ConversationTarget) =>
     );
   });
 
-/** Every waiter queued for the conversation's claim, as though the database last heard from them the given seconds ago. */
 const waitersLastSeen = (target: ConversationTarget, secondsAgo: number) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     Effect.asVoid(
@@ -139,7 +108,6 @@ const waitersLastSeen = (target: ConversationTarget, secondsAgo: number) =>
     ),
   );
 
-/** A waiter queued for the conversation's claim, as one the database last heard from the given seconds ago. */
 const waiterSeen = (target: ConversationTarget, secondsAgo: number) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     Effect.asVoid(
@@ -188,7 +156,6 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         const { handed, dispatch } = yield* countedDispatch;
         const lost = { text: "Fix the tile.", clientKey: "lost", sender: SENDER };
         const next = { text: "Then the header.", clientKey: "next", sender: SENDER };
-        // The holder wrote its line and handed it over, then died before clearing its claim.
         yield* writer.writeAwaitingLine(target, lost, Effect.succeed(true));
         yield* claimLeftBy(target, randomUUID());
 
@@ -242,7 +209,6 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         const second = yield* Effect.forkChild(send("second", Effect.succeed(true)));
         yield* timePasses(300);
         const third = yield* Effect.forkChild(send("third", Effect.succeed(true)));
-        // The first hand-over ends just before the third's next try and well before the second's.
         yield* timePasses(700);
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(first);
@@ -280,12 +246,10 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
               true,
             ),
           );
-        // A hand-over's claim, which stands while the sends below wait on it.
         yield* claimLeftBy(target, randomUUID());
 
         const earlier = yield* Effect.forkChild(send("earlier"));
         yield* timePasses(1500);
-        // As though the hand-over had run on past a waiter's quiet: the database last heard from the waiter long ago.
         yield* waitersLastSeen(target, 3);
         yield* timePasses(500);
         const later = yield* Effect.forkChild(send("later"));

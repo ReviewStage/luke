@@ -10,7 +10,6 @@ it.effect(
   "after a highlighter that could not be loaded, code is drawn plain without loading again for a minute, and colored once a later load succeeds",
   () =>
     Effect.gen(function* () {
-      // A chunk that fails to download once, then arrives, as a flaky network serves it.
       let downloads = 0;
       const { highlightSnippet: color } = taskCodeColoring(
         Effect.suspend(() => {
@@ -31,9 +30,6 @@ it.effect(
       yield* TestClock.adjust(Duration.seconds(1));
       const colored = (yield* color("ts", LINE))[0] ?? [];
 
-      assert.ok(
-        colored.length > 1,
-        "a TypeScript block is colored in runs once the load succeeds",
-      );
+      assert.ok(colored.length > 1, "a TypeScript block is colored in runs once the load succeeds");
     }),
 );

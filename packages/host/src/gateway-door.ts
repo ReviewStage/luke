@@ -1,16 +1,6 @@
-/**
- * gateway-door.ts -- every Gateway method the host answers, classified once by what it does, and the type every composer's handler table is written against, which serves a row write only from its write declaration.
- *
- * A row write's method takes only a handler `@repo/sync`'s `declaredMethod`
- * built from a write declaration, so the write is drawn over the pool the
- * moment it is asked; a handler written by hand does not compile
- * (`HostMethodTable`).
- */
-
 import { GATEWAY_METHOD, type GatewayMethod, type GatewayMethodHandler } from "@repo/gateway";
 import { ACT, type Act, type DoorTable } from "@repo/sync";
 
-/** What each Gateway method does, said once; a method added to the protocol fails here until it is classified. */
 const GATEWAY_ACT = {
   [GATEWAY_METHOD.TASKS_START]: ACT.ROW_WRITE,
   [GATEWAY_METHOD.TASKS_DELETE]: ACT.ROW_WRITE,
@@ -29,7 +19,6 @@ const GATEWAY_ACT = {
   [GATEWAY_METHOD.TASKS_COMMENT_ACT]: ACT.ROW_WRITE,
   [GATEWAY_METHOD.WORKSPACES_RENAME]: ACT.ROW_WRITE,
   [GATEWAY_METHOD.WORKSPACES_SLUG_SET]: ACT.ROW_WRITE,
-  // Note that a disconnect deletes the rows a workspace's held integrations read, so it is drawn gone before the service answers.
   [GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT]: ACT.ROW_WRITE,
   [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT]: ACT.ROW_WRITE,
   [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS]: ACT.ROW_WRITE,
@@ -65,20 +54,17 @@ const GATEWAY_ACT = {
 
   [GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.TASKS_PICTURE_KEEP]: ACT.REMOTE_WORK,
-  // Note that a workspace made mints its slug and membership and changes what the account reaches.
   [GATEWAY_METHOD.WORKSPACES_CREATE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL]: ACT.REMOTE_WORK,
-  // Note that a connect asks Slack which team the bot answers for, so the row it writes is known only once it answers.
   [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.WORKSPACES_TRANSFER]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.WORKSPACES_LEAVE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.WORKSPACES_INVITE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.GITHUB_CONNECT]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.GITHUB_DISCONNECT]: ACT.REMOTE_WORK,
-  // Note that no held read carries the admin pages' rows, so their star has none to draw over.
   [GATEWAY_METHOD.ADMIN_FAVORITE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.HOSTS_PAIRING_APPROVE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.HOSTS_PAIRING_DENY]: ACT.REMOTE_WORK,
@@ -92,10 +78,8 @@ const GATEWAY_ACT = {
   [GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.AGENTS_PULL_REQUEST_ACTION]: ACT.REMOTE_WORK,
-  // Note that a key or a token is carried once to the service, never drawn ahead of it.
   [GATEWAY_METHOD.PROVIDER_KEYS_SAVE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.PROVIDER_KEYS_REMOVE]: ACT.REMOTE_WORK,
-  // Note that the keys' read is a fetch the host holds, whose `unreadable` comes from decrypting with the deployment's key ring, so there is no pool row to draw over.
   [GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.GITHUB_TOKEN_SAVE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.GITHUB_TOKEN_REMOVE]: ACT.REMOTE_WORK,
@@ -108,9 +92,7 @@ const GATEWAY_ACT = {
   [GATEWAY_METHOD.INTEGRATIONS_CANCEL]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.INTEGRATIONS_DISCONNECT]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.MCP_CLIENTS_REVOKE]: ACT.REMOTE_WORK,
-  // Note that no held read carries the account's experiments, which ride the settings snapshot, so its switch draws at once in the panel as every settings switch does; it becomes a field change on the account preferences kind once the settings snapshot is fed from that read.
   [GATEWAY_METHOD.EXPERIMENTS_SET]: ACT.REMOTE_WORK,
-  // Note that a terminal is the sandbox's state, never a row the service holds.
   [GATEWAY_METHOD.TERMINALS_CREATE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.TERMINALS_RENAME]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.TERMINALS_KILL]: ACT.REMOTE_WORK,
@@ -124,7 +106,6 @@ const GATEWAY_ACT = {
   [GATEWAY_METHOD.BROWSER_LIVE_CONNECT]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.BROWSER_LIVE_SEND]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT]: ACT.REMOTE_WORK,
-  // Note that turning forwarding on asks the service to start it, and its state is this Mac's listeners, never a row.
   [GATEWAY_METHOD.PORT_FORWARDS_SET]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.MIRRORS_ENSURE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.MAC_COMMAND_ANSWER]: ACT.REMOTE_WORK,
@@ -267,5 +248,4 @@ const GATEWAY_ACT = {
   [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: ACT.READ,
 } as const satisfies Readonly<Record<GatewayMethod, Act>>;
 
-/** A composer's handler table: a row write's method served only from its write declaration, every other method by any handler. */
 export type HostMethodTable = DoorTable<GatewayMethod, typeof GATEWAY_ACT, GatewayMethodHandler>;

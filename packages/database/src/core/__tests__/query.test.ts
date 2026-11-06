@@ -5,12 +5,6 @@ import { SqlClient } from "effect/sql";
 import { getTestDB } from "../../testing/index.js";
 import { READ_CONCURRENCY, readConcurrency } from "../query.js";
 
-/**
- * A read's independent statements run a few at once outside a transaction,
- * each on a connection of the pool, and one at a time inside one, where they
- * share its connection, over a real dialect.
- */
-
 it.layer(getTestDB())("how many of a read's statements run at once", (it) => {
   it.effect("a few outside a transaction, and one inside one, nested or not", () =>
     Effect.gen(function* () {

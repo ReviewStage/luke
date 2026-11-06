@@ -5,12 +5,6 @@ import { Effect } from "effect";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
 
-/**
- * What every composer of the host is handed: the seams the host was given,
- * the two derived base URLs, the node registry, and the one event door. It
- * holds no concern of its own, so nothing a composer owns can be reached
- * through it by another.
- */
 export interface HostKernel {
   readonly runMode: RunMode;
   readonly stateRoot: string;
@@ -20,41 +14,14 @@ export interface HostKernel {
   readonly accountBaseUrl: string;
   readonly hostedServiceBaseUrl: string;
   readonly nodes: NodeRegistry;
-  /** One host event, handed to every client listening for its kind. */
   emit: (kind: GatewayEventKind, payload: WireValue) => void;
-  /**
-   * An address a host-owned flow needs opened: the native node's. No node
-   * connected is a refusal the action reports as not done; a node that took the
-   * ask and vanished before answering is the lost-answer error, which every
-   * caller that journals an action records as unknown rather than failed.
-   * The kind is what the address is, an address unless a caller says
-   * otherwise; the node decides from it what its own windows owe the open.
-   *
-   * A promise and not an effect: the composer that hands this on hands it to
-   * a seam outside this package — the account session manager's consent, a
-   * promise-shaped callback owned by `@repo/credentials` — and what would
-   * end that is a decision about that seam rather than anything this kernel
-   * holds.
-   */
   openExternalThroughNode: (url: string) => Promise<void>;
 }
 
-/**
- * The account service this build may be pointed at. A development build may be
- * pointed at a local one; a packaged one may not. The override redirects the
- * whole sign-in — including the identity request that carries the access token
- * — so it stops at the packaging boundary rather than shipping inside a signed
- * binary.
- */
 export const ACCOUNT_BASE_URL_VARIABLE = "APP_ACCOUNT_BASE_URL";
 
 const ACCOUNT_BASE_URL = `${LINK_ORIGIN}/api/auth`;
 
-/**
- * The account service's address: on the service origin a shell named, where it
- * named one, and otherwise production's or, in a development build, the
- * override's.
- */
 export function accountBaseUrlFor(input: {
   readonly packaged: boolean;
   readonly override: string | undefined;
@@ -64,15 +31,10 @@ export function accountBaseUrlFor(input: {
   return (input.packaged ? undefined : input.override) ?? ACCOUNT_BASE_URL;
 }
 
-/**
- * The hosted service lives on the same origin as the account service, so the
- * one development override redirects both together.
- */
 function hostedServiceBaseUrlFor(accountBaseUrl: string): string {
   return accountBaseUrl.replace(/\/api\/auth\/?$/, "");
 }
 
-/** Everything the kernel is built over, once each seam has been read for itself. */
 export interface HostKernelParts {
   readonly stateRoot: string;
   readonly runMode: RunMode;
@@ -80,12 +42,6 @@ export interface HostKernelParts {
   readonly now: () => number;
   readonly createId: () => string;
   readonly report: (message: string) => void;
-  /**
-   * The event door itself, already resolved against the late service: the
-   * merge composes the service after several composers have begun wiring
-   * their callbacks, so this is built to hold what it cannot yet deliver
-   * rather than to read a service that may not stand.
-   */
   readonly emit: (kind: GatewayEventKind, payload: WireValue) => void;
 }
 

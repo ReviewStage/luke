@@ -20,28 +20,14 @@ import {
 } from "../../testing/index.js";
 import { user } from "../auth.js";
 
-/**
- * The migration that moves a runner's bearer digest from its conversation's
- * row to its agent's: over a database from before it, a digest a runner
- * holds is found again through the agent, an agent whose conversation held
- * none stays without one, and running it twice changes nothing. Synthetic
- * accounts and digests throughout.
- */
-
 const MIGRATION = "20261021143346_coding_agent_runner_token_hash";
 
-/**
- * The migration undone, so the database stands as one from before it: the
- * conversation's column, which a later migration dropped, back, and the
- * agent's gone.
- */
 const UNDO = [
   `ALTER TABLE "conversations" ADD COLUMN "runner_token_hash" text`,
   `DROP INDEX "coding_agent_runner_token_hash"`,
   `ALTER TABLE "coding_agent" DROP COLUMN "runner_token_hash"`,
 ];
 
-/** An account's coding agent, whose conversation's digest a test sets once the column is back. */
 const agentHolding = () =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -70,7 +56,6 @@ it.layer(getTestDB())("coding_agent_runner_token_hash over a database from befor
     () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        // The agents are made by this build's code, then the column is taken away, as before the migration.
         const digest = randomUUID();
         const holding = yield* agentHolding();
         const bare = yield* agentHolding();

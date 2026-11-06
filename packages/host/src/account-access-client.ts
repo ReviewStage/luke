@@ -1,15 +1,3 @@
-/**
- * account-access-client.ts -- what the signed-in account may open in the app, as the service answers it, held for the account it was read for.
- *
- * Today that is whether the account is an admin, which a window reads to
- * offer the admin dashboard, and until when its grant of support access
- * stands, which Settings draws. The grant is written here too, under the
- * account's own session, which the service's support-access resource
- * takes rather than the account's bearer. It draws by it and authorizes nothing: the
- * dashboard's own gate decides every admin read on the service. A read that
- * fails, or an answer that is not the shape the wire declares, is read as
- * nothing opened, so a doubt never offers either.
- */
 import type { CallCredential } from "@repo/features";
 import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
 import {
@@ -24,17 +12,12 @@ import type * as HttpClient from "effect/http/HttpClient";
 import { type AppAccessSlice, NO_ACCESS } from "./app-state.js";
 
 interface AccountAccessClientOptions {
-  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
   credential: CallCredential;
-  /** What authorizes a write of the grant of support access: the account's own session. */
   sessionCredential: CallCredential;
-  /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
 }
 
-/** Reads the signed-in account's access through the same account call every hosted client makes. */
 export class AccountAccessClient {
   readonly #hosted: HostedClient;
   readonly #inSession: HostedClient;
@@ -48,13 +31,11 @@ export class AccountAccessClient {
     this.#inSession = hostedClient({
       baseUrl: options.serviceBaseUrl,
       credential: options.sessionCredential,
-      // The Mac asks for its Better Auth session once where it holds none yet, as every session write does.
       inSession: true,
     });
     this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
-  /** What the signed-in account may open; nothing for any failure. */
   readAccess(): Effect.Effect<AppAccessSlice> {
     return askHosted(this.#hosted.account.access, undefined).pipe(
       Effect.map(
@@ -65,13 +46,11 @@ export class AccountAccessClient {
             : undefined),
         }),
       ),
-      // A read that failed is settled as no admin, not left pending, so nothing waits on it.
       Effect.orElseSucceed((): AppAccessSlice => ({ admin: false })),
       Effect.provide(this.#client),
     );
   }
 
-  /** Grants support access for seven days, or revokes it: the grant as it then stands. */
   writeSupportAccess(grant: boolean): Effect.Effect<SupportAccessAnswerWire, HostedFailure> {
     const write = grant
       ? this.#inSession.supportAccess.grant
@@ -82,34 +61,17 @@ export class AccountAccessClient {
 
 interface AccountAccessHolderOptions {
   readonly client: Pick<AccountAccessClient, "readAccess">;
-  /** Who is signed in now, as the host keys an account, or nobody. */
   readonly accountKey: () => string | undefined;
-  /** Hands the access on whenever what it answers may have moved. */
   readonly publish: (access: AppAccessSlice) => void;
 }
 
 export interface AccountAccessHolder {
-  /** The access of whoever is signed in now. */
   readonly current: () => AppAccessSlice;
-  /** Reads the signed-in account's access afresh and publishes it, unless the account changed or signed out while it read. */
   readonly refresh: Effect.Effect<void>;
-  /** The account moved: publishes what stands for whoever is signed in now. */
   readonly accountChanged: Effect.Effect<void>;
-  /** The account gate closed (a sign-out, or a switch away): forgets every read, and every read still out, and publishes no admin. */
   readonly forget: Effect.Effect<void>;
 }
 
-/**
- * The access as the host holds it: the last read, kept beside the account it
- * was read for, so it answers for that account alone. Note that the account
- * is compared at every answer rather than the read cleared when the change
- * event arrives, because that event and a sign-in's read land in either
- * order, and a clear that landed after the read would drop it. What clears
- * it is the gate closing (`forget`), which runs in order with the gate's
- * opening, so a sign-out and the same account's return still forget the
- * answer read before, and a read still out across them is dropped by its
- * generation rather than by the account it names.
- */
 export function accountAccessHolder(options: AccountAccessHolderOptions): AccountAccessHolder {
   const { client, accountKey, publish } = options;
   let held: { readonly accountKey: string; readonly access: AppAccessSlice } | undefined;

@@ -1,7 +1,3 @@
-/**
- * runner.test.ts -- one launch of the runner against a scripted CLI playing P00's recorded stream and a fake service: the config line in, messages in, Stop, every event out in order through failed posts, a heartbeat while the CLI says nothing, and the launch's end where the agent's turn ends.
- */
-
 import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { Server } from "node:net";
@@ -72,16 +68,9 @@ import {
 } from "./testing/recorded-stream.js";
 
 const BEARER = "runner-bearer-for-tests";
-/**
- * What the CLI's credential variable holds, which the runner hands on and
- * takes out of every event alike: in a sandbox the launch's placeholder, on a
- * host the plan's token. Note the quote, the backslash, and the newline, which
- * a token's JSON spells escaped.
- */
 const CLAUDE_TOKEN = 'plan-token-"for\\tests\n';
 const EVENTS_URL = "https://app.test/runner/events";
 const FIRST_SEQUENCE = 7;
-/** The runner's own pid in the test's `/proc`. */
 const RUNNER_PID = 100;
 
 const ENV = {
@@ -103,7 +92,6 @@ const CONFIG: RunnerConfig = {
   integrations: [{ name: "linear", url: "https://app.test/runner/mcp/integrations/linear" }],
 };
 
-/** The integration server the config hands the agent. */
 const LINEAR_SERVER = { name: "linear", url: "https://app.test/runner/mcp/integrations/linear" };
 
 const FIRST_MESSAGE: InputLine = {
@@ -117,7 +105,6 @@ const FIRST_MESSAGE: InputLine = {
   ],
 };
 
-/** The fake events route these launches post to. */
 function fakeService(answers: readonly Answer[] = [], watchFor?: string) {
   return makeFakeService({
     url: EVENTS_URL,
@@ -127,14 +114,12 @@ function fakeService(answers: readonly Answer[] = [], watchFor?: string) {
   });
 }
 
-/** The events applied, less each ACCEPTED, which its own test follows, so a turn's shape reads alone. */
 function withoutAccepted(events: readonly RunnerEvent[]): RunnerEvent[] {
   return events.filter(
     ({ message }) => !("type" in message && message.type === RUNNER_EVENT.ACCEPTED),
   );
 }
 
-/** The `type`, and `subtype` where it has one, of each message applied but an ACCEPTED, in order. */
 function kinds(events: readonly RunnerEvent[]): string[] {
   return withoutAccepted(events).map(({ message }) => {
     if (!("type" in message)) return message.method;
@@ -143,7 +128,6 @@ function kinds(events: readonly RunnerEvent[]): string[] {
   });
 }
 
-/** One launch over stdin lines the test writes, against a fake CLI and a fake service. */
 function launch(
   steps: readonly Step[],
   service: ReturnType<typeof fakeService>,
@@ -181,7 +165,6 @@ function launch(
   });
 }
 
-/** A launch's outcome, with the test clock moved on until it has one, for the retries' waits. */
 function settled<A, E>(fiber: Fiber.Fiber<A, E>) {
   return Effect.gen(function* () {
     for (;;) {
@@ -329,7 +312,6 @@ it.effect("skips a stop meant for another launch's turn, and takes the one namin
     yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Run sleep 600." }] });
     yield* service.seen;
 
-    // A Stop of the launch before this one, delayed past it: its turn is not this launch's.
     yield* write({ type: INPUT_LINE.STOP, launch: FIRST_SEQUENCE - 7 });
     yield* write({ type: INPUT_LINE.STOP, launch: FIRST_SEQUENCE });
 
@@ -409,14 +391,12 @@ it.effect(
     }),
 );
 
-/** How many IDLE events the service has taken. */
 function idles(service: ReturnType<typeof fakeService>): number {
   return service.applied.filter(
     ({ message }) => "type" in message && message.type === RUNNER_EVENT.IDLE,
   ).length;
 }
 
-/** Waits, without moving the clock, until the service has taken the IDLE events given. */
 function untilIdles(service: ReturnType<typeof fakeService>, count: number) {
   return Effect.gen(function* () {
     for (let step = 0; step < 5_000 && idles(service) < count; step += 1) yield* Effect.yieldNow;
@@ -456,7 +436,6 @@ it.effect(
         type: RUNNER_EVENT.END,
         reason: RUNNER_END.IDLED,
       });
-      // The second message found no turn running, so it is no follow-up queued behind one.
       assert.deepEqual(
         cli.prompts.map((prompt) => prompt.priority),
         [undefined, undefined],
@@ -491,7 +470,6 @@ it.effect(
       const linesUrl = "https://app.test/runner/lines";
       const uuid = "00000000-0000-4000-8000-0000000000aa";
       const reads: { launch: string | null; after: string | null; bearer: string | null }[] = [];
-      // The first read is answered the message; every later one is held until the launch lets it go.
       const respond: FakeResponder = (url, init) => {
         if (!url.startsWith(linesUrl)) return service.respond(url, init);
         const query = new URL(url).searchParams;
@@ -573,7 +551,6 @@ it.effect(
       yield* write(FIRST_MESSAGE);
       yield* service.seen;
       const beforeAny = heartbeats();
-      // Each interval is let run out, and its heartbeat land, before the next begins.
       for (const beat of [1, 2]) {
         yield* TestClock.adjust(Duration.millis(RUNNER_HEARTBEAT.EVERY_MS));
         for (let step = 0; step < 500 && heartbeats() < beat; step += 1) yield* Effect.yieldNow;
@@ -597,7 +574,6 @@ it.effect("lets a heartbeat Vespin never answers go, and posts the next one an i
   Effect.gen(function* () {
     const service = fakeService([], "Working on the first message.");
     let hung = 0;
-    // The service holds the first heartbeat open, answering nothing until the runner lets it go.
     const stalling: typeof service = {
       ...service,
       layer: fakeHttpClientLayer((url, init) => {
@@ -778,7 +754,6 @@ it.effect("posts each event once and in order through posts Vespin failed or nev
   }),
 );
 
-/** A fake service that answers nothing, as a network that is down does, until `isUp` says it is back. */
 function downUntil(service: ReturnType<typeof fakeService>, isUp: () => boolean): typeof service {
   return {
     ...service,
@@ -827,7 +802,6 @@ it.effect("lets a post Vespin never answers go after its bound, and posts it aga
   Effect.gen(function* () {
     const service = fakeService();
     let hung = 0;
-    // The first post is held open, answering nothing until the runner lets it go.
     const stalling: typeof service = {
       ...service,
       layer: fakeHttpClientLayer((url, init) => {
@@ -890,7 +864,6 @@ it.effect(
       yield* write(CONFIG);
       yield* write({ ...FIRST_MESSAGE, uuid: first });
       yield* service.seen;
-      // A line that names no uuid is still accepted, under one the runner minted.
       yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
       yield* Queue.take(prompted);
       yield* Queue.take(prompted);
@@ -967,7 +940,6 @@ it.effect(
       assert.deepEqual(options.settingSources, ["project"]);
       assert.equal(options.permissionMode, "bypassPermissions");
       assert.equal(options.includePartialMessages, true);
-      // The tools the prompt names that CLI 2.1.304 leaves out of its default set, and the built-ins beside our own.
       for (const tool of ["Glob", "Grep", "TaskCreate", "TaskUpdate"]) {
         assert.ok(options.allowedTools?.includes(tool), tool);
       }
@@ -983,12 +955,10 @@ it.effect(
       assert.ok(!JSON.stringify(options).includes(BEARER));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
-      // A command's Playwright looks for its browsers in its own package: the image's where it installed them, a repository's where the agent may install them.
       assert.equal(options.env?.PLAYWRIGHT_BROWSERS_PATH, "0");
     }),
 );
 
-/** What a launch hands the CLI that is not a function or a live server, less the place it ran in, which nothing may follow. */
 function launchedAs(options: Options | undefined) {
   assert.ok(options);
   const { hooks: _hooks, mcpServers, env, ...rest } = options;
@@ -1042,13 +1012,11 @@ it.effect(
       assert.deepEqual(withSkills?.plugins, [
         { type: "local", path: installed, skipMcpDiscovery: true },
       ]);
-      // The checkout's own settings stay the only ones read.
       assert.deepEqual(withSkills?.settingSources, ["project"]);
       assert.equal(withNone?.plugins, undefined);
     }),
 );
 
-/** The MCP route of a fake service: answers each request as its server does, notifications with 202, and keeps what each post carried. */
 function fakeMcpRoute(answer: "take" | "refuse" = "take") {
   const calls: { authorization: string | null; body: unknown }[] = [];
   const respond = async (_url: string, init: RequestInit) => {
@@ -1061,7 +1029,6 @@ function fakeMcpRoute(answer: "take" | "refuse" = "take") {
   return { calls, respond };
 }
 
-/** The CLI's end of the control channel an SDK MCP server is connected to: what the server sent it, in order. */
 function fakeCliTransport() {
   const sent: unknown[] = [];
   const answered = Deferred.makeUnsafe<void>();
@@ -1079,7 +1046,6 @@ function fakeCliTransport() {
   return { transport, sent, answered };
 }
 
-/** A launch whose fake service answers the MCP server's route as `mcp` does, and that SDK server the CLI was handed, connected to a fake channel; our own unless an integration's is named. */
 function launchWithMcp(
   mcp: ReturnType<typeof fakeMcpRoute>,
   named: { readonly name: string; readonly url: string } = {
@@ -1103,7 +1069,7 @@ function launchWithMcp(
     const server = launched.cli.options?.mcpServers?.[named.name];
     assert.ok(server?.type === "sdk" && "instance" in server);
     const cli = fakeCliTransport();
-    // @ts-expect-error -- the fake stands in for the SDK's own control-channel transport.
+    // @ts-expect-error
     yield* Effect.promise(() => server.instance.connect(cli.transport));
     return { ...launched, channel: cli };
   });
@@ -1183,7 +1149,6 @@ it.effect(
       const directory = mkdtempSync(join(tmpdir(), "agent-runner-argv-"));
       const argvFile = join(directory, "argv");
       const executable = join(directory, "claude");
-      // A CLI that writes down the argv it was started with and exits.
       writeFileSync(executable, `#!/bin/sh\nprintf '%s\\0' "$@" > '${argvFile}'\n`);
       chmodSync(executable, 0o755);
       const listen = vi.spyOn(Server.prototype, "listen");
@@ -1263,7 +1228,6 @@ it.effect(
     }),
 );
 
-/** Our browser, which the agent opened earlier in the turn, as the sandbox's default user: Xvfb and Chromium, and a renderer of Chromium's. */
 const AGENT_BROWSER: readonly FakeProcess[] = [
   { pid: 300, parent: 1, agents: false, argv: ["Xvfb", ":77", "-screen", "0", "1280x800x24"] },
   {
@@ -1275,17 +1239,14 @@ const AGENT_BROWSER: readonly FakeProcess[] = [
   { pid: 311, parent: 310, agents: false, argv: ["/usr/local/chromium/chrome", "--type=renderer"] },
 ];
 
-/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, and our browser, nothing of the agent's beside them. */
 const WAITING_PROCESSES: readonly FakeProcess[] = [
   ...AGENT_BROWSER,
   { pid: 1, parent: 0, agents: false },
   { pid: RUNNER_PID, parent: 1, agents: true },
   { pid: RUNNER_PID + 1, parent: RUNNER_PID, agents: true },
 ];
-/** A dev server the agent started, detached from its shell onto the sandbox's init. */
 const DEV_SERVER: FakeProcess = { pid: 4242, parent: 1, agents: true };
 
-/** A Chromium of the agent's own, on another port. */
 const AGENT_CHROMIUM: FakeProcess = {
   pid: 4444,
   parent: 1,
@@ -1293,7 +1254,6 @@ const AGENT_CHROMIUM: FakeProcess = {
   argv: ["/usr/local/chromium/chrome", "--remote-debugging-port=9222", "--headless"],
 };
 
-/** When the recorded wakeup's one-shot schedule, `17 12 21 10 *`, next comes due from the test clock's start, in local time. */
 const WAKEUP_DUE = new Date(1970, 9, 21, 12, 17).toISOString();
 
 it.effect(
@@ -1405,7 +1365,6 @@ it.effect("keeps a waiting launch whose wait a message from Vespin turned into a
   }),
 );
 
-/** The stored session a rewind cuts: two answered prompts, each followed by the answer's entries. */
 const REWOUND_CHAIN = [
   "10000000-0000-4000-8000-000000000001",
   "10000000-0000-4000-8000-000000000002",

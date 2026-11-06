@@ -35,18 +35,15 @@ const AGENT_ID = "0b6f9a4e-1c1d-4d2e-9f3a-5b7c8d9e0f12";
 const LINE_ID = "d1c2b3a4-0000-4000-8000-000000000001";
 const DEVICE_SECRET = `lkd_${"a".repeat(43)}`;
 const POLL_SECRET = `lkp_${"c".repeat(43)}`;
-/** What a pairing's start answers beside its poll secret: the service's own numbers, ten minutes and five seconds. */
 const PAIRING_CODE: Omit<HostPairingStartAnswer, "pollSecret"> = {
   userCode: "BCDF-GHJK",
   url: `${SERVICE}/connect/BCDF-GHJK`,
   expiresInMs: 600_000,
   intervalMs: 5_000,
 };
-/** Where a pairing stands as a poll answers it. */
 type HostPairingPollStatus =
   (typeof HOST_PAIRING_POLL_STATUS)[keyof typeof HOST_PAIRING_POLL_STATUS];
 const RUNNER_TOKEN = "sk-ant-oat01-fixture-not-a-real-token";
-/** A release newer than the daemon's, as a beat's answer names one. */
 const NEWER_RELEASE = {
   version: "0.2.0",
   sha256: {
@@ -55,9 +52,7 @@ const NEWER_RELEASE = {
     [HOST_TARGET.DARWIN_ARM64]: "c".repeat(64),
   },
 };
-/** The Node the daemon runs on, which its runners run on too. */
 const NODE = "/opt/vespin-host/node/bin/node";
-/** The runner's bundle every OS runs: the release's own. */
 const RUNNER_BUNDLE = "/opt/vespin-host/lib/agent-runner.mjs";
 const HTTP = {
   OK: 200,
@@ -66,26 +61,19 @@ const HTTP = {
   SERVER_ERROR: 500,
 } as const;
 
-/** What the service answers a secret no standing host holds: the 401 every host reads, marked as the host removed. */
 const HOST_REMOVED = { error: "invalid-token", hostRemoved: true } as const;
-/** What anything else on the service's origin may answer: a 401 that says nothing of the host. */
 const BARE_REFUSAL = { error: "invalid-token" } as const;
-/** The box's device, as its record keeps it. */
 const DEVICE = {
   deviceId: DEVICE_ID,
   deviceSecret: DEVICE_SECRET,
   serviceOrigin: SERVICE,
 } as const;
 
-/** Which machine fra-01 is, as its host reports it: a Linux box names no model. */
 const FRA_01_MACHINE = { machineId: "e".repeat(64) } as const;
-/** Which machine Studio is, as its host reports it. */
 const STUDIO_MACHINE = { machineId: "f".repeat(64), model: "Mac Studio (2023)" } as const;
 
-/** A Linux box named fra-01. */
 const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01", machine: () => FRA_01_MACHINE };
 
-/** A box's platform on the OS given, as its daemon builds it, running as the user given. */
 const platformOn = (os: HostOs, stateRoot: string, uid = 990) =>
   hostPlatform({
     os,
@@ -97,18 +85,15 @@ const platformOn = (os: HostOs, stateRoot: string, uid = 990) =>
     clis: fakeClis(),
   });
 
-/** Every request the fake saw at the path given. */
 const at = (requests: readonly RecordedRequest[], method: string, path: string) =>
   requests.filter((request) => request.method === method && request.pathname === path);
 
-/** Yields until `done` holds, so the daemon's fibers and its file writes, which wait on no clock, run. */
 const settled = (done: () => boolean) =>
   Effect.yieldNow.pipe(
     Effect.repeat({ until: done, times: 20_000 }),
     Effect.andThen(Effect.sync(() => expect(done()).toBe(true))),
   );
 
-/** The clock moved on by `total`, a beat at a time, each step's fibers and file writes let run before the next. */
 const elapsed = (total: Duration.Duration) =>
   Effect.forEach(
     Array.from({ length: Math.ceil(Duration.toMillis(total) / DEVICE_BEAT.EVERY_MS) }),
@@ -120,17 +105,14 @@ const elapsed = (total: Duration.Duration) =>
     { discard: true },
   );
 
-/** A box's state root and its home, under a folder of its own. */
 const box = Effect.gen(function* () {
   const root = yield* temporaryDirectoryScoped("host-daemon-");
   return { home: `${root}/home`, stateRoot: `${root}/state` };
 });
 
-/** Whether a spawn is the runner, started straight on the box on the daemon's own Node. */
 const isRunner = (each: { readonly program: string; readonly args: readonly string[] }) =>
   each.program === NODE && each.args.includes(RUNNER_BUNDLE);
 
-/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH and whose runners run, and the reports it makes. */
 const world = (home: string, reports: string[]) => {
   const spawner = scriptedSpawner((program, args) => {
     if (program === "/bin/bash" && args[0] === "-l")
@@ -148,7 +130,6 @@ const world = (home: string, reports: string[]) => {
   return { spawner, layer };
 };
 
-/** A service that hands the box one launch, then answers each call as `refusing` says where it says, and takes it otherwise. */
 const launchingService = (
   home: string,
   refusing: (request: RecordedRequest) => Response | undefined,
@@ -312,7 +293,6 @@ describe("a host's daemon", () => {
           PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/agent/agent-tools:/usr/bin:/bin`,
         });
         expect(runner?.env?.IS_SANDBOX).toBe(sandboxed);
-        // Note that every agent's settings name the same folders under the host's state, outside any agent's folder.
         const fileSystem = yield* FileSystem.FileSystem;
         const pnpmStore = `"${stateRoot}/agent-packages/pnpm-store"`;
         expect(yield* fileSystem.readFileString(`${folder}/home/${pnpmConfig}/rc`)).toBe(
@@ -330,7 +310,6 @@ describe("a host's daemon", () => {
         yield* elapsed(Duration.seconds(20));
         yield* Fiber.join(daemon);
         expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))?.refused).toBe(true);
-        // Note that a daemon handed no releases, as a development run, neither fetches the release named nor says it updates.
         expect(http.requests.filter((request) => new URL(request.url).origin !== SERVICE)).toEqual(
           [],
         );
@@ -339,7 +318,6 @@ describe("a host's daemon", () => {
             (request) => "update" in JSON.parse(request.body ?? "{}"),
           ),
         ).toBe(false);
-        // Note that the runner, which never exits here, has its group ended under the grace it was started with.
         expect(runner?.ended).toEqual({ killSignal: "SIGTERM", forceKillAfterMillis: 3_000 });
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
@@ -429,7 +407,6 @@ describe("a refused host's rest", () => {
       yield* elapsed(Duration.minutes(2));
       expect(resting.pollUnsafe()).toBeUndefined();
       yield* writeHostDevice(stateRoot, { ...DEVICE, deviceSecret: `lkd_${"b".repeat(43)}` });
-      // Note that each minute's read of the record is real file work, which may land a step late, so the clock moves on until the rest ends rather than by exactly a minute.
       yield* TestClock.adjust(Duration.millis(DEVICE_BEAT.EVERY_MS)).pipe(
         Effect.andThen(Effect.yieldNow.pipe(Effect.repeat({ times: 200 }))),
         Effect.repeat({ until: () => resting.pollUnsafe() !== undefined, times: 40 }),
@@ -444,7 +421,6 @@ describe("a refused host's rest", () => {
 });
 
 describe("a host's connect with a code", () => {
-  /** A service that starts a pairing and answers each poll with the next status given, the device's id and secret with an approve. */
   const pairingService = (statuses: HostPairingPollStatus[]) =>
     recordingHttpClient((request) => {
       if (request.pathname === HOSTED_SERVICE_PATH.HOST_PAIRING_START) {
@@ -458,10 +434,8 @@ describe("a host's connect with a code", () => {
       );
     });
 
-  /** Yields a few hundred times, so a connect the fake answered reads the answer and goes on to its next wait on the clock. */
   const drained = Effect.yieldNow.pipe(Effect.repeat({ times: 300 }));
 
-  /** A Linux box's connect to the service given, each code it shows kept. */
   const connectOn = (stateRoot: string, http: RecordingHttpClient, shown: HostPairingCode[]) =>
     connectHostDevice({
       stateRoot,
@@ -495,7 +469,6 @@ describe("a host's connect with a code", () => {
         yield* TestClock.adjust(Duration.seconds(5));
         yield* settled(() => polls().length === 1);
         yield* drained;
-        // Note that a slow down adds five seconds to the wait before every poll after it.
         yield* TestClock.adjust(Duration.seconds(5));
         yield* drained;
         expect(polls()).toHaveLength(1);

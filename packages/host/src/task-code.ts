@@ -4,43 +4,12 @@ import { Clock, Duration, Effect } from "effect";
 import type { HighlighterCore } from "shiki/core";
 import { plainCodeLines } from "./task-code-remote.js";
 
-/**
- * task-code.ts -- a transcript's fenced block colored, in both of GitHub's themes, for the window to draw as spans.
- *
- * A fenced block is colored outside the window, because the window's
- * content policy refuses WebAssembly and its bundle has a budget; Shiki's
- * JavaScript regex engine runs here and the window draws spans. The desktop
- * runs this in a process of its own (`task-code-remote.ts`), so it never
- * holds main's event loop, and the web in the tab's host. Every run carries
- * its color in both of GitHub's themes, so the window follows the
- * appearance as it changes without asking for the code again.
- */
-
-/** The themes the code is colored in, one per appearance. */
 const THEME = { DARK: "github-dark-default", LIGHT: "github-light-default" } as const;
 
-/**
- * How long a highlighter that could not be loaded is not asked for again:
- * code colored in that time is drawn plain without trying the load again or
- * warning of it again, so a chunk that failed to download costs one try and
- * one warning a minute rather than one for every coloring.
- */
 const LOAD_RETRY_AFTER = Duration.minutes(1);
 
-/** The highlighter as a coloring asks for it: the one built, or none where it could not be loaded. */
 type SharedHighlighter = Effect.Effect<HighlighterCore | undefined>;
 
-/**
- * The one highlighter `load` builds, loaded the first time code is colored,
- * since most launches show none, and kept for the life of the process; or
- * none where it could not be loaded or built, as where a browser's chunk
- * fails to download, so the code is drawn plain rather than not at all; a
- * caller's interruption still ends it. A failure is kept for
- * `LOAD_RETRY_AFTER` on the `Clock`, and the first coloring after that
- * tries again. Note that two colorings racing a load may each build one,
- * which is harmless: the module loads once, and the later build is the one
- * kept.
- */
 function sharedHighlighterOf(load: Effect.Effect<HighlighterCore, unknown>): SharedHighlighter {
   let highlighter: HighlighterCore | undefined;
   let failedAt: number | undefined;
@@ -74,13 +43,11 @@ function sharedHighlighterOf(load: Effect.Effect<HighlighterCore, unknown>): Sha
   });
 }
 
-/** A run's color in one theme, or nothing for that theme's own foreground. */
 function runColor(color: string | undefined, foreground: string): string | undefined {
   const lower = color?.toLowerCase();
   return lower === foreground ? undefined : lower;
 }
 
-/** Runs of one color in both themes merged, and each theme's own foreground left unnamed, so a line carries little. */
 function compactLine(
   tokens: readonly { content: string; variants: Record<string, { color?: string | undefined }> }[],
   foreground: { readonly dark: string; readonly light: string },
@@ -100,12 +67,6 @@ function compactLine(
   return line;
 }
 
-/**
- * Lines colored as `language`, one of the highlighter's own, or drawn plain
- * for none and where the highlighter could not be loaded. Note that the coloring starts at the first line given, which is
- * what the service sent: a window opened inside a comment or a string is
- * colored from there.
- */
 function coloredLines(
   sharedHighlighter: SharedHighlighter,
   language: string | undefined,
@@ -127,11 +88,6 @@ function coloredLines(
   });
 }
 
-/**
- * The language a fenced block in a transcript is colored as, by the name
- * its fence gives: a language's own name or one of the aliases its grammar
- * declares (`ts`, `py`, `sh`), and none for a name no grammar here answers to.
- */
 function languageOfFence(
   sharedHighlighter: SharedHighlighter,
   name: string,
@@ -142,23 +98,11 @@ function languageOfFence(
   );
 }
 
-/** The coloring the window asks for, over one shared highlighter. */
 export interface TaskCodeColoring {
-  /**
-   * A fenced block of a transcript's markdown as the window draws it: its code,
-   * line by line, colored as the language its fence names, and plain for a
-   * language the highlighter does not know.
-   */
   readonly highlightSnippet: (language: string, code: string) => Effect.Effect<CodeToken[][]>;
 }
 
-/**
- * The colorings over the highlighter `load` builds: this process's own
- * below, over Shiki's chunk, and a test's over a load it scripts.
- */
-export function taskCodeColoring(
-  load: Effect.Effect<HighlighterCore, unknown>,
-): TaskCodeColoring {
+export function taskCodeColoring(load: Effect.Effect<HighlighterCore, unknown>): TaskCodeColoring {
   const sharedHighlighter = sharedHighlighterOf(load);
   return {
     highlightSnippet: (language, code) =>
@@ -168,7 +112,6 @@ export function taskCodeColoring(
   };
 }
 
-/** This process's coloring, over Shiki loaded through one dynamic `import()` the first time code is colored. */
 export const { highlightSnippet } = taskCodeColoring(
   Effect.map(
     Effect.tryPromise(() => import("./task-code-highlighter.js")),

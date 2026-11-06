@@ -10,14 +10,6 @@ import { DEVICE_LAYOUT, getTestDB } from "../../testing/index.js";
 import { beatDevice, devicesNamed, devicesSeenSince, registerDevice } from "../device-store.js";
 import { enrollOwnDevice, hostsOf } from "../host-store.js";
 
-/**
- * An account's Macs, over a real dialect: a Mac is registered, beaten, and
- * read by its own account alone, an id another account holds is never taken
- * over, a Mac that stopped beating is no longer read as there, a host's
- * update stands until its own beat names none, and the Macs a read's local agents name are read by their ids alone.
- * Synthetic accounts and Macs throughout.
- */
-
 const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -63,7 +55,6 @@ it.layer(getTestDB())("the device store", (it) => {
       const { owner } = yield* openAccounts;
       const id = randomUUID();
       yield* registerDevice(owner, { id, name: "Laptop", ...DEVICE_LAYOUT });
-      // Note that the cutoff is measured from the clock's reading, which the layer's clock carries from test to test.
       const cutoff = new Date((yield* Clock.currentTimeMillis) + 45_000);
       yield* TestClock.adjust("60 seconds");
 
@@ -97,7 +88,6 @@ it.layer(getTestDB())("the device store", (it) => {
         );
 
         yield* beatDevice(owner, id, { update: HOST_UPDATE.WAITING });
-        // A held read touches the device with no word of its update.
         yield* beatDevice(owner, id);
         const touched = yield* listed;
         yield* beatDevice(owner, id, {});
@@ -132,7 +122,6 @@ it.layer(getTestDB())("the device store", (it) => {
           model: "MacBook Air (M2, 2022)",
           machine: { name: "Studio", platform: DEVICE_PLATFORM.DARWIN, arch: DEVICE_ARCH.ARM64 },
         });
-        // Note that a register from a host older than the field names no machine.
         yield* registerDevice(owner, { id, name: "Studio", ...DEVICE_LAYOUT });
         const kept = yield* machines;
         yield* registerDevice(owner, { id, name: "Studio", ...DEVICE_LAYOUT, machineId: moved });

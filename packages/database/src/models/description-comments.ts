@@ -43,45 +43,6 @@ import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import { reachableTask, taskReachableBy } from "./workspace-store.js";
 
-/**
- * description-comments.ts -- a description's comment threads: read them, start one, answer, edit, resolve, reopen, and delete, and move every anchor with its words as the description's text is saved.
- *
- * Every member of the plan's workspace reads and writes every thread, and
- * every agent on the task writes as the member whose turn it is; an account
- * outside the workspace reads no plan here, exactly as in `task-store.ts`.
- * Each write takes the plan row's lock first, as the description's own save does,
- * so a thread started while the text is saved lands on the text as saved. A comment
- * is edited or deleted only by its writer, and a whole thread deleted only by
- * its starter, or by any member where the per-task assistant or an agent started
- * it; the rest, resolving and reopening, is any member's or agent's.
- *
- * A thread's anchor is offsets into the description's text (`schemas/description-comment.ts`).
- * A thread is started over the text the client measured it in, carried over
- * to the text as saved; every save of the text carries every anchor over the
- * change (`moveDescriptionCommentAnchors`), and where the developer's open editor
- * reports where its anchors stand, those are taken instead for the threads
- * it carried, which is how undo brings an anchor back with its words.
- *
- * A comment's files are rows of the shared attachment table owned by the
- * comment (`schemas/attachment.ts`), written in the same transaction as the
- * comment, so no reader sees one without the other, and deleted with it by
- * the comment's cascade. Each names the plan and its workspace beside the
- * comment, so it moves with the plan, and is read back by any member of
- * that workspace (`readDescriptionCommentFile`).
- *
- * A thread on one of the task's pages is the task's as any other: it is
- * started on a version the task holds of the page, under the same lock and
- * the same key, and every write to a thread by its id is the same. What
- * sets it apart is what reads it: the description's threads are read without the
- * pages', and a page's alone (`readDescriptionCommentThreads`), each subject held
- * to its own bound of threads, and no save of the description's text moves it.
- */
-
-/**
- * Who writes to a thread: the account it acts for, and whether it is that
- * member or a coding agent on it. The per-task assistant is read back from
- * entries written while a task had one, and nothing writes as it now.
- */
 export type DescriptionCommentWriterRef =
   | { readonly actor: typeof DESCRIPTION_COMMENT_ACTOR.MEMBER; readonly userId: string }
   | {
@@ -90,7 +51,6 @@ export type DescriptionCommentWriterRef =
       readonly agentId: string;
     };
 
-/** What a write to a description's comments came to: done, with what it answers, or no plan, thread, or page the account reaches, or a thread's id another task's thread holds. */
 export const DESCRIPTION_COMMENT_OUTCOME = {
   DONE: "done",
   NO_TASK: "no-plan",
@@ -103,9 +63,7 @@ export type DescriptionCommentOutcome =
   | {
       readonly status: typeof DESCRIPTION_COMMENT_OUTCOME.DONE;
       readonly answer: DescriptionCommentThreadAnswer;
-      /** Set where the write was a retry of one under the same key, which wrote nothing this time. */
       readonly repeated?: true;
-      /** The transaction the write committed in, which a reader following the thread waits for; none where it wrote nothing. */
       readonly txid?: string;
     }
   | { readonly status: typeof DESCRIPTION_COMMENT_OUTCOME.NO_TASK }
@@ -113,7 +71,6 @@ export type DescriptionCommentOutcome =
   | { readonly status: typeof DESCRIPTION_COMMENT_OUTCOME.NO_PAGE }
   | { readonly status: typeof DESCRIPTION_COMMENT_OUTCOME.ID_TAKEN };
 
-/** Where one thread stands, without what it says: what a held read compares between looks. */
 export interface DescriptionCommentStamp {
   readonly id: string;
   readonly revision: number;
@@ -155,10 +112,8 @@ const THREAD_COLUMNS = {
   updatedAt: descriptionCommentThread.updatedAt,
 };
 
-/** Which of the task's threads a read takes: the description's where it names no page, or the page's it names. */
 const SubjectSchema = Schema.NullOr(Schema.String);
 
-/** The threads on one subject of the task: the description's where `pageId` is null, the page's it names otherwise. */
 function onSubject(pageId: string | null): SQL {
   return pageId === null
     ? isNull(descriptionCommentThread.pageId)
@@ -197,7 +152,6 @@ const ENTRY_COLUMNS = {
   editedAt: descriptionComment.editedAt,
 };
 
-/** The description's text and workspace under its row's lock, where the account reaches the plan; nothing otherwise. */
 const lockOpenDescriptionText = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({ text: Schema.String, organizationId: Schema.String }),
@@ -211,7 +165,6 @@ const lockOpenDescriptionText = SqlSchema.findOneOption({
     ),
 });
 
-/** The plan's id, where the account reaches it. */
 const findReachableTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -221,7 +174,6 @@ const findReachableTask = SqlSchema.findOneOption({
     ),
 });
 
-/** The task's threads: the ones named, of any subject, or every one of the subject named. */
 const findThreads = SqlSchema.findAll({
   Request: Schema.Struct({
     taskId: Schema.String,
@@ -293,7 +245,6 @@ const findStamps = SqlSchema.findAll({
     ),
 });
 
-/** How many threads one subject of the task holds, the description or one page, resolved ones among them. */
 const countThreads = SqlSchema.findOne({
   Request: Schema.Struct({ taskId: Schema.String, pageId: SubjectSchema }),
   Result: Schema.Struct({ count: Schema.Number }),
@@ -306,7 +257,6 @@ const countThreads = SqlSchema.findOne({
     ),
 });
 
-/** The title of one version of one of the task's pages, where the task holds it. */
 const findTaskPageVersion = SqlSchema.findOneOption({
   Request: Schema.Struct({ taskId: Schema.String, pageId: Schema.String, version: Schema.Number }),
   Result: Schema.Struct({ title: Schema.String }),
@@ -325,14 +275,8 @@ const findTaskPageVersion = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The transaction a write runs in, returned beside what it wrote, so a
- * reader following the thread waits for that transaction to arrive before
- * it takes the write as shown.
- */
 const TXID = sql<string>`pg_current_xact_id()::text`;
 
-/** The task a thread of any task is on, by the thread's id alone: whether an id a start chose is free. */
 const findThreadTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ threadId: Schema.String }),
   Result: Schema.Struct({ taskId: Schema.String }),
@@ -359,7 +303,6 @@ const findKeyedThread = SqlSchema.findOneOption({
     ),
 });
 
-/** The entry a key was written under: its thread, its kind, and whom it asked, where it is an ask. */
 const findKeyedEntry = SqlSchema.findOneOption({
   Request: Schema.Struct({ taskId: Schema.String, clientKey: Schema.String }),
   Result: Schema.Struct({
@@ -393,7 +336,6 @@ const FileRowSchema = Schema.Struct({
 
 type FileRow = typeof FileRowSchema.Type;
 
-/** The files the named comments carry, without their bytes, each comment's in the order they were attached. */
 const findFiles = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String, entryIds: Schema.Array(Schema.String) }),
   Result: FileRowSchema,
@@ -417,7 +359,6 @@ const findFiles = SqlSchema.findAll({
     ),
 });
 
-/** One file a comment of the description carries, with its bytes, where the account reaches the plan. */
 const findCommentFile = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -445,7 +386,6 @@ const findCommentFile = SqlSchema.findOneOption({
     ),
 });
 
-/** An entry as the wire carries it, each absent field left out rather than null. */
 function entryOf(row: EntryRow, files: readonly FileRow[]): DescriptionCommentEntry {
   const by =
     row.actor === DESCRIPTION_COMMENT_ACTOR.MEMBER && row.userId !== null && row.userName !== null
@@ -470,7 +410,6 @@ function entryOf(row: EntryRow, files: readonly FileRow[]): DescriptionCommentEn
   };
 }
 
-/** The files an entry carries as the wire names them, or nothing where it carries none. */
 function filesOf(
   entryId: string,
   files: readonly FileRow[],
@@ -481,7 +420,6 @@ function filesOf(
   return carried.length === 0 ? undefined : { files: carried };
 }
 
-/** A thread as the wire carries it, with its entries in the order they were written. */
 function threadOf(
   row: ThreadRow,
   entries: readonly EntryRow[],
@@ -513,7 +451,6 @@ function threadOf(
   };
 }
 
-/** The threads of one subject of the task, or the ones named of any, with their entries. */
 function threadsOf(
   taskId: string,
   of: { readonly ids: readonly string[] } | { readonly pageId: string | null },
@@ -531,12 +468,10 @@ function threadsOf(
   });
 }
 
-/** The heading of the section a place in the text stands in; empty before the first heading. */
 function sectionAt(text: string, offset: number): string {
   return descriptionSections(text).findLast((section) => section.from <= offset)?.heading ?? "";
 }
 
-/** The writer's columns of an entry. */
 function writerColumns(writer: DescriptionCommentWriterRef) {
   return {
     actor: writer.actor,
@@ -545,14 +480,12 @@ function writerColumns(writer: DescriptionCommentWriterRef) {
   };
 }
 
-/** Where an entry is written: the plan, its workspace, and the thread. */
 interface EntryPlace {
   readonly taskId: string;
   readonly organizationId: string;
   readonly threadId: string;
 }
 
-/** A comment's files as the rows it keeps, in the order they were attached. */
 function fileRowsOf(
   place: EntryPlace,
   entryId: string,
@@ -562,7 +495,6 @@ function fileRowsOf(
 ): Effect.Effect<(typeof attachment.$inferInsert)[]> {
   return Effect.forEach(files, (file, position) => {
     const bytes = Base64.decode(file.data);
-    // Note that the wire schema held the data to padded base64, so a decode that fails is a broken contract, not a refusal.
     if (Result.isFailure(bytes))
       return Effect.die(new Error("description comment file is not base64"));
     return Effect.succeed({
@@ -580,7 +512,6 @@ function fileRowsOf(
   });
 }
 
-/** One entry written to a thread with the files a comment carries, and the thread moved on, so every reader's cursor moves; answers the transaction it was written in. */
 function writeEntry(
   place: EntryPlace,
   writer: DescriptionCommentWriterRef,
@@ -618,7 +549,6 @@ function writeEntry(
   });
 }
 
-/** The thread's revision moved on and its instant set, as every change of it does; answers the revision it moved to and the transaction it moved in. */
 function movedOn(
   threadId: string,
   now: Date,
@@ -632,7 +562,6 @@ function movedOn(
         .where(eq(descriptionCommentThread.id, threadId))
         .returning({ revision: descriptionCommentThread.revision, txid: TXID }),
     ),
-    // A thread read under the plan's lock that the update then misses is the database breaking its own contract.
     ([row]) =>
       row === undefined
         ? Effect.die(new Error("description comment thread vanished"))
@@ -640,7 +569,6 @@ function movedOn(
   );
 }
 
-/** The thread answered as it now stands, with the transaction the write committed in where it wrote. */
 function answered(
   taskId: string,
   threadId: string,
@@ -657,7 +585,6 @@ function answered(
   );
 }
 
-/** The thread answered as a retry under a key already taken: as it stands, marked as having written nothing. */
 function answeredAgain(
   taskId: string,
   threadId: string,
@@ -671,18 +598,12 @@ function refused(refusal: DescriptionCommentRefusal): DescriptionCommentOutcome 
   return { status: DESCRIPTION_COMMENT_OUTCOME.DONE, answer: { refused: refusal } };
 }
 
-/** Whether an entry is the writer's own, which only they edit or delete. */
 function writtenBy(row: EntryRow, writer: DescriptionCommentWriterRef): boolean {
   if (row.actor !== writer.actor) return false;
   if (writer.actor === DESCRIPTION_COMMENT_ACTOR.AGENT) return row.agentId === writer.agentId;
   return row.userId === writer.userId;
 }
 
-/**
- * Whether the writer may delete the whole thread: its starter may, and any
- * member may where the per-task assistant or an agent started it, since no
- * member wrote it.
- */
 function mayDeleteThread(starter: EntryRow, writer: DescriptionCommentWriterRef): boolean {
   if (writtenBy(starter, writer)) return true;
   return (
@@ -691,7 +612,6 @@ function mayDeleteThread(starter: EntryRow, writer: DescriptionCommentWriterRef)
   );
 }
 
-/** The description's threads, or the named page's, oldest first, each with its entries; nothing where the account reaches no such plan. */
 export function readDescriptionCommentThreads(
   userId: string,
   taskId: string,
@@ -704,7 +624,6 @@ export function readDescriptionCommentThreads(
   });
 }
 
-/** One of the task's threads by its id, the description's or a page's, with its entries; nothing where the account reaches no such plan or the plan no such thread. */
 export function readDescriptionCommentThread(
   userId: string,
   taskId: string,
@@ -718,7 +637,6 @@ export function readDescriptionCommentThread(
   });
 }
 
-/** Where each of the description's threads, or the named page's, stands, read without its words; none where the account reaches no such plan. */
 export function descriptionCommentStamps(
   userId: string,
   taskId: string,
@@ -729,7 +647,6 @@ export function descriptionCommentStamps(
   );
 }
 
-/** Where a thread being started stands, as its row keeps it. */
 type ThreadPlace = Pick<
   typeof descriptionCommentThread.$inferInsert,
   | "scope"
@@ -742,7 +659,6 @@ type ThreadPlace = Pick<
   | "pageElement"
 >;
 
-/** A thread placed on the words the request measured in its text, carried over to the description's text as saved; refused where none of them stand there now. */
 function placedOnDescription(
   text: string,
   request: DescriptionCommentStartRequest,
@@ -760,12 +676,6 @@ function placedOnDescription(
   };
 }
 
-/**
- * A thread placed on the version of the task's page the request names: on
- * the element it picked there, or on words selected in one, or on the whole
- * page, quoted by the version's title; no page where the task holds no such
- * version.
- */
 function placedOnPage(
   taskId: string,
   request: DescriptionCommentPageStart,
@@ -795,19 +705,6 @@ function placedOnPage(
   );
 }
 
-/**
- * A thread started on the description with its first comment, anchored to the words
- * the request measured in its text, carried over to the text as saved, or on
- * a version of one of the task's pages. Refused where the description, or the page,
- * holds its bound of threads, or where none of the words stand in the text
- * now; no page where the task holds no such version; the thread a key
- * already started where the request was taken before. A start may name the
- * thread's id, minted by its client so it can draw the thread before the
- * service answers: the thread is made under it, a start of this task's
- * under an id it already holds answers that thread as a retry does, and an
- * id another task's thread holds is taken, answered as a plan not reached
- * is, so it says nothing of whose it is.
- */
 export function startDescriptionCommentThread(
   writer: DescriptionCommentWriterRef,
   taskId: string,
@@ -856,7 +753,6 @@ export function startDescriptionCommentThread(
           .onConflictDoNothing({ target: descriptionCommentThread.id })
           .returning({ id: descriptionCommentThread.id }),
       );
-      // Note that a start of this task waits on the plan's lock, so an id taken meanwhile is another task's.
       if (made.length === 0) return { status: DESCRIPTION_COMMENT_OUTCOME.ID_TAKEN } as const;
       const first = {
         kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
@@ -871,7 +767,6 @@ export function startDescriptionCommentThread(
   );
 }
 
-/** One of the thread's entries, by id. */
 function entryIn(
   thread: DescriptionCommentThread,
   entries: readonly EntryRow[],
@@ -880,7 +775,6 @@ function entryIn(
   return entries.find((entry) => entry.threadId === thread.id && entry.id === id);
 }
 
-/** A reply to the thread, taken once under its key; refused where the thread holds its bound of entries. */
 function replied(
   place: EntryPlace,
   thread: DescriptionCommentThread,
@@ -918,7 +812,6 @@ function replied(
   });
 }
 
-/** The line saying who sent the thread to whom, written once under its key: what an ask that was handed over leaves in the thread. */
 function askedOf(
   place: EntryPlace,
   thread: DescriptionCommentThread,
@@ -928,7 +821,6 @@ function askedOf(
 ): TaskStoreEffect<DescriptionCommentOutcome> {
   return Effect.gen(function* () {
     const { taskId } = place;
-    // Note that a key answers as a retry only for the same ask of the same thread, so no other entry's key hands the thread over unrecorded.
     const taken = yield* findKeyedEntry({ taskId, clientKey: ask.clientKey });
     if (Option.isSome(taken)) {
       const { threadId, kind, askedActor, askedAgentId } = taken.value;
@@ -951,7 +843,6 @@ function askedOf(
   });
 }
 
-/** The thread deleted, its entries with it, answered with the transaction it was deleted in. */
 function deletedThread(threadId: string): TaskStoreEffect<DescriptionCommentOutcome> {
   return Effect.map(
     Database.use((db) =>
@@ -968,7 +859,6 @@ function deletedThread(threadId: string): TaskStoreEffect<DescriptionCommentOutc
   );
 }
 
-/** The thread set resolved or open, with the line saying who did it; a thread already so answers as it stands. */
 function settled(
   place: EntryPlace,
   thread: DescriptionCommentThread,
@@ -980,7 +870,6 @@ function settled(
     const { taskId } = place;
     if (thread.status === status) return yield* answered(taskId, thread.id);
     const { txid } = yield* movedOn(thread.id, now, { status });
-    // Note that past the bound the change is made and goes unsaid, because a resolve must never be refused, and its lines must not grow a thread without end.
     const lines = thread.entries.filter(
       (entry) => entry.kind !== DESCRIPTION_COMMENT_ENTRY.COMMENT,
     );
@@ -995,14 +884,6 @@ function settled(
   });
 }
 
-/**
- * What a member, the per-task assistant, or an agent does to one thread of
- * the plan: answer it, edit or delete a comment of its own (deleting the
- * first deletes the thread), resolve or reopen it, or delete it whole, which
- * only its starter does, or any member where the per-task assistant or an
- * agent started it. Nothing where the
- * account reaches no such plan, or the plan no such thread.
- */
 export function actOnDescriptionCommentThread(
   writer: DescriptionCommentWriterRef,
   taskId: string,
@@ -1065,11 +946,6 @@ export function actOnDescriptionCommentThread(
   );
 }
 
-/**
- * The line an ask wrote taken back, where its hand-over to the per-task
- * assistant or the agent did not land, so the thread never says someone was
- * asked who was not.
- */
 export function withdrawDescriptionCommentAsk(
   taskId: string,
   clientKey: string,
@@ -1094,12 +970,6 @@ export function withdrawDescriptionCommentAsk(
   );
 }
 
-/**
- * One file a comment of the description carries, its bytes under the type it
- * traveled as, where the account reaches the plan; nothing for a plan of a
- * workspace the account is not in, and for an id that names no comment's
- * file of this plan, a description's picture among them.
- */
 export function readDescriptionCommentFile(
   userId: string,
   taskId: string,
@@ -1113,22 +983,11 @@ export function readDescriptionCommentFile(
   return findCommentFile({ userId, taskId, attachmentId });
 }
 
-/** Where the open editor reported its anchors, in the text it sent. */
 export interface ReportedAnchors {
   readonly text: string;
   readonly anchors: DescriptionCommentAnchors;
 }
 
-/**
- * Every anchor of the description's threads carried over a save of its text from
- * `before` to `after`, resolved threads' among them, so a thread reopened
- * later stands on its words again. An anchor whose every word the save
- * deleted stands nowhere from now on, keeping its quote and its section.
- * Where the developer's editor `reported` its anchors, a thread it carried
- * stands where it reported it, carried over from its text to `after`, or
- * nowhere where it reported none: its words deleted, or brought back by
- * undo. Run inside the save's own transaction, under the plan's lock.
- */
 export function moveDescriptionCommentAnchors(
   taskId: string,
   before: string,
@@ -1168,7 +1027,6 @@ export function moveDescriptionCommentAnchors(
   });
 }
 
-/** One write over the description's comments, whole or not at all. */
 function inTransaction<A>(write: TaskStoreEffect<A>): TaskStoreEffect<A> {
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(write));
 }

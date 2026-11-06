@@ -1,10 +1,3 @@
-/**
- * runs-on-pick.test.ts -- an account's last Runs on pick, over a real
- * dialect: none until a start names one, the last kept over the one before,
- * the preferences snapshot left as it stood, and one account's pick no
- * other's. Synthetic accounts throughout.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";

@@ -12,28 +12,15 @@ import type {
 } from "./compose-terminals.js";
 import { liveSocketClient } from "./live-socket.js";
 
-/**
- * The host's client with its live reads over one socket, on a scripted
- * relay, a scripted HTTP client, and the test clock: a read goes over HTTP
- * while a socket opens, and once one stands, a live read's GET travels over
- * it as its path and query and is answered with what the socket answered,
- * while a write goes over HTTP; a 401 closes the socket and is asked again
- * over HTTP; a socket past its time takes no new asks while the ones it
- * holds are still answered; and an ask left unanswered closes its socket and
- * is asked again over HTTP, so a socket's end never fails a read.
- */
-
 const SERVICE = "https://app.test";
 const TASKS_POLL = `${SERVICE}/api/live/tasks?userId=user-1&poll=true&after=d1`;
 const HTTP_BODY = JSON.stringify({ over: "http" });
 const INBOX_READ = `${SERVICE}${HOSTED_SERVICE_PATH.INBOX_READ}`;
 
-/** How long a socket takes new asks, how long it then drains, and how long an ask waits, as the plan sets them. */
 const ROTATE_AFTER = Duration.minutes(12);
 const DRAIN = Duration.seconds(40);
 const ANSWER_WITHIN = Duration.seconds(30);
 
-/** One relay socket as a test drives it: once the host reads it, the asks it sent read in order, answers pushed in, and whether its scope closed. */
 const scriptedSocket = Effect.gen(function* () {
   const arrivals = yield* Queue.unbounded<TerminalSocketArrival, Cause.Done>();
   const asked = yield* Queue.unbounded<LiveSocketAsk>();
@@ -60,7 +47,6 @@ const scriptedSocket = Effect.gen(function* () {
   return {
     opening,
     state,
-    /** Done once the host reads the socket, which it does from the moment the socket takes asks. */
     reading: Deferred.await(read),
     asked: Queue.take(asked),
     answer: (id: number, status: number, body: string) =>
@@ -71,7 +57,6 @@ const scriptedSocket = Effect.gen(function* () {
 
 type Scripted = Effect.Success<typeof scriptedSocket>;
 
-/** A relay whose every open stands a new scripted socket, read in order, its scope's close marking it closed. */
 const scriptedRelay = Effect.gen(function* () {
   const opened = yield* Queue.unbounded<Scripted>();
   const addresses: string[] = [];
@@ -93,7 +78,6 @@ const scriptedRelay = Effect.gen(function* () {
   return { open, opened: Queue.take(opened), addresses };
 });
 
-/** An HTTP client that answers every request itself, keeping what it was asked. */
 function scriptedHttp() {
   const asked: string[] = [];
   const client = HttpClient.make((request) =>
@@ -105,7 +89,6 @@ function scriptedHttp() {
   return { client, asked };
 }
 
-/** The client under test, over a scripted relay and HTTP client. */
 const subject = Effect.gen(function* () {
   const relay = yield* scriptedRelay;
   const http = scriptedHttp();
@@ -115,7 +98,6 @@ const subject = Effect.gen(function* () {
     credential: fixedBearer("token-1"),
     serviceBaseUrl: SERVICE,
   });
-  /** A live poll asked, as a fiber its answer is joined from. */
   const poll = Effect.forkChild(
     Effect.flatMap(client.execute(HttpClientRequest.get(TASKS_POLL)), (response) =>
       Effect.map(response.text, (text) => ({ status: response.status, text })),
@@ -131,7 +113,6 @@ it.effect(
       Effect.gen(function* () {
         const { relay, http, client, poll } = yield* subject;
 
-        // The first read goes over HTTP while the socket opens, so no read waits on an open.
         assert.deepEqual(yield* Fiber.join(yield* poll), { status: 200, text: HTTP_BODY });
         const socket = yield* relay.opened;
         assert.deepEqual(relay.addresses, ["wss://app.test/api/live/socket Bearer token-1"]);
@@ -182,13 +163,11 @@ it.effect(
         const older = yield* relay.opened;
         yield* older.reading;
 
-        // An ask held on the first socket as its time runs out.
         yield* TestClock.adjust(Duration.subtract(ROTATE_AFTER, Duration.seconds(10)));
         const held = yield* poll;
         const heldAsk = yield* older.asked;
         yield* TestClock.adjust(Duration.seconds(15));
 
-        // Past its time, a read goes over HTTP while the next socket opens.
         yield* Fiber.join(yield* poll);
         const newer = yield* relay.opened;
         yield* newer.reading;

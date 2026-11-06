@@ -35,60 +35,36 @@ import { INTEGRATION_SETTLE_EVERY } from "./integrations-follow.js";
 import { polledLive } from "./testing/polled-live.js";
 import { windowFocus } from "./window-focus.js";
 
-/**
- * The account's integrations as the host asks the service for them: behind
- * a closed account gate nothing is asked or opened; a server's tools a
- * window holds are kept from their last read; and where the integrations
- * stand, which a window holds, is followed live, the service asked to
- * settle a sign-in only while a row stands pending, and to name an account
- * still to be named once and again as a window comes forward, a disconnect
- * answered only once that read carries it, and a rename drawn over it at
- * once. Synthetic accounts and rows throughout.
- */
-
-/** The sign-in address the service answers, which must reach the browser and no window. */
 const SIGN_IN = "https://vercel.com/connect/authorize/request-1";
 
 const LINEAR = { provider: INTEGRATION_PROVIDER.LINEAR } as const;
 
-/** The transaction the service deletes a disconnected account in. */
 const DISCONNECT_TXID = "4815";
 
-/** The transaction the service renames an account in. */
 const RENAME_TXID = "1623";
 
-/** The account signed in, which the held integrations are followed under. */
 const USER_ID = "user-dana";
 
-/** One row as the live statement delivers it. */
 function row(connection: string, provider: IntegrationProvider, status: IntegrationStatus) {
   return { id: `id-${connection}`, connection, provider, label: connection, status };
 }
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
-/** The tools Linear's server lists, as the service answers them unless a test scripts otherwise. */
 const LINEAR_TOOLS = { tools: [{ name: "list_issues", description: "List issues." }] };
 
 interface ServiceScript {
   status: IntegrationStatus;
   connectRefused?: boolean;
-  /** What a read of a server's tools answers; Linear's tools where none is given. */
   tools?: IntegrationToolsView;
-  /** The outside MCP clients the account allowed, as the service holds them. */
   clients?: McpClient[];
-  /** Whether a revoke fails before it finishes, as one whose session lapsed does. */
   revokeFails?: boolean;
-  /** Whether a rename is refused, as one the service did not answer is. */
   renameRefused?: boolean;
-  /** Where given, a rename is answered only once the test opens it. */
   renameAnswered?: Deferred.Deferred<void>;
 }
 
-/** The member MCP server's address, as the service answers it. */
 const SERVER_URL = "https://app.test/api/mcp";
 
-/** An outside MCP client a member allowed, as the service lists it. */
 const CLAUDE: McpClient = {
   clientId: "client-claude",
   name: "Claude",
@@ -97,7 +73,6 @@ const CLAUDE: McpClient = {
   lastRefreshedAt: null,
 };
 
-/** The service as a script over one account's connection, its live rows, and its outside MCP clients, and what it was asked about. */
 function fakeService(script: ServiceScript) {
   const opened: string[] = [];
   const asked: IntegrationProvider[] = [];
@@ -173,17 +148,14 @@ function subject(
   return Effect.gen(function* () {
     const service = fakeService(script);
     const focus = yield* windowFocus;
-    // Every telling of the servers' tools, and of where the integrations stand, the host holds for the windows, whole, in order.
     const told: WireValue[] = [];
     const integrations: AppIntegrations[] = [];
-    // Every telling of the outside MCP clients the host holds for the windows, whole, in order.
     const clients: WireValue[] = [];
     const composer = yield* composeIntegrations({
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
         emit: (kind, payload) => {
           if (kind === GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED) told.push(payload);
-          // SAFETY: the host tells its own slice as built, in this process.
           if (kind === GATEWAY_EVENT.INTEGRATIONS_CHANGED)
             integrations.push(payload as AppIntegrations);
           if (kind === GATEWAY_EVENT.MCP_CLIENTS_CHANGED) clients.push(payload);
@@ -210,10 +182,8 @@ function subject(
   });
 }
 
-/** Every step a held read has to take, taken: it runs on a fiber of its own. */
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
-/** Every step a follow has to take, taken, after the clock moved on by `by`. */
 const after = (by: Duration.Input) => Effect.andThen(TestClock.adjust(by), settled);
 
 it.effect(
@@ -305,7 +275,6 @@ it.effect(
       const { call, settles, live, focus } = yield* subject({
         status: INTEGRATION_STATUS.CONNECTED,
       });
-      // Linear answers no account's name, so an empty label there is a grant that named nothing, called by its place.
       const placed = { ...row("linear", INTEGRATION_PROVIDER.LINEAR, "connected"), label: "" };
       live.set({ connections: [placed] });
       yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
@@ -380,7 +349,6 @@ it.effect(
       assert.equal(label(), "Work", "the new label is drawn before the service answers");
       yield* Deferred.succeed(answered, undefined);
       yield* Fiber.join(renaming);
-      // A poll the rename's transaction did not wake answers the old label.
       live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
       yield* after(Duration.millis(500));
       assert.equal(

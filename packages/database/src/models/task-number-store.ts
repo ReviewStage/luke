@@ -10,20 +10,6 @@ import {
 } from "./workspace-store.js";
 import { workspaceIdOfSlug } from "./workspace-slug-store.js";
 
-/**
- * task-number-store.ts -- a task found by its number in a workspace, as a link `/<slug>/task/<number>` names it, and the numbers a task left behind as it moved.
- *
- * A task's number is its workspace's, never handed out again (`task.ts`'s
- * `task_number_counter`), so a workspace and a number name one task for
- * good: the task holding it now, or else the task that held it before it
- * moved to another workspace (`task_number_forward`), written as it moves.
- * Either is answered only to an account that reaches the task where it
- * stands now, and the workspace is found by its slug, current or former
- * (`workspace-slug-store.ts`), or its id, only for a member of it, so a number another account's workspace holds, one
- * naming no task, and a slug naming no workspace of the reader's all
- * answer as nothing.
- */
-
 const TaskNumberSchema = Schema.Struct({
   userId: Schema.String,
   organizationId: Schema.String,
@@ -32,11 +18,6 @@ const TaskNumberSchema = Schema.Struct({
 
 const TaskIdSchema = Schema.Struct({ id: Schema.String });
 
-/**
- * The workspace a link's step names to the account: by its slug, as the
- * one slug resolver reads it, or else by its id, as a link written before
- * its slug was known spells it; only one it is a member of.
- */
 function memberWorkspaceOfStep(
   userId: string,
   step: string,
@@ -48,7 +29,6 @@ function memberWorkspaceOfStep(
   });
 }
 
-/** The task holding the number in the workspace now, where the account reaches it. */
 const findNumberedTask = SqlSchema.findOneOption({
   Request: TaskNumberSchema,
   Result: TaskIdSchema,
@@ -68,7 +48,6 @@ const findNumberedTask = SqlSchema.findOneOption({
     ),
 });
 
-/** The task that held the number in the workspace before it moved out, where the account reaches it where it stands now. */
 const findForwardedTask = SqlSchema.findOneOption({
   Request: TaskNumberSchema,
   Result: TaskIdSchema,
@@ -99,11 +78,6 @@ const insertForward = SqlSchema.void({
     Database.use((db) => db.insert(taskNumberForward).values(left).onConflictDoNothing()),
 });
 
-/**
- * The number a task held in the workspace it is moving out of, kept so a
- * link written with it still opens the task; called in the move's own
- * transaction, before or after its row changes.
- */
 export function forwardTaskNumber(left: {
   readonly organizationId: string;
   readonly number: number;
@@ -112,13 +86,6 @@ export function forwardTaskNumber(left: {
   return insertForward(left);
 }
 
-/**
- * The id of the task a link's workspace, by slug or id, and number name:
- * the task holding the number in that workspace now, or the one that held
- * it before it moved out; nothing where the account is no member of such a
- * workspace, the number names no task there, or the account does not reach
- * the task where it stands now.
- */
 export function taskIdOfNumber(
   userId: string,
   workspaceStep: string,

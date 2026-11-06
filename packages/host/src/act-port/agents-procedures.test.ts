@@ -1,14 +1,3 @@
-/**
- * agents-procedures.test.ts -- the Tasks tab's agent acts, and what an agent published, through the act port.
- *
- * The Tasks tab's core asks about a task's coding agents, through the act
- * port as a window calls them: only a panel of this build's own renderer
- * asks; any other window, and a frame this build does not trust,
- * are refused in each kind's own words before the host is asked or anything
- * noted; a panel's ask reaches the host with its payload as the panel sent
- * it, and what the host answers is noted on its way; and a host that fails answers the kind's own sentence.
- */
-
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import {
@@ -29,7 +18,6 @@ import { type AgentProceduresDependencies, agentProcedures } from "./agents-proc
 import type { ActSender } from "./base.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
-// The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true };
@@ -54,7 +42,6 @@ const STARTED = {
 
 const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [AGENT_ACT_KIND.AGENTS_MODELS_RETRY]: "Could not read the models again on this system.",
   [AGENT_ACT_KIND.AGENTS_DEFAULT_WRITE]: "Could not change the default model on this system.",
@@ -84,7 +71,6 @@ const REFUSAL = {
 
 type HostAsk = AgentProceduresDependencies["host"];
 
-/** Every kind, each with a payload its schema admits and the host ask it reaches, where it asks one. */
 const ACTS: readonly {
   kind: keyof typeof REFUSAL;
   payload: WireBoundaryInput;
@@ -202,14 +188,8 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/** What the host is asked to answer, by its ask, where a test answers one otherwise than unanswered. */
 type Answers = Partial<Record<keyof HostAsk, () => Effect.Effect<unknown>>>;
 
-/**
- * A window's act port, opened as the bridge opens one: the host answering
- * each ask unanswered unless `answers` says otherwise, the notices writing
- * down what they were told, and the window standing as `actor`.
- */
 function windowPort(
   actor: ActSender,
   options: { trusted?: boolean; answers?: Answers; fallback?: () => Effect.Effect<unknown> } = {},
@@ -226,7 +206,6 @@ function windowPort(
         return answer();
       });
   const names: (keyof HostAsk)[] = ACTS.flatMap((act) => (act.ask === undefined ? [] : [act.ask]));
-  // SAFETY: each fake answers what its test hands it; the port's output schema checks it.
   const host = Object.fromEntries(names.map((name) => [name, ask(name)])) as unknown as HostAsk;
   const notices: AgentProceduresDependencies["notices"] = {
     observeAgents: (agents) => {
@@ -251,7 +230,6 @@ function windowPort(
   const port = testActPort(agentProcedures({ host, notices }));
   ports.push(port);
   const trusted = options.trusted ?? true;
-  /** One kind called as this window, settled to its answer or the sentence of its refusal. */
   const call = (kind: PortActKind, payload: WireBoundaryInput) =>
     port.call(actor, kind, payload, { trusted });
   return { call, asked, noted };

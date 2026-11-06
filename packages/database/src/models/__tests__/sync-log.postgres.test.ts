@@ -17,20 +17,6 @@ import {
 } from "../../testing/index.js";
 import { syncStanding } from "../sync-log.js";
 
-/**
- * The sync log's settled id against writes committing out of the order they
- * logged in, on a real Postgres with two connections beside the test's own,
- * which PGlite's one connection cannot hold apart. A logs a row and stays
- * open while B logs after it and commits: the reader is not handed past A's
- * id until A commits, and the delta from where it was held then carries A's
- * row. A takes its id before B
- * does, so the reader's snapshot lists it as running, or after, so it stands
- * at the snapshot's `xmax`, past the newest transaction to end, where a
- * horizon read from a snapshot once passed it over. This file runs in CI's
- * Postgres job, where `APP_STORE_TEST_DATABASE_URL` names the database
- * (`vitest.config.ts`).
- */
-
 const PROBE = pgTable("sync_log_probe", {
   id: uuid("id").primaryKey(),
   workspaceId: text("workspace_id").notNull(),
@@ -41,7 +27,6 @@ const probeSync = defineSyncTable(PROBE, {
   log: LOG.EVERY,
 });
 
-/** The test database with the probe created and its capture installed, as a migration would. */
 const probeDB = Layer.provideMerge(
   Layer.effectDiscard(
     Effect.gen(function* () {
@@ -55,7 +40,6 @@ const probeDB = Layer.provideMerge(
   getTestDB(),
 );
 
-/** Runs an effect on a connection of its own to the test's database, as `dispatch-claim.postgres.test.ts` does. */
 const anotherConnection = Effect.gen(function* () {
   const client = yield* SqlClient.SqlClient;
   const [row] = yield* client<{ readonly name: string }>`select current_database() as name`;
@@ -68,21 +52,18 @@ const anotherConnection = Effect.gen(function* () {
 const transacted = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(effect));
 
-/** The id of the transaction under way, taking one where it has none yet. */
 const takeTxid = Effect.flatMap(SqlClient.SqlClient, (client) =>
   Effect.map(client<{ readonly txid: string }>`select pg_current_xact_id()::text as txid`, (rows) =>
     Number(rows[0]?.txid ?? assert.fail("no transaction id")),
   ),
 );
 
-/** A probe row written in the transaction under way, answering the transaction's id. */
 const logProbe = Effect.gen(function* () {
   const db = yield* Database;
   yield* db.insert(PROBE).values({ id: randomUUID(), workspaceId: randomUUID() });
   return yield* takeTxid;
 });
 
-/** The ids of the transactions logged in [from, below), one per row, as a delta reads them. */
 const txidsBetween = (from: number, below: number) =>
   Effect.flatMap(Database, (db) =>
     Effect.map(
@@ -95,14 +76,8 @@ const txidsBetween = (from: number, below: number) =>
     ),
   );
 
-/**
- * How many times the reader looks for the settled id to pass a committed
- * transaction: a transaction another file holds open on the same cluster
- * holds it back too, until that transaction ends.
- */
 const LOOKS = 10_000;
 
-/** The standing once its settled id is past the transaction's, or as it stands after the last look. */
 const settledPast = (txid: number) =>
   Effect.gen(function* () {
     let standing = yield* syncStanding();

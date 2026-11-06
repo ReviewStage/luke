@@ -54,7 +54,6 @@ it.effect("writes account preferences as a full snapshot", () =>
     assert.deepEqual(answer, {
       preferences: PREFERENCES_ANSWER.preferences,
       hasStoredSnapshot: true,
-      // A service that answers no experiments part predates it: every experiment is off there.
       experiments: {},
     });
 
@@ -131,7 +130,6 @@ it.effect(
       );
       assert.deepEqual(answer?.preferences, { linkOpen: LINK_OPEN.MAC_APP });
 
-      // Note that the shared part a build from before the choice writes back whole carries none of it.
       const [request] = requests;
       assert.deepEqual(JSON.parse(String(request?.init?.body)), {
         preferences: {},

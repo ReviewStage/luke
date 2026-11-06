@@ -48,31 +48,6 @@ import {
 } from "../device-agent-store.js";
 import { beatDevice, registerDevice } from "../device-store.js";
 
-/**
- * The work queued for a local agent's Mac, over a real dialect: a line is
- * queued in order to the Mac the agent is pinned to, at a place never
- * handed out before, listed no further than a read's budget but always the
- * first, claimed
- * once with its secrets cleared in the claim, or again under the token its
- * claim carried but never with its secrets twice, and settled once with its
- * runner's exit; a launch's step is kept only while its own Mac holds it
- * claimed and unsettled, and only moved forward; a request is claimed once and answered once, its answer
- * read back as the Mac gave it, and one of a kind this build no longer
- * knows is passed over rather than failing the read; nothing is queued for, claimed by, or read
- * by another account; a discard line goes only to a Mac that registered it
- * takes one; the expiry withdraws old work but a runner still at work; and
- * a device whose lease lapsed has its open launches read, bounded, and
- * settled once, a waiting one never handed out after; and a device's open
- * launches, claimed or waiting, are read for its own account alone, as are
- * its live agents, those pinned to it and not archived; and the warm
- * launches are read across accounts, each under its own, only where the
- * agent's newest launch is open on a device that beat within its lease and
- * its run ended before the bound, or before the grace on a device waiting to
- * update; and whether an agent's device waits to update, and whether a
- * line was queued after its launch line, are read for its own account
- * alone. Synthetic accounts, agents, and Macs throughout.
- */
-
 const SEALED = "sealed:v1:not-a-real-secret";
 
 const FILE_ANSWER: DeviceAgentAnswer = {
@@ -80,7 +55,6 @@ const FILE_ANSWER: DeviceAgentAnswer = {
   bytes: new TextEncoder().encode("line one\n"),
 };
 
-/** An agent of the account's on a task of its own, pinned to the Mac given, or running in a sandbox where none is; its id. */
 const startAgent = (userId: string, deviceId?: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -105,7 +79,6 @@ const startAgent = (userId: string, deviceId?: string) =>
     return agentId;
   });
 
-/** A Mac registered under the account; its id. */
 const registerMac = (userId: string) =>
   Effect.gen(function* () {
     const deviceId = randomUUID();
@@ -113,7 +86,6 @@ const registerMac = (userId: string) =>
     return deviceId;
   });
 
-/** An account holding a Mac and an agent pinned to it, or running in a sandbox where asked. */
 const openAccount = (onMac = true) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -135,17 +107,11 @@ const launch = (agentId: string) =>
 const message = (agentId: string, text: string) =>
   ({ agentId, kind: DEVICE_AGENT_LINE_KIND.MESSAGE, payload: { text } }) as const;
 
-/** Five minutes past the clock's reading now, which the layer's clock carries from test to test. */
 const fiveMinutesOn = Effect.map(
   Clock.currentTimeMillis,
   (millis) => new Date(millis + 5 * 60_000),
 );
 
-/**
- * The agent's launch, claimed, its conversation run in a session of its own
- * and its newest turn in the status given, settled at the instant given
- * where it ended: the launch's id, and the session.
- */
 const launchedAfter = (
   opened: { readonly userId: string; readonly deviceId: string; readonly agentId: string },
   status: TurnStatus,
@@ -178,7 +144,6 @@ const launchedAfter = (
     return { id: line.id, sessionId };
   });
 
-/** The line's secrets column as the row holds it now. */
 const storedSecrets = (id: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -317,7 +282,6 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         ];
         const late = yield* stepped(queued.id, DEVICE_LAUNCH_STEP.FETCHING);
         const held = yield* latestDeviceAgentLaunch(userId, agentId);
-        // A step a newer build wrote is one this build cannot place, so a late report it knows leaves it.
         const db = yield* Database;
         yield* db
           .update(deviceAgentLine)
@@ -589,14 +553,12 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
       Effect.gen(function* () {
         const { userId, deviceId, agentId } = yield* openAccount();
         const retired = randomUUID();
-        // A command request an earlier build queued and never withdrew, written as that build wrote it.
         yield* Database.use((db) =>
           db.insert(deviceAgentRequest).values({
             id: retired,
             agentId,
             userId,
             deviceId,
-            // SAFETY: the kind is one an earlier build wrote, which this build's type no longer names.
             kind: "run_command" as never,
             args: { command: "git status" },
           }),

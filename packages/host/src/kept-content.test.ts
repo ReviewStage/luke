@@ -4,7 +4,6 @@ import { INBOX_IMAGE_TYPE } from "@repo/features/inbox-wire";
 import { Effect } from "effect";
 import { InboxAttachmentKey, keptContent } from "./kept-content.js";
 
-/** A budget four answers of `ANSWERED` fill: each weighs 20 characters, its type's 9 and 11 of base64. */
 const BUDGET = 80;
 const ANSWERED = "iVBORw0KGgo";
 

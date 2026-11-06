@@ -21,19 +21,6 @@ import {
 import { archiveAgent } from "../agent-store.js";
 import { createTask, updateTask } from "../task-store.js";
 
-/**
- * An undo of an inbox settle racing the other act that settles the same
- * item, against a real Postgres with a second connection beside the test's
- * own: the one thing PGlite, a single connection that runs one transaction
- * at a time, cannot show. Held open on another connection, the other act has
- * written its row and skipped the item already closed; the undo waits on
- * that row rather than reading past it, and hands the item to the act once
- * it commits, so the item never stands open under an archived agent or a
- * task Done. This file runs in CI's Postgres job, where
- * `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
- */
-
-/** Runs an effect on a connection of its own to the test's database, beside the test's one, as `dispatch-claim.postgres.test.ts` does. */
 const anotherConnection = Effect.gen(function* () {
   const client = yield* SqlClient.SqlClient;
   const [row] = yield* client<{ readonly name: string }>`select current_database() as name`;
@@ -43,7 +30,6 @@ const anotherConnection = Effect.gen(function* () {
   return <A, E>(effect: Effect.Effect<A, E, DatabaseServices>) => Effect.provide(effect, layer);
 });
 
-/** A member's task with an agent on it holding a question open. */
 const openQuestion = Effect.gen(function* () {
   const db = yield* Database;
   const dean = `user-${randomUUID()}`;
@@ -55,7 +41,6 @@ const openQuestion = Effect.gen(function* () {
   return { dean, taskId, agentId, itemId };
 });
 
-/** How many of the test database's sessions wait on a lock. */
 const waitingOnLocks = Effect.gen(function* () {
   const client = yield* SqlClient.SqlClient;
   const [row] = yield* client<{
@@ -64,10 +49,8 @@ const waitingOnLocks = Effect.gen(function* () {
   return row?.waiting ?? 0;
 });
 
-/** How many times the probe below looks for the undo to wait or end. */
 const LOOKS = 2000;
 
-/** Looks until the fiber waits on a lock or has ended, whichever comes first. */
 const untilWaitingOrDone = (fiber: Fiber.Fiber<unknown, unknown>) =>
   Effect.gen(function* () {
     for (let look = 0; look < LOOKS; look += 1) {
@@ -77,7 +60,6 @@ const untilWaitingOrDone = (fiber: Fiber.Fiber<unknown, unknown>) =>
     }
   });
 
-/** Where the item stands: its status and why it closed. */
 const standingOf = (itemId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -88,7 +70,6 @@ const standingOf = (itemId: string) =>
     return row ?? assert.fail("the item is gone");
   });
 
-/** The act run in a transaction on another connection, held open once it has written until released. */
 const heldOnAnother = (
   onAnother: Awaited<Effect.Success<typeof anotherConnection>>,
   act: Effect.Effect<unknown, unknown, DatabaseServices>,

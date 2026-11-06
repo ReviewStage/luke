@@ -10,7 +10,6 @@ const AGENT = "6f1c2b9e-1d3a-4c55-9a0e-2f6b8c1d0e11";
 
 const NODE = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
 
-/** A home with one agent's worktree holding a file, a secret beside the home, the agent's gh sign-in where a host kept it before and where it keeps it now, in gh's config in the agent's home, and a symlink in the worktree pointing at each. */
 const staged = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const root = yield* temporaryDirectoryScoped("local-agent-");

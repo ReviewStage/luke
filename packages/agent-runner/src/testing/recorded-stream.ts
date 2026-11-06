@@ -1,18 +1,5 @@
-/**
- * recorded-stream.ts -- P00's recorded stream, as the runner's tests replay it: the SDK messages of the probe's workflow turn and its stopped turn, cut into the steps the CLI took between the service's lines.
- *
- * P00 merged with a placeholder live recording, so this is its hermetic
- * stream (`tools/claude-code-probe/tests/verdict.test.ts`'s `firstLaunch`),
- * in the pinned SDK's (0.3.304) message shapes. What that stream does not
- * show is built from the SDK's own types and marked as such: the partial
- * messages `includePartialMessages` adds (`SDKPartialAssistantMessage`), and
- * the Stop hook's input before each `result` (`StopHookInput`'s
- * `background_tasks` and `session_crons`).
- */
-
 import type { BackgroundTaskSummary, SessionCronSummary } from "@anthropic-ai/claude-agent-sdk";
 
-/** One JSON value, as a message crosses the CLI's stdout. */
 type Recorded =
   | string
   | number
@@ -24,10 +11,8 @@ type Recorded =
 const SESSION = "00000000-0000-4000-8000-000000000001";
 const NONCE = "a1b2c3d4e5f6";
 
-/** The words the probe's turns end on (`tools/claude-code-probe/src/verdict.ts`'s `TURN_DONE`). */
 export const TURN_DONE = { FIRST: "AGENT-PROBE-TURN-1-DONE" } as const;
 
-/** The marker of the probe's stopped command (`tools/claude-code-probe/src/turns.ts`'s `STOPPED_COMMAND`). */
 export const STOPPED_COMMAND = "sleep 600";
 
 let uuid = 0;
@@ -83,7 +68,6 @@ function said(text: string): Recorded {
   };
 }
 
-/** A token of what `said` then delivers whole. Built from the SDK's `SDKPartialAssistantMessage`. */
 function partial(text: string): Recorded {
   return {
     type: "stream_event",
@@ -104,14 +88,8 @@ function result(subtype: string) {
   } satisfies Recorded;
 }
 
-/**
- * The `result` the CLI put out resuming a session a Stop interrupted, ahead
- * of the turn on the service's message, as a hand test on a host saw it: its step
- * names no prompt.
- */
 export const STRAY_RESULT = result("success");
 
-/** What a Stop hook reports in flight. Built from the SDK's `StopHookInput`. */
 export interface StopReport {
   readonly background_tasks: BackgroundTaskSummary[];
   readonly session_crons: SessionCronSummary[];
@@ -133,12 +111,6 @@ export const WAKEUP: SessionCronSummary = {
   prompt: "Continue Vespin's probe from step 4.",
 };
 
-/**
- * What the fake CLI does next: emit a message, a `result` naming the prompts
- * its turn took unless it names none, run the Stop hook, take the service's next
- * message into the turn, or hold until it is interrupted or the test
- * releases it.
- */
 export type Step =
   | { readonly emit: Recorded; readonly namesNoPrompt?: true }
   | { readonly stopHook: StopReport }
@@ -146,12 +118,6 @@ export type Step =
   | { readonly untilInterrupted: true }
   | { readonly untilReleased: true };
 
-/**
- * P00's workflow turn, from its prompt: an edit, the leak check, a background
- * command, and a `ScheduleWakeup`, after which the model turn ends while both
- * are pending; then the wakeup's own model turn, which finishes the work and
- * ends with nothing pending.
- */
 export const WORKFLOW_TURN: readonly Step[] = [
   { emit: INIT },
   { emit: toolUse("Write", { file_path: `agent-probe/${NONCE}.txt`, content: NONCE }) },
@@ -181,7 +147,6 @@ export const WORKFLOW_TURN: readonly Step[] = [
   { emit: result("success") },
 ];
 
-/** P00's stopped turn: a long foreground command, held until the service's stop interrupts it. */
 export const STOPPED_TURN: readonly Step[] = [
   { emit: INIT },
   { emit: toolUse("Bash", { command: STOPPED_COMMAND }) },
@@ -189,11 +154,6 @@ export const STOPPED_TURN: readonly Step[] = [
   { emit: result("error_during_execution") },
 ];
 
-/**
- * A turn held at work until the test releases it, so the service's second message
- * arrives while it runs and is left for the next turn, which the CLI starts
- * on that message as soon as the first ends.
- */
 export const FOLLOW_UP_TURNS: readonly Step[] = [
   { emit: INIT },
   { emit: said("Working on the first message.") },
@@ -206,10 +166,6 @@ export const FOLLOW_UP_TURNS: readonly Step[] = [
   { emit: result("success") },
 ];
 
-/**
- * P00's workflow turn up to its wakeup, then a wakeup's turn that starts a
- * long foreground command, held until the service's stop interrupts it.
- */
 export const WAKEUP_STOPPED_TURN: readonly Step[] = [
   { emit: INIT },
   {
@@ -227,7 +183,6 @@ export const WAKEUP_STOPPED_TURN: readonly Step[] = [
   { emit: result("error_during_execution") },
 ];
 
-/** A turn that ends at its first `result`, with nothing pending. */
 export const SHORT_TURN: readonly Step[] = [
   { emit: INIT },
   { emit: said("Done.") },
@@ -235,7 +190,6 @@ export const SHORT_TURN: readonly Step[] = [
   { emit: result("success") },
 ];
 
-/** A resumed session's stray `result` (`STRAY_RESULT`), then the turn that answers the service's message. */
 export const STRAY_RESULT_THEN_TURN: readonly Step[] = [
   { emit: INIT },
   { emit: STRAY_RESULT, namesNoPrompt: true },
@@ -244,14 +198,12 @@ export const STRAY_RESULT_THEN_TURN: readonly Step[] = [
   { emit: result("success") },
 ];
 
-/** A resumed session's stray `result`, the CLI then silent until the launch ends. */
 export const STRAY_RESULT_THEN_SILENCE: readonly Step[] = [
   { emit: INIT },
   { emit: STRAY_RESULT, namesNoPrompt: true },
   { untilReleased: true },
 ];
 
-/** Two turns that each end at their `result` with nothing pending, the second on the service's next message, as a warm launch takes it. */
 export const WARM_TURNS: readonly Step[] = [
   ...SHORT_TURN,
   { awaitPrompt: true },
@@ -260,7 +212,6 @@ export const WARM_TURNS: readonly Step[] = [
   { emit: result("success") },
 ];
 
-/** A turn that schedules a wakeup and ends its model turn waiting on it alone, the CLI then held up until the launch ends. */
 export const WAKEUP_WAIT: readonly Step[] = [
   { emit: INIT },
   {
@@ -276,7 +227,6 @@ export const WAKEUP_WAIT: readonly Step[] = [
   { untilReleased: true },
 ];
 
-/** A recurring task's wait, the CLI then held up until the launch ends. */
 export const RECURRING_WAIT: readonly Step[] = [
   { emit: INIT },
   { emit: said("Checking the deploy every two hours.") },
@@ -290,7 +240,6 @@ export const RECURRING_WAIT: readonly Step[] = [
   { untilReleased: true },
 ];
 
-/** A wait on a background command, the CLI then held up until the service's stop. */
 export const BACKGROUND_WAIT: readonly Step[] = [
   { emit: INIT },
   { emit: toolUse("Bash", { command: "sleep 45", run_in_background: true }) },
@@ -299,7 +248,6 @@ export const BACKGROUND_WAIT: readonly Step[] = [
   { untilReleased: true },
 ];
 
-/** A wakeup's wait that a message from the service interrupts: the message's turn runs, held until the test releases it, and ends with nothing pending. */
 export const WAKEUP_WAIT_THEN_MESSAGE: readonly Step[] = [
   { emit: INIT },
   {

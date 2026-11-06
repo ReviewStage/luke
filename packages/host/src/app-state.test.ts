@@ -15,10 +15,10 @@ import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import type { WireValue } from "@repo/wire";
 import { describe, test } from "vitest";
 import {
+  type AppDescriptionDocuments,
   type AppHolderInboxes,
   type AppInboxItems,
   type AppPages,
-  type AppDescriptionDocuments,
   type AppStateDelivery,
   type AppStateSnapshot,
   type AppTranscript,
@@ -31,14 +31,6 @@ import { initialAppState } from "./client/app-state-store.js";
 import { PUSH, PUSH_GUARD } from "./contract/index.js";
 import { runModeFor } from "./run-mode.js";
 
-/**
- * The boundary parse a window's bridge holds every delivered snapshot to: a
- * snapshot naming what its platform offers is taken, and one naming a
- * capability this build does not know, or none at all, is refused, since a
- * bridge other than the desktop's may hand it.
- */
-
-/** The parts of a delivered snapshot the parse reads, with the run's capabilities as given. */
 function delivered(capabilities: WireValue) {
   return {
     version: 3,
@@ -86,11 +78,6 @@ describe("a delivered snapshot's version and window facts", () => {
   });
 });
 
-/**
- * A delivery as a window's push stream carries it: encoded by oRPC's RPC
- * serializer as the act port encodes every push, sent as text, decoded, and
- * read by the guard the window holds a push to.
- */
 function acrossTheWire(delivery: AppStateDelivery | undefined): AppStateDelivery {
   if (delivery === undefined) throw new Error("nothing was delivered");
   const serializer = new RPCSerializer();
@@ -98,7 +85,6 @@ function acrossTheWire(delivery: AppStateDelivery | undefined): AppStateDelivery
     JSON.parse(JSON.stringify(serializer.serialize(delivery))),
   );
   if (!PUSH_GUARD[PUSH.APP_STATE](decoded)) throw new Error("the window refused the delivery");
-  // SAFETY: the window's own guard for the push admitted it above.
   return decoded as AppStateDelivery;
 }
 
@@ -126,7 +112,6 @@ describe("a delivery that crosses the wire", () => {
     assert.equal("settings" in withAppStateDelivery(held, delivered), false);
   });
 
-  /** One inbox item, its title the words it is told apart by. */
   const item = (id: string, title: string): InboxItem => ({
     id,
     agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -161,7 +146,6 @@ describe("a delivery that crosses the wire", () => {
     ...document,
     [LIVE_READ.PAGES]: { [PAGE_OWNER.TASK]: tasks, [PAGE_OWNER.AGENT]: {} },
   });
-  /** One task as the list names it, its name the words it is told apart by. */
   const summary = (id: string, name: string): TaskSummary => ({
     id,
     workspaceId: "workspace-personal",
@@ -190,13 +174,11 @@ describe("a delivery that crosses the wire", () => {
     [LIVE_READ.DESCRIPTION_DOCUMENT]: held,
   });
   const quietDescription = { rows: { task: openDescription } };
-  /** One of an agent's messages, saying `text`. */
   const line = (id: string, text: string): AgentTranscriptMessage => ({
     id,
     role: "assistant",
     parts: [{ type: "text", text }],
   });
-  /** The agent's own transcript held as `pages` pages left it, the last saying the agent stands at `status`. */
   const transcript = (
     messages: readonly AgentTranscriptMessage[],
     status: AgentStatus,
@@ -212,7 +194,6 @@ describe("a delivery that crosses the wire", () => {
     [LIVE_READ.TRANSCRIPT]: { "agent-1": { [OWN_TRANSCRIPT]: { rows: own } } },
   });
   const quietLine = line("m-1", "Read the invites.");
-  /** A task's description holding `body` alone. */
   const draft = (body: string): Task["document"] => ({ body, assumptions: [] });
   const quietList = [quietItem];
   const quietInbox = { rows: quietList };

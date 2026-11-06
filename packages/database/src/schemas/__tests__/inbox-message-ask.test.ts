@@ -18,19 +18,8 @@ import { user } from "../auth.js";
 import { inboxItem } from "../inbox.js";
 import { inboxMessage } from "../inbox-message.js";
 
-/**
- * The migration that lets an inbox item's thread carry asks and answers:
- * an agent's message keeps the ask it ends with and where it stands, a
- * member's keeps the answer it carries, and the item names the message
- * whose ask is open, until that message goes. A database from before it
- * keeps every item and message as they stood, asking and answering
- * nothing, and a deployment from before it still writes both as it did.
- * Synthetic accounts and rows throughout.
- */
-
 const MIGRATION = "20261019231740_inbox_message_ask";
 
-/** The migration undone, so the database stands as one from before it. */
 const UNDO = [
   `ALTER TABLE "inbox_item" DROP CONSTRAINT "inbox_item_open_ask_message_id_inbox_message_id_fkey"`,
   `ALTER TABLE "inbox_item" DROP COLUMN "open_ask_message_id"`,
@@ -38,7 +27,6 @@ const UNDO = [
   `ALTER TABLE "inbox_message" DROP COLUMN "answers"`,
 ];
 
-/** An account with a task and a coding agent on it, the place an item is posted in. */
 const openAgent = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -60,7 +48,6 @@ const openAgent = Effect.gen(function* () {
   return { userId, taskId: task.id, organizationId, agentId: started.agent.id };
 });
 
-/** The item and its thread as this code reads them, the thread in the order it was written. */
 const readBack = (itemId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -76,7 +63,6 @@ const readBack = (itemId: string) =>
 const { openAskMessageId: _openAsk, ...itemColumnsBefore } = getTableColumns(inboxItem);
 const { ask: _ask, answers: _answers, ...messageColumnsBefore } = getTableColumns(inboxMessage);
 
-/** The item and its thread as they read before the migration, by the columns that stood then. */
 const readBefore = (itemId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -92,7 +78,6 @@ const readBefore = (itemId: string) =>
     return { item, messages };
   });
 
-// Each case stands on a database of its own, since the first walks the migration back.
 it.layer(getTestDB())("inbox_message_ask over a database from before it", (it) => {
   it.effect(
     "an item and its message from before the migration read back as they stood, asking and answering nothing, a deployment from before it still writes both, and running it again changes nothing",
@@ -100,12 +85,9 @@ it.layer(getTestDB())("inbox_message_ask over a database from before it", (it) =
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const place = yield* openAgent;
-        // The database as it stood before the migration: no sync capture yet, and the migration undone.
         for (const statement of syncCaptureTakenOff()) yield* sql.unsafe(statement);
         for (const statement of UNDO) yield* sql.unsafe(statement);
 
-        // Written as a deployment from before the migration writes them, naming none of its columns.
-        // Note that the view columns a later migration dropped are left out, since only this migration is undone.
         const itemId = randomUUID();
         const memberMessageId = randomUUID();
         yield* sql`insert into inbox_item (id, user_id, task_id, organization_id, agent_id, key, revision, version, title, needs_reply, status, posted_at, updated_at)

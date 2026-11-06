@@ -32,17 +32,6 @@ import {
 } from "../host-store.js";
 import { keepRunsOnPick, readRunsOnPick } from "../runs-on-pick.js";
 
-/**
- * An account's hosts, over a real dialect: a member's session creates a
- * machine its account never registered, and enrolls its own registered
- * desktop in place, which is then read, listed, and removed as a host is;
- * a removed host's secret resolves nothing, and no account enrolls, lists,
- * or removes another's. A Mac that joins again folds the account's other
- * Macs on its machine into it, never another account's, a Linux box's, or
- * itself, and a host's later register never folds.
- * Synthetic accounts, hashes, and machines throughout.
- */
-
 const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -52,7 +41,6 @@ const openAccounts = Effect.gen(function* () {
   return { owner, other };
 });
 
-/** A host the account's session enrolled under a fresh id, named, on the machine given where its host said one, a Mac unless another platform is given; its id, its secret's hash, and the agents its enroll's fold moved. */
 const enrolledHost = (
   userId: string,
   host: { readonly name: string; readonly machineId?: string; readonly platform?: DevicePlatform },
@@ -137,7 +125,6 @@ it.layer(getTestDB())("the host store", (it) => {
           secretHash: firstHash,
         });
         const listed = yield* hostsOf(owner);
-        // Start offers and launches only on what this read answers the starter.
         const layoutForOther = yield* deviceLayout(other, id);
         const rotated = yield* enrollOwnDevice(owner, {
           id,
@@ -262,7 +249,6 @@ it.layer(getTestDB())("the host store", (it) => {
         const machineId = "c".repeat(64);
         const running = yield* enrolledHost(owner, { name: "Air", machineId });
         yield* registerHost(owner, { id: running.id, name: "Air", ...DEVICE_LAYOUT });
-        // Note that a host older than the field names no machine at its first register.
         const older = yield* enrolledHost(owner, { name: "Studio" });
         const first = yield* registerHost(owner, {
           id: older.id,

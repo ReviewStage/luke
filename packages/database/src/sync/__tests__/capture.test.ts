@@ -13,15 +13,6 @@ import { TOPIC } from "../notification.js";
 import { defineSyncTable, LOG, type SyncLogWrites } from "../sync-table.js";
 import { SYNC_TABLES } from "../tables.js";
 
-/**
- * Sync's capture, on a table only these tests create: a row names its
- * workspace and task itself, and takes its agents from the parents of its
- * group, which it names by a key many parents share. What a write notifies
- * is heard on the test database's own listener, so on PGlite and on the CI
- * Postgres alike. Logged, the same table writes the sync log, which is read
- * back as it stands.
- */
-
 const PROBE_PARENT = pgTable("sync_probe_parent", {
   id: uuid("id").primaryKey(),
   groupId: uuid("group_id").notNull(),
@@ -39,7 +30,6 @@ const probeColumns = {
 
 const PROBE = pgTable("sync_probe", probeColumns);
 
-/** The same table once a column is added to it. */
 const PROBE_WITH_NOTE = pgTable("sync_probe", { ...probeColumns, note: text("note") });
 
 const PROBE_SQL = [
@@ -47,7 +37,6 @@ const PROBE_SQL = [
   "create table sync_probe (id uuid primary key, workspace_id text not null, task_id text, group_id uuid, title text not null, touched_at timestamptz)",
 ];
 
-/** The probe declared synced, and logged where `log` names its writes. */
 const probeSyncLogging = (log?: SyncLogWrites) =>
   defineSyncTable(PROBE, {
     topics: [
@@ -80,7 +69,6 @@ const probeWithNoteSync = defineSyncTable(PROBE_WITH_NOTE, {
   ignore: [PROBE_WITH_NOTE.touchedAt],
 });
 
-/** The test database with the probe's tables created and their capture installed, as a migration would. */
 const probeDB = Layer.provideMerge(
   Layer.effectDiscard(
     Effect.gen(function* () {
@@ -92,7 +80,6 @@ const probeDB = Layer.provideMerge(
   getTestDB(),
 );
 
-/** A group of parents, one agent each, answering the group's id and the agents' ids. */
 const insertGroup = (agents: number) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -115,12 +102,6 @@ const updateProbe = (id: string, set: Partial<typeof PROBE.$inferInsert>) =>
 const deleteProbe = (id: string) =>
   Effect.flatMap(Database, (db) => db.delete(PROBE).where(eq(PROBE.id, id)));
 
-/**
- * The log rows the writes wrote, in the order of their transactions and, in
- * one, of their keys: each one's table, the ids its keys name, and its
- * topics. Each statement here is a transaction of its own, so the rows the
- * writes logged follow every row logged before them.
- */
 const loggedBy = <E, R>(writes: Effect.Effect<unknown, E, R>) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -193,7 +174,6 @@ it.layer(probeDB)("what a write to a synced table notifies", (it) => {
 
   it.effect("a lookup matching many parents notifies them all, past one payload's limit", () =>
     Effect.gen(function* () {
-      // Each agent's topic is about 50 bytes, so 400 take more than two payloads.
       const { groupId, agentIds } = yield* insertGroup(400);
       const row = { id: randomUUID(), workspaceId: randomUUID(), groupId, title: "Many" };
 

@@ -2,24 +2,11 @@ import type { GatewayMethod, GatewayMethodTable } from "@repo/gateway";
 import { Data, type Effect, Result, type Scope } from "effect";
 import type { HostMethodTable } from "./gateway-door.js";
 
-/** One concern of the host: the Gateway methods it answers, and its own lifecycle. */
 export interface Composer {
-  /** The methods this concern answers, a row write's only from its write declaration. Disjoint from every other composer's. */
   readonly methods: HostMethodTable;
-  /**
-   * What this concern begins — timers, subscriptions, loops, stores — in the
-   * scope its lifetime is: running it is the concern started, and the
-   * finalizers it registers are the whole of its stop, so closing that scope
-   * is the stop and there is no handle to hand back.
-   */
   readonly lifetime: Effect.Effect<void, never, Scope.Scope>;
 }
 
-/**
- * A method two composers claim. Which concern answers a method is a fact
- * about the split, never about the order the merge happened to fold it in,
- * so the fold refuses rather than letting the last writer win.
- */
 export class DuplicateGatewayMethod extends Data.TaggedError("DuplicateGatewayMethod")<{
   readonly method: GatewayMethod;
 }> {
@@ -28,13 +15,11 @@ export class DuplicateGatewayMethod extends Data.TaggedError("DuplicateGatewayMe
   }
 }
 
-/** The one method table, folded from the composers' own, or the first method two of them claim. */
 export function foldMethods(
   composers: readonly Composer[],
 ): Result.Result<GatewayMethodTable, DuplicateGatewayMethod> {
   const merged: GatewayMethodTable = {};
   for (const composer of composers) {
-    // SAFETY: a method table's keys are the method names it was built from.
     for (const method of Object.keys(composer.methods) as GatewayMethod[]) {
       const handler = composer.methods[method];
       if (handler === undefined) continue;

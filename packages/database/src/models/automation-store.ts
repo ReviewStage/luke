@@ -54,25 +54,6 @@ import { taskMadeByRun } from "./run-tasks.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 import { AGENT_WORKSPACE, isWorkspaceMember, roleAmong } from "./workspace-store.js";
 
-/**
- * automation-store.ts -- an account's automations and their runs: made, listed, changed, and deleted by the account, and a run recorded once per firing.
- *
- * Every statement an account makes names it beside the automation, so no
- * account reads or changes another's, and gates on the account still
- * being a member of the automation's workspace, as every task statement is
- * gated (`workspace-store.ts`): an account that leaves the
- * workspace leaves its automations there with it, unread and unchanged,
- * and their runs fail on the same check when they fire. A trigger is kept
- * with only the columns it uses: a schedule's due instant and a webhook's
- * secret hash are cleared whenever the trigger is no longer of their kind. The trigger, the action, and the guards are decoded through
- * the wire's own schemas on every read. A run is recorded under its firing's
- * dedupe key, so a firing claimed twice answers nothing the second time,
- * and settled once, from queued to started, skipped, or failed. When a
- * schedule is next due is the caller's to compute and hand in; this module
- * reads no clock but the instant it stamps a write with.
- */
-
-/** The longest history one read answers. */
 const MAX_RUNS_READ = 100;
 
 const AutomationRowSchema = Schema.Struct({
@@ -95,7 +76,6 @@ const AutomationRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
 });
 
-/** One automation as its account reads it. */
 export type Automation = typeof AutomationRowSchema.Type;
 
 export const AUTOMATION_COLUMNS = {
@@ -118,13 +98,9 @@ export const AUTOMATION_COLUMNS = {
   updatedAt: automation.updatedAt,
 };
 
-/** What making an automation takes: its workspace and repositories, what fires it and what it starts, its guards, when a schedule is first due, and a webhook's secret hash. */
 export interface NewAutomation {
-  /** The id to make it under, such as one drawn from an agent's call key so a call run again finds the one it made; a fresh one where left out. A make under an id already standing writes nothing and answers none. */
   readonly id?: string;
-  /** The workspace it stands on, which the account must be a member of. */
   readonly organizationId: string;
-  /** The repositories its runs work in. */
   readonly repositories?: readonly string[] | undefined;
   readonly name: string;
   readonly trigger: AutomationTrigger;
@@ -132,20 +108,13 @@ export interface NewAutomation {
   readonly guards: AutomationGuards;
   readonly nextRunAt: Date | null;
   readonly webhookSecretHash: string | null;
-  /** Whose it is; personal where left out. */
   readonly scope?: AutomationScope;
-  /** Where a run lands; a new agent each run where left out. */
   readonly targetKind?: AutomationTargetKind;
   readonly targetAgentId?: string | null;
   readonly archiveSuccessful?: boolean;
   readonly slackDelivery?: boolean;
 }
 
-/**
- * What a change names: any of the fields, at once; a field left out stands
- * as it was, but for a new trigger, which clears the columns its kind does
- * not use and takes the due instant and the secret hash the change names.
- */
 export interface AutomationChanges {
   readonly name?: string;
   readonly enabled?: boolean;
@@ -173,7 +142,6 @@ const RunRowSchema = Schema.Struct({
   settledAt: Schema.NullOr(InstantColumnSchema),
 });
 
-/** One run as the history reads it: what fired it, where it stands, why where it did not start, and the agent where it did. */
 export type AutomationRun = typeof RunRowSchema.Type;
 
 const RUN_COLUMNS = {
@@ -192,25 +160,17 @@ const QueuedRunSchema = Schema.Struct({
   payload: Schema.NullOr(Schema.String),
 });
 
-/**
- * One run as the act that starts it reads it: the run, with a webhook's
- * body beside it. Note that only a run about to be acted on reads its body,
- * because a history or a guard reads many runs and a body may run to 64 KiB.
- */
 export type QueuedRun = typeof QueuedRunSchema.Type;
 
 const QUEUED_RUN_COLUMNS = { ...RUN_COLUMNS, payload: automationRun.payload };
 
-/** A firing to record: its identity, what it was, when it fired, and a webhook's body. */
 export interface NewAutomationRun {
   readonly dedupeKey: string;
   readonly firing: AutomationFiring;
   readonly firedAt: Date;
-  /** A webhook firing's body as its caller sent it, for the agent's prompt. */
   readonly payload?: string;
 }
 
-/** How a run settled: started with its agent, or skipped or failed for a reason. */
 export type AutomationRunOutcome =
   | { readonly status: typeof AUTOMATION_RUN_STATUS.STARTED; readonly agentId: string }
   | {
@@ -223,13 +183,6 @@ export type AutomationRunOutcome =
 
 const AutomationKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-/**
- * What an account asks to do with an automation, each allowed by its own
- * rule: a personal automation
- * is its creator's, which the workspace's owners and admins see, pause, and
- * delete; a workspace's every member sees, runs, and pauses, and its
- * creator, owners, and admins change and delete.
- */
 export const AUTOMATION_ACCESS = {
   READ: "read",
   CHANGE: "change",
@@ -242,7 +195,6 @@ export type AutomationAccess = (typeof AUTOMATION_ACCESS)[keyof typeof AUTOMATIO
 
 const automationAccessSchema = Schema.Literals(Object.values(AUTOMATION_ACCESS));
 
-/** The condition that the account is a member of the automation's workspace, in one of `roles` where it names any. */
 function memberOfAutomationWorkspace(
   userId: string | typeof automation.userId,
   roles?: readonly WorkspaceRole[],
@@ -261,12 +213,6 @@ function memberOfAutomationWorkspace(
   );
 }
 
-/**
- * The condition that the account may do `access` with the automation a
- * statement names. Note that every rule asks the account to be a member of
- * the automation's workspace still, so a creator who left reaches nothing
- * of it, while its owners and admins go on seeing and deleting it.
- */
 function allowedTo(userId: string, access: AutomationAccess, id?: string): SQL | undefined {
   const mine = eq(automation.userId, userId);
   const shared = eq(automation.scope, AUTOMATION_SCOPE.WORKSPACE);
@@ -294,12 +240,10 @@ function allowedTo(userId: string, access: AutomationAccess, id?: string): SQL |
   );
 }
 
-/** The condition that the account may read the automation row a statement reads, by the rule above: what a read naming an automation from beside it, such as an agent its run started, gates the automation's own words on. */
 export function automationReadableBy(userId: string): SQL | undefined {
   return allowedTo(userId, AUTOMATION_ACCESS.READ);
 }
 
-/** The columns only one kind of trigger uses, cleared under any other kind. */
 function triggerColumns(
   trigger: AutomationTrigger,
   nextRunAt: Date | null | undefined,
@@ -314,15 +258,8 @@ function triggerColumns(
   };
 }
 
-/**
- * The id of the transaction a write committed in, read in the write's own
- * `RETURNING`, as Neon's mutations guide says, so a client following the
- * automations waits for that transaction to arrive before it confirms the
- * write.
- */
 const TXID = sql<string>`pg_current_xact_id()::text`;
 
-/** A written automation's id, and the transaction it was written in. */
 const WrittenSchema = Schema.Struct({ id: Schema.String, txid: Schema.String });
 
 const insertAutomation = SqlSchema.findAll({
@@ -367,7 +304,6 @@ const insertAutomation = SqlSchema.findAll({
           createdAt: row.now,
           updatedAt: row.now,
         })
-        // A caller that names the id may run its make again, which then finds the row standing and writes nothing.
         .onConflictDoNothing({ target: automation.id })
         .returning({ id: automation.id, txid: TXID }),
     ),
@@ -502,14 +438,11 @@ const HistoryRowSchema = Schema.Struct({
   agentConversationId: Schema.NullOr(Schema.String),
   agentTitle: Schema.NullOr(Schema.String),
   agentCreatedAt: Schema.NullOr(InstantColumnSchema),
-  /** The account the agent runs as, whose keys its turns spend. */
   agentUserId: Schema.NullOr(Schema.String),
 });
 
-/** One run as the history reads it, with the conversation, title, start, and account of the agent it started where that agent stands. */
 export type AutomationRunInHistory = typeof HistoryRowSchema.Type;
 
-/** The runs of one automation the account may read, with each one's agent, newest first. */
 function historyOf(userId: string, automationId: string): SQL {
   return inArray(
     automationRun.automationId,
@@ -567,32 +500,20 @@ const DueRowSchema = Schema.Struct({
   dueAt: InstantColumnSchema,
 });
 
-/** One schedule the sweep found due: its automation, what fires it, and the instant it was due. */
 type DueAutomation = typeof DueRowSchema.Type;
 
-/** A firing the sweep's claim recorded: the schedule it is of, and its run, queued. */
 export interface ClaimedFiring {
   readonly automation: DueAutomation;
   readonly run: AutomationRun;
 }
 
-/** What a claim of the schedules due takes: the instant, how many at most, how late a firing may still run, and the next due instant of a schedule. */
 export interface DueClaim {
   readonly now: Date;
   readonly limit: number;
   readonly graceMs: number;
-  /** The first instant strictly after `after` the trigger is due; null where it never is again. */
   readonly nextAfter: (trigger: AutomationTrigger, after: Date) => Date | null;
 }
 
-/**
- * The enabled schedules due, soonest first, of owners who still reach
- * their tasks, locked for this claim. Note that a row another claim holds is
- * skipped rather than waited on, because the cron may call twice in one
- * minute and the second call must find nothing left rather than queue
- * behind the first; and that the trigger's kind is read beside the due
- * instant, so a due instant left on a trigger of another kind fires nothing.
- */
 const lockDue = SqlSchema.findAll({
   Request: Schema.Struct({ now: Schema.Date, limit: Schema.Int }),
   Result: DueRowSchema,
@@ -659,7 +580,6 @@ const StartedAgentSchema = Schema.Struct({
   createdAt: InstantColumnSchema,
 });
 
-/** An agent one of an automation's runs started: its id, its conversation, and when it was made. */
 export type StartedRunAgent = typeof StartedAgentSchema.Type;
 
 const findStartedAgents = SqlSchema.findAll({
@@ -696,26 +616,10 @@ const ArchivableAgentSchema = Schema.Struct({
   runAgents: Schema.Number,
 });
 
-/** An agent of a run that its automation archives once it finishes well: its run and how many agents that run has, whose it is, its id, its conversation and how far its lines had run when read, when it was made, and when it was put away where it already was. */
 export type ArchivableRunAgent = typeof ArchivableAgentSchema.Type;
 
-/** An agent of the same run, counted beside the one read. */
 const runAgent = alias(agentTable, "run_agent");
 
-/**
- * The agents of runs fired at or after `since` for automations that
- * archive their successful runs and start a new agent each run, whose
- * archive the sweep has not settled yet and that hold no open inbox item,
- * at most `limit`, oldest run first and a run's agents together. A run's
- * agents are every agent naming it (`automation_run_id`): the one it
- * started and the ones those started with no task, each read with how
- * many the run has, so the sweep can tell a run read whole. Note that an
- * agent waiting on the inbox is left for a later sweep, because archiving
- * it would put away the question it is waiting on, that a run the sweep
- * settled is never read again, so an agent the developer brought back
- * stays, and that one whose starter left the workspace is read again only
- * once they are back.
- */
 const findArchivableAgents = SqlSchema.findAll({
   Request: Schema.Struct({ since: Schema.Date, limit: Schema.Number }),
   Result: ArchivableAgentSchema,
@@ -746,7 +650,6 @@ const findArchivableAgents = SqlSchema.findAll({
             eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
             gte(automationRun.firedAt, since),
             isNull(automationRun.archiveSettledAt),
-            // An agent whose starter left its workspace is no one's to archive, so it takes no place in the read.
             exists(
               queryBuilder
                 .select({ one: member.id })
@@ -759,7 +662,6 @@ const findArchivableAgents = SqlSchema.findAll({
                 ),
             ),
             noOpenInboxItem,
-            // Note that an agent whose pull request is open or a draft still stands (`noOpenPullRequest`).
             noOpenPullRequest,
           ),
         )
@@ -818,7 +720,6 @@ const writeClaim = SqlSchema.findAll({
     ),
 });
 
-/** A run claimed for its start and not yet holding the agent it started: started, with no agent. */
 const CLAIMED = and(
   eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
   isNull(automationRun.agentId),
@@ -936,7 +837,6 @@ const ListeningRowSchema = Schema.Struct({
   trigger: automationTriggerSchema,
 });
 
-/** One automation a repository's event may fire: its id, its owner, and what fires it. */
 export type ListeningAutomation = typeof ListeningRowSchema.Type;
 
 const findGithubAutomations = SqlSchema.findAll({
@@ -951,10 +851,8 @@ const findGithubAutomations = SqlSchema.findAll({
           and(
             eq(automation.enabled, true),
             eq(automation.triggerKind, AUTOMATION_TRIGGER.GITHUB),
-            // GitHub folds a repository's name; an automation keeps each as GitHub spelled it when it was named.
             sql`exists (select 1 from jsonb_array_elements_text(${automation.repositories}) as listed(name) where lower(listed.name) = lower(${repository}))`,
             sql`${automation.trigger}->>'event' = ${event}`,
-            // The owner still reaches the automation's workspace, read per row, since a delivery fires every account's automations at once.
             memberOfAutomationWorkspace(automation.userId),
           ),
         )
@@ -979,7 +877,6 @@ const findIntegrationAutomations = SqlSchema.findAll({
         .where(
           and(
             eq(automation.enabled, true),
-            // Note that an integration automation was made after workspaces came to every row, so its own column names its workspace.
             eq(automation.organizationId, organizationId),
             eq(automation.triggerKind, AUTOMATION_TRIGGER.INTEGRATION),
             sql`${automation.trigger}->>'provider' = ${provider}`,
@@ -1007,7 +904,6 @@ const findSubjectRun = SqlSchema.findAll({
         .where(
           and(
             eq(automationRun.automationId, automationId),
-            // Note that a run is dated by when it started, because one queued may start up to an hour after it fired.
             gte(automationRun.settledAt, since),
             eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
             sql`${automationRun.firing}->>'kind' = ${AUTOMATION_FIRING.INTEGRATION}`,
@@ -1031,7 +927,6 @@ const findRunsSince = SqlSchema.findAll({
     ),
 });
 
-/** One run that failed to start, as its automation's owner is told of it. */
 const FailedRunRowSchema = Schema.Struct({
   id: Schema.String,
   automationId: Schema.String,
@@ -1041,12 +936,6 @@ const FailedRunRowSchema = Schema.Struct({
   failedAt: InstantColumnSchema,
 });
 
-/**
- * The newest run of each of the account's own automations that failed to
- * start since `since`, the latest first. Note that the account must still
- * be a member of the automation's workspace, because a creator who left
- * reaches nothing of it.
- */
 const findOwnFailedRuns = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, since: Schema.Date }),
   Result: FailedRunRowSchema,
@@ -1059,7 +948,6 @@ const findOwnFailedRuns = SqlSchema.findAll({
           automationName: automation.name,
           workspaceId: automation.organizationId,
           reason: automationRun.reason,
-          // Note that a failed run is settled by the filter below, so its instant is never null.
           failedAt: automationRun.settledAt,
         })
         .from(automationRun)
@@ -1080,14 +968,6 @@ const findOwnFailedRuns = SqlSchema.findAll({
     ),
 });
 
-/**
- * The newest failed run of each of the account's own automations, written for
- * Neon Realtime as `findOwnFailedRuns` reads them, each column under the key
- * `account-inbox-wire.ts` reads it by. Note that it names no window, because
- * a live read measures nothing from the clock: the reader keeps the runs of
- * its own last week. None where the statement names a value Realtime cannot
- * carry.
- */
 export function ownFailedRunsLiveStatement(userId: string): Option.Option<LiveStatement> {
   return liveStatementOf(
     queryBuilder
@@ -1121,12 +1001,10 @@ export function ownFailedRunsLiveStatement(userId: string): Option.Option<LiveSt
   );
 }
 
-/** Re-reads one automation after a write, which answered only that a row was written. */
 function readWritten(userId: string, id: string): TaskStoreEffect<Option.Option<Automation>> {
   return findAutomation({ userId, id, access: AUTOMATION_ACCESS.READ });
 }
 
-/** Makes the account's automation on its workspace, enabled; nothing where the account is no member of it. */
 export function createAutomation(
   userId: string,
   made: NewAutomation,
@@ -1134,18 +1012,15 @@ export function createAutomation(
   return Effect.map(createAutomationCommitted(userId, made), Option.map(automationOf));
 }
 
-/** An automation as a write left it, and the transaction it committed in. */
 export interface AutomationCommitted {
   readonly automation: Automation;
   readonly txid: string;
 }
 
-/** The automation without the transaction it was written in. */
 function automationOf({ automation: written }: AutomationCommitted): Automation {
   return written;
 }
 
-/** An automation made, as `createAutomation` makes one, and the transaction its row was written in. */
 export function createAutomationCommitted(
   userId: string,
   made: NewAutomation,
@@ -1173,12 +1048,10 @@ export function createAutomationCommitted(
   });
 }
 
-/** Which automations a list reads: one workspace's, or every one the account may read where it names none. */
 export interface AutomationListFilter {
   readonly organizationId?: string | undefined;
 }
 
-/** The automations the account may read, newest first, narrowed to one workspace's where the filter names it. */
 export function listAutomations(
   userId: string,
   filter: AutomationListFilter = {},
@@ -1189,7 +1062,6 @@ export function listAutomations(
   });
 }
 
-/** One automation the account may do `access` with, reading by default; nothing for any other id. */
 export function readAutomation(
   userId: string,
   id: string,
@@ -1198,11 +1070,6 @@ export function readAutomation(
   return findAutomation({ userId, id, access });
 }
 
-/**
- * Writes the changes onto an automation the account may change, or turn on
- * or off where `access` is the toggle, and answers it as it now stands;
- * nothing for any other id.
- */
 export function updateAutomation(
   userId: string,
   id: string,
@@ -1217,7 +1084,6 @@ export function updateAutomation(
   );
 }
 
-/** An automation changed, as `updateAutomation` changes one, and the transaction its row was written in. */
 export function updateAutomationCommitted(
   userId: string,
   id: string,
@@ -1235,12 +1101,10 @@ export function updateAutomationCommitted(
   });
 }
 
-/** Deletes an automation the account may delete, and its history; false for any other id. */
 export function deleteAutomation(userId: string, id: string): TaskStoreEffect<boolean> {
   return Effect.map(deleteAutomationCommitted(userId, id), Option.isSome);
 }
 
-/** An automation deleted, as `deleteAutomation` deletes one, and the transaction its row went in; none for any other id. */
 export function deleteAutomationCommitted(
   userId: string,
   id: string,
@@ -1250,7 +1114,6 @@ export function deleteAutomationCommitted(
   );
 }
 
-/** Records a firing of the automation, queued; nothing where a run under the same dedupe key stands already. */
 export function recordAutomationRun(
   owner: Pick<Automation, "id" | "userId">,
   run: NewAutomationRun,
@@ -1266,7 +1129,6 @@ export function recordAutomationRun(
   return Effect.map(insertRun(row), (rows) => Option.fromUndefinedOr(rows[0]));
 }
 
-/** Settles a queued run as it came out; false where it was settled already, so a run settles once. */
 export function settleAutomationRun(
   runId: string,
   outcome: AutomationRunOutcome,
@@ -1284,7 +1146,6 @@ export function settleAutomationRun(
   });
 }
 
-/** The automation's runs, newest first, each with its agent, as many as asked up to the bound; none for an automation that is not the account's. */
 export function listAutomationRuns(
   userId: string,
   automationId: string,
@@ -1293,7 +1154,6 @@ export function listAutomationRuns(
   return findRuns({ userId, automationId, limit: Math.min(Math.max(limit, 1), MAX_RUNS_READ) });
 }
 
-/** The account's run of the automation recorded under the key, as the history reads it; nothing where none was. */
 export function automationRunByKey(
   userId: string,
   automationId: string,
@@ -1302,7 +1162,6 @@ export function automationRunByKey(
   return findRunByKey({ userId, automationId, dedupeKey });
 }
 
-/** The automation's runs fired at or after the instant, newest first, which its guards count. */
 export function automationRunsSince(
   automationId: string,
   since: Date,
@@ -1310,19 +1169,8 @@ export function automationRunsSince(
   return findRunsSince({ automationId, since });
 }
 
-/**
- * Claims the schedules due at `now`, at most `limit` of them, in one
- * transaction: each one's next due instant is written first, so a claim
- * that comes after finds it not due, and a firing no later than the grace
- * past its due instant is recorded as a run under that instant, which the
- * run's dedupe key holds to once even if two claims read the same row. A
- * firing later than the grace, a sweep that was down or a schedule just
- * resumed, is moved on without a run, so a backlog is never replayed.
- */
-/** One run that failed to start, as its automation's owner is told of it: the automation, why, and when. */
 export type OwnFailedRun = typeof FailedRunRowSchema.Type;
 
-/** The newest run of each of the account's own automations that failed to start since `since`, the latest failed first. */
 export function ownFailedAutomationRuns(
   userId: string,
   since: Date,
@@ -1354,16 +1202,10 @@ export function claimDueAutomations(claim: DueClaim): TaskStoreEffect<readonly C
   );
 }
 
-/**
- * One automation by id, whoever owns it, for a run the service fires: the
- * sweep and a trigger hold no account's bearer, and the run's own start
- * checks the owner is still a member of its workspace, as every Start does.
- */
 export function readAutomationToRun(id: string): TaskStoreEffect<Option.Option<Automation>> {
   return findAutomationToRun(id);
 }
 
-/** The runs still queued that fired at or after `since`, oldest first, at most `limit`, for the sweep to act on. */
 export function queuedAutomationRuns(
   since: Date,
   limit: number,
@@ -1371,7 +1213,6 @@ export function queuedAutomationRuns(
   return findQueuedRuns({ since, limit });
 }
 
-/** The agents the automation's runs fired at or after `since` started, and that stand still. */
 export function startedRunAgents(
   automationId: string,
   since: Date,
@@ -1379,7 +1220,6 @@ export function startedRunAgents(
   return findStartedAgents({ automationId, since });
 }
 
-/** The agents of runs fired at or after `since` that their automations archive once finished well, each with how many agents its run has, as above, at most `limit`, oldest run first. */
 export function archivableRunAgents(
   since: Date,
   limit: number,
@@ -1398,7 +1238,6 @@ const writeArchiveSettled = SqlSchema.void({
     ),
 });
 
-/** Marks what becomes of the run's agents as settled, archived or left standing for good, so no later sweep reads them again. */
 export function settleRunArchive(runId: string): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => writeArchiveSettled({ runId, now }));
 }
@@ -1411,16 +1250,8 @@ const SlackDeliverySchema = Schema.Struct({
   organizationId: Schema.String,
 });
 
-/** A run whose result is its owner's to be sent on Slack: the run, its automation's name, and the owner and workspace it is sent to. */
 export type RunSlackDelivery = typeof SlackDeliverySchema.Type;
 
-/**
- * The newest started run the agent was started or handed for, of an
- * automation that delivers to Slack, whose result has not been claimed yet.
- * Note that the run must name the agent itself, because an agent its run's
- * agent started belongs to the same run (`agent.automation_run_id`) and its
- * end is not the run's.
- */
 const findUndeliveredRun = SqlSchema.findOneOption({
   Request: Schema.Struct({ agentId: Schema.String }),
   Result: SlackDeliverySchema,
@@ -1462,12 +1293,6 @@ const writeSlackDelivered = SqlSchema.findAll({
     ),
 });
 
-/**
- * Claims the result of the agent's run for its owner's Slack message, as
- * above, and answers the run; nothing where the agent's run delivers to no
- * Slack or its result was claimed already, by an earlier turn or a settle
- * heard twice, so a run's result is sent once.
- */
 export function claimRunSlackDelivery(
   agentId: string,
 ): TaskStoreEffect<Option.Option<RunSlackDelivery>> {
@@ -1480,7 +1305,6 @@ export function claimRunSlackDelivery(
   });
 }
 
-/** Settles every run still queued that fired at or before `before` as failed for the reason given, answering how many. */
 export function expireQueuedAutomationRuns(
   before: Date,
   reason: AutomationRunReason,
@@ -1504,17 +1328,10 @@ const findCreatorMembership = SqlSchema.findAll({
     ),
 });
 
-/** Whether the automation's creator is a member of its workspace still, which a run that starts as them needs. */
 export function creatorStillMember(automationId: string): TaskStoreEffect<boolean> {
   return Effect.map(findCreatorMembership(automationId), (rows) => rows.length > 0);
 }
 
-/**
- * Runs `effect` holding the automation's row lock, in one transaction, so
- * two acts on one automation's runs, two sweeps or a sweep and a "Run now",
- * read its guards and claim a start one after the other rather than both
- * reading the same count.
- */
 export function withAutomationLocked<A, E, R>(
   automationId: string,
   effect: Effect.Effect<A, E, R>,
@@ -1543,12 +1360,6 @@ const findCurrentRun = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The run the agent works on now: the one last handed to it, started by it
- * or claimed to be sent to it; none for an agent no run was handed to.
- * Note that a run claimed for a same-agent automation's agent counts from
- * its claim, because its line reaches the agent before the run holds it.
- */
 export function currentAutomationRun(agentId: string): TaskStoreEffect<Option.Option<string>> {
   return Effect.map(
     findCurrentRun(agentId),
@@ -1556,7 +1367,6 @@ export function currentAutomationRun(agentId: string): TaskStoreEffect<Option.Op
   );
 }
 
-/** Claims a queued run for its start: started, with no agent yet, and the agent it is to be sent to where it is handed to one; false where it was not queued. */
 export function claimAutomationRun(
   runId: string,
   claimedAgentId: string | null = null,
@@ -1566,7 +1376,6 @@ export function claimAutomationRun(
   );
 }
 
-/** The run started with the agent named, from queued or from its claim, and the note it started under where it has one; false where it settled otherwise. */
 export function attachRunAgent(
   runId: string,
   agentId: string,
@@ -1585,7 +1394,6 @@ const writeRunTask = SqlSchema.void({
     ),
 });
 
-/** Records the task the run's agent works on, before the agent is started, so a run whose start then fails still names the task it made. */
 export function attachRunTask(runId: string, taskId: string): TaskStoreEffect<void> {
   return writeRunTask({ runId, taskId });
 }
@@ -1603,24 +1411,10 @@ const findRunMadeTask = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * Whether the task is one a run made for itself alone (`run-tasks.ts`); a
- * same-agent automation's standing task is every run's, and no one run's to
- * finish.
- */
 export function isRunTask(taskId: string): TaskStoreEffect<boolean> {
   return Effect.map(findRunMadeTask({ taskId }), Option.isSome);
 }
 
-/**
- * The agent a run started kept as the one a same-agent automation hands
- * every later run to, where the automation still holds `held`: none yet, or
- * the agent that agent replaces; false where it holds another since, such
- * as one a concurrent run kept first or its owner chose, or no longer hands
- * runs to the same agent. Note that the compare is the whole of the guard,
- * so two runs that both started an agent keep one and the other's agent
- * stays the start of its own run alone.
- */
 export function adoptAutomationAgent(
   automationId: string,
   held: string | null,
@@ -1634,7 +1428,6 @@ export function adoptAutomationAgent(
   );
 }
 
-/** A claimed run whose start was refused, failed for the reason given; false where it holds an agent or was not claimed. */
 export function failClaimedRun(
   runId: string,
   reason: AutomationRunReason,
@@ -1644,21 +1437,17 @@ export function failClaimedRun(
   );
 }
 
-/** How many of the automation's runs claimed at or after `since` are still starting, which count against its concurrency; a claim is dated by when it was made, whenever its run fired. */
 export function claimedRunsStarting(automationId: string, since: Date): TaskStoreEffect<number> {
   return Effect.map(findClaimed({ automationId, since }), (rows) => rows.length);
 }
 
-/** One claimed run left without its agent: its id, its automation, and its owner. */
 export interface StrandedRun {
   readonly id: string;
   readonly automationId: string;
   readonly userId: string;
-  /** The agent the run was claimed to be sent to, where it was handed to one; null where it was to start its own. */
   readonly claimedAgentId: string | null;
 }
 
-/** Claimed runs whose start never settled by `before`, a function that died between the claim and the agent: oldest first, at most `limit`. */
 export function strandedAutomationRuns(
   before: Date,
   limit: number,
@@ -1673,7 +1462,6 @@ const WebhookRowSchema = Schema.Struct({
   webhookSecretHash: Schema.NullOr(Schema.String),
 });
 
-/** What a webhook call is checked against: the automation, its owner, whether it runs, and its secret's hash. */
 export type WebhookAutomation = typeof WebhookRowSchema.Type;
 
 const findWebhookAutomation = SqlSchema.findOneOption({
@@ -1693,26 +1481,18 @@ const findWebhookAutomation = SqlSchema.findOneOption({
           and(
             eq(automation.id, id),
             eq(automation.triggerKind, AUTOMATION_TRIGGER.WEBHOOK),
-            // A caller of a departed owner's address reaches no automation, as a delivery reaches none.
             memberOfAutomationWorkspace(automation.userId),
           ),
         ),
     ),
 });
 
-/** The webhook automation under this id, whoever owns it, of an owner still a member of its workspace, for a call to its address; nothing for any other id or trigger. */
 export function readWebhookAutomation(
   id: string,
 ): TaskStoreEffect<Option.Option<WebhookAutomation>> {
   return findWebhookAutomation(id);
 }
 
-/**
- * The enabled automations listening for the GitHub event that work in the
- * repository, among any of their repositories, whoever owns them, of owners
- * still members of their workspaces, oldest first, at most `limit`: what a
- * delivery about the repository may fire, its filters still to read.
- */
 export function githubAutomationsOn(
   repository: string,
   event: GitHubTriggerEvent,
@@ -1721,12 +1501,6 @@ export function githubAutomationsOn(
   return findGithubAutomations({ repository, event, limit });
 }
 
-/**
- * The enabled automations of the workspace listening for the provider's
- * event, of owners still members of it, oldest first, at most `limit`:
- * what a delivery from the workspace's installation may fire, its filters
- * still to read. No other workspace's automation is ever among them.
- */
 export function integrationAutomationsOn(
   organizationId: string,
   provider: TriggerProvider,
@@ -1736,12 +1510,6 @@ export function integrationAutomationsOn(
   return findIntegrationAutomations({ organizationId, provider, event, limit });
 }
 
-/**
- * Whether the automation started a run on the integration subject named
- * (one Sentry issue, by the provider's id) at or after `since`:
- * what its per-subject cooldown holds a new delivery back by. A run that was
- * skipped or failed started nothing, so it holds nothing back.
- */
 export function subjectRunStartedSince(
   automationId: string,
   subjectId: string,

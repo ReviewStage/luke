@@ -1,7 +1,3 @@
-/**
- * app-server.test.ts -- one `codex app-server` process as the runner speaks to it: a request made once the process has ended is refused, not left waiting on an answer no one will write; one it never answers fails in time; and a refusal keeps its JSON-RPC code and data.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Deferred, Duration, Effect, Fiber } from "effect";
@@ -29,7 +25,6 @@ it.effect("refuses a request made after app-server has exited", () =>
   }),
 );
 
-/** A running app-server playing one script, with a listener that hears nothing. */
 const running = (exchanges: Script["exchanges"]) =>
   spawnAppServer(
     { executable: "/opt/agent-codex/bin/codex", args: [], cwd: "/srv/repo", env: {} },

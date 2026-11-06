@@ -9,7 +9,6 @@ import { wireResult as result, type WireGuard } from "@repo/wire/wire-guard";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
 import type { PUSH_METHOD, PushMethod, PushPayload } from "./contract/pushes.js";
 
-/** The act port's handshake, which the page and the preload each take their half of. */
 export { ACT_PORT, actPortForwarder } from "./contract/kinds.js";
 
 type BridgeArguments = readonly unknown[];
@@ -42,19 +41,12 @@ function args<Arguments extends BridgeArguments>(
 ): WireGuard<Arguments> {
   return (value) => {
     if (!Array.isArray(value)) return false;
-    // SAFETY: Array.isArray established the structured-clone argument envelope; the field guards parse every member.
     return guard(value as UnparsedWireValue[]);
   };
 }
 
 const noArgs = args<[]>((values) => values.length === 0);
 
-/**
- * The instant a surface event's guard reads it at. Note that the guard asks
- * only whether the name and properties make an event, and the event that is
- * counted is stamped by the analytics sender's own clock, so any valid
- * instant will do and none is read from this machine here.
- */
 const GUARD_EVENT_AT = 0;
 
 type SurfaceEventArguments = {
@@ -62,12 +54,6 @@ type SurfaceEventArguments = {
 }[ProductSurfaceEventName];
 
 export const BRIDGE = {
-  /**
-   * The document as this window stands: every slice, and this window's own
-   * facts beside them. Read once at mount, before the subscription below has
-   * anything to say, so a window is never drawn over a state it has not been
-   * told.
-   */
   requestAppState: entry({
     kind: "invoke",
     channel: "app:state-request",
@@ -101,10 +87,6 @@ type DerivedAppBridge = {
     : (...args: ArgumentsOf<Bridge[Method]>) => void;
 };
 
-/**
- * What the preload exposes as `window.appBridge`: the invokes and the sends. What
- * main pushes reaches the window on its act port instead (`contract/pushes.ts`).
- */
 export type PreloadBridge = Omit<DerivedAppBridge, "recordSurfaceEvent"> & {
   recordSurfaceEvent<Name extends ProductSurfaceEventName>(
     name: Name,
@@ -112,20 +94,16 @@ export type PreloadBridge = Omit<DerivedAppBridge, "recordSurfaceEvent"> & {
   ): void;
 };
 
-/** What the push a window hears on `Method` carries. */
 export type PushPayloadFor<Method extends PushMethod> = PushPayload<(typeof PUSH_METHOD)[Method]>;
 
-/** Each push a window hears, on the method it hears it on: a listener in, its unsubscribe out. */
 export type PushListeners = {
   readonly [Method in PushMethod]: (
     callback: (payload: PushPayloadFor<Method>) => void,
   ) => () => void;
 };
 
-/** Everything a window reaches main through: the preload's bridge, and the pushes it hears. */
 export type AppBridge = PreloadBridge & PushListeners;
 
 export function bridgeEntries(): ReadonlyArray<[BridgeMethod, Bridge[BridgeMethod]]> {
-  // SAFETY: Object.entries only erases the literal keys already declared by BRIDGE.
   return Object.entries(BRIDGE) as Array<[BridgeMethod, Bridge[BridgeMethod]]>;
 }

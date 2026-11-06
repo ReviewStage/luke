@@ -13,14 +13,6 @@ import {
   withChatGptDeviceLoginLocked,
 } from "../chatgpt-device-login-store.js";
 
-/**
- * An account's pending ChatGPT device-code login, over a real dialect: a
- * start replaces the account's login under a new id, a settled login keeps
- * its outcome and leaves its codes, and one account neither reads, settles,
- * nor drops another's login. The sealed column is opaque text here, as the
- * store holds it. Synthetic accounts, ids, and seals throughout.
- */
-
 const AT = new Date("2026-11-06T01:00:00Z");
 const LAPSES = new Date("2026-11-06T01:15:00Z");
 
@@ -32,7 +24,6 @@ const openAccount = Effect.gen(function* () {
   return userId;
 });
 
-/** The login's row as a check reads it, or none. */
 const readLogin = (userId: string, loginId: string) =>
   withChatGptDeviceLoginLocked({ userId, loginId }, (row) =>
     Effect.succeed(Option.getOrUndefined(row)),

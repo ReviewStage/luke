@@ -20,20 +20,6 @@ import {
 } from "../agent-store.js";
 import { beginTaskWork, createTask, finishTaskWork, updateTask } from "../task-store.js";
 
-/**
- * An inbox item settles on its own once its reason is gone: its task moved
- * to Done or Canceled, by hand or by the finish, or its agent archived,
- * through the stores' public writes over a real dialect. Every open item of
- * the task or the agent that holds an ask closes with why and its ask stands
- * withdrawn with the same why; a notice of theirs, and an item of another
- * task, agent, or account, stands open. The
- * act's opposite, the agent brought back or a member moving the task off
- * Done or Canceled, opens again exactly the items that act settled, its asks
- * open again; the task reopened by us as a turn starts on it opens nothing.
- *
- * Synthetic accounts, workspaces, tasks, and agents throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -41,7 +27,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A member's task with an agent on it holding a question and a notice open: the question as its items, which a settle closes, and the notice beside them, which it leaves. */
 const openTaskWithItems = (userId: string, organizationId: string) =>
   Effect.gen(function* () {
     const { id: taskId } = yield* createTask(userId, { organizationId });
@@ -51,7 +36,6 @@ const openTaskWithItems = (userId: string, organizationId: string) =>
     return { taskId, agentId, items: [question], notice };
   });
 
-/** Where the item stands: its status, who closed it and why, and how each ask of its thread stands. */
 const standingOf = (itemId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -85,7 +69,6 @@ const standingOf = (itemId: string) =>
     };
   });
 
-/** The items stand open, each question's ask open too, with no withdrawal's time left on it. */
 const assertOpen = (itemIds: readonly string[]) =>
   Effect.gen(function* () {
     for (const itemId of itemIds) {
@@ -98,7 +81,6 @@ const assertOpen = (itemIds: readonly string[]) =>
     }
   });
 
-/** The items stand closed by no member, with why, and every ask they held withdrawn with the same why when the item settled. */
 const assertSettled = (itemIds: readonly string[], reason: string) =>
   Effect.gen(function* () {
     for (const itemId of itemIds) {
@@ -150,12 +132,10 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
         const workspace = yield* openWorkspace(dean);
         const { taskId, agentId, items: first } = yield* openTaskWithItems(dean, workspace);
 
-        // Done, then taken up again by a turn: the first move's items stay settled.
         yield* updateTask(dean, taskId, { status: TASK_STATUS.DONE });
         assert.equal(yield* beginTaskWork(dean, taskId), true);
         yield* assertSettled(first, "Its task is done.");
 
-        // Done again over a later question, then moved back by a member: only that move's item opens.
         yield* TestClock.adjust("1 minute");
         const later = yield* openInboxItem(dean, workspace, taskId, agentId, true);
         yield* updateTask(dean, taskId, { status: TASK_STATUS.DONE });
@@ -163,7 +143,6 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
         yield* assertOpen([later]);
         yield* assertSettled(first, "Its task is done.");
 
-        // Canceled and put back to do, the same way.
         yield* updateTask(dean, taskId, { status: TASK_STATUS.CANCELED });
         yield* assertSettled([later], "Its task was canceled.");
         yield* updateTask(dean, taskId, { status: TASK_STATUS.TODO });
@@ -195,14 +174,12 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
   );
 });
 
-/** The agent's archive as it stands, failing the test where it stands unarchived. */
 const archivedAtOf = (userId: string, agentId: string) =>
   Effect.map(
     readAgent(userId, agentId),
     (agent) => Option.getOrUndefined(agent)?.archivedAt ?? assert.fail("the agent is not archived"),
   );
 
-/** Each store write that archives an agent, paired with a write that brings it back, both as its member. */
 const ARCHIVES = [
   {
     name: "an archive by hand, undone by hand",
@@ -232,7 +209,6 @@ it.layer(getTestDB())("an inbox item settling with its agent", (it) => {
         const teammate = yield* openTaskAgent(dean, workspace, archived.taskId);
         const besides = yield* openInboxItem(dean, workspace, archived.taskId, teammate, true);
         const theirs = yield* openTaskWithItems(outsider, elsewhere);
-        // An item of the agent's that its task's move settled before, which bringing the agent back leaves settled.
         const shipped = yield* openTaskWithItems(dean, workspace);
         yield* updateTask(dean, shipped.taskId, { status: TASK_STATUS.DONE });
 
@@ -255,7 +231,6 @@ it.layer(getTestDB())("an inbox item settled by both its task and its agent", (i
         const dean = yield* openAccount;
         const workspace = yield* openWorkspace(dean);
 
-        // Done, then the agent archived: moving the task back leaves the item to the archive.
         const doneFirst = yield* openTaskWithItems(dean, workspace);
         yield* updateTask(dean, doneFirst.taskId, { status: TASK_STATUS.DONE });
         yield* archiveAgent(dean, doneFirst.agentId, true);
@@ -264,7 +239,6 @@ it.layer(getTestDB())("an inbox item settled by both its task and its agent", (i
         yield* archiveAgent(dean, doneFirst.agentId, false);
         yield* assertOpen(doneFirst.items);
 
-        // The agent archived, then done: bringing the agent back leaves the item to the task.
         yield* TestClock.adjust("1 minute");
         const archivedFirst = yield* openTaskWithItems(dean, workspace);
         yield* archiveAgent(dean, archivedFirst.agentId, true);

@@ -11,17 +11,6 @@ import { recordingReporter } from "../testing/recording-reporter.js";
 import { AppStateStore, initialAppState } from "./app-state-store.js";
 import { linkClientNotices } from "./client-notices.js";
 
-/**
- * The rules the notices bring with them that no notice test covers: a panel
- * coming forward reads the account's workspaces again, and that read is the
- * client's own, so it runs on the client's scope, ends with it, and reports a
- * defect rather than losing it; and a command an agent asked to run on this
- * Mac is announced once while the panel is behind, its click bringing the
- * window forward, and never while the panel is in front, where the prompt
- * itself stands; and an agent's own transcript, as a window holds it, notes
- * the agent's end, where no worker's transcript says anything of the agent.
- */
-
 const RUN = {
   launch: { profile: "idle", captureMode: false, fixtureMode: false },
   runMode: runModeFor({ capture: false, fixture: false }),
@@ -30,7 +19,6 @@ const RUN = {
   platform: "darwin",
 } as const;
 
-/** The notifications posted, as macOS would be handed them. */
 const posted: AgentNotice[] = [];
 
 const SILENT_DOORS = Layer.succeed(AgentNoticeDoors, {
@@ -42,11 +30,6 @@ const SILENT_DOORS = Layer.succeed(AgentNoticeDoors, {
 
 const UNANSWERED = Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
 
-/**
- * The notices linked into `scope` over a host whose workspaces read is
- * `workspacesRefresh`, with every report written to `reported`; the focus
- * listener the panel would call is answered by `focus()`.
- */
 function linked(
   scope: Scope.Closeable,
   workspacesRefresh: () => Effect.Effect<void>,
@@ -102,7 +85,6 @@ it.effect(
       posted[0]?.onClick();
       assert.equal(forwarded(), 1);
 
-      // The same ask told again, beside a second, announces only the second.
       state.update({ macCommands: { asks: [ask("first"), ask("second")] } });
       yield* Effect.yieldNow;
       assert.deepEqual(
@@ -129,7 +111,6 @@ it.effect(
       const started = yield* Deferred.make<void>();
       const ended = yield* Deferred.make<void>();
       const scope = yield* Scope.make();
-      // A read the host never answers, so only the scope's close can end it.
       const { focus } = yield* linked(
         scope,
         () =>
@@ -169,7 +150,6 @@ it.effect("a workspaces read that dies is reported, to Sentry as well, rather th
   }).pipe(Effect.provide(sentry.layer));
 });
 
-/** An agent with no task, as the task list carries it beside the tasks. */
 const TASKLESS: TasklessAgent = {
   id: "a1b2c3d4-0000-4000-8000-0000000000aa",
   planId: null,
@@ -185,7 +165,6 @@ const TASKLESS: TasklessAgent = {
   activityAt: 1,
 };
 
-/** A transcript as the host holds it once `pages` pages were read, the last saying the agent, or the worker, stands at `status`. */
 function transcriptAt(status: AgentStatus, pages = 1): AppHostRead<AppTranscript> {
   return {
     rows: { messages: [], cursor: "1:0", word: { status, title: null, caughtUp: true }, pages },
@@ -241,7 +220,6 @@ it.effect(
         [LIVE_READ.TRANSCRIPT]: { [TASKLESS.id]: { [OWN_TRANSCRIPT]: read } },
       });
 
-      // Read as the agent's last turn ended, and let go before its next began.
       const ended = transcriptAt(AGENT_STATUS.COMPLETED, 2);
       state.update(own(ended));
       yield* settled;
@@ -249,7 +227,6 @@ it.effect(
         tasks: { ...state.snapshot().tasks, tasklessAgents: [{ ...TASKLESS, turnId: "turn-2" }] },
       });
       yield* settled;
-      // Held again, the host lays what it held anew, not yet caught up, as many pages read as before.
       const word = { status: AGENT_STATUS.COMPLETED, title: null, caughtUp: false };
       state.update(own({ rows: { messages: [], cursor: "1:0", word, pages: 2 } }));
       yield* settled;
@@ -285,10 +262,8 @@ it.effect(
 
       state.update(held(transcriptAt(AGENT_STATUS.RUNNING, 1)));
       yield* settled;
-      // Pushed out past the budget, while the worker's tab still holds the worker's.
       state.update(held());
       yield* settled;
-      // Read anew once the turn ended, its first page counted as the one let go was.
       state.update(held(transcriptAt(AGENT_STATUS.COMPLETED, 1)));
       yield* settled;
       assert.deepEqual(state.snapshot().agents.unseen, [TASKLESS.id]);

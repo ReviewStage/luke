@@ -38,23 +38,15 @@ function agent(status: AgentStatus, patch: Partial<AgentSummary> = {}): AgentSum
   };
 }
 
-/** An inbox read's answer as a test gives it: its tasks holding items left out where none does. */
 type InboxAnswerGiven =
   | Exclude<AgentAccountInboxAnswerView, { readonly plans: unknown }>
   | (Omit<Extract<AgentAccountInboxAnswerView, { readonly plans: unknown }>, "plans"> & {
       readonly plans?: Extract<AgentAccountInboxAnswerView, { readonly plans: unknown }>["plans"];
     });
 
-/**
- * The notices over a scripted host: the account's inbox read holds until the
- * test answers it, and everything posted, badged, and written is kept for
- * the test to read. Electron's doors are a Layer of the test's own that
- * records what leaves through each.
- */
 function fixture() {
   const posted: AgentNotice[] = [];
   const badges: number[] = [];
-  /** Whether the badge door throws, as a platform that refuses one may. */
   let refusingBadges = false;
   const doors = Layer.succeed(AgentNoticeDoors, {
     post: (notice) => {
@@ -65,7 +57,6 @@ function fixture() {
       badges.push(count);
     },
   });
-  /** How many times the account's inbox was followed. */
   let inboxFollows = 0;
   const waiting: (readonly AppInboxTask[])[] = [];
   const holding: (readonly AppInboxTaskHolding[])[] = [];
@@ -124,7 +115,6 @@ function fixture() {
       assert.ok(focus, "the notices subscribe to the window's focus");
       focus(focused);
     },
-    /** The account as a change of it says: another one, nobody, or the same one renewed. */
     changeAccount: (next: string | undefined) => {
       assert.ok(accountChanged, "the notices subscribe to the account");
       assert.ok(accounts);
@@ -132,7 +122,6 @@ function fixture() {
       accountChanged(next);
       Queue.offerUnsafe(accounts, next);
     },
-    /** The account's inbox as the host tells it next; no task holds an item but where the answer says. */
     answerInbox: (answer: InboxAnswerGiven) => {
       assert.ok(inboxAnswers);
       Queue.offerUnsafe(inboxAnswers, "failure" in answer ? answer : { plans: [], ...answer });
@@ -144,11 +133,9 @@ function fixture() {
     agents,
     badges,
     failedRuns,
-    /** The signed-in account's id as its identity now holds it: none for one stored without it. */
     knowAccountId: (next: string | undefined) => {
       accountId = next;
     },
-    /** Whether the badge door throws on each count. */
     refuseBadges: (on: boolean) => {
       refusingBadges = on;
     },
@@ -170,7 +157,6 @@ it.effect(
 
       f.changeAccount(OTHER_ACCOUNT);
       assert.deepEqual(f.unseen.at(-1), []);
-      // The answer that was on its way lands as a first sighting.
       notices.observeAgents([{ ...other, status: AGENT_STATUS.COMPLETED }]);
       yield* settled;
       assert.deepEqual(f.unseen.at(-1), []);
@@ -274,14 +260,8 @@ it.effect(
     }),
 );
 
-/**
- * Every step the inbox read has to take, taken: the accounts' stream hands
- * the account on, the read it switched to asks, and the look writes what
- * was answered, each on a fiber of its own.
- */
 const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
 
-/** An item waiting on the developer, as the account's inbox read carries it. */
 function waitingItem(id: string, patch: Partial<AccountInboxEntry> = {}): AccountInboxEntry {
   return {
     id,
@@ -297,10 +277,8 @@ function waitingItem(id: string, patch: Partial<AccountInboxEntry> = {}): Accoun
   };
 }
 
-/** The signed-in account's id, which names the agents it started. */
 const ACCOUNT_ID = "user-dana";
 
-/** When the service read each answer, by its clock: the instant every item is posted at unless a test says. */
 const READ_AT = 1_800_000_000_000;
 
 const ITEM_A = "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a";
@@ -322,10 +300,8 @@ it.effect(
       yield* settled;
       assert.deepEqual(f.waiting.at(-1), []);
       assert.equal(f.badges.at(-1), 0);
-      // The follow of the last account is let go: the next account's is followed anew.
       assert.equal(f.inboxFollows(), 2);
 
-      // The next answer is the new account's first, which announces nothing it holds.
       f.answerInbox({
         items: [waitingItem(ITEM_B), waitingItem(ITEM_C)],
         cursor: "7",
@@ -425,10 +401,8 @@ it.effect(
       ]);
     }),
 );
-/** The automation the planless agents below were started by. */
 const AUTOMATION_NAME = "Morning Sentry triage";
 
-/** An agent an automation started with no plan, as the plan list carries it, started by the signed-in account unless a test says. */
 function tasklessAgent(status: AgentStatus, patch: Partial<TasklessAgent> = {}): TasklessAgent {
   return {
     ...agent(status, { title: "Triage overnight issues" }),
@@ -478,8 +452,6 @@ it.effect.each([
     assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
   }),
 );
-/** An item of an agent with no task waiting on the developer, as the account's inbox read carries it. */
-/** An agent with no task a teammate started. */
 const TEAMMATES_AGENT = "a1b2c3d4-0000-4000-8000-0000000000aa";
 
 function tasklessItem(id: string, patch: Partial<AccountTasklessEntry> = {}): AccountTasklessEntry {
@@ -512,7 +484,6 @@ it.effect(
         items: [waitingItem(ITEM_A)],
         planless: [
           tasklessItem(ITEM_B, { updatedAt: READ_AT + 1, workspaceId: "workspace-acme" }),
-          // A teammate's agent's question, which waits on the teammate.
           tasklessItem(ITEM_C, {
             agentId: TEAMMATES_AGENT,
             startedBy: "user-sam",
@@ -798,7 +769,6 @@ it.effect(
 const RUN_ID = "4b5c6d7e-8f90-4a1b-8c2d-3e4f5a6b7c8d";
 const AUTOMATION_ID = "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04";
 
-/** A run of one of the account's own automations that failed to start, as the account's inbox read carries it. */
 function failedRun(patch: Partial<AccountFailedRun> = {}): AccountFailedRun {
   return {
     id: RUN_ID,

@@ -1,18 +1,10 @@
-/** What a conversation is to the agent: its main one, an observed session's, a child's, or an agent's own. */
 export const CONVERSATION_KIND = {
   MAIN: "main",
   OBSERVED: "observed",
   CHILD: "child",
-  /** An agent's transcript: its `messages` rows are what the agent tab shows and its latest turn is its status. */
   AGENT: "agent",
 } as const;
 
-/**
- * What answers a conversation's turns: eve, or a provider's own coding
- * harness running unmodified in the agent's sandbox, Claude Code or Codex.
- * Settled as the conversation is opened and never moved after; a
- * conversation from before the column runs on eve.
- */
 export const CONVERSATION_RUNTIME = {
   EVE: "eve",
   CLAUDE_CODE: "claude_code",
@@ -21,19 +13,12 @@ export const CONVERSATION_RUNTIME = {
 
 export type ConversationRuntime = (typeof CONVERSATION_RUNTIME)[keyof typeof CONVERSATION_RUNTIME];
 
-/** What sent one of the developer's lines to a coding agent, as the wire spells it too, so the host reads a live row's sender by the same words (`@repo/features/agent-wire`). */
 export {
   MESSAGE_SENDER,
   type MessageSender,
   messageSenderSchema,
 } from "@repo/features/agent-wire";
 
-/**
- * Where a Slack thread that speaks for an agent came from: a member's
- * message to the bot that started the agent, or the DM the bot sent an
- * automation run's result in. Only a start makes the agent Slack's own,
- * whose task finishes with no merge and which is archived after a good turn.
- */
 export const SLACK_THREAD_ORIGIN = {
   START: "start",
   RUN_RESULT: "run_result",
@@ -41,12 +26,6 @@ export const SLACK_THREAD_ORIGIN = {
 
 export type SlackThreadOrigin = (typeof SLACK_THREAD_ORIGIN)[keyof typeof SLACK_THREAD_ORIGIN];
 
-/**
- * What an inbox item's attachment is: a picture the agent posted with an
- * image block, which the block names, a file the developer's answer
- * carried, which the item names as its answer's, or a file a message on the
- * item's thread carried, which the message names.
- */
 export const INBOX_ATTACHMENT_KIND = {
   IMAGE: "image",
   ANSWER: "answer",

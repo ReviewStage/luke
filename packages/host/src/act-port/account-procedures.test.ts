@@ -14,16 +14,6 @@ import type { ActSender } from "./base.js";
 import type { AccountProceduresDependencies } from "./index.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
-/**
- * The account's acts, through the act port as a window calls them: a
- * sign-in reaches the host with its provider and the host's answer crosses
- * back; a sign-out or a deletion stops the recording before it runs, and
- * gives it back where the host never answered; a sign-out the developer
- * cancels at the shell's question answers the account as it stands and
- * stops nothing; and a frame this build does
- * not trust is refused each act in its own words, before the host is asked.
- */
-
 const PANEL: ActSender = { sender: Symbol("window"), panel: true };
 
 const SIGNED_IN: AccountSnapshot = {
@@ -35,7 +25,6 @@ const SIGNED_IN: AccountSnapshot = {
 };
 const SIGNED_OUT: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: "Could not start signing in on this system.",
   [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]: "Sign-in didn't finish.",
@@ -51,11 +40,6 @@ afterEach(() => {
   port = undefined;
 });
 
-/**
- * A window's act port onto the account procedures, over a host whose
- * sign-out and deletion answer `ended`, recording every ask and every halt
- * and resume of the recording, in order.
- */
 function windowPort(
   options: {
     trusted?: boolean;
@@ -96,7 +80,6 @@ function windowPort(
   return { client, happened };
 }
 
-/** A call settled to the sentence of its refusal, or a failure where it answered. */
 async function refusal(call: Promise<unknown>): Promise<string> {
   const settled = await settledAct(call);
   return "refused" in settled

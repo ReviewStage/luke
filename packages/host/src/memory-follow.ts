@@ -31,70 +31,34 @@ import {
   type TxWait,
 } from "./live-follow.js";
 
-/**
- * memory-follow.ts -- each workspace's memories the windows hold, followed over the service's held poll into the sync engine's pool by their ids, told whole on their app-state slice, and a forget drawn gone over them the moment it is asked.
- *
- * Settings › Memory holds its workspace's memories, and the host follows
- * them while any window holds them and a while after (`heldSlice`), so a
- * memory an agent keeps, corrects, or another member forgets draws on every
- * open page within the service's coalesce window. Each memory is one row of
- * the pool (`@repo/sync`), by its id, and the page draws them as the held
- * read answers them (`@repo/features/memory-live`). A forget is a write the
- * pool draws over its memory at once (`memoryForget`), standing until the
- * read carries its transaction, so no answer from before it puts the memory
- * back, and taken back where the service refused it. One of a memory
- * already gone commits nothing and answers no transaction, so it settles
- * on its own answer.
- *
- * A read the service did not answer is told unanswered and asked for
- * again after `LIVE_RESTART`, as a follow that stops is. One of a
- * workspace the account is no member of is told unanswered and ends; one
- * refused because the session is no longer the account the follow started
- * for ends unsaid, and the next sign-in follows it again.
- */
-
-/** A memory as the pool holds it, by its id, every write to it a change of its fields or its deletion. */
 const MEMORY = fieldKind((row: MemoryLiveRow) => row.id);
 
-/** A read the service did not answer, as the client and the gate tell it. */
 interface MemoriesUnanswered {
   readonly failure: string;
 }
 
 export interface MemoriesFollowDependencies {
-  /** One workspace's memories sealed for `userId`, its rows inline at the poll address where it polls, held past `after` where it names one. */
   readonly seal: (
     workspaceId: string,
     userId: string,
     poll: boolean,
     after?: string,
   ) => Effect.Effect<WorkspaceMemoriesLiveAnswer | MemoriesUnanswered>;
-  /** The account signed in, which every seal names; none while nobody is. */
   readonly accountId: () => string | undefined;
-  /** Whether the account gate stands open, so a follow may read. */
   readonly gate: () => boolean;
-  /** The sync engine's pool, which each held workspace's memories stand in while it is followed. */
   readonly pool: EntityPool;
   readonly tell: (held: AppMemories) => void;
 }
 
-/** A refusal after which the read is followed no longer: a workspace the account is no member of, or another account's session. */
 function endsFollow(failure: string): boolean {
   return failure === AGENT_CALL_FAILURE.NOT_FOUND || failure === LIVE_SIGNED_OUT.failure;
 }
 
-/**
- * Follows one workspace's memories until let go, each change told through
- * `answers`: the rows as the read last answered them, with every forget
- * standing drawn over them. Nothing is told before the read first answers,
- * since a forget drawn on no memories shows nothing of the workspace.
- */
 function followMemories(
   dependencies: MemoriesFollowDependencies,
   workspaceId: string,
   answers: HeldAnswers<AppHostReads[typeof LIVE_READ.MEMORIES]>,
 ): Effect.Effect<void> {
-  // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
   const userId = dependencies.accountId();
   const seal = (poll: boolean, after?: string) =>
     userId === undefined
@@ -110,7 +74,6 @@ function followMemories(
       }
       let wait: TxWait | undefined;
       let answered = false;
-      /** Why a poll ended the follow for good, the first such failure kept, so one the account no longer reaches is told unanswered. */
       let endedBy: string | undefined;
       const drawn: Effect.Effect<void> = Effect.sync(() => {
         if (answered) answers.answered(memoriesOfLiveRows(memories.rows()));
@@ -157,12 +120,6 @@ function followMemories(
   return restarting(attempt);
 }
 
-/**
- * The held lifetime over every workspace's memories the windows hold
- * (`heldSlice`), keyed by the workspace, told whole on their slice: each
- * workspace's read as its follow last told it, kept where a later read does
- * not answer, and failed where it never answered.
- */
 export function heldMemories(
   dependencies: MemoriesFollowDependencies,
 ): Effect.Effect<HeldSlice<string>, never, Scope.Scope> {
@@ -175,12 +132,6 @@ export function heldMemories(
   });
 }
 
-/**
- * A memory forgotten, gone at once from every held read of its workspace,
- * sent as `send` asks. Note that a forget the service took answers the
- * memories as they then stand, and waits on the transaction it deleted in,
- * where it deleted one; a refusal puts the memory back.
- */
 export function memoryForget(
   send: (forget: MemoryForgetParams) => Effect.Effect<MemoriesAnswerView>,
 ): WriteDeclaration<MemoryLiveRow, FieldChange<MemoryLiveRow>, MemoryForgetParams, WireValue> {

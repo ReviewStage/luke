@@ -19,18 +19,8 @@ import {
   type TokenPullRequestPollState,
 } from "../token-pull-request-poll.js";
 
-/**
- * The scheduled sweep's claim of the token agents' pull requests, over a
- * real dialect: it takes the open and draft pull requests of agents on a
- * member's token and no others, each once until its next poll is due, and
- * answers what the last poll read only while the pull request is the one
- * read. The claim is the deployment's, so each test reads back only the
- * agents it made. Synthetic accounts and pull requests throughout.
- */
-
 const NOW = new Date("2026-10-20T12:00:00Z");
 const NEXT = new Date("2026-10-20T12:01:00Z");
-/** What a claim answers of a pull request no poll has read yet. */
 const UNREAD: TokenPullRequestPollState = {
   etags: {},
   lastReviewId: null,
@@ -38,7 +28,6 @@ const UNREAD: TokenPullRequestPollState = {
   headSha: null,
   checkConclusion: null,
 };
-/** Larger than every agent the file's tests make, so a claim takes them all. */
 const EVERY = 100;
 
 const openAccount = Effect.gen(function* () {
@@ -48,7 +37,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** An agent of the account's on the access given, its pull request numbered and standing as given where it has one. */
 const openAgent = (
   userId: string,
   githubAccess: GitHubAccess,
@@ -83,7 +71,6 @@ const openAgent = (
     return agent.id;
   });
 
-/** The agents named a claim at `now` took, in the order named. */
 const claimedOf = (now: Date, agentIds: readonly string[]) =>
   Effect.map(claimTokenPullRequestPolls(now, NEXT, EVERY), (claimed) =>
     agentIds.filter((id) => claimed.some((each) => each.agentId === id)),

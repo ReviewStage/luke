@@ -117,7 +117,6 @@ import { windowFocus } from "./window-focus.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SECTION_ID = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
-/** The text the edit tests' task opens on. */
 const INVITES_TEXT = "# Teammate invitations";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
@@ -136,60 +135,35 @@ function task(id: string, name: string, body: string, updatedAt: number): Task {
   };
 }
 
-/** The instant the fake service stamps every pin with. */
 const MARKED_AT = 5_000;
 
-/** The service as a table of tasks the test edits between beats. */
 interface FakeService extends TasksClient {
   tasks: Task[];
-  /** Each task's comment threads, by task id, and every comment write asked, in order. */
   threads: Record<string, DescriptionCommentThread[]>;
   commentCalls: string[];
-  /** What a write to a thread answers, once `commentGate` opens where one stands; a deletion where none is named. */
   commentAnswer: TasksCommentAnswer | undefined;
   commentGate: Deferred.Deferred<void> | undefined;
-  /** Each description's comments' live read by its task's id, and each page's by the page's; none answers unanswered. */
   commentLives: Record<string, PolledLive<CommentPart, typeof NOT_FOUND_LIVE>>;
-  /** What the list says of each task's coding agents, by task id; a task with none says nothing. */
   agents: Record<string, TaskAgentsSummary>;
-  /** The agents with no plan the list carries beside the plans. */
   tasklessAgents: TasklessAgent[];
-  /** How many times the list's live read was first asked, its polls apart. */
   liveListReads: number;
-  /** Whether a delete is refused, as a service that did not answer refuses it. */
   deleteFails: boolean;
-  /** What a delete's answer waits on, so a test can see what is drawn while it is out. */
   deleteAnswered: Effect.Effect<void>;
-  /** Whether a relation's change is refused, as a service that did not answer refuses it. */
   relationFails: boolean;
-  /** What a relation change's answer waits on, so a test can see what is drawn while it is out. */
   relationAnswered: Effect.Effect<void>;
   createAnswer: TaskCallResult<TaskStarted, RepositoryCallFailure>;
-  /** The idempotency key each start asked was sent under, in order. */
   createKeys: (string | undefined)[];
-  /** The repositories the account reaches, as the service answers them; a failure is the service refusing the read. */
   repositoriesAnswer: TaskCallResult<GitHubRepositoriesAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
-  /** Whether a repository is refused as one the App does not reach. */
   repositoryUnreachable: boolean;
-  /** Every read the service answered, in order, so a test can see that nothing reads on a clock. */
   readonly reads: string[];
-  /** Each task's pages' and calls' live read, by task id; a task with none is not found, as the service answers one the account does not reach. */
   recordLives: Record<string, PolledLive<RecordPart, typeof NOT_FOUND_LIVE>>;
-  /** How many opens the service leaves unanswered before it answers again. */
   opensUnanswered: number;
-  /** Each task's pages' live read; none answers unanswered. */
   pageLives: Record<string, PolledLive<"pages", typeof NOT_FOUND_LIVE>>;
-  /** Each task's Browser tabs' live read; none answers unanswered. */
   browserTabLives: Record<string, PolledLive<"tabs", typeof NOT_FOUND_LIVE>>;
-  /** Each task's newest page of history's live read; none answers unanswered. */
   historyLives: Record<string, PolledLive<"revisions">>;
-  /** What the service answers for each file's window, by path; a path with none answers nothing, as a service that did not answer. */
   files: Record<string, TaskFileAnswer>;
-  /** What the service answers for each folder's listing, by path; a path with none answers nothing, as a service that did not answer. */
   folders: Record<string, TaskTreeAnswer>;
-  /** What the service answers for each task's skills, by task id; a task with none answers nothing, as a service that did not answer. */
   skills: Record<string, TaskSkillsAnswer>;
-  /** What the service answers of a repository a workspace reaches, read with no plan, by workspace id and then repository: its files' windows and its folders by path, and its skills. */
   places: Record<
     string,
     Record<
@@ -201,84 +175,42 @@ interface FakeService extends TasksClient {
       }
     >
   >;
-  /** What the service answers for a repository's pull requests, by workspace id, then repository, then number; one with none answers nothing, as a service that did not answer. */
   pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
-  /** How many more pull request reads the service answers before it answers nothing, as GitHub refusing an App over its rate limit; none for no limit. And the gate a read waits on before it answers, where one is set. */
   pullRequestQuota: number | undefined;
-  /** What setting a workspace's token repository answers; unanswered where a test gives none. */
   tokenRepositorySet: { readonly ok: true; readonly answer: readonly [] } | undefined;
   pullRequestGate: Deferred.Deferred<void> | undefined;
-  /** What the service answers for a repository's issues, kept as its pull requests are. */
   issues: Record<string, Record<string, Map<number, GitHubRepositoryIssueAnswer>>>;
-  /** The newest page of the history, for any task; none answers nothing, as a service that did not answer. */
   history: DescriptionRevisionsAnswer | undefined;
-  /** The older pages of the history, by the revision each is read before. */
   olderHistory: Record<number, DescriptionRevisionsAnswer>;
-  /** Each revision the service holds, by its number, which a restore puts back as the task's document. */
   revisions: Record<number, DescriptionRevisionAnswer["revision"]>;
-  /** Every version of every page the service holds, for any task. */
   pages: PageVersion[];
-  /** The descriptions' pictures the service holds, by plan and then by picture. */
   pictures: Map<string, Map<string, { contentType: PictureType; base64: string }>>;
-  /** What an edit answers in place of a save, where a test sets one: a conflict or a refusal. */
   editAnswer: DescriptionEditAnswer | undefined;
-  /** The transaction an edit answers it committed in, where a test names one. */
   editTxid: string | undefined;
-  /** The account's pinned repositories, newest pinned first, as the service keeps them. */
   pins: RepositoryPin[];
-  /** Whether the pins are refused, read and written alike, as a service that did not answer refuses them. */
   pinsFail: boolean;
-  /** The transaction a pin's write answers it committed in, where a test names one. */
   pinTxid: string | undefined;
-  /** The transaction a task's pin answers it committed in, where a test names one. */
   markTxid: string | undefined;
-  /** Whether a task's pin is refused, as a service that did not answer refuses it. */
   markFails: boolean;
-  /** The transaction a task's repository change answers it committed in, where a test names one. */
   repositoryTxid: string | undefined;
-  /** What a task pin's answer waits on once the store has moved, so a test can sign out while it is still out. */
   markAnswered: Effect.Effect<void>;
-  /** What a pin's answer waits on once the store has moved, so a test can sign out while it is still out. */
   pinAnswered: Effect.Effect<void>;
-  /** The account's sidebar sections as the service keeps them; none where it does not answer, as before any test sets them. */
   sections: TaskSections | undefined;
-  /** Every change to the sections the service was asked for, in order. */
   sectionWrites: TaskSectionWrite[];
-  /** The kind of section change the service refuses, where a test names one. */
   sectionRefused: TaskSectionWrite["kind"] | undefined;
-  /** How a task's rename goes untaken where a test names it: unanswered as offline, or refused. */
   renameUntaken: WriteUntaken | undefined;
-  /** The idempotency key each rename asked was sent under, in order. */
   renameKeys: (string | undefined)[];
-  /** What a section change's answer waits on once the service has it, so a test can ask another meanwhile. */
   sectionAnswered: Effect.Effect<void>;
-  /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
-  /** Our GitHub App's install address a connection answers. */
   installUrl: string;
-  /** Whether the workspaces are not sealed, as a service that did not answer. */
   workspacesFail: boolean;
-  /** Whether the service answers the workspaces' seals and polls as signed out, as a changed session does. */
   workspacesSignedOut: boolean;
-  /** The name another Mac renames a workspace to just after this one's rename answers, where one does. */
   renamedAgain: string | undefined;
-  /** What a rename's answer waits on once the store has moved, so a test can have the follow deliver first. */
   renameAnswered: Effect.Effect<void>;
-  /** What a role change's answer waits on once the store has answered, so a test can see what is drawn before it. */
   roleAnswered: Effect.Effect<void>;
-  /** A slug another workspace holds, which the service refuses as taken; none where every slug is free. */
   slugTaken: string | undefined;
-  /** What a slug change's answer waits on, so a test can see what is drawn before it. */
   slugAnswered: Effect.Effect<void>;
-  /** Whether the workspaces' follow misses the store's changes, the live read answering none of them. */
   followMisses: boolean;
-  /**
-   * The account's live reads as the service answers them polled
-   * (`testing/polled-live.ts`): the workspaces and the sidebar read from the
-   * service's own state, the workspaces moved on every change to them; a
-   * workspace's people and invitations, and the task list, as a test sets
-   * their rows.
-   */
   readonly live: {
     readonly workspaces: PolledLive<"workspaces" | "installations">;
     readonly sidebar: PolledLive<"sections" | "entries" | "agentEntries" | "pins">;
@@ -295,25 +227,15 @@ interface FakeService extends TasksClient {
       { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED | typeof LIVE_SIGNED_OUT.failure }
     >;
   };
-  /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
-  /** Each workspace's pending invitations, by its id. */
   invitations: Record<string, WorkspaceInvitation[]>;
-  /** Each workspace's photo, by its id: its type and its bytes in base64; one with none is not found. */
   photos: Record<string, { contentType: WorkspacePhotoType; base64: string }>;
-  /** Whether a write is refused as the account's role not allowing it. */
   notPermitted: boolean;
-  /** What a Sentry disconnect answers, once `integrationsGate` lets it. */
   sentryAnswer: WorkspaceCallResult<WorkspaceSentry>;
-  /** What the Slack bot's read and every Slack write answer, once `integrationsGate` lets a write. */
   slackBotAnswer: WorkspaceCallResult<WorkspaceSlackBot>;
-  /** What a Sentry or Slack write waits on before the service answers it; nothing from the start. */
   integrationsGate: Effect.Effect<void>;
-  /** The account's GitHub as the service last says it; none answers nothing, as a service that did not answer. */
   connection: GitHubConnection | undefined;
-  /** Where a GitHub connection read waits before answering what it read, so a test can hold one on the wire. */
   githubGate: Effect.Effect<void>;
-  /** The single-use pages the service hands out to connect GitHub, the newest last. */
   connectPages: string[];
 }
 
@@ -335,7 +257,6 @@ const ACME: Workspace = {
   githubInstallations: [{ installationId: 7, login: "acme", active: true }],
   memberCount: 3,
 };
-/** A workspace's photo as the window sends it: a WebP's `data:` URL. */
 const PHOTO_URL = "data:image/webp;base64,UklGRgAAAABXRUJQ";
 const RELAY: Workspace = {
   id: "workspace-relay",
@@ -347,19 +268,14 @@ const RELAY: Workspace = {
   memberCount: 1,
 };
 
-/** The parts of a task's record's live read. */
 type RecordPart = "description" | "pages" | "calls" | "code";
 
-/** The parts a subject's comments' live read delivers. */
 type CommentPart = "threads" | "entries" | "files";
 
-/** A live read the service answers not found, as one the account does not reach. */
 const NOT_FOUND_LIVE = { failure: TASK_CALL_FAILURE.NOT_FOUND } as const;
 
-/** The origin a workspace's invitations are answered with, which each accept link is built on. */
 const INVITATIONS_ORIGIN = "https://app.test";
 
-/** The sidebar as its live statements' rows carry it: what the wire leaves out is null. */
 function sidebarLiveRows(sections: TaskSections | undefined, pins: readonly RepositoryPin[]) {
   return {
     sections: (sections?.sections ?? []).map((section) => ({
@@ -379,7 +295,6 @@ function sidebarLiveRows(sections: TaskSections | undefined, pins: readonly Repo
   };
 }
 
-/** The workspaces as the live statements' rows carry them, the account's own first one being Ada's. */
 function workspacesLiveRows(workspaces: readonly Workspace[]) {
   return {
     workspaces: workspaces.map((each) => ({
@@ -422,19 +337,15 @@ const NOT_PERMITTED_WORKSPACE = {
   failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
 } as const;
 
-/** The instant the fake service stamps every edit's save with. */
 const EDITED_AT = 7_000;
 
-/** The task list's read as the service answers it, before it is read by sync id. */
 type ListAnswer = Exclude<
   ReturnType<PolledLive<"plans" | "agents" | "issues">["first"]>,
   { readonly failure: string }
 >;
 
-/** Each part of the task list's rows by id as they stood at each sync id answered, so a read past one is answered what moved since. */
 type ListAt = Map<string, ReadonlyMap<"plans" | "agents", ReadonlyMap<string, string>>>;
 
-/** A part's rows by id, each as JSON, to tell which moved. */
 function rowsById(rows: readonly unknown[] | undefined): ReadonlyMap<string, string> {
   return new Map(
     (rows ?? []).flatMap((row) => {
@@ -444,12 +355,6 @@ function rowsById(rows: readonly unknown[] | undefined): ReadonlyMap<string, str
   );
 }
 
-/**
- * The task list's read as the service answers it by sync id, each version
- * of the rows its id: past none, every row whole with the id to read past
- * next; past an id, each part only the rows that moved since, with the ids
- * of its own rows that stand no longer.
- */
 function listBySyncId(answer: ListAnswer, past: string | undefined, listAt: ListAt): ListAnswer {
   const next = answer.queries.plans.digest ?? "0";
   const before = past === undefined ? undefined : listAt.get(past);
@@ -479,7 +384,6 @@ function listBySyncId(answer: ListAnswer, past: string | undefined, listAt: List
 
 function fakeService(tasks: Task[]): FakeService {
   let memberships: Workspace[] = [PERSONAL];
-  /** What the task list's read keeps to answer by sync id. */
   const listAt: ListAt = new Map();
   let followMisses = false;
   const live: FakeService["live"] = {
@@ -503,7 +407,6 @@ function fakeService(tasks: Task[]): FakeService {
       { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED | typeof LIVE_SIGNED_OUT.failure }
     >(["plans", "agents", "issues"]),
   };
-  /** A live read's answer as the service's call answers it: the read, or why it answered none. */
   const called = <Answer, Failure extends string>(
     read: Effect.Effect<Answer | { readonly failure: Failure }>,
   ): Effect.Effect<TaskCallResult<Answer, Failure>> =>
@@ -512,7 +415,6 @@ function fakeService(tasks: Task[]): FakeService {
         ? { ok: false as const, failure: answer.failure }
         : { ok: true as const, answer: answer as Answer },
     );
-  /** A live read first asked, or polled past `after`. */
   const asked = <Part extends string, Refused extends { readonly failure: string }>(
     read: PolledLive<Part, Refused>,
     poll: boolean | undefined,
@@ -532,7 +434,6 @@ function fakeService(tasks: Task[]): FakeService {
           ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
           : called(asked(read, poll, after));
       }),
-    // The service starts the thread as asked, the member its writer, and holds it on the description.
     startComment: (planId, start) =>
       Effect.sync(() => {
         if ("page" in start) throw new Error("the fake holds no page's threads");
@@ -608,7 +509,6 @@ function fakeService(tasks: Task[]): FakeService {
     readRevision: (_taskId, seq) => Effect.sync(() => service.revisions[seq]),
     pages: [],
     pictures: new Map(),
-    // The service keeps a picture under the next id, and refuses one more where the description holds two, a bound small enough to reach.
     keepPicture: (taskId, picture) =>
       Effect.sync(() => {
         const held = service.pictures.get(taskId) ?? new Map();
@@ -630,7 +530,6 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() =>
         service.pages.find((page) => page.id === pageId && page.version === version),
       ),
-    // The service puts the revision's document back and names the developer its last editor.
     restore: (taskId, seq) =>
       Effect.sync(() => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
@@ -699,9 +598,7 @@ function fakeService(tasks: Task[]): FakeService {
     connection: { connected: false, login: null },
     githubGate: Effect.void,
     connectPages: [],
-    // Each connect is a fresh page bound to the account, as the service mints one.
     github: {
-      // The service reads the connection when asked and answers it after the gate.
       status: () =>
         Effect.suspend(() => {
           const read = service.connection;
@@ -717,7 +614,6 @@ function fakeService(tasks: Task[]): FakeService {
           service.connectPages.push(url);
           return { ok: true as const, answer: { url } };
         }),
-      // The service unlinks the session's GitHub and answers the connection as it then stands.
       disconnect: () =>
         Effect.sync(() => {
           service.reads.push("github-disconnect");
@@ -728,7 +624,6 @@ function fakeService(tasks: Task[]): FakeService {
           return { ok: true as const, answer: service.connection };
         }),
     },
-    // The service answers an admin read with what it read, and stars any account.
     admin: {
       read: (params) =>
         Effect.sync(() => {
@@ -741,11 +636,9 @@ function fakeService(tasks: Task[]): FakeService {
           return true;
         }),
     },
-    // The service's workspaces as a table the test edits, each write moving it as the store does.
     workspaces: {
       tokenRepositories: () => Effect.succeed(UNANSWERED_WORKSPACE),
       setTokenRepository: () => Effect.succeed(service.tokenRepositorySet ?? UNANSWERED_WORKSPACE),
-      // A workspace's invitations are read for an owner or an admin alone, as the service reads them; a poll is not counted among the reads.
       invitationsLive: (workspaceId, _userId, poll, after) =>
         Effect.suspend((): ReturnType<TasksClient["workspaces"]["invitationsLive"]> => {
           if (poll !== true) service.reads.push(`invitations-live:${workspaceId}`);
@@ -755,7 +648,6 @@ function fakeService(tasks: Task[]): FakeService {
             answer: { ...answer, origin: INVITATIONS_ORIGIN },
           }));
         }),
-      // A workspace's people are read for a member alone, as the service reads them; a poll is not counted among the reads.
       peopleLive: (workspaceId, _userId, poll, after) =>
         Effect.suspend((): ReturnType<TasksClient["workspaces"]["peopleLive"]> => {
           if (poll !== true) service.reads.push(`people-live:${workspaceId}`);
@@ -768,7 +660,6 @@ function fakeService(tasks: Task[]): FakeService {
                   : ({ ok: true, answer } as const),
               );
         }),
-      // The workspaces as the store holds them, each poll held until they move; a poll is not counted among the reads.
       live: (_userId, poll, after) =>
         Effect.suspend((): ReturnType<TasksClient["workspaces"]["live"]> => {
           if (poll !== true) service.reads.push("workspaces-live");
@@ -776,7 +667,6 @@ function fakeService(tasks: Task[]): FakeService {
           if (service.workspacesSignedOut) {
             return Effect.succeed({ ok: false, failure: LIVE_SIGNED_OUT.failure } as const);
           }
-          // Note that a poll held until the workspaces moved reads the session again as it answers.
           return Effect.map(asked(live.workspaces, poll, after), (answer) =>
             service.workspacesSignedOut
               ? ({ ok: false, failure: LIVE_SIGNED_OUT.failure } as const)
@@ -810,7 +700,6 @@ function fakeService(tasks: Task[]): FakeService {
             ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.SLUG_TAKEN } as const)
             : UNANSWERED_WORKSPACE;
         }).pipe(Effect.tap(() => service.slugAnswered)),
-      // A photo set stands as its version, the photo's own text, and null takes the version away.
       setPhoto: (workspaceId, photo) =>
         Effect.sync(() => {
           service.reads.push(`photoSet:${workspaceId}:${photo ?? "none"}`);
@@ -843,7 +732,6 @@ function fakeService(tasks: Task[]): FakeService {
           );
           return { ok: true, answer: now } as const;
         }),
-      // A workspace's integrations are read for a member alone, as the service reads them, with both integrations held by the deployment; a poll is not counted among the reads.
       integrationsLive: (workspaceId, _userId, poll, after) =>
         Effect.suspend((): ReturnType<TasksClient["workspaces"]["integrationsLive"]> => {
           if (poll !== true) service.reads.push(`integrations-live:${workspaceId}`);
@@ -906,7 +794,6 @@ function fakeService(tasks: Task[]): FakeService {
           service.members[workspaceId] = changed;
           return { ok: true, answer: changed } as const;
         }).pipe(Effect.tap(() => service.roleAnswered)),
-      // A handover makes the heir the owner and the account, the owner until then, an admin.
       transfer: (workspaceId, userId) =>
         Effect.sync(() => {
           service.reads.push(`transfer:${workspaceId}:${userId}`);
@@ -926,7 +813,6 @@ function fakeService(tasks: Task[]): FakeService {
           );
           return { ok: true, answer: handedOver } as const;
         }),
-      // The service answers the invitation it made, with its accept link.
       invite: (workspaceId, email, role) =>
         Effect.sync(() => {
           service.reads.push(`invite:${workspaceId}:${email}`);
@@ -958,7 +844,6 @@ function fakeService(tasks: Task[]): FakeService {
           return { ok: true, answer: workspaceId } as const;
         }),
     },
-    // The sidebar as the service holds it; a poll is not counted among the reads.
     sidebarLive: (_userId, poll, after) =>
       Effect.suspend(() => {
         if (poll !== true) service.reads.push("sidebar-live");
@@ -967,7 +852,6 @@ function fakeService(tasks: Task[]): FakeService {
           answer,
         }));
       }),
-    // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
     pinRepository: (repository, pinned) =>
       Effect.andThen(
         Effect.sync((): TaskCallResult<RepositoryPinsWritten, WriteUntaken> => {
@@ -985,7 +869,6 @@ function fakeService(tasks: Task[]): FakeService {
         }),
         (answer) => Effect.as(service.pinAnswered, answer),
       ),
-    // The service answers its sections as they stand, the test having set them to what the write left.
     writeTaskSection: (write) =>
       Effect.sync((): TaskCallResult<TaskSectionsWritten, WriteUntaken> => {
         service.sectionWrites.push(write);
@@ -994,7 +877,6 @@ function fakeService(tasks: Task[]): FakeService {
           ? { ok: false, failure: WRITE_UNTAKEN.REFUSED }
           : { ok: true, answer: sections };
       }).pipe(Effect.tap(() => service.sectionAnswered)),
-    // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
       Effect.sync((): TaskCallResult<DescriptionEditAnswer, typeof TASK_CALL_FAILURE.NOT_FOUND> => {
         if (service.editAnswer !== undefined) return { ok: true, answer: service.editAnswer };
@@ -1077,7 +959,6 @@ function fakeService(tasks: Task[]): FakeService {
           ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND } as const)
           : called(asked(read, poll, after));
       }),
-    // Note that a poll past a sync id is not counted among the list's reads, as each is held until its rows move.
     listLive: (_userId, sync) =>
       Effect.suspend(() => {
         if (sync === undefined) return called(Effect.succeed(live.list.first()));
@@ -1118,7 +999,6 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return service.repositoriesAnswer;
       }),
-    // The service keeps the repository on the task and answers the task whole.
     setRepository: (taskId, repository) =>
       Effect.sync((): TaskCallResult<TaskWritten, RepositoryCallFailure> => {
         if (service.repositoryUnreachable) {
@@ -1136,7 +1016,6 @@ function fakeService(tasks: Task[]): FakeService {
           answer: { task: changed, ...(txid === undefined ? undefined : { txid }) },
         };
       }),
-    // The service moves the task and answers it whole.
     move: (taskId, workspaceId) =>
       Effect.sync((): TaskCallResult<TaskWritten, TaskCallFailure> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
@@ -1147,7 +1026,6 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return { ok: true, answer: { task: moved } };
       }),
-    // The service adds the block to the task the change names, as the store does, and answers the task whole.
     block: (taskId, change) =>
       Effect.sync((): TaskCallResult<TaskWritten, BlockCallFailure> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
@@ -1158,7 +1036,6 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return { ok: true, answer: { task: blocked } };
       }),
-    // The service sets the task's parent, or clears it, as the store does, and answers the task whole.
     setParent: (taskId, { parentTaskId }) =>
       Effect.sync((): TaskCallResult<TaskWritten, ParentCallFailure> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
@@ -1170,7 +1047,6 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return { ok: true, answer: { task: parented } };
       }),
-    // The service moves the relation to the kind named, as the store does: the other made the parent here, and answers the task whole.
     changeRelation: (taskId, { taskId: otherId }) =>
       Effect.sync((): TaskCallResult<TaskWritten, RelationCallFailure> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
@@ -1186,7 +1062,6 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return { ok: true, answer: { task: moved } };
       }).pipe(Effect.tap(() => service.relationAnswered)),
-    // The service re-titles the document with the name, as the store does.
     rename: (taskId, { name }, key) =>
       Effect.sync((): TaskCallResult<TaskWritten, WriteUntaken> => {
         service.renameKeys.push(key);
@@ -1200,8 +1075,6 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return { ok: true, answer: { task: renamed } };
       }),
-    // The service sets the status, the priority, and the assignee named, naming the assignee by
-    // their account, and leaves the rest standing; null assigns the task to no one.
     setStanding: (taskId, { assigneeId, ...standing }) =>
       Effect.sync((): TaskCallResult<TaskWritten, WriteUntaken> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
@@ -1218,7 +1091,6 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return { ok: true, answer: { task: changed } };
       }),
-    // The service stamps a pin at its own clock, and a false takes it away.
     mark: (taskId, { pinned }) =>
       Effect.sync((): TaskCallResult<TaskWritten, WriteUntaken> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
@@ -1252,14 +1124,11 @@ function fakeService(tasks: Task[]): FakeService {
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
-/** `settled`, then the host's next poll asked, which waits half a second after the last answered (`live-follow.ts`), then `settled` again. */
 const nextPoll = (settled: Effect.Effect<void>) =>
   Effect.andThen(settled, Effect.andThen(TestClock.adjust(Duration.millis(500)), settled));
 
-/** The host's own fibers given their turn, as `subject`'s `settled` gives them. */
 const settledTurns = Effect.repeat(Effect.yieldNow, { times: 200 });
 
-/** The followed list answered with the parts given, the rest as they stood, on the poll standing or the next. */
 const listAnswers = (
   service: FakeService,
   parts: {
@@ -1277,21 +1146,15 @@ function subject(
   service: FakeService,
   options: {
     signedIn?: boolean;
-    /** Whether the run reaches the service, which a fixture run does not. */
     sendsNetwork?: boolean;
-    /** The account signed in now, Dana's where none is named. */
     accountId?: () => string;
-    /** The account's lists kept on disk, none where none is named. */
     entities?: EntityStore;
-    /** The pool the composer's rows stand in, a fresh one that keeps no write waiting where none is named. */
     pool?: EntityPool;
   } = {},
 ) {
   return Effect.gen(function* () {
-    /** Every event the composer emitted besides the view, by its kind. */
     const pushed: [GatewayEventKind, WireValue][] = [];
     const told: TasksView[] = [];
-    /** Every other event the host emitted, in order. */
     const events: { readonly kind: string; readonly payload: WireValue }[] = [];
     const waiters: {
       wanted: (view: TasksView) => boolean;
@@ -1302,7 +1165,6 @@ function subject(
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
         now: () => 0,
-        // Note that the id the host mints for a task it starts is the one the service answers it under.
         createId: () => INVITES,
         emit: (kind, payload) => {
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) {
@@ -1336,53 +1198,39 @@ function subject(
       return Effect.orDie(handler(params, context));
     };
     const last = () => told.at(-1);
-    /** The first view told, from now on, that `wanted` holds of. */
     const viewWhere = (wanted: (view: TasksView) => boolean) =>
       Effect.gen(function* () {
         const seen = yield* Deferred.make<TasksView>();
         waiters.push({ wanted, seen });
         return yield* Deferred.await(seen);
       });
-    /** Waits from now on for the first view `wanted` holds of, and answers the wait. */
     const viewLands = (wanted: (view: TasksView) => boolean) =>
       Effect.map(Deferred.make<TasksView>(), (seen) => {
         waiters.push({ wanted, seen });
         return Deferred.await(seen);
       });
-    /** The host's own fibers given their turn, so what a poll answered is drawn. */
     const settled = Effect.gen(function* () {
       for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
     });
-    /**
-     * The followed list answered as the service holds it: a row for each of
-     * its tasks, and the agents given, on the poll standing or the next, half
-     * a second after the last answered (`live-follow.ts`).
-     */
     const listed = (agents: readonly unknown[] = []) =>
       Effect.gen(function* () {
         service.live.list.set({ plans: service.tasks.map(rowOfTask), agents, issues: [] });
         yield* nextPoll(settled);
       });
-    /** Holds a task's description as the window does while it has the task open. */
     const holdDescription = (taskId: string) =>
       call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId });
-    /** Opens a task as the window's press does, the window then holding its description, and lets the description's read land. */
     const openTask = (taskId: string) =>
       Effect.tap(call(GATEWAY_METHOD.TASKS_OPEN, { taskId }), () =>
         Effect.andThen(holdDescription(taskId), settled),
       );
-    /** The descriptions the host holds for the windows as it last told them (`LIVE_READ.DESCRIPTION_DOCUMENT`). */
     const descriptions = (): AppDescriptionDocuments => {
       const told = pushed.findLast(
         ([kind]) => kind === GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED,
       );
-      // SAFETY: the host tells its held descriptions whole as this event's payload.
       return (told?.[1] ?? NO_KEYS_HELD) as AppDescriptionDocuments;
     };
-    /** `taskId`'s description as the host last told it held; none where it holds none. */
     const held = (taskId: string): AppHostRead<HeldDescriptionDocument> | undefined =>
       descriptions()[taskId];
-    /** The task `taskId`'s held description holds; none where none is held, or it is gone. */
     const description = (taskId: string): Task | undefined => {
       const rows = held(taskId)?.rows;
       return rows !== undefined && "task" in rows ? rows.task : undefined;
@@ -1626,7 +1474,6 @@ it.effect(
         openEntityStore({ directory: "/state", cipher: testCipher(), accountId: "user-dana" }),
         disk,
       );
-      /** The sync id the list stands at on disk, as a store opened over it reads it. */
       const keptAt = Effect.map(
         Effect.scoped(opened),
         (store) => store.stored(KEPT_READ.TASK_LIST)?.at,
@@ -1640,7 +1487,6 @@ it.effect(
       yield* TestClock.adjust("30 seconds");
       const first = yield* keptAt;
 
-      // The service answers past the id it answered last, nothing having moved since.
       yield* listed();
       yield* TestClock.adjust("30 seconds");
       const meanwhile = yield* keptAt;
@@ -1809,7 +1655,6 @@ it.effect(
         workspaceId: billing.workspaceId,
       });
 
-      // The first send landed though its answer was lost, so the service holds the task, its record, and its key.
       service.tasks = [...service.tasks, task(INVITES, "Invitation expiry", "", 30)];
       const record = polledRecord(service, INVITES);
       service.recordLives[INVITES] = record;
@@ -1822,7 +1667,6 @@ it.effect(
       yield* settled;
       yield* TestClock.adjust(Duration.seconds(1));
       yield* followSettled;
-      // A teammate saves the description, which the next poll carries.
       service.tasks = service.tasks.map((each) =>
         each.id === INVITES
           ? { ...each, updatedAt: 40, document: { ...each.document, body: "# Theirs" } }
@@ -1955,10 +1799,8 @@ it.effect(
       const shown = () => last()?.tasks.some((row) => row.id === INVITES);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-earlier"]);
       yield* nextPoll(settled);
-      // The service answers a start only once let go, as one still out.
       const answered = yield* Deferred.make<void>();
       const { create } = service;
       service.create = (request) => Effect.andThen(Deferred.await(answered), create(request));
@@ -1976,7 +1818,6 @@ it.effect(
       service.createAnswer = { ok: true, answer: { task: made, txid: "tx-start" } };
       const start = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_START, quickAdd));
       yield* settled;
-      // A list read from before the start answers without it.
       service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-other"]);
       yield* nextPoll(settled);
       const throughStale = shown();
@@ -2005,7 +1846,6 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
       yield* openTask(BILLING);
-      // The service answers the start only once let go, as one still out.
       const answered = yield* Deferred.make<void>();
       const { create } = service;
       service.create = (request) => Effect.andThen(Deferred.await(answered), create(request));
@@ -2040,7 +1880,6 @@ it.effect(
       const { call, settled, listed, description } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // The service makes the task only once let go, its record sealed from then on.
       const answered = yield* Deferred.make<void>();
       const { create } = service;
       service.create = (request) => Effect.andThen(Deferred.await(answered), create(request));
@@ -2061,7 +1900,6 @@ it.effect(
       yield* Fiber.join(start);
       yield* TestClock.adjust(Duration.seconds(1));
       yield* followSettled;
-      // A teammate saves the description, which the next poll carries.
       service.tasks = service.tasks.map((each) =>
         each.id === INVITES
           ? { ...each, updatedAt: 40, document: { ...each.document, body: "# Theirs" } }
@@ -2080,7 +1918,6 @@ it.effect("a start answered after another task was opened answers its task and o
     const billing = task(BILLING, "Billing export", "# Billing", 20);
     const service = fakeService([billing]);
     const { call, last, settled } = yield* subject(service);
-    // The service makes the task only once let go, as a start still out when the next press lands.
     const answered = yield* Deferred.make<void>();
     const { create } = service;
     service.create = (request) => Effect.andThen(Deferred.await(answered), create(request));
@@ -2110,12 +1947,10 @@ it.effect("a task opened again draws its held description before any read of it 
     const { call, last, openTask, held, settled } = yield* subject(service);
     yield* openTask(INVITES);
     yield* openTask(BILLING);
-    // Every read of the service is held from here, as a service that has not answered yet.
     const answered = yield* Deferred.make<void>();
     const { open } = service;
     service.open = (taskId) => Effect.andThen(Deferred.await(answered), open(taskId));
 
-    // The window lets the billing task's description go as it opens the invites task again, whose it holds anew.
     yield* call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: BILLING });
     const opening = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }));
     yield* call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId: INVITES });
@@ -2139,7 +1974,6 @@ it.effect(
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const billing = task(BILLING, "Billing export", "# Billing export", 20);
       const service = fakeService([billing, invites]);
-      // The billing task's description is held, as a read still out when the next press lands.
       const answered = yield* Deferred.make<void>();
       const { open } = service;
       service.open = (taskId) =>
@@ -2184,7 +2018,6 @@ it.effect(
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const service = fakeService([invites]);
       const { call, settled, held, description, openTask } = yield* subject(service);
-      // The read takes the task as it stands when asked, and answers only once let go.
       const answered = yield* Deferred.make<void>();
       const { open } = service;
       service.open = (taskId) =>
@@ -2213,7 +2046,6 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
 
-      // The read takes the task as it stands when asked, and answers only once let go.
       const answered = yield* Deferred.make<void>();
       const { open } = service;
       service.open = (taskId) =>
@@ -2298,7 +2130,6 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
       yield* openTask(INVITES);
-      // Answers Sync woke hand the list's and the record's follows their waits for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
       yield* answered(() => record.set({}, ["tx-earlier"]));
@@ -2315,7 +2146,6 @@ it.effect(
       assert.equal(description(INVITES)?.document.body, mine);
       assert.equal(description(INVITES)?.updatedAt, EDITED_AT);
 
-      // A teammate's save the record carries before the edit's transaction reads nothing, and the list's row from before it is held over.
       const [edited] = service.tasks;
       assert.ok(edited !== undefined);
       const theirs = {
@@ -2333,7 +2163,6 @@ it.effect(
       assert.equal(description(INVITES)?.document.body, mine);
       assert.equal(last()?.tasks.find((row) => row.id === INVITES)?.updatedAt, EDITED_AT);
 
-      // Once the record carries the edit's transaction, the save it delivered meanwhile is read.
       yield* answered(() =>
         record.set({ description: [{ taskId: INVITES, savedAt: theirs.updatedAt }] }, ["tx-edit"]),
       );
@@ -2459,7 +2288,6 @@ it.effect(
       const before = told.length;
       service.live.sidebar.move();
       yield* nextPoll(settled);
-      // Note that an answer moving two parts is told once, so no window draws one moved without the other.
       assert.equal(told.length - before, 1);
       assert.deepEqual(
         last()?.taskSections?.sections.map((section) => section.title),
@@ -2484,7 +2312,6 @@ it.effect(
         title: "Launch",
         createdAt: 5,
       };
-      // The service keeps the section, then refuses to put the task in it.
       service.sections = { sections: [launch], entries: [], agentEntries: [] };
       service.sectionRefused = TASK_SECTION_WRITE.PLACE;
       const writes = [
@@ -2583,7 +2410,6 @@ it.effect(
         view?.repositoryPins?.map((pin) => pin.repository) ?? [];
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
-      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.sidebar.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -2593,7 +2419,6 @@ it.effect(
         call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/relay", pinned: true }),
       );
       yield* settled;
-      // Another Mac's change from before the pin landed is answered without it.
       service.live.sidebar.set({ pins: [] }, ["tx-other"]);
       yield* nextPoll(settled);
       service.live.sidebar.set({ pins: service.pins }, ["tx-pin"]);
@@ -2634,7 +2459,6 @@ it.effect("a pin still being written when the account signs out is drawn for nob
     );
     yield* settled;
     const from = told.length;
-    // Note that the sign-out waits on the pin's service call, which holds the one lock reads take.
     const signingOut = yield* Effect.forkChild(tasks.reset);
     yield* settled;
     yield* Deferred.succeed(answered, undefined);
@@ -2664,7 +2488,6 @@ it.effect(
         view?.tasks.find((row) => row.id === INVITES)?.pinnedAt !== undefined;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -2675,7 +2498,6 @@ it.effect(
       );
       yield* settled;
       const standing = last()?.pendingTasks;
-      // Another Mac's change from before the pin landed is answered without it.
       const [invites] = service.tasks;
       assert.ok(invites);
       service.live.list.set({ plans: [{ ...rowOfTask(invites), name: "Invites" }] }, ["tx-other"]);
@@ -2692,7 +2514,6 @@ it.effect(
         [],
         "the pin is never drawn back",
       );
-      // A list held still while read moves the task the pin stood over, and lets it go once kept.
       assert.deepEqual(standing, [INVITES]);
       assert.equal(last()?.pendingTasks, undefined);
 
@@ -2716,7 +2537,6 @@ it.effect(
       const repositoryOf = () => last()?.tasks.find((row) => row.id === INVITES)?.repository;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
       yield* nextPoll(settled);
 
@@ -2725,7 +2545,6 @@ it.effect(
         call(GATEWAY_METHOD.TASKS_SET_REPOSITORY, { taskId: INVITES, repository: "acme/relay" }),
       );
       yield* settled;
-      // Another task's pin draws the list again before the list carries the repository.
       yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: BILLING, pinned: true });
       const drawn = repositoryOf();
       service.live.list.set({ plans: service.tasks.map(rowOfTask) }, ["tx-repository"]);
@@ -2872,7 +2691,6 @@ it.effect("a task marked done here is drawn finished now, so the recently finish
 
     const drawn = told[from]?.tasks.find((row) => row.id === INVITES);
     assert.equal(drawn?.status, TASK_STATUS.DONE);
-    // The harness's host clock reads zero.
     assert.equal(drawn?.completedAt, 0);
   }),
 );
@@ -3140,7 +2958,6 @@ it.effect(
         call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
       );
       yield* settled;
-      // Only the other workspace's change reaches the follow; the rename's own is lost.
       const missed = workspacesLiveRows([{ ...PERSONAL, name: "Dana's own" }, ACME]);
       service.live.workspaces.set({ workspaces: missed.workspaces });
       yield* settled;
@@ -3171,7 +2988,6 @@ it.effect(
       );
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
-      // A teammate renames it back before the first rename's answer lands.
       service.memberships = [PERSONAL, ACME];
       yield* nextPoll(settled);
       yield* Deferred.succeed(answered, undefined);
@@ -3233,13 +3049,11 @@ it.effect("a rename still being written when the account signs out is drawn for 
       call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
     );
     yield* settled;
-    // A second rename waits behind the first, so it would be sent only after the sign-out.
     const queued = yield* Effect.forkChild(
       call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Research" }),
     );
     yield* settled;
     yield* tasks.reset;
-    // A teammate names it back before the next sign-in reads it, so the rename's answer is the only "Acme Labs" left.
     service.memberships = [PERSONAL, ACME];
     yield* tasks.open;
     yield* settled;
@@ -3392,12 +3206,10 @@ it.effect(
     }),
 );
 
-/** A member's row as the people's live read carries it: the plugin's role text, and no picture. */
 function memberRow(member: WorkspaceMember, role: string = member.role) {
   return { userId: member.userId, name: member.name, email: member.email, role, image: null };
 }
 
-/** The account signed in under `subject`, a member of the workspace whose people a test holds. */
 const DANA: WorkspaceMember = {
   userId: "user-dana",
   name: "Dana Scully",
@@ -3412,7 +3224,6 @@ const ALAN: WorkspaceMember = {
 };
 const LEE = { userId: "user-lee", name: "Lee Park" };
 
-/** Each workspace's people the host told the windows, the latest last. */
 function heldMembers(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
   return pushed.flatMap(([kind, payload]) =>
     kind === GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED ? [payload] : [],
@@ -3461,7 +3272,6 @@ it.effect(
       assert.deepEqual(shown(), standing([DANA, ALAN, GRACE]));
       const before = service.reads.length;
 
-      // A role change stands, through a poll read before it that lands after its answer.
       yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
         workspaceId: ACME.id,
         userId: GRACE.userId,
@@ -3473,18 +3283,15 @@ it.effect(
       people.set({ former: [leeRow] });
       yield* nextPoll(settled);
       assert.deepEqual(shown(), standing([DANA, admin, ALAN], [LEE]));
-      // Note that the read's own role text may list several roles.
       people.set({
         members: [memberRow(DANA), memberRow(GRACE, "member,admin"), memberRow(ALAN)],
       });
       yield* nextPoll(settled);
       assert.deepEqual(shown(), standing([DANA, admin, ALAN], [LEE]));
-      // Once the read carries it, the read alone stands.
       people.set({ members: [DANA, GRACE, ALAN].map((each) => memberRow(each)) });
       yield* nextPoll(settled);
       assert.deepEqual(shown(), standing([DANA, ALAN, GRACE], [LEE]));
 
-      // A removal stands until the read no longer carries the member.
       people.set({ members: [DANA, admin, ALAN].map((each) => memberRow(each)) });
       yield* nextPoll(settled);
       yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
@@ -3498,7 +3305,6 @@ it.effect(
       people.set({ members: [memberRow(DANA), memberRow(admin)] });
       yield* nextPoll(settled);
 
-      // A handover stands as the heir's role and the account's own from its answer.
       yield* call(GATEWAY_METHOD.WORKSPACES_TRANSFER, {
         workspaceId: ACME.id,
         userId: GRACE.userId,
@@ -3582,10 +3388,8 @@ it.effect(
     }),
 );
 
-/** An active Sentry installation of the workspace, as the integrations read delivers it. */
 const SENTRY_ROW = { installationId: "sentry-installation-1", account: "acme", createdAt: 1 };
 
-/** The workspace's Slack bot, connected, as the integrations read delivers it. */
 const SLACK_ROW = {
   workspaceId: ACME.id,
   teamId: "T0001",
@@ -3593,28 +3397,23 @@ const SLACK_ROW = {
   defaultRepository: null,
 };
 
-/** A channel of the workspace's Slack team, the bot not in it, as Slack lists it. */
 const ENG_CHANNEL = { id: "C0001", name: "eng", private: false, member: false };
 
-/** What the host last told the windows of `workspaceId`'s integrations; none where it told none. */
 function integrationsShown(
   pushed: readonly (readonly [GatewayEventKind, WireValue])[],
   workspaceId: string,
 ): WorkspaceIntegrations | undefined {
   const told = pushed.findLast(([kind]) => kind === GATEWAY_EVENT.WORKSPACE_INTEGRATIONS_CHANGED);
   const read = isRecord(told?.[1]) ? told[1][workspaceId] : undefined;
-  // SAFETY: the host tells its held integrations whole as this event's payload, each workspace's read under its id.
   return (isRecord(read) ? read.rows : undefined) as WorkspaceIntegrations | undefined;
 }
 
-/** What the host last told the windows of `workspaceId`'s Slack channels; none where it told none. */
 function channelsShown(
   pushed: readonly (readonly [GatewayEventKind, WireValue])[],
   workspaceId: string,
 ): readonly SlackListedChannel[] | undefined {
   const told = pushed.findLast(([kind]) => kind === GATEWAY_EVENT.SLACK_CHANNELS_CHANGED);
   const read = isRecord(told?.[1]) ? told[1][workspaceId] : undefined;
-  // SAFETY: the host tells its held channels whole as this event's payload, each workspace's list under its id.
   return (isRecord(read) ? read.rows : undefined) as readonly SlackListedChannel[] | undefined;
 }
 
@@ -3631,7 +3430,6 @@ it.effect(
       const team = () => integrationsShown(pushed, ACME.id)?.slack.team?.name;
       yield* call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
-      // The read is woken by a write once, so it hands a wait for the next.
       integrations.set(
         {
           sentryInstallations: [SENTRY_ROW],
@@ -3664,7 +3462,6 @@ it.effect(
       assert.deepEqual(yield* Fiber.join(disconnecting), {
         sentry: { configured: true, installations: [] },
       });
-      // The read answers once more from before the disconnect, which still stands over it.
       integrations.set({ sentryInstallations: [SENTRY_ROW] });
       yield* nextPoll(settled);
       assert.deepEqual(installations(), []);
@@ -3705,7 +3502,6 @@ it.effect(
         channels: [ENG_CHANNEL],
       };
       service.slackBotAnswer = { ok: true, answer: { configured: true } };
-      // A member's window holds the workspace's integrations and never its channels.
       yield* call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
       integrations.set({
@@ -3719,13 +3515,11 @@ it.effect(
       yield* nextPoll(settled);
       assert.equal(channelAsks(), 0, "no window holds the channels");
 
-      // An owner's window holds them, and they are asked as it does.
       yield* call(GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
       assert.equal(channelAsks(), 1);
       assert.deepEqual(channelsShown(pushed, ACME.id), [ENG_CHANNEL]);
 
-      // A teammate's disconnect, then a connect, each move the bot's row, and each asks again.
       service.slackBotAnswer = { ok: true, answer: { configured: true } };
       integrations.set({ slackInstallation: [] });
       yield* nextPoll(settled);
@@ -3737,7 +3531,6 @@ it.effect(
       assert.equal(channelAsks(), 3);
       assert.deepEqual(channelsShown(pushed, ACME.id), [ENG_CHANNEL]);
 
-      // A channel joined lays the channels its answer carries, the bot in it.
       const joined = { ...ENG_CHANNEL, member: true };
       service.slackBotAnswer = { ok: true, answer: { ...connected, channels: [joined] } };
       yield* call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL, {
@@ -3754,7 +3547,6 @@ it.effect(
     }),
 );
 
-/** Every telling of the workspaces' photos the host holds for the windows, whole, in order. */
 function heldPhotos(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
   return pushed.flatMap(([kind, payload]) =>
     kind === GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED ? [payload] : [],
@@ -3791,19 +3583,16 @@ it.effect(
     }),
 );
 
-/** Each workspace's pending invitations the host told the windows, the latest last. */
 function heldInvitations(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
   return pushed.flatMap(([kind, payload]) =>
     kind === GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED ? [payload] : [],
   );
 }
 
-/** A pending invitation's row as the invitations' live read carries it: the plugin's role text, and when it expires in epoch milliseconds. */
 function invitationRow(id: string, expiresAt: number) {
   return { id, email: `${id}@example.com`, role: WORKSPACE_ROLE.MEMBER, expiresAt };
 }
 
-/** The invitation `invitationRow` carries, as the held read lists it: its expiry in ISO, and its accept link on the origin the service answered with. */
 function pendingInvitation(id: string, expiresAt: number): WorkspaceInvitation {
   return {
     id,
@@ -3814,7 +3603,6 @@ function pendingInvitation(id: string, expiresAt: number): WorkspaceInvitation {
   };
 }
 
-/** An hour, in the epoch milliseconds an invitation's expiry is counted in. */
 const HOUR = 3_600_000;
 
 it.effect(
@@ -3837,7 +3625,6 @@ it.effect(
       yield* settled;
       const before = service.reads.length;
 
-      // The invitation made is answered as the service made it, and stands from its answer, its link on the read's own origin.
       const made = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
         workspaceId: ACME.id,
         email: "alan@example.com",
@@ -3861,7 +3648,6 @@ it.effect(
           "https://app.test/accept-invitation?id=inv-alan%40example.com&email=alan%40example.com",
       };
       assert.deepEqual(shown(), standing([grace, alan]));
-      // A poll read before the invite and answered after it takes nothing away, and what else it moved lands at once.
       invitations.set({ invitations: [graceRow, leeRow] });
       yield* nextPoll(settled);
       assert.deepEqual(shown(), standing([grace, lee, alan]));
@@ -3874,12 +3660,10 @@ it.effect(
       });
       yield* nextPoll(settled);
       assert.deepEqual(shown(), standing([grace, lee, alan]));
-      // Once the read carries it, the read alone stands, so its acceptance elsewhere takes it away.
       invitations.set({ invitations: [graceRow, leeRow] });
       yield* nextPoll(settled);
       assert.deepEqual(shown(), standing([grace, lee]));
 
-      // A cancel stands until the read no longer carries the invitation, whatever list it answered.
       yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
         workspaceId: ACME.id,
         invitationId: "lee",
@@ -3892,7 +3676,6 @@ it.effect(
       yield* nextPoll(settled);
       assert.deepEqual(shown(), standing([grace]));
 
-      // A refused invite draws nothing.
       service.notPermitted = true;
       const refused = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
         workspaceId: ACME.id,
@@ -3921,7 +3704,6 @@ it.effect(
       service.live.invitations.set({ invitations: [] });
       yield* settled;
 
-      // The read never carries the invitation, so the invite stands until its wait gives up, past the cancel that answered after it.
       yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
         workspaceId: ACME.id,
         email: "alan@example.com",
@@ -4352,7 +4134,6 @@ it.effect(
       service.skills[INVITES] = skillsNamed("review");
       assert.deepEqual(yield* asked(), skillsNamed("review"), "none held, the read is waited on");
 
-      // A skill added on GitHub: the next ask answers what is held, and the one after what was read behind it.
       service.skills[INVITES] = skillsNamed("review", "release");
       assert.deepEqual(yield* asked(), skillsNamed("review"));
       yield* settled;
@@ -4395,7 +4176,6 @@ it.effect(
       service.skills[INVITES] = installed("review");
       assert.deepEqual(yield* asked(), installed("review"));
 
-      // Moved to another workspace, the plan offers that workspace's installed skills.
       service.tasks = [{ ...invites, workspaceId: "workspace-acme" }];
       service.skills[INVITES] = installed("release");
       yield* listed();
@@ -4403,25 +4183,21 @@ it.effect(
     }),
 );
 
-/** A pull request's or an issue's address on GitHub, as a link to it names it. */
 const RELAY_PULL = "https://github.com/acme/relay/pull/42";
 const RELAY_PULL_GONE = "https://github.com/acme/relay/pull/43";
 const RELAY_PULL_UNANSWERED = "https://github.com/acme/relay/pull/44";
 const RELAY_ISSUE = "https://github.com/acme/relay/issues/7";
 const RELAY_HOME = "https://github.com/acme/relay";
 
-/** A pull request of acme/relay as GitHub answers it, titled as given. */
 const relayPull = (title: string): GitHubRepositoryPullRequestAnswer => ({
   pullRequest: { number: 42, title, url: RELAY_PULL, state: PULL_REQUEST_STATE.OPEN },
 });
 
-/** The links' standings the host holds for the windows, as it last told them. */
 function standingsOf(events: readonly { readonly kind: string; readonly payload: WireValue }[]) {
   return events.filter((event) => event.kind === GATEWAY_EVENT.LINK_STANDINGS_CHANGED).at(-1)
     ?.payload;
 }
 
-/** One link's standing as the host last told it, by the workspace it is read through and its address. */
 function standingAt(
   events: readonly { readonly kind: string; readonly payload: WireValue }[],
   workspaceId: string,
@@ -4487,7 +4263,6 @@ it.effect(
       const { call, events, settled, focus } = yield* subject(service);
       const hold = (address: string) =>
         call(GATEWAY_METHOD.TASKS_LINK_STANDING_FOLLOW, { workspaceId: ACME.id, address });
-      /** A window coming forward after `seconds`, and every ask it caused landed. */
       const forwardAfter = (seconds: number) =>
         Effect.gen(function* () {
           yield* TestClock.adjust(Duration.seconds(seconds));
@@ -4682,7 +4457,6 @@ it.effect(
     }),
 );
 
-/** Every step a live follow has to take, taken. */
 const followSettled = Effect.repeat(
   Effect.andThen(
     Effect.yieldNow,
@@ -4691,11 +4465,9 @@ const followSettled = Effect.repeat(
   { times: 20 },
 );
 
-/** A task's record's live read as the service answers it polled, its rows none until a test sets them. */
 const recordLive = () =>
   polledLive<RecordPart, typeof NOT_FOUND_LIVE>(["description", "pages", "calls", "code"]);
 
-/** A task's record's live read as the service reads it from `tasks`: the description marked by its last save, and no pages, calls, or code. */
 function polledRecord(service: FakeService, taskId: string) {
   return polledLive<RecordPart, typeof NOT_FOUND_LIVE>(
     ["description", "pages", "calls", "code"],
@@ -4710,7 +4482,6 @@ function polledRecord(service: FakeService, taskId: string) {
   );
 }
 
-/** Rows set on a live read, then its next poll asked, half a second after the last answered. */
 const answered = (set: () => void) =>
   Effect.andThen(
     Effect.sync(set),
@@ -4736,17 +4507,14 @@ it.effect(
       yield* followSettled;
       const opens = () => service.reads.filter((read) => read === `open:${INVITES}`).length;
       const opened = opens();
-      // The first poll's mark is the save the first read already holds, so nothing reads it again.
       yield* TestClock.adjust(Duration.seconds(5));
       yield* followSettled;
       assert.equal(opens(), opened);
 
-      // The window goes on to another task and lets this one's description go, which stays held among those let go lately.
       yield* openTask(BILLING);
       yield* call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: INVITES });
       assert.equal(last()?.activeTaskId, BILLING);
 
-      // A teammate saves the description, which the next poll carries.
       const theirs = `${INVITES_TEXT}\n\nInvites expire after a week.`;
       const held = service.tasks.find((each) => each.id === INVITES);
       assert.ok(held !== undefined);
@@ -4760,7 +4528,6 @@ it.effect(
             }
           : each,
       );
-      // The first read of it goes unanswered, and is asked again, since the mark it read for stands still.
       service.opensUnanswered = 1;
       record.move();
       yield* TestClock.adjust(Duration.seconds(1));
@@ -4772,7 +4539,6 @@ it.effect(
       assert.equal(description(INVITES)?.document.body, theirs);
       assert.equal(opens(), opened + 2);
 
-      // The window's own save is drawn from its answer, which the next poll's mark only confirms.
       const mine = `${theirs}\n\nOnly members invite.`;
       assert.deepEqual(
         yield* call(GATEWAY_METHOD.TASKS_EDIT, {
@@ -4803,7 +4569,6 @@ it.effect(
       yield* answered(() => record.set({ description: [], pages: [], calls: [], code: [] }));
       assert.equal(record.held(), 1);
 
-      // Another member deletes the task, so the poll standing answers it not found.
       record.refuse(NOT_FOUND_LIVE);
       yield* followSettled;
       yield* TestClock.adjust(Duration.hours(1));
@@ -4834,7 +4599,6 @@ it.effect("a read answering an older save than the held description lands nothin
     const opens = () => service.reads.filter((read) => read === `open:${INVITES}`).length;
     const opened = opens();
 
-    // A later save moves the mark, but the read it asks answers the description from before the edit, as a store behind the save would.
     const { open } = service;
     service.open = (taskId) =>
       Effect.map(open(taskId), (read) => (read.ok ? { ok: true, answer: invites } : read));
@@ -4867,7 +4631,6 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_START, { name: "Teammate invitations" });
       yield* followSettled;
 
-      // A teammate's save moves the mark, and the read it asks takes the task as it stands when asked, answering only once let go.
       const answered = yield* Deferred.make<void>();
       const { open } = service;
       service.open = (taskId) =>
@@ -4932,7 +4695,6 @@ it.effect(
       assert.deepEqual(pushed.slice(1), [held({ rows: [FUNNEL] }), held({ rows: [shown] })]);
       assert.equal(told.length, 0, "a plan's pages held for the Inbox are never told in the view");
 
-      // Let go, the pages stay followed among those let go lately, so choosing the plan again reads nothing anew.
       yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
       yield* followSettled;
       assert.equal(pages.held(), 1);
@@ -4986,7 +4748,6 @@ it.effect(
     }),
 );
 
-/** A thread on the description, as the window draws it, with its first comment. */
 const SEVEN_DAYS: DescriptionCommentThread = {
   id: "1b7c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e",
   scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
@@ -5003,13 +4764,11 @@ const SEVEN_DAYS: DescriptionCommentThread = {
       at: 0,
     },
   ],
-  // Note that it is started before the thread the fake service starts, so a read lists it first.
   createdAt: 0,
   updatedAt: 0,
   revision: 1,
 };
 
-/** The rows a subject's comments' live read delivers for `threads`, each entry by a member and with no files. */
 function commentRows(threads: readonly DescriptionCommentThread[]) {
   return {
     threads: threads.map((thread) => ({
@@ -5128,7 +4887,6 @@ it.effect(
       const resolved = { ...SEVEN_DAYS, status: DESCRIPTION_COMMENT_STATUS.RESOLVED, revision: 2 };
       yield* call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, { taskId: INVITES });
       yield* followSettled;
-      // An answer Sync woke hands the follow its wait for a write's transaction.
       yield* answered(() => description.set(commentRows([SEVEN_DAYS]), ["tx-earlier"]));
 
       service.commentGate = Deferred.makeUnsafe<void>();
@@ -5158,7 +4916,6 @@ it.effect(
     }),
 );
 
-/** One kept tab's row, as the live read delivers it, the agent's pointer on it. */
 const SIGN_IN_TAB = {
   id: "7c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
   agentId: "8d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a",
@@ -5213,7 +4970,6 @@ it.effect(
       service.browserTabLives[INVITES] = tabs;
       yield* TestClock.adjust(Duration.seconds(2));
       yield* followSettled;
-      // Dana takes the tab over until ten seconds in.
       yield* answered(() =>
         tabs.set({ tabs: [{ ...SIGN_IN_TAB, driverUserId: "user-dana", heldUntil: 10_000 }] }),
       );
@@ -5221,7 +4977,6 @@ it.effect(
         held({ rows: [{ ...tab, driver: { userId: "user-dana", heldUntil: 10_000 } }] }),
       ]);
 
-      // Let go, the tabs stay followed among those let go lately; her window goes away, so the takeover lapses with no row moving.
       yield* call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, { taskId: INVITES });
       yield* followSettled;
       assert.equal(tabs.held(), 1);
@@ -5243,7 +4998,6 @@ it.effect(
     }),
 );
 
-/** One revision as the history's live read delivers its row: saved by Dean by hand at `at`. */
 function historyRow(seq: number, at: number) {
   return {
     seq,
@@ -5263,7 +5017,6 @@ function historyRow(seq: number, at: number) {
   };
 }
 
-/** One revision as the version history lists it, from the row `historyRow` delivers. */
 function historyLine(seq: number, at: number) {
   return {
     seq,
@@ -5278,7 +5031,6 @@ function historyLine(seq: number, at: number) {
   };
 }
 
-/** The revisions `newest` down to `oldest`, newest first. */
 function revisionsFrom(newest: number, oldest: number): readonly number[] {
   return Array.from({ length: newest - oldest + 1 }, (_, back) => newest - back);
 }
@@ -5305,7 +5057,6 @@ it.effect(
       ]);
       assert.equal(told.length, 0, "a description's history is never told in the view");
 
-      // Let go, the history stays followed among those let go lately, so its version history opened again reads nothing anew.
       yield* call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: INVITES });
       yield* followSettled;
       assert.equal(history.held(), 1);
@@ -5328,7 +5079,6 @@ it.effect("an older page laid into a held history stays when a save lands a new 
     const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
     const history = polledLive<"revisions">(["revisions"]);
     service.historyLives[INVITES] = history;
-    // The service delivers one revision past a page of fifty, so the page reads that an older one stands, here before 3.
     const rows = (newest: number, oldest: number) =>
       revisionsFrom(newest, oldest).map((seq) => historyRow(seq, seq * 1_000));
     const lines = (newest: number, oldest: number) =>
@@ -5345,7 +5095,6 @@ it.effect("an older page laid into a held history stays when a save lands a new 
       { [INVITES]: { rows: { revisions: lines(52, 3), earlier: 3 } } },
     ]);
 
-    // The reader scrolls back: the older page is answered, and laid after the newest.
     assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_REVISIONS, { taskId: INVITES, before: 3 }), {
       revisions: lines(2, 1),
     });
@@ -5354,7 +5103,6 @@ it.effect("an older page laid into a held history stays when a save lands a new 
       { [INVITES]: { rows: { revisions: lines(52, 1) } } },
     ]);
 
-    // A save lands a newest page that reaches back only to 4, and the versions read past it stay.
     yield* answered(() => history.set({ revisions: rows(53, 3) }));
     assert.deepEqual(heldNow(), [
       GATEWAY_EVENT.HISTORIES_CHANGED,
@@ -5378,7 +5126,6 @@ it.effect(
       const { call } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
       yield* followSettled;
-      // An answer Sync woke hands the held history its wait for a write's transaction.
       yield* answered(() => history.set({ revisions: [historyRow(1, 1_000)] }, ["tx-earlier"]));
 
       const restoring = yield* Effect.forkChild(
@@ -5393,10 +5140,8 @@ it.effect(
     }),
 );
 
-/** The instant the live list is read at, which the test's clock is set to. */
 const LIVE_NOW = 1_800_000_000_000;
 
-/** One plan as the plans statement delivers its row. */
 function taskRow(id: string, name: string) {
   return {
     id,
@@ -5407,7 +5152,6 @@ function taskRow(id: string, name: string) {
     ownerName: "Dana",
     pinnedAt: null,
     pinPosition: null,
-    // A key the service still answers for older builds, which this one reads past.
     archivedAt: null,
     createdAt: 1_000,
     updatedAt: 2_000,
@@ -5419,7 +5163,6 @@ function taskRow(id: string, name: string) {
   };
 }
 
-/** One plan as the plans statement delivers the service's task. */
 function rowOfTask(each: Task) {
   return {
     ...taskRow(each.id, each.name),
@@ -5433,7 +5176,6 @@ function rowOfTask(each: Task) {
   };
 }
 
-/** One agent of the plan, or of none, as the agents statement delivers its row, started `ago` before the list is read, with no turn yet. */
 function agentRow(planId: string | null, ago: number) {
   return agentListRow(planId, LIVE_NOW - ago);
 }
@@ -5463,7 +5205,6 @@ it.effect(
       assert.equal(last()?.live, HOST_LIVE.LIVE);
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
 
-      // The session is another account's now: the poll standing is refused for good.
       service.live.list.refuse({ failure: LIVE_SIGNED_OUT.failure });
       yield* settled;
       yield* TestClock.adjust(Duration.seconds(30));
@@ -5499,7 +5240,6 @@ it.effect(
         [BILLING, INVITES].toSorted(),
       );
 
-      // Another member deleted the billing task, and nothing else moved.
       yield* listAnswers(service, { plans: [taskRow(INVITES, "Teammate invitations")] });
 
       assert.deepEqual(
@@ -5558,7 +5298,6 @@ it.effect(
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listAnswers(service, {
         plans: [taskRow(INVITES, "Teammate invitations, live")],
-        // A settled turn, and a line written after it that no turn has taken yet.
         agents: [
           {
             ...agentRow(INVITES, 30 * 60_000),
@@ -5611,7 +5350,6 @@ it.effect(
       });
       assert.equal(last()?.live, HOST_LIVE.LIVE);
 
-      // A deploy changed the row's shape, so it no longer decodes, and the poll asked again within a second fails the same way.
       yield* listAnswers(service, { plans: [{ id: INVITES, title: "Teammate invitations" }] });
       yield* TestClock.adjust(Duration.seconds(1));
       yield* settled;
@@ -5619,7 +5357,6 @@ it.effect(
       assert.equal(last()?.listStatus, TASKS_READ.READY, "the list drawn stands");
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
 
-      // The rows decode again by the time the follow starts again, a pause later.
       service.live.list.set({ plans: [taskRow(INVITES, "Teammate invitations, again")] });
       yield* TestClock.adjust(Duration.seconds(5));
       yield* settled;
@@ -5649,7 +5386,6 @@ it.effect(
       const before = service.liveListReads;
       const toldBefore = told.length;
 
-      // The Mac woke: a resume and an unlock land together.
       yield* call(GATEWAY_METHOD.TASKS_RESYNC);
       yield* call(GATEWAY_METHOD.TASKS_RESYNC);
       yield* settled;
@@ -5660,7 +5396,6 @@ it.effect(
       );
       assert.equal(last()?.live, HOST_LIVE.LIVE);
 
-      // The connection comes back a moment after the wake, which may have read the list before the network was there.
       yield* call(GATEWAY_METHOD.TASKS_REGAINED);
       yield* settled;
       assert.equal(service.liveListReads, before + 2, "a regain reads the list again");
@@ -5714,7 +5449,6 @@ it.effect(
         10,
       ]);
 
-      // A row that names no assignee is a task assigned to no one.
       yield* listAnswers(service, { plans: [{ ...rowOfTask(invites), status: TASK_STATUS.DONE }] });
       assert.deepEqual(standing(), [
         TASK_STATUS.DONE,
@@ -5754,7 +5488,6 @@ it.effect(
     }),
 );
 
-/** Every telling of the token repositories the host holds for the windows, whole, in order. */
 function heldTokenRepositories(
   pushed: readonly (readonly [GatewayEventKind, WireValue])[],
 ): WireValue[] {
@@ -5810,7 +5543,6 @@ it.effect("two holds and a remount read one workspace's people once", () =>
     yield* settled;
     service.live.people.set({ members: [memberRow(ADA)], former: [] });
     yield* nextPoll(settled);
-    // Let go, the people stay followed among those let go lately, so a surface drawn again reads nothing anew.
     yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_UNFOLLOW, { workspaceId: ACME.id });
     yield* settled;
     yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });

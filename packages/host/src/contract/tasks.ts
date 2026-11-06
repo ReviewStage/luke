@@ -1,14 +1,3 @@
-/**
- * tasks.ts -- the Tasks tab's asks of the host about the task list, the open task, and what a task holds, as procedures.
- *
- * A kind that carries nothing takes `undefined` alone, so a window calls it
- * with no payload and one sent anything is refused.
- * Each output is its value's schema flipped, so oRPC's output check encodes
- * the row's value into what crosses the port; a write that answers whether
- * the service took it answers a boolean, and one the panel reads nothing of
- * answers `void`.
- */
-
 import { eventIterator, type } from "@orpc/contract";
 import {
   adminFavoriteParamsSchema,
@@ -82,7 +71,6 @@ import { TASKS_ACT_KIND } from "./kinds.js";
 const takesNothing = exactInput(EffectSchema.Undefined);
 const takesTaskId = exactInput(EffectSchema.Struct({ taskId: exactId }));
 
-/** A text admitted as written, refused where it carries nothing or runs past `max`. */
 function exactText(max: number) {
   return EffectSchema.String.check(
     EffectSchema.makeFilter((value) => value.trim().length > 0),
@@ -90,7 +78,6 @@ function exactText(max: number) {
   );
 }
 
-/** A fenced block to color: its fence's language and its code, each bounded. */
 const colorCodeParamsSchema = EffectSchema.Struct({
   language: exactText(FENCE_LANGUAGE_MAX_CHARS),
   code: exactText(COLORED_CODE_MAX_CHARS),
@@ -136,7 +123,6 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksWriteSectionParamsSchema))
     .output(EffectSchema.Boolean),
-  // Note that the hold's stream carries nothing: the held repositories reach the panel on app state, and the stream is the window's hold on them.
   [TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW]: actProcedure(
     "Could not follow your GitHub repositories on this system.",
   )
@@ -212,7 +198,6 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksSkillsParamsSchema))
     .output(EffectSchema.flip(tasksSkillsAnswerSchema)),
-  // Note that the hold's stream carries nothing: the held standing reaches the panel on app state, and the stream is the window's hold on it.
   [TASKS_ACT_KIND.TASKS_LINK_STANDING_FOLLOW]: actProcedure(
     "Could not follow that link on this system.",
   )
@@ -250,13 +235,11 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksPageParamsSchema))
     .output(EffectSchema.flip(tasksPageSourceAnswerSchema)),
-  // Note that the hold's stream carries nothing: the held pages reach the panel on app state, and the stream is the window's hold on them.
   [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actProcedure(
     "Could not follow that task's pages on this system.",
   )
     .input(exactInput(taskPagesFollowSchema))
     .output(eventIterator(type<never>())),
-  // Note that the hold's stream carries nothing: the held description reaches the panel on app state, and the stream is the window's hold on it.
   [TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW]: actProcedure(
     "Could not follow that task's description on this system.",
   )
@@ -267,7 +250,6 @@ export const tasksActsContract = {
   )
     .input(exactInput(taskDocumentFollowSchema))
     .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held history reaches the panel on app state, and the stream is the window's hold on it.
   [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
     "Could not follow that description's history on this system.",
   )
@@ -284,7 +266,6 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_PICTURE_KEEP]: actProcedure("Could not keep that picture on this system.")
     .input(exactInput(tasksPictureKeepParamsSchema))
     .output(EffectSchema.flip(tasksPictureKeepAnswerSchema)),
-  // Note that the hold's stream carries nothing: the held comments reach the panel on app state, and the stream is the window's hold on them.
   [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: actProcedure(
     "Could not follow the task's comments on this system.",
   )

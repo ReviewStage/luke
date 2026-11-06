@@ -6,7 +6,6 @@ import { ConnectionError, SqlError, SqlSyntaxError } from "effect/sql/SqlError";
 import { TestClock } from "effect/testing";
 import { waitingOutNeonComputeLimit } from "../neon-compute-limit.js";
 
-/** Neon's refusal as `@effect/sql-pg` hands it on: the server's words beneath a failed connect. */
 const refused = new SqlError({
   reason: new ConnectionError({
     cause: new Error(
@@ -24,7 +23,6 @@ const broken = new SqlError({
   }),
 });
 
-/** A migration that cannot connect until `freesAt` on the clock, and then applies. */
 const migrationFreedAt = (freesAt: Duration.Duration) =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;

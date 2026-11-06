@@ -5,11 +5,6 @@ import type { ActSender } from "./base.js";
 import { refusedPlatformProcedures } from "./index.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
-/**
- * A platform that carries none of the platform's port kinds, as a browser
- * tab carries none yet: each is refused in its kind's own sentence.
- */
-
 const PANEL: ActSender = { sender: Symbol("tab"), panel: true };
 
 const ports: TestActPort<unknown>[] = [];

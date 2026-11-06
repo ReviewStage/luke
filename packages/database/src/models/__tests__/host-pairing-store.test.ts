@@ -21,17 +21,6 @@ import {
 } from "../host-pairing-store.js";
 import { enrollOwnDevice, hostBySecret, hostsOf } from "../host-store.js";
 
-/**
- * A box's pairings, over a real dialect: once one account approved or
- * denied a code, no account reads, approves, or denies it again, and the
- * approve made one host, listed under its approver alone; an approve never
- * takes over a device that stands; a box that polls past its collect
- * grace is handed no secret; and the sweep deletes a lapsed pairing, the
- * address it kept with it, and a host whose box never collected its secret,
- * while a host keyed by its poll stays.
- * Synthetic accounts, codes, hashes, addresses, and boxes throughout.
- */
-
 const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -41,7 +30,6 @@ const openAccounts = Effect.gen(function* () {
   return { owner, other };
 });
 
-/** A pending pairing opened under a fresh code and poll secret hash: that code and hash. */
 const opened = Effect.gen(function* () {
   const userCode = randomUUID();
   const pollSecretHash = `poll-${randomUUID()}`;

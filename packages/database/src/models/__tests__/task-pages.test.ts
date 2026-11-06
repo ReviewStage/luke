@@ -15,24 +15,6 @@ import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js"
 import { listPages, readPageById, readPageVersion, writePage } from "../task-pages.js";
 import { createTask, deleteTask } from "../task-store.js";
 
-/**
- * A task's pages read by the page's id alone, over a real dialect: any
- * member of the task's workspace reads the newest version or one named,
- * beside the task it stands on and its newest version, and an account
- * outside the workspace, or a version the page never had, reads nothing.
- * Each version keeps who showed it, the brain or a coding agent by its id, which
- * a member reads on the plan's list and on the version, and a version shown
- * before that was kept reads as shown by no one named.
- *
- * A coding agent on no task shows its pages on itself, and they are read by
- * the agent's rule of who may read it rather than any task's: a member of
- * its workspace who sees the agent reads them, an account of another
- * workspace or one the agent's GitHub access hides it from reads nothing,
- * and a task's pages and an agent's never read as each other's.
- *
- * Synthetic accounts and pages throughout.
- */
-
 const LUKE: PageShower = { kind: PAGE_SHOWER.APP };
 
 const onTask = (taskId: string): PageOwner => ({ kind: PAGE_OWNER.TASK, taskId });
@@ -41,7 +23,6 @@ const onAgent = (agentId: string): PageOwner => ({ kind: PAGE_OWNER.AGENT, agent
 
 const shownByAgent = (agentId: string): PageShower => ({ kind: PAGE_SHOWER.AGENT, agentId });
 
-/** A coding agent of the workspace, on the task named or on none, reached as its GitHub access says. */
 const openAgent = (
   userId: string,
   organizationId: string,
@@ -70,7 +51,6 @@ const openAgent = (
     return id;
   });
 
-/** Each version's owner columns as the row holds them. */
 const ownerColumnsOf = (pageId: string) =>
   Effect.flatMap(Database, (db) =>
     db
@@ -170,7 +150,6 @@ it.layer(getTestDB())("a page read by its id", (it) => {
         const older = Option.getOrThrow(
           yield* writePage(owner, onTask(task.id), { title: "Old", html: "<h1>Old</h1>" }, LUKE),
         );
-        // A version shown before who showed it was kept, as the column's migration leaves it.
         const db = yield* Database;
         yield* db
           .update(taskPageVersion)
@@ -181,7 +160,6 @@ it.layer(getTestDB())("a page read by its id", (it) => {
         const first = yield* readPageVersion(teammate, onTask(task.id), shown.id, 1);
 
         assert.deepEqual(
-          // Pages written in the same millisecond list in no particular order, so they are read by title.
           listed
             .map((page) => [page.title, page.shownBy] as const)
             .toSorted(([one], [other]) => one.localeCompare(other)),
@@ -210,7 +188,6 @@ it.layer(getTestDB())("a page read by its id", (it) => {
         yield* joinWorkspace(workspace, teammate);
         yield* openWorkspace(outsider);
         const agentId = yield* openAgent(owner, workspace, null);
-        // An agent on the owner's own GitHub token, which the teammate's token never read the repository of.
         const hidden = yield* openAgent(owner, workspace, null, GITHUB_ACCESS.TOKEN);
         const task = yield* createTask(owner, { organizationId: workspace, name: "Invitations" });
         const shower = shownByAgent(agentId);
@@ -252,7 +229,6 @@ it.layer(getTestDB())("a page read by its id", (it) => {
           [byId.owner, byId.page.version, byId.newestVersion],
           [onAgent(agentId), 2, 2],
         );
-        // Another workspace's member reads and writes nothing of the agent's pages.
         assert.deepEqual(yield* listPages(outsider, onAgent(agentId)), []);
         assert.ok(Option.isNone(yield* readPageById(outsider, first.id, undefined)));
         assert.ok(Option.isNone(yield* readPageVersion(outsider, onAgent(agentId), first.id, 1)));
@@ -261,11 +237,9 @@ it.layer(getTestDB())("a page read by its id", (it) => {
             yield* writePage(outsider, onAgent(agentId), { title: "Mine", html: "<p>x</p>" }, LUKE),
           ),
         );
-        // A teammate the agent's GitHub access hides it from reads nothing of its pages; its owner does.
         assert.deepEqual(yield* listPages(teammate, onAgent(hidden)), []);
         assert.ok(Option.isNone(yield* readPageById(teammate, secret.id, undefined)));
         assert.equal((yield* listPages(owner, onAgent(hidden))).length, 1);
-        // An agent's page is no task's, and a task's page no agent's own.
         assert.ok(Option.isNone(yield* readPageVersion(owner, onTask(task.id), first.id, 1)));
         assert.ok(
           Option.isNone(
@@ -312,7 +286,6 @@ it.layer(getTestDB())("a page read by its id", (it) => {
           ),
         );
 
-        // The agent's own list holds the pages it showed on no task, never the task's.
         assert.deepEqual(yield* listPages(owner, onAgent(onIt)), []);
 
         yield* deleteTask(owner, task.id);

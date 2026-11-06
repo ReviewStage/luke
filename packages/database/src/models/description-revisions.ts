@@ -26,69 +26,23 @@ import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import { taskReachableBy } from "./workspace-store.js";
 
-/**
- * description-revisions.ts -- a description's history: every save kept as a revision under the writer who made it.
- *
- * The description's one write (`description-notes.ts`) records each save that changed the
- * description here, inside the transaction that holds the task's row, so the description
- * and its history never disagree. A revision is the description's content after it,
- * its whole text, so reading one or going back to one is a read and never a
- * replay.
- * Saves the same writer makes one after another are one revision, moved on
- * by each: the notetaker's, a coding agent's, or the developer's, each
- * while the revision's latest save is a few minutes old at most. A
- * revision names the member it was made for, the developer editing or the
- * one whose turn the notetaker wrote on, so two members' saves are never one
- * revision, and each reads the other's by name. A description
- * that was written before history began has no revision for that content, so
- * the first save that finds it records it first, under `earlier`, at the
- * description's last save, and the save after it has something to differ from. The
- * developer restoring a revision is a save like any other, kept as a revision
- * of its own that names the one it brought back; it joins nothing before it,
- * and nothing after it joins it, so each restore stands in the history, and
- * a restore is undone by restoring the revision before it.
- * Who last changed each section is read off the newest revisions, each
- * against the one before it, rather than kept beside the description.
- *
- * A save is recorded for a task id handed by a caller that already holds the
- * task's row under its lock; the history is read under the account's
- * membership of the task's workspace, so every member reads the history any
- * of them wrote, and a task of a workspace the account is not in reads as a
- * task with none.
- */
-
-/** How the history is kept. */
 export const DESCRIPTION_REVISION = {
-  /** How long after a revision's latest save the same writer's next save still joins it. */
   JOIN_WITHIN_MS: 10 * 60_000,
-  /** The newest revisions who last changed each section is read off; a section none of them changed names nobody. */
   SECTION_HISTORY: 50,
 } as const;
 
-/**
- * Who made a save: the notetaker, a coding agent, or the developer, editing
- * a field or, with the revision they restored, restoring one.
- */
 export type DescriptionWriter =
   | { readonly actor: typeof DESCRIPTION_ACTOR.NOTETAKER }
   | { readonly actor: typeof DESCRIPTION_ACTOR.AGENT; readonly agentId: string }
   | { readonly actor: typeof DESCRIPTION_ACTOR.DEVELOPER; readonly restoredFrom?: number };
 
-/** One save to record: the description, its writer and the member who made it, its content before and after, and how many changes it made. */
 export interface DescriptionSaveRecord {
   readonly taskId: string;
   readonly writer: DescriptionWriter;
-  /**
-   * The member the save is made for: the developer editing, or the one whose
-   * turn the notetaker writes on. A coding agent's save names none.
-   */
   readonly userId: string;
-  /** The description's text before the save. */
   readonly before: string;
-  /** Its text after it. */
   readonly after: string;
   readonly changes: number;
-  /** The description's last save before this one, where it has been saved; none for a description never written. */
   readonly savedBefore: Option.Option<Date>;
 }
 
@@ -126,7 +80,6 @@ const findNewestRevision = SqlSchema.findOneOption({
     ),
 });
 
-/** The id of the transaction a write is part of, read in the write's own `RETURNING`, which Realtime names each change it delivers by. */
 const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
 
 const TxIdSchema = Schema.Struct({ txid: Schema.String });
@@ -202,7 +155,6 @@ const findLastEdit = SqlSchema.findOneOption({
     ),
 });
 
-/** The revision a restore brought back, read beside the restore that names it. */
 const restored = alias(descriptionRevision, "restored");
 
 const RevisionLineRowSchema = Schema.Struct({
@@ -216,11 +168,6 @@ const RevisionLineRowSchema = Schema.Struct({
 
 type LastEditRow = typeof LastEditRowSchema.Type;
 
-/**
- * A page of the description's revisions, the newest first, before the one
- * `before` names where it names one, with one past the page read to say
- * whether an older page stands.
- */
 const findRevisionLines = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -270,11 +217,9 @@ const findRevisionLines = SqlSchema.findAll({
 
 const RevisionContentRowSchema = Schema.Struct({
   seq: Schema.Number,
-  // Every revision is the description's text since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
 });
 
-/** The content of the description at each revision named, with the task's name as it stands now. */
 const findRevisionContents = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -312,7 +257,6 @@ const SectionRevisionRowSchema = Schema.Struct({
 
 type SectionRevisionRow = typeof SectionRevisionRowSchema.Type;
 
-/** The description's newest revisions with their text, newest first, with one past the bound read as the text the oldest changed. */
 const findSectionRevisions = SqlSchema.findAll({
   Request: Schema.String,
   Result: SectionRevisionRowSchema,
@@ -335,7 +279,6 @@ const findSectionRevisions = SqlSchema.findAll({
     ),
 });
 
-/** The member a revision names, where its account still stands; a coding agent's names none. */
 function editorOf(row: { readonly editorId: string | null; readonly editorName: string | null }): {
   readonly by?: DescriptionEditor;
 } {
@@ -344,7 +287,6 @@ function editorOf(row: { readonly editorId: string | null; readonly editorName: 
     : { by: { userId: row.editorId, name: row.editorName } };
 }
 
-/** A revision's writer and latest save as the window reads them, a coding agent named as its row names it now. */
 function lastEditOf(row: LastEditRow): DescriptionLastEdit {
   return {
     actor: row.actor,
@@ -354,32 +296,22 @@ function lastEditOf(row: LastEditRow): DescriptionLastEdit {
       : undefined),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
     at: row.at.getTime(),
-    // Note that no revision is written on a call any more, and a released desktop still requires the key.
     duringCall: false,
   };
 }
 
-/** The member a save is kept under: none for a coding agent's, whose writer is the agent. */
 function memberOf(record: DescriptionSaveRecord): string | null {
   return record.writer.actor === DESCRIPTION_ACTOR.AGENT ? null : record.userId;
 }
 
-/** The writer's agent, where a coding agent wrote it. */
 function agentOf(writer: DescriptionWriter): string | null {
   return writer.actor === DESCRIPTION_ACTOR.AGENT ? writer.agentId : null;
 }
 
-/** The revision the writer restored, where the save is the developer's restore of one. */
 function restoredOf(writer: DescriptionWriter): number | null {
   return writer.actor === DESCRIPTION_ACTOR.DEVELOPER ? (writer.restoredFrom ?? null) : null;
 }
 
-/**
- * Whether a save by the writer, now, joins the newest revision rather than
- * starting one. Note that a restore joins nothing and nothing joins it,
- * because each is the one revision that undoes it, and that two members'
- * saves never join, because each revision names one member.
- */
 function joins(newest: RevisionRow, record: DescriptionSaveRecord, now: Date): boolean {
   const { writer } = record;
   return (
@@ -392,12 +324,6 @@ function joins(newest: RevisionRow, record: DescriptionSaveRecord, now: Date): b
   );
 }
 
-/**
- * The revision a description from before history stood at, recorded as the description's
- * first, so the first revision recorded after it has something to differ
- * from; nothing for a description never written, whose first revision differs from
- * the text it started as. Answers the number it took, zero where it took none.
- */
 function recordEarlier(
   record: DescriptionSaveRecord,
 ): Effect.Effect<number, StoreFailure, DatabaseServices> {
@@ -422,7 +348,6 @@ function recordEarlier(
   });
 }
 
-/** A revision's writer as each section it changed names them: the actor, and the member or the agent where one wrote. */
 function writerOf(row: SectionRevisionRow): DescriptionSectionWriterWho {
   return {
     actor: row.actor,
@@ -431,14 +356,6 @@ function writerOf(row: SectionRevisionRow): DescriptionSectionWriterWho {
   };
 }
 
-/**
- * Records one save that changed the description: the newest revision moved on where
- * the same writer, for the same member, made it lately, a new revision
- * otherwise, kept under the member. Run inside the
- * transaction that holds the task's row, so two saves of one description never take
- * one number. Answers the id of the transaction it was written in, which a
- * reader following the history over Realtime waits for.
- */
 export function recordRevision(
   record: DescriptionSaveRecord,
 ): Effect.Effect<string, StoreFailure, DatabaseServices> {
@@ -473,25 +390,12 @@ export function recordRevision(
   });
 }
 
-/**
- * The description's newest revision as its "Edited by" line reads it: who wrote it,
- * a coding agent named as its row names it now, and when; nothing for a description
- * with no history yet.
- */
 export function readLastEdit(
   taskId: string,
 ): Effect.Effect<Option.Option<DescriptionLastEdit>, StoreFailure, DatabaseServices> {
   return Effect.map(findLastEdit(taskId), Option.map(lastEditOf));
 }
 
-/**
- * Who last changed each section of a description, read off its newest revisions
- * (`sectionWritersOf`); none for a description with no history yet. The oldest read
- * is only the text the next changed where it is past the bound or the description
- * as it stood before history, `earlier`, which no writer wrote. The description's
- * first revision is read against the empty text every description starts as, where
- * it is among those read.
- */
 export function readSectionWriters(
   taskId: string,
 ): Effect.Effect<readonly DescriptionSectionWriter[], StoreFailure, DatabaseServices> {
@@ -511,12 +415,6 @@ export function readSectionWriters(
   });
 }
 
-/**
- * A page of the description's revisions, the newest first, before the
- * revision `before` names where it names one, and what the next older page
- * is read before where one stands; no revision for a description with no history
- * yet, and for a task id the account does not own.
- */
 export function listRevisions(
   userId: string,
   taskId: string,
@@ -543,7 +441,6 @@ export function listRevisions(
   });
 }
 
-/** The description's text at one revision; nothing where it has no such revision, or the account reaches no such task. */
 export function readRevisionContent(
   userId: string,
   taskId: string,
@@ -554,12 +451,6 @@ export function readRevisionContent(
   );
 }
 
-/**
- * One revision of the description as the History tab shows it: the description
- * after it and before it, the first revision having nothing before it, each
- * its text as the document's body; nothing where the description
- * has no such revision, or the account reaches no such task.
- */
 export function readRevision(
   userId: string,
   taskId: string,

@@ -14,31 +14,12 @@ import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import { workspaceReachableBy } from "./workspace-store.js";
 
-/**
- * integration-installation-store.ts -- which workspace each integration's installed app stands for, and the intents that carry an install there.
- *
- * An installation is linked to one workspace and never moved: linking it to
- * the workspace it stands for again, or after its provider said it was
- * uninstalled, takes it (active again, under whoever linked it last), and
- * linking one still active for another workspace is refused there and
- * leaves it. A delivery finds its workspace only through an active
- * installation, so an uninstalled one fires nothing. An install is an
- * intent first: a random state bound to the provider, the account, and the
- * workspace, stored only as its SHA-256, spent once when the provider sends
- * the browser back; whether the account may install on the workspace is the
- * caller's to check before minting and again before linking. Every function
- * is an effect over the ambient `SqlClient`.
- */
-
-/** How long an install intent stands: room to choose an organization and approve the app at the provider. */
 export const INTEGRATION_INSTALL_INTENT_LIFETIME = Duration.hours(1);
 
 const ProviderSchema = Schema.Literals(Object.values(TRIGGER_PROVIDER));
 
-/** The random bytes an intent's state is spelled from. */
 const STATE_BYTES = 32;
 
-/** What a link settles on: linked to the workspace, or refused because the installation stands, active, for another. */
 export const INSTALLATION_LINK = {
   LINKED: "linked",
   ALREADY_CONNECTED: "already-connected",
@@ -46,13 +27,11 @@ export const INSTALLATION_LINK = {
 
 export type InstallationLink = (typeof INSTALLATION_LINK)[keyof typeof INSTALLATION_LINK];
 
-/** What linking an installation names: the provider and its id for it, the workspace, and the member linking it. */
 export interface InstallationToLink {
   readonly provider: TriggerProvider;
   readonly externalId: string;
   readonly organizationId: string;
   readonly userId: string;
-  /** The account's name at the provider (a Sentry organization's slug); left out, the row's stands. */
   readonly accountLabel?: string | undefined;
 }
 
@@ -66,25 +45,17 @@ const InstallationRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
 });
 
-/** One installation as a workspace's settings list it. */
 export type IntegrationInstallation = typeof InstallationRowSchema.Type;
 
-/** The account and workspace an install intent was minted for. */
 export interface IntegrationInstallIntent {
   readonly userId: string;
   readonly organizationId: string;
 }
 
-/** A state's stored form. */
 function stateHashOf(state: string): string {
   return createHash("sha256").update(state).digest("hex");
 }
 
-/**
- * The installation written to the workspace in one statement: a new one
- * inserted, or the standing row taken where it is this workspace's or was
- * uninstalled; nothing written where it stands, active, for another.
- */
 const upsertInstallation = SqlSchema.findAll({
   Request: Schema.Struct({
     provider: ProviderSchema,
@@ -114,7 +85,6 @@ const upsertInstallation = SqlSchema.findAll({
           set: {
             organizationId: sql`excluded.organization_id`,
             status: INTEGRATION_INSTALLATION_STATUS.ACTIVE,
-            // A link that read no label keeps the one the row holds.
             accountLabel: sql`coalesce(excluded.account_label, ${integrationInstallation.accountLabel})`,
             linkedByUserId: sql`excluded.linked_by_user_id`,
             updatedAt: sql`excluded.updated_at`,
@@ -125,12 +95,6 @@ const upsertInstallation = SqlSchema.findAll({
     ),
 });
 
-/**
- * An active installation marked uninstalled, answering the transaction it
- * was marked in, read in its own `RETURNING`, so a reader following the
- * workspace's installations waits for that transaction before it confirms
- * a disconnect; none where no active row stood.
- */
 const writeDeleted = SqlSchema.findAll({
   Request: Schema.Struct({
     provider: ProviderSchema,
@@ -219,7 +183,6 @@ const insertIntent = SqlSchema.void({
     ),
 });
 
-/** The account's intents already past their hour, which a new one sweeps so they do not pile up. */
 const deleteExpiredIntents = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, now: Schema.Date }),
   execute: ({ userId, now }) =>
@@ -256,7 +219,6 @@ const deleteIntent = SqlSchema.findOneOption({
     ),
 });
 
-/** Links the installation to the workspace, or answers that it stands, active, for another, which keeps it. */
 export function linkIntegrationInstallation(
   link: InstallationToLink,
 ): TaskStoreEffect<InstallationLink> {
@@ -268,14 +230,6 @@ export function linkIntegrationInstallation(
   );
 }
 
-/**
- * Marks the installation uninstalled, answering the transaction it was
- * marked in; none where no active installation stands under the id. A
- * provider's uninstall names no workspace, since it ends the installation
- * wherever it is linked; a workspace's own disconnect names its
- * `organizationId`, so it never ends one another workspace has linked since
- * it last read.
- */
 export function markIntegrationInstallationDeleted(
   provider: TriggerProvider,
   externalId: string,
@@ -294,7 +248,6 @@ export function markIntegrationInstallationDeleted(
   );
 }
 
-/** The workspace an active installation stands for, which a delivery under it fires the automations of; nothing for one unknown or uninstalled. */
 export function activeInstallationWorkspace(
   provider: TriggerProvider,
   externalId: string,
@@ -304,16 +257,6 @@ export function activeInstallationWorkspace(
   );
 }
 
-/**
- * A workspace's active Sentry installations as one member's held read
- * answers them: Sentry's id for each and its organization's slug, null where
- * none was read, while the reader is a member of the workspace, and none at
- * all once they are not, so a subscription stays bound to the rule its
- * endpoint checked. Every column is under the key the wire reads it by
- * (`@repo/features/workspace-integrations-live`), the instant it was linked
- * as epoch milliseconds, and the order is the reader's to keep. None where a
- * statement names a value Realtime cannot carry.
- */
 export function sentryInstallationsLiveStatement(
   readerId: string,
   organizationId: string,
@@ -341,14 +284,12 @@ export function sentryInstallationsLiveStatement(
   );
 }
 
-/** The workspace's installations, every provider's, active or uninstalled, the first linked first. */
 export function workspaceIntegrationInstallations(
   organizationId: string,
 ): TaskStoreEffect<readonly IntegrationInstallation[]> {
   return findWorkspaceInstallations(organizationId);
 }
 
-/** A new install intent for the account and the workspace at the provider; answers the state the install address carries, which nothing stores. */
 export function openIntegrationInstallIntent(
   provider: TriggerProvider,
   userId: string,
@@ -370,7 +311,6 @@ export function openIntegrationInstallIntent(
   });
 }
 
-/** The intent a state stands for at the provider, spent so it never links twice; nothing for a state unknown, another provider's, spent, or expired. */
 export function spendIntegrationInstallIntent(
   provider: TriggerProvider,
   state: string,

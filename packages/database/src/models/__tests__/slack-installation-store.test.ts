@@ -22,15 +22,6 @@ import {
   writeSlackDefaultRepository,
 } from "../slack-installation-store.js";
 
-/**
- * The Slack team a workspace's bot is connected to, over a real dialect:
- * each workspace reads only its own installation and its own members' Slack
- * ids, emails, and own Slack accounts, and a Disconnect forgets the ids it
- * kept.
- *
- * Synthetic accounts, workspaces, and Slack ids throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;

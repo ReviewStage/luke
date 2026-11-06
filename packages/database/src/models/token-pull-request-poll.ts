@@ -1,18 +1,3 @@
-/**
- * token-pull-request-poll.ts -- the scheduled sweep's claim of the token agents' pull requests due a poll, and what each poll read.
- *
- * The agents polled are those on their starter's own GitHub token, not
- * archived, whose pull request GitHub last answered as open or a draft. A
- * claim first gives each such agent a row of its own, due at once, then
- * takes the rows due, the longest due first and at most a batch, under row
- * locks a concurrent claim skips rather than waits on, and moves each one's
- * next poll on before the locks go: Vercel may call the minute's sweep
- * twice, and the second claim must find nothing left. A poll's reads are
- * written back on the row whole. The row keeps the number of the pull
- * request it read; a claim answers the state only where that is still the
- * agent's pull request, so a new one is polled afresh.
- */
-
 import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
@@ -24,7 +9,6 @@ import { type StoredPollEtags, tokenPullRequestPoll } from "../schemas/token-pul
 
 type PollEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
-/** What one poll read of a pull request, as the next poll starts from it. */
 export interface TokenPullRequestPollState {
   readonly etags: StoredPollEtags;
   readonly lastReviewId: number | null;
@@ -33,7 +17,6 @@ export interface TokenPullRequestPollState {
   readonly checkConclusion: string | null;
 }
 
-/** One agent's pull request a claim took: whose agent it is, its number now, and what the last poll of it read, null where none has. */
 export interface ClaimedTokenPullRequest {
   readonly agentId: string;
   readonly userId: string;
@@ -60,17 +43,13 @@ const StateFields = {
 const DueRowSchema = Schema.Struct({
   agentId: Schema.String,
   userId: Schema.String,
-  /** The number the row's state was read on. */
   polled: Schema.Number,
-  /** The agent's pull request's number as GitHub last answered it. */
   published: Schema.Number,
   ...StateFields,
 });
 
-/** The pull request's number as the agent's row keeps it. */
 const publishedNumber = () => sql<number>`(${agentTable.published}->>'number')::int`;
 
-/** An agent polled: on its starter's token, not archived, its pull request open or a draft. */
 const polledAgent = and(
   eq(agentTable.githubAccess, GITHUB_ACCESS.TOKEN),
   isNull(agentTable.archivedAt),
@@ -145,7 +124,6 @@ const writeState = SqlSchema.void({
     ),
 });
 
-/** Claims at most `limit` of the token agents' pull requests due a poll at `now`, each next due at `next`. */
 export function claimTokenPullRequestPolls(
   now: Date,
   next: Date,
@@ -168,7 +146,6 @@ export function claimTokenPullRequestPolls(
   );
 }
 
-/** Writes what a poll of the agent's pull request numbered `pullRequest` read, whole. */
 export function recordTokenPullRequestPoll(
   agentId: string,
   pullRequest: number,

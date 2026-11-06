@@ -1,7 +1,3 @@
-/**
- * codex.test.ts -- one Codex launch of the runner against a scripted app-server playing P16's recorded notifications and a fake service: the config line in, app-server started with the plan's provider, messages as turns and steers, Stop as an interrupt, a refreshed token as a restart between turns or, on the plan, the runner's token command run again mid-turn, every notification out in order, and the launch's end at the turn's.
- */
-
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -63,10 +59,8 @@ it.effect(
   "on an OpenAI API key, app-server reads it through the provider's env_key, no command inherits it, no event carries it, and a model line moving to an Ultrafast version runs the next turn on the ultrafast tier its own catalog lists",
   () =>
     Effect.gen(function* () {
-      // Note that in a sandbox this is the launch's placeholder, the key itself set at its firewall, which the runner reads alike.
       const apiKey = "openai-api-key-for-tests";
       const service = fakeService("sleep 600");
-      // The launch knows no bundle: on its API key it asks no token.
       const { spawned, write, run } = yield* launch(
         [STOPPED],
         service,
@@ -77,7 +71,6 @@ it.effect(
       yield* write({ type: INPUT_LINE.MODEL, fast: true, ultrafast: true });
       yield* write(message("Run sleep 600.", LINE.FIRST));
       yield* service.seen;
-      // The catalog app-server reads in place of its bundled one, while it runs: every bundled model, each listing Ultrafast.
       const catalogPath = JSON.parse(override(spawned[0], "model_catalog_json") ?? '""');
       const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
       const bundled = JSON.parse(CODEX_BUNDLED_MODELS_JSON);
@@ -110,7 +103,6 @@ it.effect(
           'shell_environment_policy.exclude=["APP_RUNNER_TOKEN", "OPENAI_API_KEY"]',
         ),
       );
-      // An Ultrafast version runs on Codex's ultrafast tier, turned on beside the fast one.
       assert.ok(overrides.includes("features.fast_mode=true"));
       assert.ok(overrides.includes("features.ultrafast_mode=true"));
       assert.equal(received(process, "turn/start")[0]?.serviceTier, "ultrafast");
@@ -146,15 +138,12 @@ const CONFIG: CodexConfig = {
   tokenUrl: TOKEN_URL,
 };
 
-/** A message line of text alone, under the service's id for the line where one is given. */
 function message(text: string, uuid?: string): InputLine {
   const line = { type: INPUT_LINE.MESSAGE, content: [{ type: "text" as const, text }] };
   return uuid === undefined ? line : { ...line, uuid };
 }
 
-/** P16's first phase: initialize, initialized, thread/start, turn/start, turn/steer, turn/start, turn/interrupt. */
 const FIRST = recordedExchanges("first");
-/** P16's resumed phase, after a restart: initialize, initialized, thread/resume, turn/start. */
 const RESUMED = recordedExchanges("resumed");
 
 function exchange(exchanges: readonly Exchange[], index: number): Exchange {
@@ -165,41 +154,33 @@ function exchange(exchanges: readonly Exchange[], index: number): Exchange {
 
 const OPEN = [exchange(FIRST, 0), exchange(FIRST, 1), exchange(FIRST, 2)];
 const RESUME = [exchange(RESUMED, 0), exchange(RESUMED, 1), exchange(RESUMED, 2)];
-/** The probe's first turn: an edit, a scan, an MCP call, then the CI watch a steer lands in, then completed. */
 const WORKFLOW: Script = { exchanges: [...OPEN, exchange(FIRST, 3), exchange(FIRST, 4)] };
-/** The probe's `sleep 600` turn, interrupted. */
 const STOPPED: Script = { exchanges: [...OPEN, exchange(FIRST, 5), exchange(FIRST, 6)] };
 
-/** The resumed turn, cut where its last two notifications (idle, turn/completed) begin. */
 const RESUMED_TURN = exchange(RESUMED, 3);
 const RESUMED_TURN_END = RESUMED_TURN.reply.slice(-2);
 
-/** The method of each notification a script's replies hold, in order. */
 function notified(exchanges: readonly Exchange[]): string[] {
   return exchanges.flatMap(({ reply }) =>
     reply.flatMap((line) => (line.method === undefined ? [] : [line.method])),
   );
 }
 
-/** The service's ids for the lines a test writes, as it sends them. */
 const LINE = {
   FIRST: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e01",
   STEERED: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e02",
 } as const;
 
-/** The lines a launch said app-server took, in order. */
 function acceptedLines(events: readonly RunnerEvent[]): string[] {
   return events.flatMap(({ message: posted }) =>
     "type" in posted && posted.type === RUNNER_EVENT.ACCEPTED ? [posted.uuid] : [],
   );
 }
 
-/** What each applied event was: a notification's method, or one of the runner's own. */
 function kinds(events: readonly RunnerEvent[]): string[] {
   return events.map(({ message: posted }) => ("method" in posted ? posted.method : posted.type));
 }
 
-/** One Codex launch over stdin lines the test writes, against scripted app-servers and a fake service. */
 function launch(
   scripts: readonly Script[],
   service: ReturnType<typeof makeFakeService>,
@@ -224,7 +205,6 @@ function launch(
           server.layer,
           extra.http ?? service.layer,
           claude.layer,
-          // Codex never waits on a wakeup, so no wait of its is released whatever runs.
           processTable(UNREAD_PROC, 1),
           Logger.layer([recorder]),
         ),
@@ -281,7 +261,6 @@ it.effect(
 
       assert.deepEqual(withSkills?.unexpected, []);
       assert.deepEqual(received(withSkills, "skills/extraRoots/set"), [{ extraRoots: [skills] }]);
-      // Set before the thread is opened, so the thread's first turn lists them.
       assert.deepEqual(withSkills?.received.map((each) => each.method).slice(0, 4), [
         "initialize",
         "initialized",
@@ -291,7 +270,6 @@ it.effect(
       assert.deepEqual(withNone?.unexpected, []);
       assert.deepEqual(received(withNone, "skills/extraRoots/set"), []);
 
-      // The roots are app-server's process-wide, so a relaunch's new app-server is set them again before its thread resumes.
       const relaunched = yield* launch(
         [
           {
@@ -338,7 +316,6 @@ it.effect(
         ],
       });
       yield* service.seen;
-      // The catalog app-server reads on the plan, while it runs: every bundled model, none offering Codex's subagents, whose messages OpenAI refuses on a plan.
       const catalogOverride = override(spawned[0], "model_catalog_json");
       const catalog = JSON.parse(readFileSync(JSON.parse(catalogOverride ?? '""'), "utf8"));
       assert.deepEqual(
@@ -353,7 +330,6 @@ it.effect(
         kinds(service.applied).filter((kind) => kind !== RUNNER_EVENT.ACCEPTED),
         [...notified(WORKFLOW.exchanges), RUNNER_EVENT.END],
       );
-      // Each line is said taken once, under the service's own id, which Codex is handed to echo.
       assert.deepEqual(acceptedLines(service.applied), [LINE.FIRST, LINE.STEERED]);
       assert.deepEqual(
         service.applied.map(({ sequence }) => sequence),
@@ -403,7 +379,6 @@ it.effect(
         'shell_environment_policy.exclude=["APP_RUNNER_TOKEN", "APP_CODEX_TOKEN"]',
         'shell_environment_policy.set={ PLAYWRIGHT_BROWSERS_PATH = "0" }',
       ]);
-      // The bearer reaches app-server in its environment alone, never argv.
       assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);
       assert.equal(process?.env.CODEX_HOME, ENV.CODEX_HOME);
       assert.ok(!process?.args.some((arg) => arg.includes(BEARER)));
@@ -426,7 +401,6 @@ it.effect(
       assert.equal(start?.model, CONFIG.model);
       assert.equal(start?.effort, CODEX_EFFORT.HIGH);
       assert.equal(start?.serviceTier, "fast");
-      // Every turn names its sandbox, none of Codex's own, so a thread started under another runs under this one.
       assert.equal(start?.approvalPolicy, "never");
       assert.deepEqual(start?.sandboxPolicy, { type: "dangerFullAccess" });
       assert.deepEqual(start?.input, [
@@ -558,7 +532,6 @@ it.effect(
         kinds(service.applied).filter((kind) => kind === "turn/completed").length,
         2,
       );
-      // The refused steer's line is said taken when the next turn takes it, not before.
       assert.deepEqual(acceptedLines(service.applied), [LINE.FIRST, LINE.STEERED]);
       const steeredAt = service.applied.findIndex(
         ({ message: posted }) =>
@@ -569,7 +542,6 @@ it.effect(
     }),
 );
 
-/** The resumed launch, its second message's steer refused as said, then, where it waits, run as the next turn. */
 function refusedSteer(error: NonNullable<RecordedMessage["error"]>, waits: boolean): Script {
   const refusal: RecordedMessage = { id: 4, error };
   return {
@@ -705,7 +677,6 @@ it.effect("starts the next turn for a message Vespin sent just before the turn c
       exchanges: [
         ...RESUME,
         { method: "turn/start", reply: RESUMED_TURN.reply.slice(0, -2) },
-        // The steer is taken and the turn completes before app-server answers it.
         {
           method: "turn/steer",
           reply: [
@@ -723,7 +694,6 @@ it.effect("starts the next turn for a message Vespin sent just before the turn c
     yield* write(message("What exact line did you first write to PROBE.md?"));
     yield* write(message("And the second line?"));
     yield* service.seen;
-    // The follow-up is queued behind the completion before the steer is answered.
     yield* write(message("Also check the tests."));
     yield* Effect.yieldNow.pipe(Effect.repeat({ times: 50 }));
     yield* Deferred.succeed(release, undefined);
@@ -741,16 +711,11 @@ it.effect("starts the next turn for a message Vespin sent just before the turn c
 
 const PROVIDER = "model_providers.openai_chatgpt_plan";
 
-/** The value of the `-c` override `key` a process was started with, where it has one. */
 function override(process: Spawned | undefined, key: string): string | undefined {
   const prefix = `${key}=`;
   return process?.args.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
 }
 
-/**
- * The service's token route as the runner's token command reaches it: each ask under
- * the runner's bearer answers the next fresh token, `plan-token-1`, `-2`, ….
- */
 function fakeTokenRoute() {
   const bearers: (string | null)[] = [];
   let issued = 0;
@@ -762,12 +727,6 @@ function fakeTokenRoute() {
   return { bearers, respond };
 }
 
-/**
- * Codex's provider `auth` as app-server runs it: the command and its args read
- * from the process's argv, run with the process's own environment (here the
- * command's body, the runner's `codexToken`, in place of a child), and
- * its stdout the bearer app-server sends.
- */
 function runTokenCommand(process: Spawned, http: Layer.Layer<HttpClient.HttpClient>) {
   const command = JSON.parse(override(process, `${PROVIDER}.auth.command`) ?? "null");
   const args: string[] = JSON.parse(override(process, `${PROVIDER}.auth.args`) ?? "[]");
@@ -785,15 +744,12 @@ it.effect(
       const http = fakeHttpClientLayer((url, init) =>
         url === TOKEN_URL ? route.respond(url, init) : service.respond(url, init),
       );
-      // What app-server sent OpenAI as its bearer, request by request.
       const sentToOpenAi: string[] = [];
       const turn: Exchange = {
         ...RESUMED_TURN,
         beforeReply: (process) =>
           Effect.gen(function* () {
-            // The turn's first request goes out on the command's token.
             sentToOpenAi.push(yield* runTokenCommand(process, http));
-            // An hour on, OpenAI answers 401: app-server runs the command again and retries.
             sentToOpenAi.push(yield* runTokenCommand(process, http));
           }),
       };
@@ -818,7 +774,6 @@ it.effect(
         reason: RUNNER_END.TURN_ENDED,
       });
 
-      // The provider runs the command.
       assert.equal(override(process, `${PROVIDER}.auth.timeout_ms`), "30000");
       assert.equal(override(process, `${PROVIDER}.auth.refresh_interval_ms`), "300000");
       assert.deepEqual(JSON.parse(override(process, `${PROVIDER}.auth.args`) ?? "[]"), [
@@ -826,7 +781,6 @@ it.effect(
         CODEX_TOKEN_COMMAND,
         TOKEN_URL,
       ]);
-      // The command inherits the bearer; no command the agent runs does.
       assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);
       assert.equal(
         override(process, "shell_environment_policy.exclude"),
@@ -834,7 +788,6 @@ it.effect(
       );
       assert.equal(override(process, "shell_environment_policy.inherit"), '"core"');
 
-      // What the command printed went to app-server alone: never argv, an event, or a log.
       const posted = service.bodies.join("\n");
       for (const secret of ["plan-token-1", "plan-token-2", BEARER]) {
         assert.ok(!posted.includes(secret));
@@ -855,7 +808,6 @@ it.effect(
         url === TOKEN_URL ? route.respond(url, init) : service.respond(url, init),
       );
       const sentToOpenAi: string[] = [];
-      // A command reads app-server's environment, which no sandbox of Codex's keeps from it, and the agent says what it found.
       const printed = {
         method: "item/agentMessage/delta",
         params: { threadId: THREAD, turnId: "turn", itemId: "item", delta: `found ${placeholder}` },
@@ -966,7 +918,6 @@ it.effect(
     }),
 );
 
-/** A page of the thread's turns, newest first, each naming the client id of the line it took. */
 function turnsPage(turns: readonly { readonly id: string; readonly line: string }[]): Exchange {
   return {
     method: "thread/turns/list",

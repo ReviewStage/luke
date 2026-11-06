@@ -24,17 +24,6 @@ import {
 } from "../soft-delete.js";
 import type { ConversationTarget } from "../writer.js";
 
-/**
- * The pictures a conversation's tools answered, over a real dialect: the
- * same bytes are kept once per conversation and answered as the same row,
- * another conversation keeps and reads only its own, and a picture that
- * would take its conversation past its bytes is not kept, and a deleted
- * conversation's pictures, its workers' among them, go with its purge.
- *
- * Synthetic accounts and bytes throughout: no picture is a real one.
- */
-
-/** A synthetic picture, its bytes told apart by `mark`; the store keeps what it is handed and sniffs nothing. */
 function picture(mark: number): PictureToKeep {
   return {
     bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, mark % 256, Math.floor(mark / 256)]),
@@ -91,9 +80,6 @@ it.layer(getTestDB())("a conversation's pictures", (it) => {
     Effect.gen(function* () {
       const target = yield* openConversation;
       const kept = yield* keepConversationPicture(target, picture(0));
-      // Note that the row stands in for pictures kept up to the budget's last few bytes, because
-      // the budget is read off the rows' byte counts and two hundred megabytes of real bytes
-      // would only slow the test.
       const db = yield* Database;
       yield* db.insert(attachment).values({
         userId: target.userId,

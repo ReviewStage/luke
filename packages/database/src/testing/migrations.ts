@@ -5,27 +5,14 @@ import { MIGRATIONS_FOLDER } from "../core/migrator.js";
 import { renderSyncTable } from "../sync/render.js";
 import { SYNC_TABLES } from "../sync/tables.js";
 
-/**
- * migrations.ts -- one migration's statements as the migrator runs them, and a rename's undone, for a test that stands a database where it stood before a migration.
- */
-
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
 
-/** The migration that names a plan's row a task, which a test of an earlier migration walks back first. */
 export const RENAME_PLAN_TO_TASK = "20261017014941_rename_plan_to_task";
 
-/**
- * The statements that take Sync's capture off every synced table, as
- * the database stood before it. A test that walks today's schema back past
- * an earlier migration runs them first, because a capture's triggers name
- * the columns that walk renames or drops, just as a migration that drops
- * one takes the capture off first (`render.ts`).
- */
 export function syncCaptureTakenOff(): readonly string[] {
   return SYNC_TABLES.flatMap((table) => renderSyncTable(table).drop);
 }
 
-/** The migration's statements, in the order the migrator runs them. */
 export function migrationStatements(migration: string): Effect.Effect<readonly string[]> {
   return Effect.promise(async () =>
     (await readFile(join(MIGRATIONS_FOLDER, migration, "migration.sql"), "utf8"))
@@ -35,7 +22,6 @@ export function migrationStatements(migration: string): Effect.Effect<readonly s
   );
 }
 
-/** A rename's statement undone: the names it moved swapped back. A statement that is no rename is refused, since it has no undoing. */
 export function undoneRename(statement: string): string {
   const table = /^ALTER TABLE "([^"]+)" RENAME TO "([^"]+)";?$/u.exec(statement);
   if (table) return `ALTER TABLE "${table[2]}" RENAME TO "${table[1]}"`;
@@ -52,13 +38,10 @@ export function undoneRename(statement: string): string {
   throw new Error(`the migration holds a statement that is no rename: ${statement}`);
 }
 
-/** The migration that names the agent's tables `agent…`, which a test of an earlier migration walks back first. */
 export const RENAME_AGENT_TABLES = "20261029021951_agent_tables_rename";
 
-/** The migration that names the task's document its description, which a test of an earlier migration walks back first, before the agent tables'. */
 const RENAME_DESCRIPTION = "20261106055235_description_rename";
 
-/** A migration's renames walked back and run forward again: `back` undoes them last first, and `forward` runs them as the migration did. */
 function renamesOf(migration: string): Effect.Effect<{
   readonly back: readonly string[];
   readonly forward: readonly string[];
@@ -71,12 +54,6 @@ function renamesOf(migration: string): Effect.Effect<{
   });
 }
 
-/**
- * The renames since: the agent tables' and the description's, the later,
- * walked back and their renames run forward again: a test that stands the
- * database before an earlier migration, spelled in the old names, runs
- * `back` first and `forward` before it reads with today's schema.
- */
 export function laterRenames(): Effect.Effect<{
   readonly back: readonly string[];
   readonly forward: readonly string[];
@@ -90,7 +67,6 @@ export function laterRenames(): Effect.Effect<{
   );
 }
 
-/** The tables a later migration dropped: the attachments' old names (`20261021000416_attachment_views_drop`), Chat's (`drop_chat`), the cut features' (`drop_retired_storage`), and the operator's (`operator_drop`). */
 const DROPPED_TABLES = [
   "chat_attachment",
   "inbox_attachment",
@@ -114,10 +90,8 @@ const DROPPED_TABLES = [
   "operator_wake",
 ] as const;
 
-/** The indexes a later migration dropped on a table that stands, by every name each held: the operator's one per member (`operator_drop`). */
 const DROPPED_INDEXES = ["coding_agent_member_operator", "agent_member_operator"] as const;
 
-/** The columns a later migration dropped, by every name each held, and the indexes that went with them: an automation's task (`20261028195432_automation_task_drop`), and a private memory's member (`operator_drop`). */
 const DROPPED_COLUMNS = [
   {
     table: "automation",
@@ -127,7 +101,6 @@ const DROPPED_COLUMNS = [
   { table: "memory", columns: ["private_to"], indexes: [] },
 ] as const;
 
-/** Whether the statement names a column since dropped, or an index that went with it. */
 function namesDroppedColumn(statement: string): boolean {
   return DROPPED_COLUMNS.some(
     ({ table, columns, indexes }) =>
@@ -137,7 +110,6 @@ function namesDroppedColumn(statement: string): boolean {
   );
 }
 
-/** An earlier migration's statements as a replay over today's schema can run them: every one naming a table, column, or index since dropped, or an index or constraint named after one, left out. */
 export function replayable(statements: readonly string[]): readonly string[] {
   return statements.filter(
     (statement) =>

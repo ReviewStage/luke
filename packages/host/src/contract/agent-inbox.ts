@@ -1,22 +1,3 @@
-/**
- * agent-inbox.ts -- the Inbox's asks of the host, as procedures.
- *
- * What a task's coding agents need of the developer: a task's or an agent's
- * inbox held followed, and read again, and every item the account reaches read again; one item answered,
- * closed, messaged, or marked, a thread started, every item marked read, and
- * an item's image and an agent's picture.
- *
- * Each output is its view schema's type side (`EffectSchema.toType`) rather
- * than the view flipped, as the agents' acts' are. The only difference
- * between a view's two sides here is the phantom brand on a block, a
- * response this build does not know (`UnknownInboxType` in
- * `inbox-wire.ts`), so encoding is the
- * identity; flipped, the window would read the encoded side, whose
- * unbranded `{ type: string }` swallows the union every reader narrows. The
- * output check still runs each view's checks and leaves out a key the view
- * does not name.
- */
-
 import { eventIterator, type } from "@orpc/contract";
 import {
   agentInboxAnsweredViewSchema,
@@ -42,7 +23,6 @@ import { actProcedure, exactInput } from "./base.js";
 import { AGENT_INBOX_ACT_KIND } from "./kinds.js";
 
 export const agentInboxActsContract = {
-  // Note that the hold's stream carries nothing: the held inbox reaches the panel on app state, and the stream is the window's hold on it.
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: actProcedure(
     "Could not follow the inbox on this system.",
   )

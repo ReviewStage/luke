@@ -2,12 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { oneShotDueAt } from "./wakeups.js";
 
-/**
- * When a one-shot task Claude Code scheduled comes due, read in local time
- * from the five-field schedule that pins its minute and hour; a schedule
- * that pins no single minute, or names a weekday, tells no time here.
- */
-
 const NOW = new Date(2026, 9, 21, 12, 0);
 
 test("a one-shot pinned to a day and a month comes due then, or a year on once that minute has passed", () => {

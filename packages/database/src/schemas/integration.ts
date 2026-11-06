@@ -3,70 +3,28 @@ import { index, jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
-/**
- * integration.ts -- one account's connection to one account at an integration, as we hold it.
- *
- * Vercel Connect keeps each provider's grant and refreshes it; this row is
- * our own word on whether its agents may use that grant, because Connect
- * has no way to ask whether a sign-in finished and its SDK caches tokens in
- * process. A row standing `connected` is what lets an agent read a token
- * (`packages/service/src/integrations/integration-token.ts`); no row is a disconnected provider, so
- * a Disconnect deletes the row before anything is asked of Connect, and no
- * cache anywhere outlives it. `state` is the one-time value a browser sign-in
- * carries back to the callback, unique across every provider so the callback
- * finds the row by it alone; it stands only while a sign-in is under way, and
- * a connected row keeps its status while the account signs in again.
- *
- * A user account may hold more than one account at a provider (two Notion
- * workspaces), each its own row and its own grant: `connectSubject` is the
- * subject every ask of Connect names for it, so two rows are two grants, and
- * `connectionName` is the one name the account goes by everywhere else (eve's
- * connection, a coding agent's switches and mentions, the routes' query).
- * The account first connected at a provider is named after the provider and
- * asks under our account's own user id, as every row did before a second
- * one was possible.
- *
- * `tools` is the list the provider's MCP server last gave this account
- * (`packages/service/src/integrations/integration-tool-store.ts`), which a
- * native agent's server answers its listing from, so a launch asks Connect
- * for no token. It holds tool names, words, and schemas, never a credential,
- * and goes with the row on a Disconnect and is cleared when a sign-in
- * completes again.
- */
 export const integrationConnection = pgTable(
   "integration_connection",
   {
-    /** The row's own id, minted when its first sign-in begins. */
     id: text("id").primaryKey(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     provider: text("provider").$type<IntegrationProvider>().notNull(),
-    /** The subject Connect holds this account's grant under: the user id for the first account at a provider, a minted id for another. */
     connectSubject: text("connect_subject").notNull(),
-    /** `notion`, `notion-2`, …: `@repo/features/integration-wire`'s connection name, minted once and never renamed. */
     connectionName: text("connection_name").notNull(),
-    /** The account's name at the provider ("Acme"), or the developer's own for it; null until either is known. */
     label: text("label"),
-    /** `integration-store.ts`'s `INTEGRATION_ROW_STATUS`: pending, connected, or expired. */
     status: text("status").notNull(),
-    /** The sign-in under way's own value, which only its callback carries back; null when none is. */
     state: text("state"),
-    /** When the sign-in under way began; null when none is. */
     stateIssuedAt: timestamptz("state_issued_at"),
-    /** Retired: Connect's handle on a sign-in, read by nothing since we stopped asking Connect's undocumented result endpoint; dropped once that deployment drains. */
     connectVerifier: text("connect_verifier"),
-    /** When a sign-in last completed; null until one has. */
     connectedAt: timestamptz("connected_at"),
-    /** The tools the provider's MCP server last listed for this account, as a model is shown them; null until listed, and after a sign-in completes again. */
     tools: jsonb("tools").$type<unknown>(),
-    /** When the read that listed `tools` began; null whenever they are. */
     toolsListedAt: timestamptz("tools_listed_at"),
     updatedAt: timestamptz("updated_at").notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("integration_connection_user_name_idx").on(table.userId, table.connectionName),
-    // One grant per subject at each provider: the first account at every provider shares the user id as its subject.
     uniqueIndex("integration_connection_provider_subject_idx").on(
       table.provider,
       table.connectSubject,

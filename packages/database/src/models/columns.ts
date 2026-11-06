@@ -1,23 +1,14 @@
 import { agentArchiverSchema } from "@repo/features/agent-wire";
 import { Schema, SchemaTransformation } from "effect";
 
-/** An optional field as its nullable column takes it. */
 export function nullable<Value>(value: Value | undefined): Value | null {
   return value === undefined ? null : value;
 }
 
-/** A nullable column as an optional field: present with its value, or absent. */
 export function optionalField<Value>(name: string, value: Value | null): Record<string, Value> {
   return value === null ? {} : { [name]: value };
 }
 
-/**
- * A `bigint` column's value as a number, whichever of the three readings the
- * driver gave it: `@effect/sql-pg`'s own binary codec answers a JS `bigint`,
- * the `pg` driver it replaced answered a string, and PGlite parses the column
- * to a number. Only the read differs — a number bound to an `int8` parameter
- * is taken by every one of them.
- */
 export const NumberFromBigIntColumn = Schema.BigInt.pipe(
   Schema.decodeTo(
     Schema.Number,
@@ -25,32 +16,14 @@ export const NumberFromBigIntColumn = Schema.BigInt.pipe(
   ),
 );
 
-/**
- * A `bigint` epoch-millis column as the three drivers hand it back:
- * `@effect/sql-pg` reads `int8` as a JS `bigint` and the `pg` driver before it
- * read one as a string, each because a 64-bit value need not fit a JS number,
- * while PGlite parses it to one. Every instant in these columns is a
- * millisecond since the epoch, well inside the safe integer range, so all
- * three readings decode to the same number and no dialect's rows read
- * differently.
- */
 export const EpochMillisColumnSchema = Schema.Union([
   Schema.Number,
   Schema.NumberFromString,
   NumberFromBigIntColumn,
 ]);
 
-/**
- * A `timestamptz` column as the two drivers hand it back: `@effect/sql-pg`'s
- * own binary codec answers epoch milliseconds, while PGlite parses the column
- * to a `Date`. Both readings are the same instant, so neither dialect's rows
- * read differently. A timestamp *parameter* is a `Date` on both — a number
- * bound to one fails the query — which is why a write's own field stays
- * `Schema.Date`.
- */
 export const InstantColumnSchema = Schema.Union([Schema.DateFromMillis, Schema.Date]);
 
-/** An agent's `archived_by` column as a row holds it (`StoredArchive`). */
 export const ArchivedByColumnSchema = Schema.NullOr(
   Schema.Struct({
     by: agentArchiverSchema,
@@ -67,16 +40,9 @@ const UsageCountsFields = {
   outputTokens: Schema.Number,
   cachedInputTokens: Schema.Number,
   reasoningTokens: Schema.Number,
-  /** Absent on a row from before it was kept, and where no step's provider said it. */
   cacheWriteTokens: Schema.optionalKey(Schema.Number),
 };
 
-/**
- * A turn's `usage` column: the brain's four counts, written by the writer
- * and read by the store's reads, and beside them the same counts by the
- * model each step ran on, absent on a row from before the breakdown was
- * kept (`StoredTurnUsage`).
- */
 export const TurnUsageColumnSchema = Schema.Struct({
   ...UsageCountsFields,
   byModel: Schema.optionalKey(

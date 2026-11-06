@@ -17,19 +17,10 @@ import {
 import { planListRow } from "./testing/task-list-rows.js";
 import { testCipher } from "./testing/test-cipher.js";
 
-/**
- * The account's lists kept on disk, over a state root of the test's own and
- * a cipher standing in for the Keychain's: what a store kept comes back to
- * the same account at the same row shapes, and a file kept for another
- * account, or at other row shapes, draws nothing and is deleted as the store
- * opens. Synthetic accounts and rows throughout.
- */
-
 const DANA = "user-dana";
 
 const files = Layer.merge(NodeFileSystem.layer, NodePath.layer);
 
-/** The task list as one answer left it, read at sync id 7. */
 const LIST: KeptRows[typeof KEPT_READ.TASK_LIST] = {
   rows: {
     plans: [planListRow("7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", "Teammate invitations")],
@@ -38,7 +29,6 @@ const LIST: KeptRows[typeof KEPT_READ.TASK_LIST] = {
   at: "7",
 };
 
-/** A store opened over `directory` for `accountId` in a scope of its own, which the test closes as a quit does. */
 function opened(directory: string, accountId: string) {
   return Effect.gen(function* () {
     const scope = yield* Scope.make();
@@ -49,11 +39,9 @@ function opened(directory: string, accountId: string) {
   });
 }
 
-/** The sealed file's path under `directory`. */
 const fileOf = (directory: string) =>
   Effect.map(Path.Path, (path) => path.join(directory, ENTITY_STORE_FILE_NAME));
 
-/** The sealed file's text opened as the test cipher seals it. */
 const openedText = (directory: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -61,17 +49,14 @@ const openedText = (directory: string) =>
     return testCipher().decrypt(Result.getOrThrow(Base64.decode(sealed)));
   });
 
-/** The sealed file's text once a save has written it. */
 const writtenText = (directory: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const file = yield* fileOf(directory);
-    // Note that the write is the disk's own, which no test clock moves, so the test waits on the file itself.
     yield* Effect.repeat(fileSystem.exists(file), { until: (exists) => exists, times: 10_000 });
     return yield* fileSystem.readFileString(file);
   });
 
-/** The file kept again as a build of other row shapes would have kept it: every byte its own but the hash. */
 const keptAtOtherShapes = (directory: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -109,7 +94,6 @@ it.effect(
     Effect.gen(function* () {
       const directory = yield* temporaryDirectoryScoped("entity-store-");
       const { store, closed } = yield* opened(directory, DANA);
-      // Note that the store closes before its folder is removed, whatever the assertions find.
       yield* Effect.addFinalizer(() => closed);
       yield* store.keep(KEPT_READ.TASK_LIST, LIST);
 
@@ -167,7 +151,6 @@ it.effect(
         },
       ]);
       yield* store.keepIn(KEPT_READ.MEMBERS, "workspace-relay", people);
-      // Note that the store is closed before the folder is removed, so a save its open forked late, after the keeps above, is not still writing into it.
       yield* closed;
 
       assert.deepEqual(store.storedIn(KEPT_READ.MEMBERS, "workspace-acme"), people);

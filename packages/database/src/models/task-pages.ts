@@ -21,25 +21,6 @@ import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import { agentReachableBy, reachableTask, taskReachableBy } from "./workspace-store.js";
 
-/**
- * task-pages.ts -- the pages shown on a task or on a coding agent with no task: write a page or its next version as who showed it, list an owner's pages, and read one version, by its owner or by the page's id alone.
- *
- * A page stands on its owner (`PageOwner`): a task, whose pages any agent on
- * it and the brain write, or a coding agent on no task, whose pages are its own.
- * A write is a page's next version, taken under the owner row's own lock, so
- * two writes of one page never take one number and an owner deleted
- * meanwhile reads as gone rather than written back into being. Every
- * statement names the account beside the owner and gates on the owner's own
- * rule of who may read it (`taskReachableBy`, `agentReachableBy`), so a member
- * reads and writes the pages a teammate's agent wrote, and an owner the
- * account does not reach reads and writes as no owner, exactly as in
- * `task-store.ts` and `agent-store.ts`. A version a coding agent showed
- * names it in `agent_id` whichever it stands on. A write is read against the
- * wire's own bounds before it touches a row, so nothing is stored that the
- * desktop could not read back. Pages written in the same millisecond list in
- * no particular order between them.
- */
-
 const OwnerKeySchema = Schema.Struct({
   userId: Schema.String,
   owner: Schema.Union([
@@ -64,27 +45,22 @@ const PAGE_LINE_COLUMNS = {
   shownBy: taskPageVersion.shownBy,
 };
 
-/** The versions that stand on the owner: a task's by its column, an agent's as those on no task that name it. */
 function ownedBy(owner: PageOwner): SQL | undefined {
   return owner.kind === PAGE_OWNER.TASK
     ? eq(taskPageVersion.taskId, owner.taskId)
     : and(isNull(taskPageVersion.taskId), eq(taskPageVersion.agentId, owner.agentId));
 }
 
-/** The condition that the account reaches the owner of a version, for a statement that joins the version's task and its agent: by the task's rule where it stands on one, and by the agent's where it does not. */
 function ownerReachableBy(userId: string): SQL | undefined {
   return or(and(isNull(taskPageVersion.taskId), agentReachableBy(userId)), taskReachableBy(userId));
 }
 
-/** The owner a version names, as the columns read it. */
 function ownerOf(row: { readonly taskId: string | null; readonly agentId: string | null }) {
   if (row.taskId !== null) return { kind: PAGE_OWNER.TASK, taskId: row.taskId } as const;
-  // The owner check holds one of the two to stand, so a row with neither is the database breaking its own contract.
   if (row.agentId === null) return undefined;
   return { kind: PAGE_OWNER.AGENT, agentId: row.agentId } as const;
 }
 
-/** The owner's id under its row's lock until the transaction ends; nothing where the account reaches no such owner. */
 const lockOwner = SqlSchema.findOneOption({
   Request: OwnerKeySchema,
   Result: Schema.Struct({ id: Schema.String }),
@@ -104,7 +80,6 @@ const lockOwner = SqlSchema.findOneOption({
     ),
 });
 
-/** The newest version's number of one page of the owner; nothing where the owner has no such page. */
 const findNewestVersion = SqlSchema.findOneOption({
   Request: Schema.Struct({ owner: OwnerKeySchema.fields.owner, pageId: Schema.String }),
   Result: Schema.Struct({ version: Schema.Number }),
@@ -135,12 +110,10 @@ const insertVersion = SqlSchema.findOne({
     Database.use((db) => db.insert(taskPageVersion).values(row).returning(PAGE_LINE_COLUMNS)),
 });
 
-/** Each page of the owner by its newest version, the most recently written first. */
 const findPageLines = SqlSchema.findAll({
   Request: OwnerKeySchema,
   Result: PageLineRowSchema,
   execute: ({ userId, owner }) => {
-    // Note that the newest versions are picked first and ordered after, because `distinct on` must lead the ordering.
     const newest = queryBuilder
       .selectDistinctOn([taskPageVersion.pageId], PAGE_LINE_COLUMNS)
       .from(taskPageVersion)
@@ -179,7 +152,6 @@ const findVersion = SqlSchema.findOneOption({
     ),
 });
 
-/** A version of a page found by the page's id alone, its newest where none is named, with the owner it stands on, gated on the owner's rule of who may read it. */
 const findPageById = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -226,7 +198,6 @@ function lineOf(row: typeof PageLineRowSchema.Type): PageLine {
   };
 }
 
-/** The columns a version is written under: its task where it stands on one, and the agent that showed it, on a task or not. */
 function ownerColumns(owner: PageOwner, shownBy: PageShower) {
   const agentId = shownBy.kind === PAGE_SHOWER.AGENT ? shownBy.agentId : null;
   return owner.kind === PAGE_OWNER.TASK
@@ -234,13 +205,6 @@ function ownerColumns(owner: PageOwner, shownBy: PageShower) {
     : { taskId: null, agentId: owner.agentId };
 }
 
-/**
- * Writes the page's next version, or a new page's first where the write
- * names none, on the owner, as shown by `shownBy`; the page as it now
- * stands. Nothing where the account reaches no such owner, or the owner no
- * such page, and a schema failure, with nothing written, for a write past
- * the wire's bounds.
- */
 export function writePage(
   userId: string,
   owner: PageOwner,
@@ -259,7 +223,6 @@ export function writePage(
             : yield* findNewestVersion({ owner, pageId: admitted.pageId });
         if (Option.isNone(newest)) return Option.none<PageLine>();
         const at = yield* DateTime.nowAsDate;
-        // An insert that returned no row is the database breaking its own contract, not an outcome.
         const row = yield* insertVersion({
           ...ownerColumns(owner, shownBy),
           pageId: admitted.pageId ?? randomUUID(),
@@ -275,12 +238,10 @@ export function writePage(
   );
 }
 
-/** The owner's pages, each by its newest version, the most recently written first; none where the account reaches no such owner. */
 export function listPages(userId: string, owner: PageOwner): TaskStoreEffect<readonly PageLine[]> {
   return Effect.map(findPageLines({ userId, owner }), (rows) => rows.map(lineOf));
 }
 
-/** One version of one page of the owner, with its HTML; nothing where the account reaches no such owner, page, or version. */
 export function readPageVersion(
   userId: string,
   owner: PageOwner,
@@ -293,18 +254,12 @@ export function readPageVersion(
   );
 }
 
-/** A page read by its id alone: the owner it stands on, the version asked for, and the newest version there is. */
 export interface FoundPage {
   readonly owner: PageOwner;
   readonly page: PageVersion;
   readonly newestVersion: number;
 }
 
-/**
- * One version of the page by the page's id alone, the newest where none is
- * named, with the owner it stands on and its newest version; nothing where
- * the account reaches no owner holding such a page or version.
- */
 export function readPageById(
   userId: string,
   pageId: string,

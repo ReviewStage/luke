@@ -6,25 +6,16 @@ import { Effect, Fiber } from "effect";
 import { AccountAccessClient, accountAccessHolder } from "./account-access-client.js";
 import { type AppAccessSlice, NO_ACCESS } from "./app-state.js";
 
-/**
- * The account's access as the host reads and holds it: an admin's read is
- * an admin for that account alone, a sign-out or another account is no
- * admin, and a read that fails, or answers what the wire does not declare,
- * is no admin. The service is a scripted fetch; the accounts are synthetic.
- */
-
 interface RecordedRequest {
   url: string | URL | Request;
   init: RequestInit | undefined;
 }
 
-/** An answer the service gives, made fresh for each call that receives it. */
 const json =
   (...answer: Parameters<typeof jsonResponse>) =>
   () =>
     jsonResponse(...answer);
 
-/** A service answering each call in turn, holding at its last answer, and what each call asked. */
 function service(answers: Array<() => Response>) {
   const requests: RecordedRequest[] = [];
   let call = 0;
@@ -38,11 +29,8 @@ function service(answers: Array<() => Response>) {
   return { requests, client: client(fetchLike) };
 }
 
-/** What an admin outside the native-agents cohort may open, and what nobody may. */
 const ADMIN: AppAccessSlice = { admin: true };
-/** What stands for an account whose access is not read, or no longer held. */
 const UNREAD: AppAccessSlice = NO_ACCESS;
-/** A read that answered, or failed, as no admin. */
 const NOT_ADMIN: AppAccessSlice = { admin: false };
 
 function client(fetchLike: Parameters<typeof fakeHttpClientLayer>[0]) {
@@ -54,7 +42,6 @@ function client(fetchLike: Parameters<typeof fakeHttpClientLayer>[0]) {
   });
 }
 
-/** A holder over the client, the account signed in as the test moves it, and every access it published. */
 function holder(accessClient: AccountAccessClient, signedIn: string | undefined) {
   const account = { key: signedIn };
   const published: AppAccessSlice[] = [];
@@ -121,14 +108,12 @@ it.effect("an admin's read is an admin, and a sign-out leaves no admin standing"
     assert.deepEqual(held.current(), ADMIN);
     assert.deepEqual(published, [ADMIN]);
 
-    // The gate closes as the account signs out, and its change event follows.
     account.key = undefined;
     yield* held.forget;
     yield* held.accountChanged;
     assert.deepEqual(held.current(), UNREAD);
     assert.deepEqual(published.at(-1), UNREAD);
 
-    // The same account back is no admin until it is read again.
     account.key = "admin@app.test";
     yield* held.accountChanged;
     assert.deepEqual(held.current(), UNREAD);
@@ -141,7 +126,6 @@ it.effect("a sign-out the same account returned from before its change landed st
     const { held, published } = holder(client, "admin@app.test");
     yield* held.refresh;
 
-    // The gate closed and opened again before either change event was taken: both read the account back.
     yield* held.forget;
     yield* held.accountChanged;
     yield* held.accountChanged;
@@ -168,7 +152,6 @@ it.effect("an admin's read is no answer for another account signed in after it",
 
 it.effect("a read answered after the account changed is kept for nobody", () =>
   Effect.gen(function* () {
-    // The account signs out while the service is still answering.
     let whileAnswering = () => undefined;
     const accessClient = client(async () => {
       whileAnswering();
@@ -190,7 +173,6 @@ it.effect("a read answered after the account changed is kept for nobody", () =>
 
 it.effect("a read still out across a sign-out and the same account's return is dropped", () =>
   Effect.gen(function* () {
-    // The service answers at once, but holds its body open until the test lets it go.
     let body: ReadableStreamDefaultController<Uint8Array> | undefined;
     const held = service([
       () =>
@@ -207,7 +189,6 @@ it.effect("a read still out across a sign-out and the same account's return is d
 
     const reading = yield* Effect.forkChild(access.refresh);
     for (let turn = 0; turn < 1_000 && body === undefined; turn += 1) yield* Effect.yieldNow;
-    // The gate closes and the same account signs back in while the read is out.
     yield* access.forget;
     yield* Effect.sync(() => {
       body?.enqueue(new TextEncoder().encode(JSON.stringify({ admin: true })));

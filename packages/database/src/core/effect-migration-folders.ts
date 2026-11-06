@@ -1,11 +1,3 @@
-/**
- * Where each migration the old runner recorded now lives: the tag
- * `effect_sql_migrations` holds for it, mapped to the folder `drizzle-kit up`
- * moved its SQL into. The history transfer (`migrator.ts`) reads this once per
- * database, and only a database the old runner migrated has anything to look
- * up. Nothing is added here: a migration written after the move is recorded by
- * Drizzle's migrator under its folder name from the start.
- */
 export const EFFECT_MIGRATION_FOLDERS = {
   "0000_absent_green_goblin": "20260817033945_absent_green_goblin",
   "0001_bright_morbius": "20260817065743_bright_morbius",

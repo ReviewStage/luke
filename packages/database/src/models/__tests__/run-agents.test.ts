@@ -18,14 +18,6 @@ import { createAgent } from "../agent-store.js";
 import { createAutomation, recordAutomationRun } from "../automation-store.js";
 import { readRunAgents } from "../run-agents.js";
 
-/**
- * The agents an automation's run made, over a real dialect: every agent
- * that names the run, and no other run's, read in the order they were
- * started, and none for an account outside the automation's workspace.
- *
- * Synthetic accounts, workspaces, and automations throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -33,7 +25,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A workspace the account owns, as the organization plugin would leave the rows. */
 const openWorkspace = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -104,7 +95,6 @@ it.layer(getTestDB())("a run's agents", (it) => {
         const first = yield* agentOf("Triage run", run);
         const second = yield* agentOf("Fix the flaky test", run);
         const elsewhere = yield* agentOf("Another run", otherRun);
-        // Each row gets a start instant of its own, so the order does not hang on the clock's resolution.
         const db = yield* Database;
         const startedAt = (agentId: string, createdAt: string) =>
           db

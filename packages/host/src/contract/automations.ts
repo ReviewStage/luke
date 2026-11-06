@@ -13,14 +13,6 @@ import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { AUTOMATION_ACT_KIND } from "./kinds.js";
 
-/**
- * automations.ts -- the Automations pages' asks of the host about the account's automations, as procedures.
- *
- * Each output is its view schema flipped, so oRPC's output check encodes the
- * row's value into what crosses the port. A hold's stream carries nothing:
- * what it holds reaches the panel on app state, and the stream is the
- * window's hold on it.
- */
 export const automationActsContract = {
   [AUTOMATION_ACT_KIND.AUTOMATIONS_CREATE]: actProcedure(
     "Could not make the automation on this system.",

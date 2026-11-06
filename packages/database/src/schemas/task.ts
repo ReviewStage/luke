@@ -28,22 +28,6 @@ import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { agentTable, type StoredArchive } from "./agent.js";
 import { organization, user } from "./auth.js";
 
-/**
- * task.ts -- a named task and its plan, its one current document.
- *
- * One row per task, keyed by a UUID of the service's own and owned by the
- * account that started it, in the workspace it was started in: its name, where it stands (a pin is each member's own, `plan-pin.ts`), its
- * one document, a free Markdown text, and the journal of the saves coding
- * agents made on it. A save replaces the
- * text in one statement, so none is left half-written: a save that failed
- * left the row as it stood. What the text held before is kept beside it, in
- * `description_revision` (`description-revision.ts`). The text is stored as written,
- * like the conversation, readable by an operator and kept the developer's
- * own by the account it is keyed by.
- *
- * The row cascades with its account, so deleting an account is still one
- * statement, and with its workspace.
- */
 export const task = pgTable(
   "task",
   {
@@ -51,146 +35,52 @@ export const task = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** The workspace the task belongs to: a Better Auth `organization`, the starter's personal one unless another was named. */
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    /**
-     * The task's number in its workspace, counted from one in the order its
-     * tasks were made and never reused (`task_number_counter`), which its key (`ACME-42`,
-     * `@repo/features/workspace-key`) is drawn from. A task moved to another
-     * workspace takes the next number there.
-     */
     number: integer("number").notNull(),
-    /**
-     * The task this one is a child of, which it breaks down a part of; null
-     * for a task at the top, and once its parent's row is gone. Children
-     * nest to any depth, and a child works in its parent's repository, which
-     * the write that names a parent holds to.
-     */
     parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => task.id, {
       onDelete: "set null",
     }),
-    /** How the task is worked (`TASK_MODE`): by its agents, or by a pilot; fixed as it starts. */
     mode: text("mode").$type<TaskMode>().notNull().default(TASK_MODE.AGENT),
-    /** Where the task stands (`TASK_STATUS`). */
     status: text("status").$type<TaskStatus>().notNull().default(TASK_STATUS.TODO),
-    /** How much the task matters (`TASK_PRIORITY`); none until someone weighs it. */
     priority: text("priority").$type<TaskPriority>().notNull().default(TASK_PRIORITY.NONE),
-    /**
-     * The member the task is assigned to, who is on it now, apart from the
-     * account that started it (`user_id`, its creator); a member of the
-     * task's workspace as it was written, and null for a task no one is on.
-     * Deleting that account, or that member leaving the workspace (the
-     * `task_assignee_leaves_with_member` trigger on `member`), lets the task
-     * go unassigned rather than taking it with them.
-     */
     assigneeId: text("assignee_id").references(() => user.id, { onDelete: "set null" }),
-    /**
-     * Who made the task, apart from the member it was made for (`user_id`):
-     * that member by hand (`developer`, every task from before this column),
-     * the brain on their call (`notetaker`), or a coding agent acting for them
-     * (`agent`), as `create_task` names its caller.
-     */
     creatorActor: text("creator_actor")
       .$type<TaskCreatorActor>()
       .notNull()
       .default(DESCRIPTION_ACTOR.DEVELOPER),
-    /** The coding agent that made the task; null for any other maker, and once the agent's row is gone. */
     creatorAgentId: uuid("creator_agent_id").references((): AnyPgColumn => agentTable.id, {
       onDelete: "set null",
     }),
-    /**
-     * Whether `start_agent` made the task for the agent it started, its
-     * caller on no task, which finishes once its agents finished well with no
-     * merge asked, as a run's does (`task-finish.ts`); false for every other.
-     */
     madeByStart: boolean("made_by_start").notNull().default(false),
-    /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
       .$type<readonly DescriptionAgentEdit[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
-    /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@repo/features/description-document`). */
     document: text("document").notNull(),
-    /**
-     * The GitHub repository the task is about, `owner/name` as GitHub spells
-     * it, confirmed reachable through our GitHub App by the account
-     * before it was written; null until one is chosen, which is where every
-     * task from before repositories stands and is no error.
-     */
     repository: text("repository"),
-    /**
-     * How the repository was reached as it was named: the workspace's GitHub
-     * App, or the naming member's own token; the App's for a task with none.
-     */
     githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
-    /**
-     * The developer's own words about the task as they started it, which
-     * the brain is handed beside the plan to plan from; null for a task started
-     * with none. Kept as written, like the document.
-     */
     brief: text("brief"),
-    /**
-     * @deprecated A pin is its reader's own now, in `plan_pin`
-     * (`plan-pin.ts`), and nothing writes or reads this. It was the
-     * workspace's, so a pin one member made stood for every member. It stands
-     * until no running build reads it, then a later migration drops it.
-     */
+    /** @deprecated A pin is its reader's own now, in `plan_pin`, and nothing writes or reads this. */
     pinnedAt: timestamptz("pinned_at"),
-    /**
-     * When the task was finished: the instant its status last moved to Done
-     * or Canceled, which the Tasks page windows its finished work by; null
-     * while it stands in any other status. A write that leaves the status as
-     * it stood leaves this as it stood too (`task-store.ts`).
-     */
     completedAt: timestamptz("completed_at"),
-    /**
-     * Who moved the task to Done by hand, which archived its idle agents with
-     * it (`StoredArchive`): a member, or a coding agent for its member; null
-     * while it stands in any other status, and for a Done made by our own finish,
-     * which archives nothing. An agent still at work as it moved is
-     * archived as its turn ends, as this archiver, while the task still stands
-     * so (`task-store.ts`'s `archiveAgentOfDoneTask`).
-     */
     doneBy: jsonb("done_by").$type<StoredArchive>(),
     createdAt: createdAt(),
-    /** The last save of the document; the start, before any. */
     updatedAt: updatedAt(),
-    /**
-     * The instant every member without a read mark of their own
-     * (`task-read.ts`) has read the task through: the instant read marks
-     * moved to the service, on a task that stood before it, so no task that
-     * stood then reads unread until it changes again; null on a task started
-     * since, which reads through its start. The migration that added it
-     * stamped the standing rows through the column's default, in the catalog
-     * rather than by a write of each row, and then dropped the default.
-     */
     readThrough: timestamptz("read_through"),
   },
   (table) => [
-    // The task list reads one account's tasks, newest started first.
     index("task_user_created").on(table.userId, table.createdAt),
-    // A workspace's tasks, newest started first.
     index("task_organization_created").on(table.organizationId, table.createdAt),
-    // The key names one task of its workspace, and a new task takes the next number.
     uniqueIndex("task_organization_number").on(table.organizationId, table.number),
-    // A workspace's tasks assigned to one member, and that member leaving letting each of them go.
     index("task_organization_assignee").on(table.organizationId, table.assigneeId),
-    // A task's children, and its delete letting each of them go.
     index("task_parent").on(table.parentTaskId).where(sql`${table.parentTaskId} is not null`),
     check("task_parent_not_self", sql`${table.parentTaskId} <> ${table.id}`),
   ],
 );
 
-/**
- * The last number each workspace handed a task, so a task's number is
- * never handed out again, whether the task that took it was deleted or moved
- * to another workspace: a new task, or one moved in, takes one past it
- * (`task-store.ts`). A workspace has no row until its first task, and the
- * row goes with the workspace.
- */
 export const taskNumberCounter = pgTable("task_number_counter", {
   organizationId: text("organization_id")
     .primaryKey()
@@ -198,14 +88,6 @@ export const taskNumberCounter = pgTable("task_number_counter", {
   lastNumber: integer("last_number").notNull(),
 });
 
-/**
- * A number a task held in a workspace it moved out of, so a link written
- * with that number (`/<slug>/task/<number>`) still opens the task: a row per
- * move, written as the task leaves (`task-store.ts`), and read only where
- * the number names no task of the workspace now. A number is never handed
- * out again, so the pair names one task for good. The row goes with the
- * workspace, or with the task.
- */
 export const taskNumberForward = pgTable(
   "task_number_forward",
   {
@@ -219,7 +101,6 @@ export const taskNumberForward = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.organizationId, table.number] }),
-    // The task's delete taking each of its rows.
     index("task_number_forward_task").on(table.taskId),
   ],
 );

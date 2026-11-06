@@ -22,16 +22,6 @@ import {
   latestPullRequestChapters,
 } from "../pull-request-chapters-store.js";
 
-/**
- * A pull request's chapters over a real dialect: the newest claim reads
- * whatever its head; a claim inserts, takes over a finished or failed row,
- * or one generating past the bound, and answers busy within it; of claims at
- * once exactly one is claimed; a finish or a failure lands only under the
- * claim still holding the row; and a workspace reads none of another's.
- *
- * Synthetic accounts, workspaces, commits, and chapters throughout.
- */
-
 const AT = Date.UTC(2026, 9, 19, 12);
 const at = (minutes: number) => new Date(AT + minutes * 60_000);
 
@@ -50,7 +40,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A member and the workspace they own, with a Generate for the pull request's head at the instant given. */
 const openPullRequest = Effect.gen(function* () {
   const requestedBy = yield* openAccount;
   const organizationId = yield* openWorkspace(requestedBy);

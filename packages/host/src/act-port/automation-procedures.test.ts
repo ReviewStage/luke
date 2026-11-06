@@ -14,17 +14,6 @@ import type { ActSender } from "./base.js";
 import type { AutomationProceduresDependencies } from "./index.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
-/**
- * The Automations pages' acts, through the act port as a window calls them:
- * only a panel of this build's own renderer asks; any other
- * window, and a frame this build does not trust, are refused in each
- * kind's own words before the host is asked; and a panel's ask reaches the
- * host with its payload as the panel sent it. A hold's stream has the
- * host hold what it names from its first stream to its last, and carries
- * nothing, since what it holds reaches the panel on app state.
- */
-
-// The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true };
@@ -36,7 +25,6 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/** A window's client of the act port serving `procedures`, standing as `actor`, trusted or not. */
 function windowClient(
   procedures: Parameters<typeof testActPort<unknown>>[0],
   actor: ActSender,
@@ -50,7 +38,6 @@ function windowClient(
 const AUTOMATION_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
 const RUN_KEY = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
   [AUTOMATION_ACT_KIND.AUTOMATIONS_CHANGE]: "Could not change the automation on this system.",
   [AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE]: "Could not delete the automation on this system.",
@@ -61,7 +48,6 @@ const REFUSAL = {
 
 type Kind = keyof typeof REFUSAL;
 
-/** One call of each kind, with the payload a panel sends and the host ask it reaches. */
 const ACTS: readonly {
   kind: Kind;
   host: string;
@@ -106,10 +92,8 @@ const ACTS: readonly {
 
 type HostAsk = AutomationProceduresDependencies["host"];
 
-/** The params any one of the host's automation asks takes. */
 type AutomationParams = Parameters<HostAsk[keyof HostAsk]>[0];
 
-/** A window's act port over a host that answers every automation ask unanswered, and what it was asked. */
 function windowPort(actor: typeof PANEL, trusted = true) {
   const asked: unknown[] = [];
   const unanswered = (name: string) => (params: AutomationParams) =>
@@ -162,7 +146,6 @@ it("a panel's ask reaches the host with its payload, and the host's answer is th
 
 it("a payload carrying a key its kind does not name is refused in the kind's own words, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
-  // A payload held in a binding, as a window built it, so the compiler leaves its extra key be.
   const payload = { automationId: AUTOMATION_ID, extra: true };
 
   assert.deepEqual(await settledAct(client[AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE](payload)), {
@@ -171,7 +154,6 @@ it("a payload carrying a key its kind does not name is refused in the kind's own
   assert.deepEqual(asked, []);
 });
 
-/** Turns the event loop until `ready` holds, as a page waits on its port. */
 async function until(ready: () => boolean): Promise<void> {
   for (let turn = 0; turn < 200 && !ready(); turn += 1) await nextTurn();
 }
@@ -182,7 +164,6 @@ it("a panel's hold on a list follows it at the host once for every stream of it,
     automationsFollow: () => Effect.sync(() => void asked.push("follow")),
     automationsUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
   };
-  // SAFETY: the hold reaches the follow asks alone.
   const host = follows as HostAsk;
   const port = testActPort(automationProcedures({ host }));
   ports.push(port);

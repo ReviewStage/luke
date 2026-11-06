@@ -20,16 +20,7 @@ import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { ACCOUNT_ASK_ACT_KIND } from "./kinds.js";
 
-/**
- * account-asks.ts -- the account's own asks of the host from Settings and a dictating box, as procedures.
- *
- * A kind that carries nothing takes `undefined` alone, so a window calls it
- * with no payload and one sent anything is refused.
- * Each output is its view schema flipped, so oRPC's output check encodes the
- * row's value into what crosses the port, as the agent acts' do.
- */
 export const accountAskActsContract = {
-  // Note that the hold's stream carries nothing: the held keys reach the panel on app state, and the stream is the window's hold on them.
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW]: actProcedure(
     "Couldn't follow your API keys on this system.",
   )
@@ -70,7 +61,6 @@ export const accountAskActsContract = {
   )
     .input(exactInput(chatGptDeviceLoginParamsSchema))
     .output(EffectSchema.flip(chatGptDevicePollAnswerViewSchema)),
-  // Note that the hold's stream carries nothing: the held token reaches the panel on app state, and the stream is the window's hold on it.
   [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW]: actProcedure(
     "Could not follow your GitHub token on this system.",
   )
@@ -91,7 +81,6 @@ export const accountAskActsContract = {
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
-  // Note that the hold's stream carries nothing: the held memories reach the panel on app state, and the stream is the window's hold on them.
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW]: actProcedure(
     "Could not follow the workspace's memory on this system.",
   )

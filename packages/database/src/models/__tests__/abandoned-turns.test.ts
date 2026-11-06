@@ -36,18 +36,8 @@ import {
   storeWriter,
 } from "../writer.js";
 
-/**
- * How a coding agent's turn whose end is never coming is settled, over a
- * real dialect: by the sweep once it ran past its bound, by the sweep as
- * canceled once a Stop eve never confirmed is past its own, and at once when
- * eve said its session ended for good.
- *
- * Synthetic accounts, conversations, and turns throughout.
- */
-
 const STARTED_AT = 1_800_000_000_000;
 
-/** A conversation of a new account, of the kind given, recording the eve session given where one is. */
 const openConversation = (
   kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND],
   runtimeSessionId?: string,
@@ -63,10 +53,8 @@ const openConversation = (
     return { userId, conversationId } satisfies ConversationTarget;
   });
 
-/** A coding agent's conversation of a new account. */
 const openAgentConversation = openConversation(CONVERSATION_KIND.AGENT);
 
-/** A turn of the conversation's: queued, begun by eve, or begun and ended as it succeeded; answers its id. */
 const turnIn = (
   writer: StoreWriter,
   target: ConversationTarget,
@@ -97,7 +85,6 @@ const turnIn = (
     return turnId;
   });
 
-/** The conversation's newest turn as the agents' reads see it: its status and failure word. */
 const newestTurnOf = (target: ConversationTarget) =>
   Effect.map(latestTurnsOfReached([target.conversationId]), (turns) => {
     const turn = turns.get(target.conversationId);
@@ -135,7 +122,6 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         assert.deepEqual(yield* projectionOf(agent), { session: "cli" });
         assert.deepEqual(yield* lose(agent), [], "a second settle writes nothing");
 
-        // A projection holding a turn other than the one settled keeps it.
         const other = yield* openAgentConversation;
         yield* turnIn(writer, other, TURN_STATUS.QUEUED);
         yield* holding(other, "a-newer-launch-turn");
@@ -150,7 +136,6 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         assert.deepEqual(yield* lose(idle), []);
         assert.deepEqual(yield* newestTurnOf(idle), [TURN_STATUS.SETTLED, null]);
 
-        // A turn a Stop was asked of ends canceled, as the Stop asked, and is no failure the settle answers.
         const stopped = yield* openAgentConversation;
         const stoppedTurn = yield* turnIn(writer, stopped, TURN_STATUS.RUNNING);
         yield* writer.requestTurnCancel(stopped, {
@@ -295,7 +280,6 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         yield* sweepAbandonedTurns({ writer }, { now: pastBound });
         assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.FAILED, TURN_FAILURE.ABANDONED]);
         yield* sweepAbandonedTurns({ writer }, { now: pastBound + 1 });
-        // The file's database holds other tests' turns, which the sweep settles too.
         const heardOfTarget = heard.filter((turn) => turn.conversationId === target.conversationId);
         assert.deepEqual(heardOfTarget, [
           {
@@ -393,7 +377,6 @@ it.layer(getTestDB())("the sweep over withdrawn lines", (it) => {
             .where(eq(messages.conversationId, target.conversationId)),
           (rows) => rows.map((row) => row.clientId).sort(),
         );
-        // Note that the lines were withdrawn at the test clock's start, the epoch.
         yield* purgeWithdrawnLines(TURN_ABANDON.AGENT_AFTER_MS);
         const withinBound = yield* standing;
         yield* purgeWithdrawnLines(TURN_ABANDON.AGENT_AFTER_MS + 1);

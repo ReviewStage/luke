@@ -13,15 +13,7 @@ import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { INSTALLED_SKILL_ACT_KIND } from "./kinds.js";
 
-/**
- * installed-skills.ts -- Settings' Skills page's asks of the host about the skills the account installs, as procedures.
- *
- * Each output is its view schema flipped, so oRPC's output check encodes the
- * page's value into what crosses the port, the convention the hosted contract
- * keeps (`@repo/features/contract`).
- */
 export const installedSkillActsContract = {
-  // Note that the hold's stream carries nothing: the held skills reach the panel on app state, and the stream is the window's hold on them.
   [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_FOLLOW]: actProcedure(
     "Could not follow your skills on this system.",
   )

@@ -13,17 +13,6 @@ import { repositoryPin } from "../schemas/repository-pin.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 
-/**
- * repository-pin-store.ts -- the repositories an account pinned in the sidebar, read and written for `/api/repository-pins`.
- *
- * Every function is an effect over the ambient `SqlClient`, keyed by the
- * account, so no account reads or moves another's pins. A pin keeps the
- * instant it was first made, so pinning twice moves nothing, and unpinning
- * deletes the row, so unpinning twice moves nothing either. A pin is counted
- * against the bound and written under a lock on the account's own row, so
- * two Macs pinning at once cannot both slip under it.
- */
-
 const PinRowSchema = Schema.Struct({
   repository: Schema.String,
   pinnedAt: InstantColumnSchema,
@@ -31,15 +20,8 @@ const PinRowSchema = Schema.Struct({
 
 const PinKeySchema = Schema.Struct({ userId: Schema.String, repository: Schema.String });
 
-/**
- * The id of the transaction that made a pin, read in the write's own
- * `RETURNING`, as Neon's mutations guide does it: a follower of the sidebar
- * waits for it to arrive on its live query. A write that changed no row
- * returns none, so there is nothing to wait for.
- */
 const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
 
-/** The transaction a statement wrote its row in; no row where it changed none. */
 const WrittenSchema = Schema.Struct({ txid: Schema.String });
 
 const findPins = SqlSchema.findAll({
@@ -55,7 +37,6 @@ const findPins = SqlSchema.findAll({
     ),
 });
 
-/** The account's row, held for the transaction, which is what serializes one account's pins; nothing for an account gone. */
 const lockAccount = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ id: Schema.String }),
@@ -92,18 +73,12 @@ const deletePin = SqlSchema.findAll({
     ),
 });
 
-/** The account's pinned repositories, newest pinned first. */
 export function listRepositoryPins(userId: string): TaskStoreEffect<readonly RepositoryPin[]> {
   return Effect.map(findPins(userId), (rows) =>
     rows.map((row) => ({ repository: row.repository, pinnedAt: row.pinnedAt.getTime() })),
   );
 }
 
-/**
- * The account's pinned repositories written for Neon Realtime: the same rows
- * as `listRepositoryPins`, the instant in epoch milliseconds, and the order
- * the reader's to keep. None where a value cannot be carried.
- */
 export function repositoryPinsLiveStatement(userId: string): Option.Option<LiveStatement> {
   return liveStatementOf(
     queryBuilder
@@ -118,14 +93,6 @@ export function repositoryPinsLiveStatement(userId: string): Option.Option<LiveS
   );
 }
 
-/**
- * Pins one repository or unpins it, and answers the account's pins as they
- * then stand, with the transaction the pin changed a row in; nothing where
- * a new pin would hold more than the bound, or the account is gone, with
- * nothing written. A repository already pinned keeps its instant and counts
- * against no bound, and a pin or unpin that changed no row answers no
- * transaction, so a follower has nothing to wait for.
- */
 export function setRepositoryPin(
   userId: string,
   repository: string,

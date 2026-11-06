@@ -8,22 +8,6 @@ import { InstantColumnSchema } from "./columns.js";
 import type { DeviceLoginOwner } from "./provider-key-seal.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 
-/**
- * chatgpt-device-login-store.ts -- an account's pending connection of a ChatGPT plan through Codex's device-code login: begun, checked under its row's lock, settled, and dropped.
- *
- * An account holds at most one pending login, and a start replaces it
- * whole under a new login id, so a panel still polling the old one finds
- * it gone. Every read and write names the account and the login together,
- * so no account reaches another's login, and none reaches a login its own
- * newer start replaced. A check runs under the row's lock
- * (`withChatGptDeviceLoginLocked`), so two polls at once run one after the
- * other and the second reads how the first settled it. A settled login
- * keeps its outcome and leaves its sealed codes, so a poll after the one
- * that settled it answers the same. What goes in and out is sealed: this
- * module never sees a code in the clear. Every function is an effect over
- * the ambient `SqlClient`.
- */
-
 const SettledSchema = Schema.Literals([
   CHATGPT_DEVICE_LOGIN.CONNECTED,
   CHATGPT_DEVICE_LOGIN.EXPIRED,
@@ -38,10 +22,8 @@ const LoginRowSchema = Schema.Struct({
   expiresAt: InstantColumnSchema,
 });
 
-/** A pending login as its row holds it: its codes sealed until it settles, how it settled, and when its code lapses. */
 export type ChatGptDeviceLoginRow = typeof LoginRowSchema.Type;
 
-/** The account's login of this id, where it is still the account's one. */
 const ownLogin = (owner: DeviceLoginOwner) =>
   and(
     eq(accountChatGptDeviceLogin.userId, owner.userId),
@@ -106,7 +88,6 @@ const deleteLogin = SqlSchema.void({
     Database.use((db) => db.delete(accountChatGptDeviceLogin).where(ownLogin(owner))),
 });
 
-/** Keeps the account's new pending login, its codes sealed, replacing whichever it held. */
 export function beginChatGptDeviceLogin(
   owner: DeviceLoginOwner,
   sealedCodes: string,
@@ -116,12 +97,6 @@ export function beginChatGptDeviceLogin(
   return upsertLogin({ ...owner, sealedCodes, expiresAt, now });
 }
 
-/**
- * Runs `body` on the account's login of this id, or on none where it holds
- * none by that id, in one transaction with its row locked, so two checks of
- * one login run one after the other and the second reads how the first
- * settled it.
- */
 export function withChatGptDeviceLoginLocked<A, E, R>(
   owner: DeviceLoginOwner,
   body: (row: Option.Option<ChatGptDeviceLoginRow>) => Effect.Effect<A, E, R>,
@@ -133,7 +108,6 @@ export function withChatGptDeviceLoginLocked<A, E, R>(
   );
 }
 
-/** Settles the account's login of this id at `outcome`, dropping its sealed codes. */
 export function settleChatGptDeviceLogin(
   owner: DeviceLoginOwner,
   outcome: ChatGptDeviceSettled,
@@ -141,7 +115,6 @@ export function settleChatGptDeviceLogin(
   return settleLogin({ ...owner, outcome });
 }
 
-/** Drops the account's login of this id, where it still holds it. */
 export function dropChatGptDeviceLogin(owner: DeviceLoginOwner): TaskStoreEffect<void> {
   return deleteLogin(owner);
 }

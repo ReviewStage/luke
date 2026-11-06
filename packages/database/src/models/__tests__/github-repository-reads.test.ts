@@ -17,17 +17,6 @@ import {
 } from "../github-token-store.js";
 import { createTask, listTasks, readTask } from "../task-store.js";
 
-/**
- * A task and a coding agent reached on their owner's own GitHub token, over
- * a real dialect: seen by their owner, by a teammate whose verified token
- * the service last found reading the repository, and by no other member,
- * while a task on the workspace's App is every member's. And the
- * repositories the service asks GitHub about for a member: those of
- * teammates' token tasks and agents not answered within the window.
- *
- * Synthetic accounts, repositories, and sealed values throughout; no token.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -35,7 +24,6 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A token the member keeps, as a save leaves it: verified, its seal synthetic. Answers the seal. */
 const keepToken = (userId: string) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -49,7 +37,6 @@ const keepToken = (userId: string) =>
     return sealedToken;
   });
 
-/** A workspace of the owner's with a task and an agent on the owner's token, and a task on the App. */
 const tokenWorkspace = Effect.gen(function* () {
   const owner = yield* openAccount;
   const workspace = yield* openWorkspace(owner);
@@ -90,7 +77,6 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
         const side = (readable: boolean) => [{ repository: "octo-member/side", readable }];
         assert.equal(yield* recordRepositoryReads(reader, readerSeal, side(true), now), true);
         assert.equal(yield* recordRepositoryReads(refused, refusedSeal, side(false), now), true);
-        // Answers asked on a token nobody keeps, as GitHub may be asked on one replaced meanwhile, are not kept.
         assert.equal(
           yield* recordRepositoryReads(tokenless, "sealed-gone", side(true), now),
           false,
@@ -126,7 +112,6 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
         assert.deepEqual(yield* sees(reader), seesAppOnly);
         const replaced = yield* keepToken(reader);
         assert.deepEqual(yield* sees(reader), seesAppOnly);
-        // The token before it was asked about the repository; the one now kept was not.
         assert.equal(yield* recordRepositoryReads(reader, row.sealedToken, side(true), now), false);
         assert.deepEqual(yield* sees(reader), seesAppOnly);
         assert.equal(yield* recordRepositoryReads(reader, replaced, side(true), now), true);
@@ -169,7 +154,6 @@ it.layer(getTestDB())("a task and an agent on their owner's own GitHub token", (
         const teammate = yield* openAccount;
         yield* joinWorkspace(workspace, teammate);
         const seal = yield* keepToken(teammate);
-        // The teammate's own token task is theirs to see, so nothing is asked about it.
         yield* createTask(teammate, {
           organizationId: workspace,
           repository: "teammate/own",

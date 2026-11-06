@@ -1,27 +1,3 @@
-/**
- * automation-collections.ts -- a workspace's automations, each one row of the sync engine's pool: fed by the list's follow, built at the host's own instant, and changed by a write to one automation the moment it is asked.
- *
- * An automation is a kind of the pool (`@repo/sync`), one row however many
- * reads hold it, and a workspace's list stands on the rows its follow
- * answers. The list is built from them as the held read built it
- * (`@repo/features/automation-live`), at the host's own instant, because a
- * run's agent's status moves with the clock alone and a live query reads no
- * clock. So it is built again each time the rows move, and at the nearest
- * instant the clock alone moves it (`automationsGraceEdge`). Nothing is
- * drawn until the follow first answers, so a write asked before then never
- * draws a list that holds nothing else.
- *
- * A change or a deletion is a write the pool draws over its automation's
- * row at once (`compose-automations.ts` declares them), standing until the
- * list carries its transaction, through the wait the list's follow hands,
- * or taken back where the service refused it. A new automation is a row
- * made on the pool under the id the host minted for it, drawn from what its
- * create asks the moment it is asked, which the list of its workspace shows
- * while the write stands. Where the list hands no wait yet, the row as a
- * write's own answer leaves it is taken in the read's place, so a write
- * never answers before the list drawn shows it.
- */
-
 import {
   type AutomationsLiveRows,
   automationsGraceEdge,
@@ -42,13 +18,10 @@ import { Effect, type Scope } from "effect";
 import { drawnAtEdges } from "./live-collection.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
 
-/** An automation's row as the list's statement answers it, its newest run's columns beside it. */
 export type AutomationRow = AutomationsLiveRows["automations"][number];
 
-/** An automation as the pool holds it, by its id, every write to it a change of its fields or its deletion. */
 export const AUTOMATION = fieldKind((row: AutomationRow) => row.id);
 
-/** The newest run's columns of an automation that has run none. */
 const NO_RUN = {
   runId: null,
   runFiring: null,
@@ -70,7 +43,6 @@ const NO_RUN = {
   failureWord: null,
 } as const satisfies Partial<AutomationRow>;
 
-/** Where a run lands, as a row's columns hold it. */
 function targetFields(
   target: NonNullable<AutomationSummary["target"]>,
 ): Pick<AutomationRow, "targetKind" | "targetAgentId"> {
@@ -79,7 +51,6 @@ function targetFields(
     : { targetKind: target.kind, targetAgentId: null };
 }
 
-/** What a change asks of an automation, laid over its row as the service will write it. */
 export function changedFields({
   target,
   ...asked
@@ -87,7 +58,6 @@ export function changedFields({
   return { ...asked, ...(target === undefined ? undefined : targetFields(target)) };
 }
 
-/** What a write's answer says of an automation's own columns; its newest run is the list's to say. */
 export function writtenFields(
   automation: AutomationSummary,
 ): Pick<AutomationRow, "name" | "enabled" | "trigger" | "action" | "guards" | "nextRunAt"> &
@@ -108,12 +78,6 @@ export function writtenFields(
   };
 }
 
-/**
- * A new automation's row as its create asks it, under the id minted for it,
- * before the service answers: what the create names, and a new automation's
- * defaults as the service sets them where it names none. Its next run is
- * the service's to say once it has made it.
- */
 export function askedRow(
   made: AutomationCreateParams & { readonly id: string },
   maker: { readonly userId: string; readonly at: number },
@@ -142,7 +106,6 @@ export function askedRow(
   };
 }
 
-/** A new automation's row as the service answered it made, which has run nothing yet. */
 export function answeredRow(automation: AutomationSummary): AutomationRow {
   return {
     ...NO_RUN,
@@ -165,32 +128,22 @@ export function answeredRow(automation: AutomationSummary): AutomationRow {
 }
 
 export interface AutomationListDependencies {
-  /** The pool the list's rows stand in. */
   readonly pool: EntityPool;
-  /** The workspace whose automations the list holds, which a new one of it is shown on while its write stands. */
   readonly workspaceId: string;
-  /** Draws the list as it now stands. */
   readonly draw: (automations: readonly AutomationSummary[]) => void;
-  /** The service's origin, which a webhook automation's address is written on. */
   readonly serviceBaseUrl: string;
-  /** The followed list's wait for a write's transaction; none while the follow hands none. */
   readonly txWait: () => TxWait | undefined;
 }
 
-/** A workspace's automations standing in the pool, for as long as its scope stands. */
 export interface AutomationListCollections {
-  /** Takes one answer of the list's follow and draws it. */
   readonly answer: (rows: AutomationsLiveRows) => Effect.Effect<void>;
-  /** Whether the list holds an automation, which a write to it is drawn on. */
   readonly holds: (automationId: string) => boolean;
 }
 
-/** A workspace's automations, drawn from the follow's first answer on. */
 export function automationListCollections(
   dependencies: AutomationListDependencies,
 ): Effect.Effect<AutomationListCollections, never, Scope.Scope> {
   return Effect.gen(function* () {
-    // Note that nothing is drawn before the follow first answers, nor once the scope closed, since a follow let go draws for no window.
     let answered = false;
     let open = true;
     yield* Effect.addFinalizer(() =>
@@ -207,7 +160,6 @@ export function automationListCollections(
       adopts: (row) => row.organizationId === dependencies.workspaceId,
     });
 
-    /** Draws the list as it stands now, what every standing write drew among it, and arms its next edge. */
     const drawn: Effect.Effect<void> = yield* drawnAtEdges((at) => {
       if (!answered || !open) return undefined;
       const rows = { automations: automations.rows() };

@@ -63,7 +63,6 @@ describe("a write that cannot land", () => {
     withDirectory((directory) =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
-        // A folder that holds a file where the settings file goes: no rename can replace it.
         yield* fileSystem.makeDirectory(path.join(directory, SETTINGS_FILE_NAME, "held"), {
           recursive: true,
         });

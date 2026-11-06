@@ -41,22 +41,11 @@ import type { AppAutomationReads } from "./app-state.js";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 
-/**
- * The automations concern: behind a closed gate nothing is asked of the
- * service, a write's params reach the service as the window named them,
- * the window hears the service's answer whole, and params of the wrong
- * shape are refused before anything travels. What a window holds is laid
- * on its app-state slice as it stands and each time it moves, for the
- * account signed in as it started, until let go for good or signed out.
- * Synthetic ids and words.
- */
-
 const AUTOMATION_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
 const WORKSPACE_ID = "workspace-1";
 
 const ACCOUNT_ID = "account-1";
 
-/** An automation with no runs yet, its live read answered polled. */
 const POLLED_RUNS: AutomationRunsLiveAnswer = {
   url: LIVE_POLL_URL,
   queries: {
@@ -72,7 +61,6 @@ const POLLED_RUNS: AutomationRunsLiveAnswer = {
 
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
-/** `settled`, then the host's next poll asked, which waits half a second after the last answered (`live-follow.ts`), then `settled` again. */
 const nextPoll = Effect.andThen(
   settled,
   Effect.andThen(TestClock.adjust(Duration.millis(500)), settled),
@@ -102,7 +90,6 @@ const SUMMARY = {
   createdAt: 1,
 } as const;
 
-/** `SUMMARY` as the list's statement answers its row, with no run yet. */
 const ROW: AutomationsLiveRows["automations"][number] = {
   id: AUTOMATION_ID,
   userId: ACCOUNT_ID,
@@ -144,7 +131,6 @@ const ROW: AutomationsLiveRows["automations"][number] = {
   failureWord: null,
 };
 
-/** A run whose agent started at the clock's first instant and has taken no turn yet, as the runs' statement answers it. */
 const STARTING_RUN: AutomationRunsLiveRows["runs"][number] = {
   id: "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8e",
   firing: { kind: AUTOMATION_FIRING.MANUAL, userId: ACCOUNT_ID },
@@ -166,7 +152,6 @@ const STARTING_RUN: AutomationRunsLiveRows["runs"][number] = {
   failureWord: null,
 };
 
-/** A run "Run now" made, as the service answers it. */
 const RUN = {
   id: "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
   firing: { kind: AUTOMATION_FIRING.MANUAL },
@@ -185,24 +170,19 @@ const CREATE = {
   action: SUMMARY.action,
 };
 
-/** The service as a script that writes down every ask it hears, as the ask runs. */
 function fakeService(options: { replaceRefused?: boolean } = {}) {
   const asked: unknown[] = [];
-  /** The live reads as the service answers them polled (`testing/polled-live.ts`): a workspace's list, every run of it, and one automation's runs. */
   const live: {
     readonly list: PolledLive<"automations", typeof LIVE_SIGNED_OUT>;
     readonly workspaceRuns: PolledLive<"runs">;
-    /** What the runs' live read answers first, and what a poll past it answers; not found, and held, where unsaid. */
     runs?: AutomationRunsLiveAnswer;
     runsPolled?: { readonly failure: typeof AUTOMATION_CALL_FAILURE.NOT_FOUND };
   } = {
     list: polledLive<"automations", typeof LIVE_SIGNED_OUT>(["automations"]),
     workspaceRuns: polledLive<"runs">(["runs"]),
   };
-  // A workspace with no automations, and none of their runs, until a test says otherwise.
   live.list.set({ automations: [] });
   live.workspaceRuns.set({ runs: [] });
-  /** What a change, a create, and a Run now answer, and what a create waits on before it answers, which a test may replace. */
   const replies: {
     change: Effect.Success<ReturnType<AutomationsClient["change"]>>;
     create: Effect.Success<ReturnType<AutomationsClient["create"]>>;
@@ -246,8 +226,7 @@ function fakeService(options: { replaceRefused?: boolean } = {}) {
       poll
         ? live.runsPolled === undefined
           ? Effect.never
-          : // A poll is held a while before it answers, as the service holds one.
-            Effect.as(Effect.repeat(Effect.yieldNow, { times: 20 }), live.runsPolled)
+          : Effect.as(Effect.repeat(Effect.yieldNow, { times: 20 }), live.runsPolled)
         : Effect.sync(() => {
             asked.push(["runs-live", automationId, userId]);
             return live.runs ?? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
@@ -268,7 +247,6 @@ function subject(
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
         now: () => 0,
-        // Note that the id the host mints for a new automation is the one the service answers it under.
         createId: () => AUTOMATION_ID,
         hostedServiceBaseUrl: "https://service.example",
         emit: (kind, payload) => emitted.push({ kind, payload }),
@@ -283,18 +261,15 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    /** What the held reads told the windows' app state, in order. */
     const told = () =>
       emitted
         .filter((each) => each.kind === GATEWAY_EVENT.AUTOMATIONS_CHANGED)
         .map((each) => each.payload as Partial<AppAutomationReads>);
-    /** Each time `read`'s slice was told, in order. */
     const toldOf = <Read extends keyof AppAutomationReads>(read: Read) =>
       told().flatMap((held) => {
         const slice = held[read];
         return slice === undefined ? [] : [slice as AppAutomationReads[Read]];
       });
-    /** The workspace's list as each tell laid it, by its automations' ids and whether each is on, where it held rows. */
     const listed = () =>
       toldOf(LIVE_READ.AUTOMATIONS).flatMap((held) => {
         const automations = held[WORKSPACE_ID]?.rows;
@@ -549,7 +524,6 @@ it.effect(
       live.list.set({ automations: [ROW] });
       yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
       yield* settled;
-      // An answer Sync woke hands the follow its wait for a write's transaction.
       live.list.set({ automations: [ROW] }, ["1"]);
       yield* nextPoll;
 
@@ -562,7 +536,6 @@ it.effect(
         }),
       );
       yield* settled;
-      // Another window's rename from before the switch landed is answered without it.
       live.list.set({ automations: [{ ...ROW, name: "Triage" }] }, ["3"]);
       yield* nextPoll;
       live.list.set({ automations: [{ ...ROW, name: "Triage", enabled: false }] }, ["2"]);
@@ -623,7 +596,6 @@ it.effect("a Run now answers once its workspace's held runs carry it, as its lis
       id: WORKSPACE_ID,
     });
     yield* settled;
-    // Answers Sync woke hand both follows their waits for a write's transaction.
     live.list.set({ automations: [ROW] }, ["1"]);
     live.workspaceRuns.set({ runs: [] }, ["1"]);
     yield* nextPoll;

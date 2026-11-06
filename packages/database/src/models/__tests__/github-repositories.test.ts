@@ -28,15 +28,6 @@ import {
   listWorkspaceTokenRepositories,
 } from "../workspace-token-repository-store.js";
 
-/**
- * A GitHub repository renamed: every name the store keeps of it, in every
- * account and in any case, follows GitHub's id to its new name, each table
- * still holding one row where it holds one per name, and another
- * repository's names stay where they stood.
- *
- * Synthetic accounts, ids, and repositories throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -44,14 +35,11 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A fresh id for a repository, so no other test's sighting of it is in the way. */
 const repositoryId = () => Math.floor(Math.random() * 1_000_000_000) + 1;
 
-/** A fresh repository name under `owner`, so no other test's rows carry it. */
 const repositoryName = (owner: string, name: string) =>
   `${owner}/${name}-${randomUUID().slice(0, 8)}`;
 
-/** GitHub's `updated_at` for a sighting, by the minute of an hour it names. */
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 2, 12, minute));
 
 const taskRepository = (userId: string, taskId: string) =>

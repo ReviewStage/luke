@@ -25,11 +25,6 @@ const refusingConnection: SqlConnection.Connection = {
   executeStream: () => Stream.fromEffect(refused()),
 };
 
-/**
- * A `PgClient` over the refusing connection, so the Drizzle `Database` the
- * runtime builds over its `PgClient` stands over this one unchanged and
- * refuses every statement the same way.
- */
 const refusingPgClient = Effect.map(
   SqlClient.make({
     acquirer: Effect.succeed(refusingConnection),
@@ -41,7 +36,6 @@ const refusingPgClient = Effect.map(
     Object.assign(client, {
       [PgClient.TypeId]: PgClient.TypeId,
       config: {},
-      // Every statement refuses, so the fragment a JSON value would render is never sent.
       json: () => client`null`,
       listen: refused,
       notify: refused,

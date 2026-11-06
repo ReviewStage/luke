@@ -109,29 +109,6 @@ import { conversationReachableBy } from "../recorded-session.js";
 import { createTask } from "../task-store.js";
 import { type LineSender, storeWriter } from "../writer.js";
 
-/**
- * The workers a coding agent's conversation delegated to, over a real
- * dialect: every delegation its conversation recorded by a kept call, oldest
- * first, each on the pair it recorded, and none of another account's. And
- * a turn Anthropic refused Fast for, as its usage reads it. And an agent
- * with no task, which its workspace's members reach and no one else does,
- * and the workspace's agents listed for its members alone. And what sent
- * each of the developer's lines to an agent, read by the agent's account.
- * And where in a turn under way each line arrived, as the turn took it in.
- * And the turn each ask the voice handed on ran in, as its binding names it.
- * And who an agent writes as on GitHub, settled once by its first session.
- * And an agent's pin, which is its reader's own, as a plan's is.
- * And an agent with no repository, started blank, which a call names.
- * And how an agent is run: its runtime, its harness's session, its
- * runner's bearer digest, and who pays for it.
- * And the agent a conversation is, one at most, read by its header.
- * And an agent deleted for good by any member of its workspace, once it stands stopped.
- * And the description notes a native agent's running turn holds reserved, its account's alone.
- * And the account's own agent that started an agent, which no other account's agent stands for.
- *
- * Synthetic accounts and conversations throughout.
- */
-
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -178,7 +155,6 @@ it.layer(getTestDB())("the coding-agent store's delegations", (it) => {
           agent,
           new Date("2026-10-13T12:00:01Z"),
         );
-        // Note that only an eve agent's workers recorded delegations, so they stand as such an agent left them.
         const db = yield* Database;
         yield* db.insert(agentDelegationTable).values([
           {
@@ -222,7 +198,6 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           conversationId: yield* openConversation(owner, CONVERSATION_KIND.AGENT),
         };
         const writer = yield* storeWriter({ tools: {} });
-        /** The line written as a send lands, answering its row's id. */
         const line = (clientKey: string, sender: LineSender) =>
           Effect.gen(function* () {
             yield* writer.writeAwaitingLine(
@@ -244,7 +219,6 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           userId: teammate,
         });
         const byApp = yield* line("app", { kind: MESSAGE_SENDER.APP });
-        // A line the app sent before it was named `app`, whose row names it `luke`.
         const byLegacyApp = yield* line("legacy-app", { kind: MESSAGE_SENDER.APP });
         yield* db
           .update(messages)
@@ -257,7 +231,6 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           name: "Nightly triage",
         });
         const byGitHub = yield* line("github", { kind: MESSAGE_SENDER.GITHUB, login: "octocat" });
-        // The sending agent is the teammate's, on no task, which the owner's line still names.
         const sender = yield* tasklessAgent(teammate, yield* openWorkspace(teammate));
         const byAgent = yield* line("agent", {
           kind: MESSAGE_SENDER.AGENT,
@@ -265,14 +238,12 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
           name: "Invite expiry",
           model: "anthropic/claude-opus-5.5",
         });
-        // A line whose agent is gone keeps the model it was sent under, and names no agent.
         const byGoneAgent = yield* line("gone-agent", {
           kind: MESSAGE_SENDER.AGENT,
           agentId: randomUUID(),
           name: "Old agent",
           model: "openai/gpt-6.1-sol",
         });
-        // A line as a build before senders were kept wrote it.
         const [earlier] = yield* db
           .insert(messages)
           .values({
@@ -350,7 +321,6 @@ it.layer(getTestDB())("the coding-agent store's line places", (it) => {
         const writer = yield* storeWriter({ tools: {} });
         const turnId = randomUUID();
         const turn = { conversationId: sessionKey(target.conversationId), turnId };
-        /** A line sent and then taken in by the turn, answering its row's id. */
         const taken = (text: string) =>
           Effect.gen(function* () {
             const sender: LineSender = { kind: MESSAGE_SENDER.GITHUB, login: "octocat" };
@@ -458,7 +428,6 @@ it.layer(getTestDB())("the coding-agent store's lines typed into a call", (it) =
   );
 });
 
-/** A settled turn of the conversation, with usage recorded, as the relay leaves one. */
 const settledTurn = (userId: string, conversationId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -532,7 +501,6 @@ it.layer(getTestDB())("the coding-agent store's description notes of a turn", (i
   );
 });
 
-/** A workspace the account is a member of, as the organization plugin would leave the rows. */
 const openWorkspace = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -547,7 +515,6 @@ const openWorkspace = (userId: string) =>
     return id;
   });
 
-/** An agent of the workspace, on no plan as an automation's run leaves one unless a plan is given, on the repository and at the instant given where they are. */
 const tasklessAgent = (
   userId: string,
   organizationId: string,
@@ -599,7 +566,6 @@ it.layer(getTestDB())("the coding-agent store's mentioned servers", (it) => {
         const userId = yield* openAccount;
         const workspace = yield* openWorkspace(userId);
         const { agentId, conversationId } = yield* tasklessAgent(userId, workspace);
-        // An earlier message's mention, still standing for the agent's next turn.
         yield* dispatchMentioningServers(
           userId,
           agentId,
@@ -612,7 +578,6 @@ it.layer(getTestDB())("the coding-agent store's mentioned servers", (it) => {
           userId,
           agentId,
           [INTEGRATION_PROVIDER.NOTION, INTEGRATION_PROVIDER.LINEAR],
-          // A turn starts while the runtime has the message, and takes what stands; then the runtime refuses it.
           Effect.map(takeAgentMentionedServers(userId, conversationId), (taken) => {
             tookMeanwhile = taken;
             return false;
@@ -806,14 +771,12 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
           .from(conversations)
           .where(eq(conversations.id, conversationId));
         assert.ok(read);
-        // A message landed after the read, as a developer waking the agent would leave it.
         yield* db
           .update(conversations)
           .set({ nextMessageSeq: read.seq + 1 })
           .where(eq(conversations.id, conversationId));
 
         const stale = yield* archiveUnmovedAgent(starter, agentId, read.seq);
-        // Its pull request reopened after the read, which moves no line of its conversation.
         const pullRequest = (state: PullRequestState) =>
           recordAgentPublished(starter, agentId, {
             number: 7,
@@ -828,7 +791,6 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
         yield* pullRequest(PULL_REQUEST_STATE.OPEN);
         const reopened = yield* archiveUnmovedAgent(starter, agentId, read.seq + 1);
         yield* pullRequest(PULL_REQUEST_STATE.MERGED);
-        // A question it posted after the read, which moves no line of its conversation either.
         const asked = yield* openInboxItem(starter, workspace, null, agentId, true);
         const waiting = yield* archiveUnmovedAgent(starter, agentId, read.seq + 1);
         yield* db
@@ -875,13 +837,11 @@ it.layer(getTestDB())("the coding-agent store's record of who archived an agent"
         const seen = Option.getOrThrow(byMember).archivedAt;
         assert.ok(seen !== null);
         assert.equal(yield* unarchiveAgentFrom(teammate, agentId, seen), true);
-        // The archive made again is made later, as any archive after a read of the last one is.
         yield* TestClock.adjust("1 second");
         yield* archiveAgent(teammate, agentId, true, byAgent);
         const archived = Option.getOrThrow(yield* readAgent(starter, agentId));
         assert.deepEqual(archived.archivedBy, byAgent);
         assert.ok(Option.isNone(yield* archiveAgent(outsider, agentId, true, byAgent)));
-        // An unarchive from the archive a reader saw before it was made again takes nothing.
         assert.equal(yield* unarchiveAgentFrom(starter, agentId, seen), false);
         assert.ok(Option.getOrThrow(yield* readAgent(starter, agentId)).archivedAt !== null);
         const back = Option.getOrThrow(yield* archiveAgent(starter, agentId, false));
@@ -954,7 +914,6 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           web.agentId,
         ]);
         assert.deepEqual(yield* listWorkspaceAgents(outsider, workspace, { limit: 10 }), []);
-        // Only the account's own, where asked, held to the limit after the narrowing.
         assert.deepEqual(
           ids(yield* listWorkspaceAgents(starter, workspace, { ownOnly: true, limit: 2 })),
           [newest.agentId, oldest.agentId],
@@ -964,7 +923,6 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           [web.agentId],
         );
 
-        // An agent on a plan is listed with the rest, and alone where its plan is named.
         const invitations = yield* createTask(teammate, {
           organizationId: workspace,
           name: "Teammate invitations",
@@ -1040,7 +998,6 @@ it.layer(getTestDB())("the coding-agent store's author of an agent", (it) => {
           AGENT_AUTHOR.DEVELOPER,
         );
 
-        // Recorded over, as an opening the App made in the developer's place records why; never by an outsider.
         yield* recordAgentAuthor(outsider, agentId, AGENT_AUTHOR.APP_NO_PUSH);
         yield* recordAgentAuthor(starter, agentId, AGENT_AUTHOR.APP_UNLINKED);
         assert.equal(
@@ -1100,7 +1057,6 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan of an accoun
 });
 
 it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
-  /** The pull request as the wire carries it, which is what the task list reads. */
   const onTheWire = {
     number: 7,
     title: "Expire teammate invitations",
@@ -1176,7 +1132,6 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
         const workspace = yield* openWorkspace(starter);
         const { agentId } = yield* tasklessAgent(starter, workspace);
         const quiet = yield* tasklessAgent(starter, workspace);
-        // Written past the store, as a row from before the keys were kept stands.
         yield* Effect.flatMap(Database, (db) =>
           db.update(agentTable).set({ published: onTheWire }).where(eq(agentTable.id, agentId)),
         );
@@ -1204,7 +1159,6 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
           headSha: "c0ffee1",
           areas: [{ path: ".", additions: 12, deletions: 3 }],
         };
-        // Written past the store, as a row from while Factory stood keeps them.
         yield* Effect.flatMap(Database, (db) =>
           db.update(agentTable).set({ published: factoryRow }).where(eq(agentTable.id, agentId)),
         );
@@ -1270,7 +1224,6 @@ it.layer(getTestDB())("the coding-agent store's merged pull request on a task", 
         assert.equal(yield* taskHasMergedPullRequest(teammate, task.id), true);
         assert.equal(yield* taskHasMergedPullRequest(outsider, task.id), false);
 
-        // The one merged pull request on the starter's own token, which the teammate's token does not read, still counts for the teammate.
         yield* archiveAgent(starter, merged, false);
         yield* recordAgentPublished(starter, merged, null);
         const onToken = yield* agentOn(GITHUB_ACCESS.TOKEN);
@@ -1304,7 +1257,6 @@ it.layer(getTestDB())("the coding-agent store's agents by their pull request", (
         const reviewer = yield* tasklessAgent(charles, charless, { createdAt: new Date(2_000) });
         const other = yield* tasklessAgent(dean, deans);
         const elsewhere = yield* tasklessAgent(dean, deans, { repository: "acme/web" });
-        // An agent that published nothing yet is found by no pull request.
         yield* tasklessAgent(dean, deans);
         yield* recordAgentPublished(dean, author.agentId, pullRequest(12));
         yield* recordAgentPublished(charles, reviewer.agentId, pullRequest(12));
@@ -1320,7 +1272,6 @@ it.layer(getTestDB())("the coding-agent store's agents by their pull request", (
           ],
         );
         assert.equal((yield* listAgentsOnPullRequest("acme/api", 12, 1)).length, 1);
-        // GitHub may spell the repository in another case than the agent's row does.
         assert.equal((yield* listAgentsOnPullRequest("Acme/API", 12, 10)).length, 2);
         assert.deepEqual(yield* listAgentsOnPullRequest("acme/api", 99, 10), []);
       }),
@@ -1365,7 +1316,6 @@ it.layer(getTestDB())("the coding-agent store's agents on a branch", (it) => {
         assert.equal((yield* listAgentsOnBranches("acme/api", ["agent/invite"], 1)).length, 1);
         assert.deepEqual(yield* listAgentsOnBranches("acme/api", ["Agent/Invite"], 10), []);
 
-        // The extra's pull request, as GitHub last answered it, finds the agent by its number too.
         yield* recordAgentRepositoryPublished(
           dean,
           beside.agentId,
@@ -1391,7 +1341,6 @@ it.layer(getTestDB())("the coding-agent store's agents on a branch", (it) => {
   );
 });
 
-/** Dean's workspace with Charles a member of it, and an agent an automation of Dean's started there with no plan. */
 const openSharedAgent = Effect.gen(function* () {
   const dean = yield* openAccount;
   const charles = yield* openAccount;
@@ -1401,7 +1350,6 @@ const openSharedAgent = Effect.gen(function* () {
   return { dean, charles, agentId };
 });
 
-/** The agent's pin as the account's list reads it, archived agents among the rest; none where the list holds no pin of it. */
 const pinReadBy = (userId: string, agentId: string) =>
   Effect.map(listTasklessAgentRows(userId, { includeArchived: true }), (agents) =>
     agents.find(({ id }) => id === agentId)?.pinnedAt?.getTime(),
@@ -1412,7 +1360,6 @@ const pinnedOnes = (agentId: string) =>
     db.select({ userId: agentPin.userId }).from(agentPin).where(eq(agentPin.agentId, agentId)),
   );
 
-/** The agent's read mark as the account's list reads it. */
 const markReadBy = (userId: string, agentId: string) =>
   Effect.map(listTasklessAgentRows(userId, { includeArchived: true }), (agents) => {
     const row = agents.find(({ id }) => id === agentId) ?? assert.fail("the agent is not listed");
@@ -1547,7 +1494,6 @@ it.layer(getTestDB())("an agent's pin", (it) => {
       const teammate = yield* openAccount;
       const workspace = yield* openWorkspace(starter);
       yield* joinWorkspace(workspace, teammate);
-      // A task on its starter's own token, which a teammate does not see.
       const task = yield* createTask(starter, {
         organizationId: workspace,
         name: "Billing",
@@ -1889,10 +1835,8 @@ it.layer(getTestDB())("the GitHub access a task and an agent recorded", (it) => 
 });
 
 it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
-  /** Text the size of a long description, which an agent may be handed and no line carries. */
   const largeText = "Any member may invite a teammate by email.\n".repeat(6_000);
 
-  /** What a line says of an agent, and which of the text columns it carries, which should be none. */
   const said = (line: AgentLine) => ({
     id: line.id,
     title: line.title,
@@ -1902,7 +1846,6 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
     text: ["descriptionSnapshot", "prompt", "automationOrigin"].filter((column) => column in line),
   });
 
-  /** The agent a Start made, failing the test where it made none. */
   const made = (answer: Option.Option<{ readonly agent: Agent }>) =>
     Option.getOrElse(answer, () => assert.fail("the start made no agent")).agent;
 
@@ -2002,7 +1945,6 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
         );
         assert.deepEqual((yield* listTasklessAgentRows(starter)).map(said), [lines.run]);
 
-        // Every other column reads as a whole read reads it, and the line a whole read draws is the listed one.
         const whole = Option.getOrThrow(yield* readAgent(starter, run.id));
         const {
           automationOrigin: _origin,
@@ -2602,17 +2544,14 @@ it.layer(getTestDB())("the coding-agent store's search of a workspace's agents",
           );
 
         assert.deepEqual(yield* found(owner, "night"), [automated.agentId]);
-        // A title names the agent in its automation's place.
         assert.deepEqual(yield* found(owner, "weekly"), []);
         assert.deepEqual(yield* found(owner, "invite"), [titled.agentId]);
         assert.deepEqual(yield* found(owner, "GPT 5.1 Codex"), [untitled.agentId]);
         assert.deepEqual(yield* found(owner, "invitations"), [onTask.agentId]);
-        // Each word is found in the name or in the task's name, whichever holds it.
         assert.deepEqual(yield* found(owner, "send  INVITATIONS"), [onTask.agentId]);
         assert.deepEqual(yield* found(owner, "invitations send"), [onTask.agentId]);
         assert.deepEqual(yield* found(owner, "reminder nothing"), []);
         assert.deepEqual(yield* found(owner, "send 100%"), []);
-        // A query of only whitespace narrows nothing.
         assert.equal((yield* found(owner, "  \t ")).length, 4);
         assert.deepEqual(yield* found(outsider, "invite"), []);
       }),

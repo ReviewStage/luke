@@ -21,15 +21,8 @@ import { hostKernelOver } from "./host-kernel.js";
 import { runModeFor } from "./run-mode.js";
 import { fixedAccountSource } from "./testing/fixed-account-source.js";
 
-/**
- * The settings concern's own hosted clients, built before the account is and
- * so linked to its credential late: a call goes out as the linked credential
- * would, which for a cookie session is with no header at all.
- */
-
 const SERVICE_BASE_URL = "https://app.example.test";
 
-/** A settings concern in a run that sends, over a service that answers every request and keeps what each carried. */
 const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {
   const requests: { readonly url: string; readonly authorization: string | null }[] = [];
   const service: typeof globalThis.fetch = async (input, init) => {
@@ -43,7 +36,6 @@ const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {
       HostKernelTag,
       hostKernelOver({
         stateRoot,
-        // A run that sends, so the counted events leave on a flush.
         runMode: runModeFor({ capture: false, fixture: false }),
         accountBaseUrl: `${SERVICE_BASE_URL}/api/auth`,
         now: () => 0,
@@ -53,7 +45,6 @@ const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {
       }),
     ),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-    // A version the counted events allowlist reads, so the launch is counted.
     Layer.succeed(AppIdentity, {
       appVersion: "1.0.0",
       packaged,
@@ -71,7 +62,6 @@ const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {
     readAccountKey: () => Effect.succeed(undefined),
     confirmAccount: () => Effect.void,
   });
-  // The lifetime arms the counted events, where usage data is shared, and counts this launch.
   yield* settings.lifetime;
   const sent = () =>
     requests.filter(
@@ -121,7 +111,6 @@ it.effect(
     }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer])),
 );
 
-/** One browser tab's settings concern over the shared state root, and what it sent its panel. */
 const tabOver = Effect.fnUntraced(function* (
   stateRoot: string,
   changedElsewhere: Layer.Layer<never> | Layer.Layer<SettingsChangedElsewhere>,
@@ -132,7 +121,6 @@ const tabOver = Effect.fnUntraced(function* (
       HostKernelTag,
       hostKernelOver({
         stateRoot,
-        // A run that sends nothing, so no count leaves for the service.
         runMode: runModeFor({ capture: false, fixture: true }),
         accountBaseUrl: `${SERVICE_BASE_URL}/api/auth`,
         now: () => 0,
@@ -164,7 +152,6 @@ const tabOver = Effect.fnUntraced(function* (
   return { settings, sent };
 });
 
-/** A writing tab, and a reading tab whose shell says the file changed each time `signal` is offered. */
 const twoTabs = Effect.fnUntraced(function* () {
   const stateRoot = yield* temporaryDirectoryScoped("settings-elsewhere-");
   const signal = yield* Queue.unbounded<void>();
@@ -181,7 +168,6 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { writer, reader, signal } = yield* twoTabs();
-      // The reader has read the file before the writer changes it.
       assert.equal((yield* reader.settings.store.snapshot()).stored.theme, undefined);
 
       yield* writer.settings.store.set("theme", THEME.DARK);

@@ -10,22 +10,6 @@ import { forgetRepositoryReads } from "./github-repository-reads.js";
 import type { SealedGitHubToken } from "./provider-key-seal.js";
 import type { TaskStoreEffect } from "./task-store.js";
 
-/**
- * github-token-store.ts -- the row of a member's own GitHub personal access token, sealed as `provider-key-seal.ts` seals it.
- *
- * Every function is an effect over the ambient `SqlClient`, keyed by the
- * account, so no account reads, replaces, or removes another's token. What
- * goes in and out is sealed: this module never sees a token in the clear,
- * and a row read here is opened by its caller with the ring the environment
- * holds. A save replaces the row whole, as a token added now and verified
- * now, since a token is saved only once GitHub accepted it. A status is
- * written against the sealed token a step ran on, so a step on a token since
- * replaced marks nothing of its successor. A save and a removal each forget
- * which repositories the member's token was answered for
- * (`github-repository-reads.ts`), since another token may read others.
- */
-
-/** Better Auth's provider id for GitHub on an account row. */
 const GITHUB_PROVIDER_ID = "github";
 
 const StatusSchema = Schema.Literals(Object.values(GITHUB_TOKEN_STATUS));
@@ -43,15 +27,12 @@ const RowSchema = Schema.Struct({
   createdAt: InstantColumnSchema,
 });
 
-/** The member's token as its row holds it: sealed, beside what the member is shown of it. */
 export type GitHubTokenRow = typeof RowSchema.Type;
 
 const OwnedRowSchema = Schema.Struct({ userId: Schema.String, ...RowSchema.fields });
 
-/** One stored token with its account, for the rewrap that walks every row. */
 export type OwnedGitHubTokenRow = typeof OwnedRowSchema.Type;
 
-/** What GitHub answered of a token at its save, kept beside the seal. */
 export interface GitHubTokenFacts {
   readonly hint: string;
   readonly githubUserId: string;
@@ -97,7 +78,6 @@ const findEveryRow = SqlSchema.findAll({
     ),
 });
 
-/** The GitHub ids the account's linked GitHub rows name, newest first. */
 const findLinkedGitHubIds = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({ githubUserId: Schema.String }),
@@ -174,7 +154,6 @@ const updateStatus = SqlSchema.void({
     ),
 });
 
-/** The wrap moved only where the row still holds the seal it was read with, so a token replaced meanwhile keeps its own. */
 const rewrapRow = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -200,17 +179,14 @@ const rewrapRow = SqlSchema.findAll({
     ),
 });
 
-/** The member's stored token, sealed, or nothing where they keep none. */
 export function readGitHubTokenRow(userId: string): TaskStoreEffect<GitHubTokenRow | undefined> {
   return Effect.map(findRow(userId), Option.getOrUndefined);
 }
 
-/** The GitHub ids of every GitHub account the member linked, newest first; empty where they linked none. */
 export function linkedGitHubUserIds(userId: string): TaskStoreEffect<readonly string[]> {
   return Effect.map(findLinkedGitHubIds(userId), (rows) => rows.map((row) => row.githubUserId));
 }
 
-/** Keeps the member's token, replacing the one they held, as added and verified now, and forgets what the one before read. */
 export function saveGitHubToken(
   userId: string,
   sealed: SealedGitHubToken,
@@ -223,12 +199,10 @@ export function saveGitHubToken(
   );
 }
 
-/** Removes the member's token, and what it read; removing one they do not hold moves nothing. */
 export function removeGitHubToken(userId: string): TaskStoreEffect<void> {
   return Effect.andThen(deleteRow(userId), forgetRepositoryReads(userId));
 }
 
-/** Writes how GitHub last answered the token a step ran on, where the row still holds that token. */
 export function setGitHubTokenStatus(
   userId: string,
   sealedToken: string,
@@ -238,15 +212,10 @@ export function setGitHubTokenStatus(
   return updateStatus({ userId, sealedToken, status, now });
 }
 
-/** Every stored token of every account, sealed, for the rewrap alone. */
 export function listEveryGitHubTokenRow(): TaskStoreEffect<readonly OwnedGitHubTokenRow[]> {
   return findEveryRow(undefined);
 }
 
-/**
- * Moves one row onto a new wrap of its data key, and answers whether it
- * did: not where the row was replaced or rewrapped since it was read.
- */
 export function rewrapGitHubTokenRow(
   row: OwnedGitHubTokenRow,
   rewrapped: SealedGitHubToken,

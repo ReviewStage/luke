@@ -15,27 +15,13 @@ import {
   unsavedWorkHolders,
 } from "./quit.js";
 
-/**
- * The quit and every way out beside it, as main composes them: while a panel
- * holds unsaved words, a quit, a restart to update, and a sign-out ask first, with Cancel the default and
- * each thing that would be lost named; while nothing would be, none of them
- * asks; and the updater's own quit, behind a finished teardown, is never
- * held. Synthetic windows throughout.
- */
-
 const NOTHING: AtStake = { unsavedWork: false };
 
-/** One question put, and the answer the developer gives it. */
 interface Asked {
   readonly question: LeaveQuestion;
   readonly answer: (leave: boolean) => void;
 }
 
-/**
- * Main's quit over a panel that tells whether it holds unsaved work, with
- * every question asked kept for the test to answer and every quit asked
- * again counted.
- */
 function composedQuit() {
   const panel = Symbol("panel");
   const unsavedWork = unsavedWorkHolders<symbol>(() => false);
@@ -68,12 +54,10 @@ function composedQuit() {
   };
 }
 
-/** The label of the button Return presses. */
 function returnPresses(question: LeaveQuestion): string | undefined {
   return question.buttons[question.defaultId];
 }
 
-/** Lets the question's answer reach whoever waits on it: every promise it settles runs before the next turn. */
 const settled = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 it("a quit with unsaved description words asks first, with Cancel what Return and Esc press, and quits only once told to", async () => {
@@ -89,7 +73,6 @@ it("a quit with unsaved description words asks first, with Cancel what Return an
   assert.equal(question.cancelId, question.defaultId);
   assert.equal(question.buttons[LEAVE_ANSWER], "Quit");
 
-  // A second quit while the sheet stands asks nothing more.
   assert.equal(quit.held(), true);
   assert.equal(asked.length, 1);
 
@@ -189,8 +172,6 @@ it("the updater's own quit, behind the teardown it runs first, is never held, th
   const { quit, asked, tell } = composedQuit();
   tell(true);
 
-  // Note that this is what Restart to update does once the developer said to:
-  // the teardown first, and only then Squirrel's own quit.
   await quit.teardown();
 
   assert.equal(quit.stage(), QUIT_STAGE.TORN_DOWN);
@@ -198,7 +179,6 @@ it("the updater's own quit, behind the teardown it runs first, is never held, th
   assert.deepEqual(asked, []);
 });
 
-/** A reload over two panels, each telling of its own unsaved work, with every question asked kept for the test to answer. */
 function composedReload() {
   const unsavedWork = unsavedWorkHolders<string>(() => false);
   const asked: (Asked & { readonly page: string })[] = [];
@@ -229,7 +209,6 @@ it("a reload asks first, on that window, only while its own page holds unsaved w
   assert.equal(question.buttons[LEAVE_ANSWER], "Reload");
   assert.equal(returnPresses(question), "Cancel");
 
-  // A second ⌘R while the sheet stands reloads nothing and asks nothing more.
   assert.equal(await askBeforeReload("right"), false);
   assert.equal(asked.length, 1);
 

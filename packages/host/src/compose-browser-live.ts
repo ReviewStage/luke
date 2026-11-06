@@ -1,23 +1,3 @@
-/**
- * compose-browser-live.ts -- a cloud Browser tab's live view, on the window's behalf: each view a panel attached held open on the service's live relay under the account's credential, its text frames carried each way.
- *
- * The desktop's panel draws the view and decides when to open it again
- * (`@repo/panel`'s `cloud-browser-live.ts`); this only carries the socket,
- * because the bearer is the host's and never the page's. An attached view
- * is a connection main named, held here on one fiber until the panel lets
- * it go or the socket closes: the fiber opens the relay socket
- * (`browser-live-wire.ts`) under the account's credential
- * (`relay-credential.ts`), a bearer renewed once on a refusal, hands up
- * each text frame the service sent as a
- * `BROWSER_LIVE_MESSAGE` event named by that connection, and its close, last,
- * as `BROWSER_LIVE_CLOSED`, with its code; a socket that never opened closes
- * as a browser's would, abnormally. What the panel sends before the socket
- * opens is held for it, up to a bound. Nothing the page shows is read here
- * beyond its connection's id, kept, logged, or counted: each frame is handed
- * to the event and let go (root `AGENTS.md`'s cloud browser line). Composed
- * beside the terminals (`compose-terminals.ts`), whose socket it opens with.
- */
-
 import { webSocketOrigin } from "@repo/features";
 import {
   BROWSER_LIVE_ABNORMAL_CLOSE,
@@ -41,7 +21,6 @@ import type { HostKernel } from "./host-kernel.js";
 import { openedUnderCredential } from "./relay-credential.js";
 import type { RunMode } from "./run-mode.js";
 
-/** The most text frames a view holds for a socket still opening; past it the panel's newest are let go. */
 const HELD_WHILE_OPENING = 32;
 
 export interface BrowserLiveDependencies {
@@ -52,7 +31,6 @@ export interface BrowserLiveDependencies {
   openSocket: OpenTerminalSocket;
 }
 
-/** The live view's methods, and the reset a sign-out runs, which lets every view go. */
 export interface BrowserLiveConcern {
   readonly methods: Readonly<
     Record<
@@ -65,13 +43,11 @@ export interface BrowserLiveConcern {
   readonly reset: Effect.Effect<void>;
 }
 
-/** One attached view: its socket once open, and what the panel sent before it was. */
 interface Connection {
   socket: TerminalSocket | undefined;
   readonly held: string[];
 }
 
-/** The live view's table over its seams, every connection's fiber held in `fibers`. */
 export function browserLiveConcern(
   dependencies: BrowserLiveDependencies,
   fibers: FiberMap.FiberMap<string>,
@@ -87,7 +63,6 @@ export function browserLiveConcern(
       kernel.emit(GATEWAY_EVENT.BROWSER_LIVE_CLOSED, carried({ connectionId, code }));
     });
 
-  /** One view's socket, from its open until it closes; the panel letting it go interrupts it, which closes it. */
   const session = (connectionId: string, connection: Connection, address: string) =>
     Effect.scoped(
       Effect.gen(function* () {

@@ -23,18 +23,6 @@ import {
   withProviderKeyLocked,
 } from "../provider-key-store.js";
 
-/**
- * An account's provider credential rows over a real dialect: an API key and
- * a Claude setup-token are rows of their own kind, each read, replaced and
- * removed by its kind for its account alone, a setup-token kept unverified,
- * and the two kinds of one provider standing side by side. A ChatGPT
- * sign-in is a row of its own kind with its access token's expiry, resealed
- * in place under its lock, and the account's ChatGPT host id is minted once
- * and outlives it.
- *
- * Synthetic accounts and seals throughout.
- */
-
 const sealed = (sealedKey: string) => ({ keyVersion: 1, sealedDataKey: "wrap", sealedKey });
 
 const openAccounts = Effect.gen(function* () {

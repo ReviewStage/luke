@@ -28,14 +28,6 @@ import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { WORKSPACE_ACT_KIND } from "./kinds.js";
 
-/**
- * workspaces.ts -- the panel's asks of the host about the account's workspaces, as procedures.
- *
- * Each output is its value's schema flipped, so oRPC's output check encodes
- * the row's value into what crosses the port; a write that answers nothing
- * the panel reads answers `void`.
- */
-
 const answersWorkspace = EffectSchema.flip(workspaceSchema);
 const answersInvitations = EffectSchema.flip(EffectSchema.Array(workspaceInvitationSchema));
 const answersMembers = EffectSchema.flip(EffectSchema.Array(workspaceMemberSchema));
@@ -109,7 +101,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceSlackBotChannelParamsSchema))
     .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
-  // Note that the hold's stream carries nothing: the held people reach the panel on app state, and the stream is the window's hold on them.
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW]: actProcedure(
     "Could not follow that workspace's members on this system.",
   )
@@ -120,7 +111,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(workspacePeopleFollowSchema))
     .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held integrations reach the panel on app state, and the stream is the window's hold on them.
   [WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW]: actProcedure(
     "Could not follow that workspace's integrations on this system.",
   )
@@ -131,7 +121,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceParamsSchema))
     .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held channels reach the panel on app state, and the stream is the window's hold on them.
   [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW]: actProcedure(
     "Could not read that workspace's Slack channels on this system.",
   )
@@ -142,7 +131,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceParamsSchema))
     .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing, as the people's does.
   [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW]: actProcedure(
     "Could not follow that workspace's invitations on this system.",
   )
@@ -183,7 +171,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceSlugSetParamsSchema))
     .output(answersWorkspace),
-  // Note that the hold's stream carries nothing: the held repositories reach the panel on app state, and the stream is the window's hold on them.
   [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW]: actProcedure(
     "Could not follow that workspace's repositories on this system.",
   )

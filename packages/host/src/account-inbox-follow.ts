@@ -27,49 +27,17 @@ import {
   type TxWait,
 } from "./live-follow.js";
 
-/**
- * account-inbox-follow.ts -- what waits on the developer across the account, followed over the service's held poll and told to main each time it moves.
- *
- * The host follows the account's live read (`live-follow.ts`) once main
- * follows the account inbox, builds the answer the held read answered from
- * each delivery (`accountInboxOfLiveRows`), and tells main each one, which
- * its notices, the Dock badge, and the Inbox tab observe. A failed run ages
- * out of the last week with no row moving, so the answer is built again as
- * it does. A read refused as signed out ends the follow, which is read again
- * after `LIVE_RESTART`. Only the answer built from the rows leaves.
- *
- * The rows of its open items, those of agents with no task, and the tasks
- * holding them stand in collections of their own, each answer taken as its
- * poll answers: brief entries and per-task counts, another shape than the
- * items the sync engine's pool holds. So the read stands beside the pool
- * (`inbox-collections.ts`'s `INBOX_ITEM`), drawing every inbox write
- * standing over its own rows. So an item the reader settles leaves what
- * waits, its task counting one question fewer where it asked the reader, and
- * a mark flips its dot, the moment the write is asked, and the answer is
- * built again as each lands.
- */
-
-/** How long a follow no reader holds is kept, so a reader started again soon finds it standing. */
 const IDLE = Duration.seconds(30);
 
-/**
- * The parts every service answers, which the follow is typed by. Note that a
- * part only a newer service answers, its agents holding items, is followed
- * too where the first answer carries it, since the follow takes its parts
- * from that answer.
- */
 type AnsweredPart = Exclude<keyof AccountInboxLiveAnswer["queries"], "agents">;
 
-/** A read the service did not answer, `gone` where it never will again. */
 type SealFailure = { readonly failure: string; readonly gone?: boolean };
 
-/** A follow before its first rows, with the answer they make, or stopped for good. */
 type LiveState =
   | { readonly kind: typeof LIVE_STATE.WAITING }
   | { readonly kind: typeof LIVE_STATE.STANDING; readonly answer: AccountInboxAnswer }
   | { readonly kind: typeof LIVE_STATE.BROKEN };
 
-/** What an account's read is answered from: its follow, or that the service answered none. */
 type Standing =
   | {
       readonly kind: typeof LIVE_STATE.LIVE;
@@ -78,22 +46,17 @@ type Standing =
   | { readonly kind: typeof LIVE_STATE.BROKEN };
 
 export interface AccountInboxDependencies {
-  /** The account's read for the account named, its rows inline, held past `after` where it names one; signed out, or a failure where the service answered none. */
   readonly seal: (
     userId: string,
     poll: boolean,
     after?: string,
   ) => Effect.Effect<AccountInboxLiveAnswer | SealFailure>;
-  /** The sync engine's pool, beside which each account's read stands while it is followed, drawing the inbox writes standing over its rows. */
   readonly pool: EntityPool;
-  /** The account's own reads, among which each account's wait stands while it is followed. */
   readonly accountWide: AccountWideReads;
 }
 
-/** Each account's follow, by its id, held while main reads it and a while after. */
 export type AccountInboxes = RcMap.RcMap<string, Standing>;
 
-/** The answer the rows make now, and again each time a failed run they carry ages out, until the rows move. */
 function answersOf(rows: AccountInboxLiveRows): Stream.Stream<AccountInboxAnswer> {
   return Stream.unwrap(
     Effect.map(Clock.currentTimeMillis, (at) => {
@@ -109,10 +72,8 @@ function answersOf(rows: AccountInboxLiveRows): Stream.Stream<AccountInboxAnswer
   );
 }
 
-/** An open item as the read lists it, a task's or an agent's with no task. */
 type Entry = AccountInboxLiveRows["items"][number] | AccountInboxLiveRows["planless"][number];
 
-/** What a change leaves of an open item: gone where it settles it, its reminder where it sets or cancels one, its read mark where it flips it, and none where it leaves it alone, as an item changed since the service answered it. */
 function entryChanged<Row extends Entry>(
   change: InboxChange,
   entry: Row,
@@ -135,20 +96,13 @@ function entryChanged<Row extends Entry>(
   return (entry.unread === true) === unread ? undefined : { ...entry, unread };
 }
 
-/** Whether a task's open item is a question waiting on the reader, as its task's count counts it. */
 function counted(entry: AccountInboxLiveRows["items"][number], readerId: string): boolean {
   const waitsOn = entry.waitsOn ?? entry.startedBy ?? readerId;
   return entry.asking !== false && waitsOn === readerId;
 }
 
-/** The parts of the read a write changes. */
 type Changeable = Pick<AccountInboxLiveRows, "items" | "planless" | "plans">;
 
-/**
- * The rows a change leaves of the read: each open item it settles gone and
- * its task counting it no longer, and each it marks flipped; none where it
- * moves no row.
- */
 function rowsChanged(
   rows: Changeable,
   change: InboxChange,
@@ -178,7 +132,6 @@ function rowsChanged(
   return moved ? { items, planless, plans } : undefined;
 }
 
-/** The map a composer holds for as long as it stands. */
 export function accountInboxes(
   dependencies: AccountInboxDependencies,
 ): Effect.Effect<AccountInboxes, never, Scope.Scope> {
@@ -195,19 +148,15 @@ export function accountInboxes(
           getKey: (row: AccountInboxLiveRows["plans"][number]) => row.planId,
         });
         let wait: TxWait | undefined;
-        /** The rows as the read last answered them, or a write's own answer took them in its place; none before it first answers. */
         let answered: AccountInboxLiveRows | undefined;
-        /** Takes rows as the read's own, every part's. */
         const taken = (rows: AccountInboxLiveRows) => {
           items.answer(rows.items);
           planless.answer(rows.planless);
           plans.answer(rows.plans);
           answered = rows;
         };
-        /** The rows as the read holds them, each write standing drawn over them in turn. */
         const shown = (): Changeable => {
           const held: Changeable = {
-            // SAFETY: each collection holds only the rows of its own part, which the read answered.
             items: rowsOf(items.collection) as AccountInboxLiveRows["items"],
             planless: rowsOf(planless.collection) as AccountInboxLiveRows["planless"],
             plans: rowsOf(plans.collection),
@@ -216,12 +165,10 @@ export function accountInboxes(
             .standing()
             .reduce((rows, change) => rowsChanged(rows, change, userId) ?? rows, held);
         };
-        // The answer built again from the rows as they stand each time they move, and as a failed run they carry ages out.
         const standing = yield* Queue.sliding<AccountInboxLiveRows>(1);
         const drawn = Effect.suspend(() =>
           answered === undefined ? Effect.void : Queue.offer(standing, { ...answered, ...shown() }),
         );
-        /** Whether the read lists the item `id` names, open, as one of a task's or of an agent's with no task. */
         const lists = (id: string) =>
           answered !== undefined &&
           (answered.items.some((entry) => entry.id === id) ||
@@ -276,12 +223,6 @@ export function accountInboxes(
   });
 }
 
-/**
- * What waits across the account for `userId`, told whole each time it moves,
- * until the fiber is let go. A read the service refused, or a follow that
- * stopped, is let go and read again after `LIVE_RESTART`, for whoever the
- * caller follows then.
- */
 export function followAccountInbox(
   inboxes: AccountInboxes,
   userId: string,

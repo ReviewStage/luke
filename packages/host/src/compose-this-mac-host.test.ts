@@ -1,12 +1,3 @@
-/**
- * compose-this-mac-host.test.ts -- This Mac's host kept as the member and the account's experiments say: nothing enrolled until This Mac is turned on, then enrolled under a new id or a refused record's own, its record written and the install script run; turned off by the install's own uninstall; a record of the account's kept under its id, never enrolled again while it stands; the host stopped with its files kept where Bring your own host is off; a record that is not the account's left alone; and This Mac told the windows as its record moves.
- *
- * The composer runs over a real state folder of its own, a fake service
- * that enrolls the Mac, lists the account's hosts, and serves the install
- * script, and a fake launchd and installer that each say what they were
- * asked, on the test's clock. Synthetic ids and secrets throughout.
- */
-
 import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
@@ -38,10 +29,8 @@ const SERVICE = "https://app.test";
 const SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"c".repeat(43)}`;
 const OLD_SECRET = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${"d".repeat(43)}`;
 const SCRIPT = "#!/bin/sh\necho install\n";
-/** Where the fake service takes an enroll, so its responder reads the version the enroll carried. */
 const ENROLL_URL = `${SERVICE}/enroll`;
 const FILES = Layer.merge(NodeFileSystem.layer, NodePath.layer);
-/** The desktop's own window, as the Gateway hands a method its caller. */
 const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 const BRING_YOUR_OWN_HOST_ON = {
@@ -49,17 +38,12 @@ const BRING_YOUR_OWN_HOST_ON = {
 };
 
 interface MacOptions {
-  /** The experiments the account has on; Bring your own host by default. */
   readonly experiments?: Partial<Record<Experiment, boolean>>;
-  /** The devices the service lists among the account's hosts, beside each it enrolls. */
   readonly listed?: readonly string[];
-  /** Whether launchd holds the host's LaunchAgent. */
   readonly loaded?: boolean;
-  /** How many runs of the install script fail before one lands. */
   readonly failedInstalls?: number;
 }
 
-/** The clock nudged, and the state folder's reads and writes, which wait on no clock, let land, until the condition holds. */
 const until = (holds: () => boolean) =>
   Effect.gen(function* () {
     for (let round = 0; round < 20_000 && !holds(); round += 1) {
@@ -69,7 +53,6 @@ const until = (holds: () => boolean) =>
     assert.ok(holds(), "the composer never got there");
   });
 
-/** The clock nudged, and the state folder's reads and writes let land, for the time given. */
 const nudged = (time: Duration.Input) =>
   Effect.gen(function* () {
     const rounds = Duration.toMillis(time) / 100;
@@ -79,12 +62,6 @@ const nudged = (time: Duration.Input) =>
     }
   });
 
-/**
- * This Mac's host composed over a state folder of its own, with what each
- * fake was asked, in the order it was asked: the service's enrolls, by the
- * device id and the version they carried, and the installer's and launchd's
- * acts; and This Mac as the windows were last told it, under the account.
- */
 const thisMac = (stateRoot: string, options: MacOptions = {}) =>
   Effect.gen(function* () {
     const asked: string[] = [];
@@ -112,7 +89,6 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
         hostedServiceBaseUrl: SERVICE,
         createId: () => MINTED_ID,
         emit: (kind, payload) => {
-          // SAFETY: what the composer tells on this event is the windows' This Mac, built as `AppThisMacHosts`.
           if (kind === GATEWAY_EVENT.THIS_MAC_HOST_CHANGED) told = payload as AppThisMacHosts;
         },
         runMode: { sendsNetwork: true },
@@ -158,7 +134,6 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
               asked.push("stop");
               return Result.succeed(undefined);
             }),
-            // As the install's own uninstall leaves it: the record gone with the state folder.
             uninstall: Effect.sync(() => {
               asked.push("uninstall");
               rmSync(join(stateRoot, "device.json"), { force: true });
@@ -172,13 +147,11 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
     const held = (): AppThisMacHost | undefined => told?.[USER_ID]?.rows;
     const set = composer.methods[GATEWAY_METHOD.HOSTS_THIS_MAC_SET];
     assert.ok(set !== undefined, "This Mac answers being turned on and off");
-    /** Run agents on this Mac turned on or off, as its switch turns it; what it answered. */
     const turn = (on: boolean, deleteFolders?: boolean) =>
       Effect.orDie(set(deleteFolders === undefined ? { on } : { on, deleteFolders }, CONTEXT));
     return { asked, enrolled, held, turn };
   });
 
-/** The state folder with the record given written, as the install's host would have left it. */
 const recorded = (record: HostDevice) =>
   Effect.gen(function* () {
     const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
@@ -231,7 +204,6 @@ it.effect(
         yield* until(() => mac.held() !== undefined);
         assert.deepEqual(mac.held(), { machineId: MACHINE_ID, enrolled: false, agentFolders: 0 });
 
-        // As the host daemon writes it once it pairs, apart from this app.
         yield* writeHostDevice(stateRoot, {
           deviceId: KEPT_ID,
           deviceSecret: OLD_SECRET,
@@ -440,7 +412,6 @@ it.effect.each([
         yield* nudged(Duration.minutes(1));
         assert.deepEqual(yield* on.turn(false), { failure: "unanswered" });
 
-        // Note that the length is asserted rather than the list, which an assertion would narrow to an empty one.
         assert.equal(on.asked.length + off.asked.length, 0);
         assert.deepEqual(Option.getOrUndefined(yield* readHostDevice(stateRoot)), record);
       }).pipe(Effect.provide(FILES)),

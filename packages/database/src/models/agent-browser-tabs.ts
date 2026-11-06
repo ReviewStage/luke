@@ -1,31 +1,3 @@
-/**
- * agent-browser-tabs.ts -- the Browser tabs open in agents' browsers: an agent's actions write them, and the members who see the agent list them and take one over.
- *
- * An agent is named here by its own conversation, the one its sandbox is
- * kept for (`schemas/agent-browser-tab.ts`), and a worker writes under its
- * parent's. The agent's side, an
- * upsert as it acts on a tab, a close, and the list of its own tabs, is the
- * service's and reads no account, as the sandbox's terminal lease reads
- * none. A member's side reads through the rule a whole agent is read by: a
- * coding agent's tabs are listed only to one who sees that agent and, for
- * one on a task, that task too (`agentVisibleTo`), so an agent on no task
- * is reached by the agent alone, and any other reads as none at all. A task's tabs are its agents' together, each read
- * through the agent's own row (`agent.task_id`), never the task the
- * tab's row was written under, so a tab follows its agent. Whether the member may drive the tab, which a coding
- * agent on its starter's own token keeps to the starter, is the service's to
- * decide from the agent this answers beside the tab.
- *
- * A takeover is a check-and-set on the driver and the instant it lapses: a
- * member takes a tab no one drives, or whose takeover lapsed, or that they
- * drive already, and renews only a takeover of their own still standing, so
- * two members never both drive one tab, and one whose window went away
- * leaves the tab to the agent once their instant passes.
- *
- * The agent's side also keeps its pointer on a tab (`pointBrowserTab`), and
- * a member's window follows an agent's or a task's tabs live
- * (`browserTabsLiveStatement`), under the same rule as the list.
- */
-
 import {
   AGENT_BROWSER_TAB_OPENER,
   type BrowserTabsPlace,
@@ -53,7 +25,6 @@ const GITHUB_ACCESSES = Object.values(GITHUB_ACCESS);
 
 const CURSOR_KINDS = Object.values(BROWSER_CURSOR_KIND);
 
-/** One tab as its row keeps it. */
 const BrowserTabSchema = Schema.Struct({
   id: Schema.String,
   conversationId: Schema.String,
@@ -77,28 +48,22 @@ const BrowserTabSchema = Schema.Struct({
 
 export type AgentBrowserTabRow = typeof BrowserTabSchema.Type;
 
-/** The coding agent whose browser holds a tab, as the rule for who may drive it reads it. */
 interface BrowserTabAgent {
   readonly id: string;
-  /** The member who started the agent. */
   readonly userId: string;
   readonly githubAccess: GitHubAccess;
 }
 
-/** A tab a member reached: its row, and the coding agent whose browser holds it. */
 export interface ReachedBrowserTab {
   readonly tab: AgentBrowserTabRow;
   readonly agent: BrowserTabAgent;
 }
 
-/** A tab as an agent's action on it reports it: whose browser, its task, the browser's own id for it, and how its page stands. */
 export interface BrowserTabAction {
-  /** The conversation of the agent whose browser holds it: a coding agent's, or a worker's parent's. */
   readonly conversationId: string;
   readonly targetId: string;
   readonly address: string;
   readonly title: string;
-  /** Who opened it, kept from its first report: the agent, or the member named. */
   readonly openedBy:
     | { readonly kind: typeof AGENT_BROWSER_TAB_OPENER.AGENT }
     | { readonly kind: typeof AGENT_BROWSER_TAB_OPENER.MEMBER; readonly userId: string };
@@ -132,38 +97,20 @@ const ReachedTabSchema = Schema.Struct({
   agentGithubAccess: Schema.Literals(GITHUB_ACCESSES),
 });
 
-/** An address or a title cut where the Browser tab cuts one, since it is only drawn. */
 function shown(text: string): string {
   return text.length > BROWSER_SHOWN_MAX_CHARS ? text.slice(0, BROWSER_SHOWN_MAX_CHARS) : text;
 }
 
-/**
- * The task of the agent whose conversation is named, read from the agent's
- * own row rather than taken from the caller; null for an agent on none. Note
- * that the column is still written but no read reaches a tab by it: a tab is
- * reached through its agent's row (`agentOfPlace`).
- */
 function taskOfConversation(conversationId: string) {
   return sql<
     string | null
   >`(select ${agentTable.taskId} from ${agentTable} where ${agentTable.conversationId} = ${conversationId})`;
 }
 
-/**
- * The condition that a tab's agent, the coding agent its conversation names,
- * is the one the place names, or one on the task it names, read from the
- * agent's own row.
- */
 function agentOfPlace(place: BrowserTabsPlace): SQL {
   return "taskId" in place ? eq(agentTable.taskId, place.taskId) : eq(agentTable.id, place.agentId);
 }
 
-/**
- * The tabs a member reaches in the place named: of an agent they see whole,
- * its task included where it is on one (`agentVisibleTo`). A tab
- * no coding agent's conversation names, one the per-task assistant opened while a
- * task had one, is listed to no one.
- */
 function reachedTabs(userId: string, place: BrowserTabsPlace, tabId?: string) {
   return Database.use((db) =>
     db
@@ -243,7 +190,6 @@ const upsertTab = SqlSchema.findOne({
     title: Schema.String,
     openedBy: Schema.Literals(OPENERS),
     openedByUserId: Schema.NullOr(Schema.String),
-    /** Whether the opener given replaces the one a row already keeps: only for a target this caller just made. */
     claimOpener: Schema.Boolean,
     now: Schema.Date,
   }),
@@ -260,7 +206,6 @@ const upsertTab = SqlSchema.findOne({
         })
         .onConflictDoUpdate({
           target: [agentBrowserTab.conversationId, agentBrowserTab.targetId],
-          // Who opened it and when stand from its first report; the page moves on, and the instant never back.
           set: {
             address: tab.address,
             title: tab.title,
@@ -303,7 +248,6 @@ const pointTab = SqlSchema.findAll({
           and(
             eq(agentBrowserTab.conversationId, conversationId),
             eq(agentBrowserTab.targetId, targetId),
-            // Only over an earlier move, so of two writes landing out of order the later move stands.
             or(isNull(agentBrowserTab.cursorAt), lte(agentBrowserTab.cursorAt, at)),
           ),
         )
@@ -342,7 +286,6 @@ const retargetTab = SqlSchema.findAll({
           and(
             eq(agentBrowserTab.id, tabId),
             eq(agentBrowserTab.conversationId, conversationId),
-            // Only from the target the caller read, so of two reopening the tab at once one moves it.
             eq(agentBrowserTab.targetId, from),
           ),
         )
@@ -363,13 +306,7 @@ const notePageTab = SqlSchema.findAll({
       db
         .update(agentBrowserTab)
         .set({ address, title })
-        .where(
-          and(
-            eq(agentBrowserTab.id, tabId),
-            // Only on the target the caller watches, so a write from a target a reopening moved the tab off never lands.
-            eq(agentBrowserTab.targetId, targetId),
-          ),
-        )
+        .where(and(eq(agentBrowserTab.id, tabId), eq(agentBrowserTab.targetId, targetId)))
         .returning({ id: agentBrowserTab.id }),
     ),
 });
@@ -388,13 +325,11 @@ const takeTab = SqlSchema.findAll({
         .update(agentBrowserTab)
         .set({
           driverUserId: userId,
-          // A member's own standing takeover moves on and never back, so an earlier take landing late shortens nothing.
           heldUntil: sql`case when ${agentBrowserTab.driverUserId} = ${userId} and ${agentBrowserTab.heldUntil} > ${now} then greatest(${agentBrowserTab.heldUntil}, ${heldUntil}) else ${heldUntil}::timestamptz end`,
         })
         .where(
           and(
             eq(agentBrowserTab.id, tabId),
-            // No one drives it, the driver's takeover lapsed, or the driver is this member.
             or(
               isNull(agentBrowserTab.driverUserId),
               isNull(agentBrowserTab.heldUntil),
@@ -419,7 +354,6 @@ const renewTab = SqlSchema.findAll({
     Database.use((db) =>
       db
         .update(agentBrowserTab)
-        // The later of the two, so a slower renewal never moves the takeover back.
         .set({ heldUntil: sql`greatest(${agentBrowserTab.heldUntil}, ${heldUntil})` })
         .where(
           and(
@@ -445,13 +379,11 @@ const releaseTab = SqlSchema.findAll({
     ),
 });
 
-/** A reached row split into its tab and its agent. */
 function reachedOf(row: typeof ReachedTabSchema.Type): ReachedBrowserTab {
   const { agentId, agentUserId, agentGithubAccess, ...tab } = row;
   return { tab, agent: { id: agentId, userId: agentUserId, githubAccess: agentGithubAccess } };
 }
 
-/** The member driving the tab at the instant given; null where none does or their takeover lapsed. */
 export function browserTabDriver(
   tab: Pick<AgentBrowserTabRow, "driverUserId" | "heldUntil">,
   now: Date,
@@ -461,11 +393,6 @@ export function browserTabDriver(
   return { userId: tab.driverUserId, heldUntil: tab.heldUntil };
 }
 
-/**
- * The tabs of the place named, the oldest first, each with the coding agent
- * whose browser holds it: one agent's, or every one of a task's agents' the
- * member sees; nothing where the member reaches no such agent or task.
- */
 export function listBrowserTabs(
   userId: string,
   place: BrowserTabsPlace,
@@ -481,7 +408,6 @@ export function listBrowserTabs(
   });
 }
 
-/** One tab of the place named, where the member reaches it as `listBrowserTabs` would list it; nothing otherwise. */
 export function readBrowserTab(
   userId: string,
   place: BrowserTabsPlace,
@@ -492,30 +418,16 @@ export function readBrowserTab(
   );
 }
 
-/** The tabs open in the browser of the agent whose conversation is named, the oldest first. */
 export function listAgentBrowserTabs(
   conversationId: string,
 ): BrowserTabEffect<readonly AgentBrowserTabRow[]> {
   return findAgentTabs({ conversationId });
 }
 
-/**
- * Records an agent's action on a tab: the tab its browser names, made where
- * none stands on the task its agent is on, its page as it now stands, cut
- * at the Browser tab's bound, and the instant. Who opened it stands from its first report, and a
- * member's takeover is left as it is, for the agent's side to heed.
- */
 export function upsertBrowserTab(action: BrowserTabAction): BrowserTabEffect<AgentBrowserTabRow> {
   return writeTab(action, false);
 }
 
-/**
- * Records a tab a member just opened in an agent's browser, as
- * `upsertBrowserTab` does, but with the member as its opener even where a
- * row for the target stands already: one the agent's own `list` wrote in
- * the moment between the page opening and this write, since the browser
- * makes a new id for every page, so no agent opened it.
- */
 export function recordMemberOpenedBrowserTab(
   tab: Omit<BrowserTabAction, "openedBy"> & { readonly userId: string },
 ): BrowserTabEffect<AgentBrowserTabRow> {
@@ -523,7 +435,6 @@ export function recordMemberOpenedBrowserTab(
   return writeTab({ ...page, openedBy: { kind: AGENT_BROWSER_TAB_OPENER.MEMBER, userId } }, true);
 }
 
-/** A tab's write: upserted with its page as it stands, its opener kept from its first report unless `claimOpener`. */
 function writeTab(
   action: BrowserTabAction,
   claimOpener: boolean,
@@ -540,21 +451,10 @@ function writeTab(
       openedByUserId: openedBy.kind === AGENT_BROWSER_TAB_OPENER.MEMBER ? openedBy.userId : null,
       claimOpener,
       now,
-    }).pipe(
-      // An upsert that returned no row is the database breaking its own contract, not an outcome.
-      Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
-    );
+    }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
   });
 }
 
-/**
- * Moves a tab of the agent's from the target it was read on onto the one
- * its browser reopened it as, once a browser started without its pages: the
- * same tab, by its id, with its page, opener, takeover, and instants as they
- * stood. Answers whether it moved: not for a tab of another agent's browser,
- * nor for one another caller moved off `from` first, so of two reopening a
- * tab at once exactly one keeps its new page.
- */
 export function retargetBrowserTab(
   conversationId: string,
   tabId: string,
@@ -564,15 +464,6 @@ export function retargetBrowserTab(
   return Effect.map(retargetTab({ conversationId, tabId, from, to }), (rows) => rows.length > 0);
 }
 
-/**
- * Records a tab's page as a member's live view of it saw it move, the
- * member steering it from its bar or driving it, so a browser that starts
- * afresh reopens it where it stood (`restore-tabs.ts`): its address and
- * title, cut where the Browser tab cuts them, and nothing else, its opener,
- * takeover, and last action as they stood. Answers whether the tab took it:
- * not where it no longer stands on the target named, as after a reopening
- * moved it, so a stale view's write never lands.
- */
 export function noteBrowserTabPage(
   tabId: string,
   targetId: string,
@@ -584,16 +475,6 @@ export function noteBrowserTabPage(
   );
 }
 
-/**
- * Records where the agent's pointer went on a tab of its browser, the
- * instant it went there standing as the tab's last action, so a member's
- * window draws it gliding there. Answers whether a kept tab took it: a tab
- * no row keeps yet, one this call just opened, is drawn by no window, so
- * its move is dropped, and a move older than the one the tab holds, a write
- * that landed late beside another call's, is dropped too, so the pointer
- * and the tab's last action never go back. Note that it is one write, with
- * no read before it.
- */
 export function pointBrowserTab(
   conversationId: string,
   move: BrowserCursorMove,
@@ -605,7 +486,6 @@ export function pointBrowserTab(
       x: move.x,
       y: move.y,
       kind: move.kind,
-      // Note that a visible page's size is whole CSS pixels, as the browser reports it.
       width: Math.round(move.viewport.width),
       height: Math.round(move.viewport.height),
       at: new Date(move.at),
@@ -614,19 +494,10 @@ export function pointBrowserTab(
   );
 }
 
-/** Deletes a tab its agent closed, answering whether the agent's browser held it. */
 export function closeBrowserTab(conversationId: string, tabId: string): BrowserTabEffect<boolean> {
   return Effect.map(deleteTab({ conversationId, tabId }), (rows) => rows.length > 0);
 }
 
-/**
- * Makes the member the tab's driver until the instant given, answering
- * whether they now drive it: taken where no one drove it or the driver's
- * takeover had lapsed at `now`, and moved on, never back, where they drove
- * it already;
- * a tab another member drives stays theirs. Reaching the tab is the
- * caller's to have checked.
- */
 export function takeOverBrowserTab(
   tabId: string,
   userId: string,
@@ -636,7 +507,6 @@ export function takeOverBrowserTab(
   return Effect.map(takeTab({ tabId, userId, heldUntil, now }), (rows) => rows.length > 0);
 }
 
-/** Moves the member's own takeover, still standing at `now`, on to the instant given, never back; answers whether it stood. */
 export function renewBrowserTabTakeover(
   tabId: string,
   userId: string,
@@ -646,24 +516,10 @@ export function renewBrowserTabTakeover(
   return Effect.map(renewTab({ tabId, userId, heldUntil, now }), (rows) => rows.length > 0);
 }
 
-/** Hands the tab back to its agent where the member drives it, answering whether they did; another member's takeover stands. */
 export function handBackBrowserTab(tabId: string, userId: string): BrowserTabEffect<boolean> {
   return Effect.map(releaseTab({ tabId, userId }), (rows) => rows.length > 0);
 }
 
-/**
- * One agent's or one task's tabs written for Neon Realtime, so a member's
- * window follows them, the agent's pointer among them, as they move: each
- * tab `listBrowserTabs` lists the account, under the same rule of who may
- * read it, every column under the key the wire's tab line reads it by
- * (`@repo/features/agent-browser-tab-wire`'s `agentBrowserTabLineSchema`)
- * and every instant in epoch milliseconds. The account is joined through its
- * membership of the agent's workspace, as Neon's guide authorizes a live
- * read. It reads no clock, as Realtime requires, so a takeover past its
- * instant is delivered as it stands and lapsed by the reader, and keeps no
- * order, which the reader keeps. None where a value cannot be carried, which
- * a caller answers as the tabs not being live.
- */
 export function browserTabsLiveStatement(
   userId: string,
   place: BrowserTabsPlace,
@@ -695,7 +551,6 @@ export function browserTabsLiveStatement(
         ),
       )
       .from(agentBrowserTab)
-      // Note that a tab no coding agent's conversation names is listed to no one, as the held list reads it.
       .innerJoin(agentTable, eq(agentTable.conversationId, agentBrowserTab.conversationId))
       .innerJoin(
         member,

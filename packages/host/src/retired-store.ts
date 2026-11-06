@@ -2,21 +2,8 @@ import { DEFAULT_AGENT_ID } from "@repo/runtime/vocabulary";
 import { Cause, Effect, Path } from "effect";
 import * as FileSystem from "effect/FileSystem";
 
-/**
- * The agents' directory under the app's application data, one entry per agent:
- * where earlier builds kept the local brain's store and workspace, and what a
- * launch still looks under to remove the retired store.
- */
 const AGENTS_DIRECTORY = "agents";
 
-/**
- * What an earlier build kept under the agent's directory and this one never
- * opens: the SQLite database of the local brain's conversations, working
- * memory, notebook, and index, the write-ahead log and shared-memory file
- * SQLite keeps beside it, and the recovery archives of deleted
- * conversations. Nothing here is migrated; the hosted brain's record is the
- * account's and starts clean. The names are the ones the retired store wrote.
- */
 const RETIRED_STORE_ENTRY = {
   DATABASE: "agent.sqlite",
   WRITE_AHEAD_LOG: "agent.sqlite-wal",
@@ -26,7 +13,6 @@ const RETIRED_STORE_ENTRY = {
 
 type RetiredStoreEntry = (typeof RETIRED_STORE_ENTRY)[keyof typeof RETIRED_STORE_ENTRY];
 
-/** The entries under the agent's directory a launch removes, in the order it removes them. */
 const RETIRED_STORE_ENTRIES: readonly RetiredStoreEntry[] = [
   RETIRED_STORE_ENTRY.DATABASE,
   RETIRED_STORE_ENTRY.WRITE_AHEAD_LOG,
@@ -35,19 +21,10 @@ const RETIRED_STORE_ENTRIES: readonly RetiredStoreEntry[] = [
 ];
 
 interface RemoveRetiredStoreOptions {
-  /** The app's own application-state root, the agents' directory beneath it. */
   stateRoot: string;
   report: (message: string) => void;
 }
 
-/**
- * Removes the retired store's entries from the agent's directory, each on
- * its own: an entry that is not there is nothing to do, and one that cannot
- * be removed is reported and left for the next launch, without stopping the
- * others or the launch. The workspace and skills beside them are untouched.
- * Stateless by design: every launch looks, so no marker has to record that
- * one did. The machine's file system is the ambient `FileSystem` service.
- */
 export const removeRetiredStore = (
   options: RemoveRetiredStoreOptions,
 ): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> =>

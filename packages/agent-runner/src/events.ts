@@ -1,17 +1,3 @@
-/**
- * events.ts -- the runner's way out: every message numbered in the order it was emitted, and posted to the service in batches, in order, retried until the service takes it.
- *
- * One sender fiber posts one batch at a time, so a batch never overtakes the
- * one before it, and a batch that fails is posted again whole with the same
- * numbers, which the service applies at most once. Everything emitted while a post
- * is in flight waits in the queue and goes in the next batch, so a stream of
- * partial messages costs a post per round trip rather than per token. Beside
- * the sender, a heartbeat posts a batch with no events every
- * `RUNNER_HEARTBEAT` for as long as the launch runs, once each, since the
- * next is never far, so the service keeps the sandbox alive through a harness's
- * long silence; it stops as the sink drains.
- */
-
 import {
   Cause,
   Data,
@@ -33,17 +19,8 @@ import {
   type RunnerMessage,
 } from "./protocol.js";
 
-/** The most events one post carries. */
 const BATCH_MAX = 256;
 
-/**
- * How long the sender waits after a post the service did not take: the first wait,
- * doubling on each failure, up to the longest, each spread by jitter so the
- * launches an outage cut off together do not all post again in step. There is
- * no count after which it gives up: a launch that holds its run posts for as
- * long as it runs, and only the service refusing it (a status that never changes by
- * waiting) or the device stopping it ends it.
- */
 const POST_RETRY = {
   FIRST: Duration.millis(250),
   LONGEST: Duration.seconds(30),
@@ -56,31 +33,18 @@ const POST_BACKOFF = Schedule.exponential(POST_RETRY.FIRST).pipe(
   ),
 );
 
-/**
- * How long one post waits on the service's answer before it is let go as a failure
- * to retry: the heartbeat's own bound, so a connection a sleep or a network
- * change left half open cannot hold the sender for good.
- */
 const POST_TIMEOUT = Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS);
 
-/**
- * How long `drain` waits for the last events after the launch was stopped
- * before it lets them go: one post's own bound, so a Stop ends the runner
- * promptly through an outage rather than after it.
- */
 const STOP_DRAIN = POST_TIMEOUT;
 
-/** The statuses that say the service may take the same batch later: its own failure, a timeout, or a limit. */
 const TRANSIENT_STATUS = new Set([408, 429]);
 const SERVER_ERROR = 500;
 
-/** A post the service did not take. `transient` is whether posting it again may succeed. */
 export class EventsUndelivered extends Data.TaggedError("EventsUndelivered")<{
   readonly transient: boolean;
   readonly detail: string;
 }> {}
 
-/** Where a launch's events go, as whom, from which number, and the secrets no event may carry. */
 interface SinkOptions {
   readonly url: string;
   readonly bearer: Redacted.Redacted;
@@ -89,30 +53,21 @@ interface SinkOptions {
 }
 
 export interface EventSink {
-  /** Numbers a message and queues it for the service. */
   readonly emit: (message: RunnerMessage) => Effect.Effect<void>;
-  /** Takes no more messages and waits until every queued one is posted, or the service refused them for good. */
   readonly drain: Effect.Effect<void, EventsUndelivered>;
-  /** `drain` for a launch the service stopped: waits at most one post's bound for the last events, then lets them go. */
   readonly drainStopped: Effect.Effect<void, EventsUndelivered>;
-  /** Settles only if the service refuses a post for good, with why: it will not hear anything more from this launch. */
   readonly undelivered: Effect.Effect<EventsUndelivered>;
-  /** Adds a secret the launch came to hold, such as a refreshed token, to those no batch from now on carries. */
   readonly withhold: (secret: Redacted.Redacted) => Effect.Effect<void>;
 }
 
-/** What a secret is replaced with wherever an event carried it. */
 const REDACTED = "[redacted]";
 
-/** A value as it crosses to the service: JSON's own shapes. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };
 
-/** A text with every secret taken out. */
 function redactedText(text: string, secrets: readonly string[]): string {
   return secrets.reduce((scrubbing, secret) => scrubbing.replaceAll(secret, REDACTED), text);
 }
 
-/** A value with every secret taken out of each string in it, keys included. */
 function redacted(value: Json, secrets: readonly string[]): Json {
   if (Predicate.isString(value)) return redactedText(value, secrets);
   if (Array.isArray(value)) return value.map((each) => redacted(each, secrets));
@@ -125,26 +80,12 @@ function redacted(value: Json, secrets: readonly string[]): Json {
   );
 }
 
-/**
- * A batch as the text the service is sent, with every secret the launch holds taken
- * out. Note that we scrub every event, the SDK's included, because a tool's
- * output or a CLI's error is text the runner never wrote, and a command the
- * agent runs may print a credential it can read: on a host the credential
- * itself, and in a sandbox its placeholder.
- * Note too that a sandbox's placeholders are scrubbed, because whoever read
- * one in the transcript could present it from inside the sandbox, a
- * Terminal's shell among them, and act as the agent or spend its credential.
- * Note too that we scrub the strings themselves, before they are spelled as
- * JSON, so no escape can hide a secret or be cut in half by its removal.
- */
 function batchText(batch: RunnerEventBatch, secrets: readonly Redacted.Redacted[]): string {
   const values = secrets.map(Redacted.value).filter((value) => value !== "");
-  // Note that the batch is JSON already, as the SDK parsed it from the CLI's stdout.
   const json: Json = JSON.parse(JSON.stringify(batch));
   return JSON.stringify(redacted(json, values));
 }
 
-/** One batch, posted once: taken, or why the service did not take it. */
 function postOnce(
   client: HttpClient.HttpClient,
   options: SinkOptions,
@@ -156,8 +97,6 @@ function postOnce(
   );
   return client.execute(request).pipe(
     Effect.timeout(POST_TIMEOUT),
-    // Note that the error is not kept as the cause, because the request it
-    // carries holds the bearer in its headers.
     Effect.mapError(
       () => new EventsUndelivered({ transient: true, detail: "Service unreachable" }),
     ),
@@ -171,7 +110,6 @@ function postOnce(
   );
 }
 
-/** One batch, posted until the service takes it or answers that it never will. */
 const postBatch = Effect.fn("agent-runner/postBatch")(function* (
   client: HttpClient.HttpClient,
   options: SinkOptions,
@@ -185,11 +123,6 @@ const postBatch = Effect.fn("agent-runner/postBatch")(function* (
   );
 });
 
-/**
- * The sink for one launch, numbering from `firstSequence`. Its sender runs in
- * the caller's scope; a post the service refuses for good stops it, and `drain`
- * reports that failure.
- */
 export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
   options: SinkOptions,
 ): Effect.fn.Return<EventSink, never, HttpClient.HttpClient | Scope.Scope> {
@@ -205,8 +138,6 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
     }
   }).pipe(Effect.catchIf(Cause.isDone, () => Effect.void));
   const sender = yield* Effect.forkScoped(sendAll);
-  // Note that a heartbeat the service did not take, or did not answer within the post's bound, is let go, since the next follows within the interval.
-  // Note that `Effect.schedule` waits one interval before the first beat, as the schedule's first step sleeps.
   const heartbeat = yield* Effect.forkScoped(
     Effect.schedule(
       Effect.ignore(
@@ -227,7 +158,6 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
     Effect.andThen(Queue.end(queue)),
     Effect.andThen(Fiber.join(sender)),
   );
-  // Note that the sender is not joined to its end here, because the scope interrupts it as the launch ends.
   const drainStopped = drain.pipe(Effect.timeoutOption(STOP_DRAIN), Effect.asVoid);
   const undelivered = Fiber.join(sender).pipe(
     Effect.flip,

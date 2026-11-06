@@ -1,44 +1,22 @@
-/**
- * scripted-spawner.ts -- a `ChildProcessSpawner` that runs nothing: each spawn plays the script a test wrote for it, on the test's clock.
- *
- * A script prints its stdout and stderr at once and exits with its code
- * after its delay, or never where it names no code. The spawner keeps the
- * platform's one promise about the scope a process is spawned in: a process
- * still running when that scope closes is ended, group and all, under the
- * signal and the SIGKILL grace its command asked for. A kill signals the
- * process's group as the caller asked, and sets off what its script says
- * a signal does. What the process was handed (program, arguments, working
- * directory, environment, stdin), whether it was killed, and how it ended
- * are kept for the test to read, which is what the operating system would
- * observe.
- */
-
 import { Deferred, Duration, Effect, Layer, Sink, Stream } from "effect";
 import * as PlatformError from "effect/PlatformError";
 import type { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process";
 
-/** What one spawned process does. */
 export interface Script {
   readonly stdout?: string;
   readonly stderr?: string;
-  /** The code it exits with on its own; absent, it runs until it is ended. */
   readonly exitCode?: number;
-  /** How long it runs before it exits on its own. */
   readonly after?: Duration.Input;
-  /** What it runs until, in place of `after`, as a process that ends on a signal sent another way. */
   readonly until?: Effect.Effect<void>;
-  /** What a kill of its group sets off, as a process that handles the signal does. */
   readonly killed?: Effect.Effect<void>;
 }
 
-/** How a process's group was killed: the signal, and the wait before SIGKILL. */
 interface Killed {
   readonly killSignal: string;
   readonly forceKillAfterMillis: number;
 }
 
-/** One process as the operating system saw it: what it was handed, and how it ended. */
 interface Spawned {
   readonly program: string;
   readonly args: readonly string[];
@@ -46,15 +24,12 @@ interface Spawned {
   readonly env: Readonly<Record<string, string | undefined>> | undefined;
   readonly extendEnv: boolean | undefined;
   readonly stdin: ChildProcess.CommandOptions["stdin"];
-  /** How it ended: on its own, or ended with its group under the command's kill options. */
   ended: "exited" | "running" | Killed;
-  /** How its group was killed while it ran, where it was. */
   killed: Killed | undefined;
 }
 
 export interface ScriptedSpawner {
   readonly layer: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner>;
-  /** Every process spawned so far, in order. */
   readonly spawned: readonly Spawned[];
 }
 
@@ -64,7 +39,6 @@ function bytes(text: string | undefined): Stream.Stream<Uint8Array> {
   return text === undefined || text === "" ? Stream.empty : Stream.make(encoder.encode(text));
 }
 
-/** A spawner playing `scriptFor`'s answer for each command; a command it answers nothing for fails to start. */
 export function scriptedSpawner(
   scriptFor: (program: string, args: readonly string[]) => Script | undefined,
 ): ScriptedSpawner {
