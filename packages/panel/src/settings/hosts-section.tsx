@@ -13,6 +13,7 @@ import {
   ANNOUNCE,
   BUTTON_VARIANT,
   Button,
+  Checkbox,
   CODE_CARD_TITLE,
   CONFIRM_LOSS,
   CodeCard,
@@ -206,13 +207,21 @@ const THIS_MAC_WORDS = {
   TURN_ON_FAILED: "Could not turn on this Mac. Try again.",
 } as const;
 
-/** What turning This Mac off asks first: it takes the host and its agents' folders off this Mac. */
+/** What turning This Mac off asks first: it takes the host off this Mac, and its agents' folders where the member leaves that checked. */
 const THIS_MAC_OFF = {
   title: "Turn off agents on this Mac?",
-  body: `${PRODUCT_NAME} removes its host from this Mac, its agents' folders included, and any agent running here stops. Their tasks and transcripts stay in ${PRODUCT_NAME}.`,
+  body: `${PRODUCT_NAME} removes its host from this Mac, and any agent running here stops. Their tasks and transcripts stay in ${PRODUCT_NAME}.`,
   verb: "Turn off",
   running: "Turning off",
 } as const;
+
+/** The choice turning This Mac off offers where its host made agents' folders: delete them, or keep them in `~/.vespin/agents`. */
+function deleteFoldersWords(count: number): { readonly label: string; readonly detail: string } {
+  return {
+    label: `Delete its agents' ${count === 1 ? "folder" : `${count} folders`} in ~/.vespin/agents`,
+    detail: "Work in them that wasn't pushed goes with them.",
+  };
+}
 
 /** What Remove says goes, whatever the machine: the host removes itself from the machine as it hears so (`apps/host`'s `removeItself`). */
 const REMOVED = `It stops taking agents now, and ${PRODUCT_NAME} removes itself from the machine, its agents' folders included. Their tasks and transcripts stay in ${PRODUCT_NAME}.`;
@@ -482,22 +491,38 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
         });
       });
   };
-  // Note that turning This Mac off asks first, since it takes the host and its agents' folders off this Mac.
+  // Note that turning This Mac off asks first, since it takes the host off this Mac, and its agents' folders unless the member keeps them.
+  const [deleteFolders, setDeleteFolders] = useState(true);
+  const agentFolders = thisMac?.agentFolders ?? 0;
   const turningOff = useConfirmDialog(
     { subject: thisMac?.enrolled === true, surfaceOpen: true },
     () =>
-      act(ACT_KIND.HOSTS_THIS_MAC_SET, { on: false })
+      act(ACT_KIND.HOSTS_THIS_MAC_SET, {
+        on: false,
+        deleteFolders: deleteFolders || agentFolders === 0,
+      })
         .catch(() => undefined)
         .then((answer) => (answer === undefined || "failure" in answer ? REFUSED : ACCEPTED)),
     confirmFailure(FAILURE_SURFACE.THIS_MAC_SET),
   );
-  const switchThisMac = (next: boolean) => (next ? turnThisMacOn() : turningOff.ask());
+  const switchThisMac = (next: boolean) => {
+    if (next) return turnThisMacOn();
+    setDeleteFolders(true);
+    turningOff.ask();
+  };
 
   const listed = hosts?.map(machineOf) ?? [];
   // Note that This Mac's host stands on its switch's row only while it is on; one the service still lists while it is off, as an uninstall that could not reach the service leaves it, stands as any host does, by its own name, with its Remove.
   const naming = thisMac?.enrolled === true ? thisMac : undefined;
+  // Note that the record's device names This Mac's host where it has one, since an old host of the same machine may still be listed beside it.
   const listedMac =
-    naming === undefined ? undefined : hosts?.find((host) => isThisMac(machineOf(host), naming));
+    naming === undefined
+      ? undefined
+      : hosts?.find((host) =>
+          naming.deviceId === undefined
+            ? isThisMac(machineOf(host), naming)
+            : host.id === naming.deviceId,
+        );
   const loaded = signedIn && hosts !== undefined && installScriptUrl !== undefined;
   const others = hosts?.filter((host) => host !== listedMac) ?? [];
   return (
@@ -554,7 +579,16 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
         open
         confirm={turningOff}
         question={{ ...THIS_MAC_OFF, loss: CONFIRM_LOSS.IRREVERSIBLE, replayUnmasked: true }}
-      />
+      >
+        {agentFolders === 0 ? null : (
+          <Checkbox
+            checked={deleteFolders}
+            onChange={setDeleteFolders}
+            label={deleteFoldersWords(agentFolders).label}
+            detail={deleteFoldersWords(agentFolders).detail}
+          />
+        )}
+      </ConfirmDialog>
       {adding === undefined || !loaded ? null : (
         <AddHostsDialog
           known={adding.known}

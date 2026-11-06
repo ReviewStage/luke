@@ -26,8 +26,14 @@ import type { Composer } from "./composer.js";
 import { deviceLeft } from "./daemon/host-leave.js";
 import { Reporter, ThisMacHost } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
-import { type HostDevice, readHostDevice, writeHostDevice } from "./host-device-record.js";
+import {
+  type HostDevice,
+  readHostDevice,
+  removeHostDevice,
+  writeHostDevice,
+} from "./host-device-record.js";
 import type { HostKernel } from "./host-kernel.js";
+import { forgetOwnedAgents, ownedAgents } from "./local-agent-state.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -109,7 +115,8 @@ const sameKept = (one: Kept, other: Kept) =>
 const sameThisMac = (one: AppThisMacHost, other: AppThisMacHost) =>
   one.deviceId === other.deviceId &&
   one.machineId === other.machineId &&
-  one.enrolled === other.enrolled;
+  one.enrolled === other.enrolled &&
+  one.agentFolders === other.agentFolders;
 
 /** What turning This Mac on or off answers: done, or that it could not be. */
 const DONE = { done: true } as const;
@@ -160,13 +167,33 @@ export function composeThisMacHost(
       Effect.map(host.machine, (machine) => machine.machineId),
     );
 
-    /** This Mac as the windows draw it: which machine it is, and the device its record names, where it was enrolled with this app's service. */
+    /** Whose the record's device was last found to be: the account signed in then, the device, and whether the service lists it among that account's hosts. */
+    const ownership = MutableRef.make<
+      | { readonly userId: string | undefined; readonly deviceId: string; readonly owned: boolean }
+      | undefined
+    >(undefined);
+
+    /** Whether the record's device was last found to be another account's than the one signed in; not where it was not asked yet. */
+    const knownOthers = (record: HostDevice) => {
+      const found = MutableRef.get(ownership);
+      return (
+        found !== undefined &&
+        found.userId === dependencies.accountId() &&
+        found.deviceId === record.deviceId &&
+        !found.owned
+      );
+    };
+
+    /** This Mac as the windows draw it: which machine it is, the device its record names, where it was enrolled with this app's service, whether it runs agents for the account signed in, and how many agents' folders its host made. */
     const read = Effect.map(
-      Effect.all([ownServiceRecord, machineId]),
-      ([record, id]): AppThisMacHost => ({
+      Effect.all([ownServiceRecord, machineId, ownedAgents(host.stateRoot)]),
+      ([record, id, folders]): AppThisMacHost => ({
         ...(Option.isSome(record) ? { deviceId: record.value.deviceId } : undefined),
         ...(id === undefined ? undefined : { machineId: id }),
-        enrolled: Option.isSome(record) && record.value.refused !== true,
+        // Note that a record reads as on until the service is found to list it as another account's, since asking it on every pass would cost a call each time.
+        enrolled:
+          Option.isSome(record) && record.value.refused !== true && !knownOthers(record.value),
+        agentFolders: folders.length,
       }),
     );
 
@@ -185,13 +212,17 @@ export function composeThisMacHost(
       kernel.emit(GATEWAY_EVENT.THIS_MAC_HOST_CHANGED, carried(held));
     });
 
-    /** Whether the record's device is the account's, as the service lists its hosts. */
+    /** Whether the record's device is the account's, as the service lists its hosts, kept for the windows' read. */
     const accountOwns = (record: HostDevice) =>
-      Effect.flatMap(dependencies.hostListed(record.deviceId), (listed) =>
-        Option.isSome(listed)
-          ? Effect.succeed(listed.value)
-          : Effect.fail("read the account's hosts"),
-      );
+      Effect.flatMap(dependencies.hostListed(record.deviceId), (listed) => {
+        if (Option.isNone(listed)) return Effect.fail("read the account's hosts");
+        MutableRef.set(ownership, {
+          userId: dependencies.accountId(),
+          deviceId: record.deviceId,
+          owned: listed.value,
+        });
+        return Effect.succeed(listed.value);
+      });
 
     /**
      * The Mac enrolled under the device id given, or one minted, on the
@@ -253,17 +284,21 @@ export function composeThisMacHost(
     /** How many times This Mac was turned on, which the loop reads so a turn on is kept running, the script run after its enroll. */
     const turns = MutableRef.make(0);
 
-    /** This Mac turned on: enrolled where none of the account's stands unrefused; whether it is on. */
-    const turnedOn = Effect.gen(function* () {
-      if (HOST_RELEASE === undefined || !host.runsHost) return false;
-      const record = yield* readHostDevice(host.stateRoot);
-      if (Option.isSome(record) && !ownService(record.value)) return false;
-      if (Option.isSome(record) && record.value.refused !== true) return true;
-      const deviceId = Option.map(record, (kept) => kept.deviceId);
-      if (!(yield* enrolled(deviceId, HOST_RELEASE.VERSION))) return false;
-      MutableRef.update(turns, (count) => count + 1);
-      return true;
-    }).pipe(
+    /** This Mac turned on: enrolled where none of the account's stands unrefused, never over another account's standing host; whether it is on. */
+    const turnedOn = oneAtATime(
+      Effect.gen(function* () {
+        if (HOST_RELEASE === undefined || !host.runsHost) return false;
+        const record = yield* readHostDevice(host.stateRoot);
+        if (Option.isSome(record) && !ownService(record.value)) return false;
+        if (Option.isSome(record) && record.value.refused !== true) {
+          return yield* accountOwns(record.value);
+        }
+        const deviceId = Option.map(record, (kept) => kept.deviceId);
+        if (!(yield* enrolled(deviceId, HOST_RELEASE.VERSION))) return false;
+        MutableRef.update(turns, (count) => count + 1);
+        return true;
+      }),
+    ).pipe(
       Effect.catch((step) =>
         Effect.sync(() => {
           report(`this Mac's host: could not ${step}`);
@@ -273,30 +308,47 @@ export function composeThisMacHost(
     );
 
     /**
-     * This Mac turned off: the install's own uninstall run, which takes the
-     * host off this Mac, and then its record's device left on its own secret,
-     * read before the uninstall deleted it. Note that the app leaves as well,
-     * because a host release from before uninstall left the account itself
-     * deletes the secret without, and a leave the service already took
-     * answers as gone. Whether the uninstall ran.
+     * This Mac turned off, its agents' folders deleted or kept as asked: the
+     * install's own uninstall run, which takes the host off this Mac, then the
+     * record's device left on its own secret, read before the uninstall
+     * deleted it, and the record removed where no install was there to
+     * remove it. Never another account's host. Note that the app leaves as
+     * well, because a host release from before uninstall left the account
+     * itself deletes the secret without, and a leave the service already took
+     * answers as gone; and that kept folders are kept by letting go of the
+     * record of which ones the host made, which every release's uninstall
+     * reads to find them. Whether it is off.
      */
-    const turnedOff = oneAtATime(
-      Effect.gen(function* () {
-        if (!host.runsHost) return false;
-        const record = yield* ownServiceRecord;
-        const removed = yield* host.uninstall;
-        if (Result.isFailure(removed)) {
-          report(`this Mac's host could not be removed: ${removed.failure}`);
-          return false;
-        }
-        report("this Mac's host was removed");
-        if (HOST_RELEASE !== undefined && Option.isSome(record) && record.value.refused !== true) {
-          const left = yield* deviceLeft(record.value, HOST_RELEASE.VERSION);
-          if (!left) report("this Mac's host could not leave the account, so it stays listed");
-        }
-        return true;
-      }),
-    );
+    const turnedOff = (deleteFolders: boolean) =>
+      oneAtATime(
+        Effect.gen(function* () {
+          if (!host.runsHost) return false;
+          const record = Option.filter(yield* ownServiceRecord, (kept) => kept.refused !== true);
+          if (Option.isSome(record) && !(yield* accountOwns(record.value))) return false;
+          if (!deleteFolders) yield* forgetOwnedAgents(host.stateRoot);
+          const removed = yield* host.uninstall;
+          if (Result.isFailure(removed)) {
+            report(`this Mac's host could not be removed: ${removed.failure}`);
+            return false;
+          }
+          report("this Mac's host was removed");
+          if (HOST_RELEASE !== undefined && Option.isSome(record)) {
+            const left = yield* deviceLeft(record.value, HOST_RELEASE.VERSION);
+            if (!left) report("this Mac's host could not leave the account, so it stays listed");
+          }
+          yield* removeHostDevice(host.stateRoot);
+          return true;
+        }),
+      ).pipe(
+        Effect.catch((step) =>
+          Effect.sync(() => {
+            report(
+              `this Mac's host: could not ${typeof step === "string" ? step : "be turned off"}`,
+            );
+            return false;
+          }),
+        ),
+      );
 
     /** The account's host stopped and kept from starting at the next login, its files kept. */
     const keepStopped = Effect.gen(function* () {
@@ -350,12 +402,12 @@ export function composeThisMacHost(
       /** Run agents on this Mac turned on or off; done, or that it could not be, its windows told where it now stands. */
       [GATEWAY_METHOD.HOSTS_THIS_MAC_SET]: (params) =>
         Effect.gen(function* () {
-          const { on } = yield* readParams(
+          const { on, deleteFolders } = yield* readParams(
             thisMacHostSetParamsSchema,
             params,
             "a set says whether This Mac is on",
           );
-          const done = yield* on ? turnedOn : turnedOff;
+          const done = yield* on ? turnedOn : turnedOff(deleteFolders ?? true);
           yield* tellThisMac;
           return carried(done ? DONE : UNDONE);
         }).pipe(Effect.provideContext(services)),

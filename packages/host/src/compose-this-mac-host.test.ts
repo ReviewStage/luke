@@ -179,7 +179,8 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
     const set = composer.methods[GATEWAY_METHOD.HOSTS_THIS_MAC_SET];
     assert.ok(set !== undefined, "This Mac answers being turned on and off");
     /** Run agents on this Mac turned on or off, as its switch turns it; what it answered. */
-    const turn = (on: boolean) => Effect.orDie(set({ on }, CONTEXT));
+    const turn = (on: boolean, deleteFolders?: boolean) =>
+      Effect.orDie(set(deleteFolders === undefined ? { on } : { on, deleteFolders }, CONTEXT));
     return { asked, enrolled, held, turn };
   });
 
@@ -201,7 +202,7 @@ it.effect(
         yield* until(() => mac.held() !== undefined);
         yield* nudged(Duration.minutes(1));
         assert.equal(mac.asked.length, 0, "nothing is enrolled unasked");
-        assert.deepEqual(mac.held(), { machineId: MACHINE_ID, enrolled: false });
+        assert.deepEqual(mac.held(), { machineId: MACHINE_ID, enrolled: false, agentFolders: 0 });
 
         assert.deepEqual(yield* mac.turn(true), { done: true });
         yield* until(() => mac.asked.length >= 2);
@@ -220,6 +221,7 @@ it.effect(
           deviceId: MINTED_ID,
           machineId: MACHINE_ID,
           enrolled: true,
+          agentFolders: 0,
         });
       }).pipe(Effect.provide(FILES)),
     ),
@@ -233,7 +235,7 @@ it.effect(
         const stateRoot = yield* temporaryDirectoryScoped("this-mac-");
         const mac = yield* thisMac(stateRoot, { experiments: {} });
         yield* until(() => mac.held() !== undefined);
-        assert.deepEqual(mac.held(), { machineId: MACHINE_ID, enrolled: false });
+        assert.deepEqual(mac.held(), { machineId: MACHINE_ID, enrolled: false, agentFolders: 0 });
 
         // As the host daemon writes it once it pairs, apart from this app.
         yield* writeHostDevice(stateRoot, {
@@ -243,7 +245,12 @@ it.effect(
         });
         yield* until(() => mac.held()?.deviceId !== undefined);
 
-        assert.deepEqual(mac.held(), { deviceId: KEPT_ID, machineId: MACHINE_ID, enrolled: true });
+        assert.deepEqual(mac.held(), {
+          deviceId: KEPT_ID,
+          machineId: MACHINE_ID,
+          enrolled: true,
+          agentFolders: 0,
+        });
         assert.equal(
           mac.asked.length,
           0,
@@ -339,9 +346,49 @@ it.effect(
         yield* nudged(Duration.minutes(1));
 
         assert.deepEqual(mac.asked, ["uninstall", "leave"]);
-        assert.deepEqual(mac.held(), { machineId: MACHINE_ID, enrolled: false });
+        assert.deepEqual(mac.held(), { machineId: MACHINE_ID, enrolled: false, agentFolders: 0 });
       }).pipe(Effect.provide(FILES)),
     ),
+);
+
+it.effect(
+  "turning This Mac off with its folders kept lets go of which ones its host made before the uninstall reads them",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const record = { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE };
+        const stateRoot = yield* recorded(record);
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* fileSystem.makeDirectory(join(stateRoot, "owned-agents"), { recursive: true });
+        yield* fileSystem.writeFileString(join(stateRoot, "owned-agents", "agent-1"), "");
+        const mac = yield* thisMac(stateRoot, { listed: [KEPT_ID], loaded: true });
+        yield* until(() => mac.held()?.agentFolders === 1);
+
+        assert.deepEqual(yield* mac.turn(false, false), { done: true });
+
+        assert.equal(yield* fileSystem.exists(join(stateRoot, "owned-agents")), false);
+        assert.deepEqual(mac.asked, ["uninstall", "leave"]);
+      }).pipe(Effect.provide(FILES)),
+    ),
+);
+
+it.effect("another account's standing host on this Mac is neither turned off nor taken as on", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const record = { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE };
+      const stateRoot = yield* recorded(record);
+      const mac = yield* thisMac(stateRoot, { loaded: true });
+      yield* until(() => mac.held() !== undefined);
+
+      assert.deepEqual(yield* mac.turn(false), { failure: "unanswered" });
+      assert.deepEqual(yield* mac.turn(true), { failure: "unanswered" });
+      yield* nudged(Duration.seconds(10));
+
+      assert.equal(mac.asked.length, 0, "nothing of the other account's host is touched");
+      assert.equal(mac.held()?.enrolled, false);
+      assert.deepEqual(Option.getOrUndefined(yield* readHostDevice(stateRoot)), record);
+    }).pipe(Effect.provide(FILES)),
+  ),
 );
 
 it.effect(

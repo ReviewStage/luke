@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DEVICE_ARCH } from "@repo/features/device-agent-wire";
@@ -126,8 +127,13 @@ function thisMacHost(): ThisMacHostSeam {
         ? Result.fail(`launchd still holds ${LABEL}`)
         : Result.succeed<void>(undefined);
     }),
-    // Note that its input is no terminal, so it asks nothing and removes every agent's folder.
-    uninstall: ran(path.join(os.homedir(), INSTALL_COMMAND), ["uninstall"], ANSWER_WITHIN.INSTALL),
+    // Note that its input is no terminal, so it asks nothing, and that a Mac enrolled whose install never landed has no command and nothing to uninstall.
+    uninstall: Effect.suspend(() => {
+      const command = path.join(os.homedir(), INSTALL_COMMAND);
+      return existsSync(command)
+        ? ran(command, ["uninstall"], ANSWER_WITHIN.INSTALL)
+        : Effect.succeed(Result.succeed<void>(undefined));
+    }),
   };
 }
 

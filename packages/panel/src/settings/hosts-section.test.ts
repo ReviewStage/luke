@@ -373,5 +373,27 @@ test("This Mac's switch turns it on at once, and off only once the question is a
   assert.ok(asked.includes("Turn off agents on this Mac?"), asked);
 
   await press("Turn off");
-  assert.deepEqual(sent, [{ on: true }, { on: false }]);
+  assert.deepEqual(sent, [{ on: true }, { on: false, deleteFolders: true }]);
+});
+
+test("turning This Mac off offers to keep its agents' folders, and keeps them where that is unchecked", async () => {
+  const sent: unknown[] = [];
+  await machinesWithThisMac([], { machineId: MACHINE_ID, enrolled: true, agentFolders: 3 }, [], {
+    [ACT_KIND.HOSTS_THIS_MAC_SET]: async (input: unknown) => {
+      sent.push(input);
+      return { done: true as const };
+    },
+  });
+  await act(async () => thisMacSwitch().click());
+  await settle();
+
+  const box = document.querySelector<HTMLElement>(
+    '[role="alertdialog"] [aria-label^="Delete its agents\' 3 folders"], [role="alertdialog"] [role="checkbox"]',
+  );
+  assert.ok(box !== null, "the question offers to delete the folders");
+  assert.equal(box.getAttribute("aria-checked"), "true", "deleting them is what it offers first");
+  await act(async () => box.click());
+  await press("Turn off");
+
+  assert.deepEqual(sent, [{ on: false, deleteFolders: false }]);
 });

@@ -207,8 +207,13 @@ export type HostDoneAnswerView = typeof hostDoneAnswerViewSchema.Type;
 /** What removing a host names: its id. */
 export const hostIdParamsSchema = hostIdRequestSchema;
 
-/** What turning Run agents on this Mac on or off says: whether it is on. */
-export const thisMacHostSetParamsSchema = EffectSchema.Struct({ on: EffectSchema.Boolean });
+/** What turning Run agents on this Mac on or off says: whether it is on, and, turning it off, whether its agents' folders go with it. */
+export const thisMacHostSetParamsSchema = EffectSchema.Struct({
+  on: EffectSchema.Boolean,
+  deleteFolders: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type ThisMacHostSetParams = typeof thisMacHostSetParamsSchema.Type;
 
 /** The account's own provider keys, as the window hears them read, saved, or removed: the keys as they stand, or why there are none. */
 export const providerKeysAnswerViewSchema = EffectSchema.Union([providerKeysAnswerSchema, failed]);
