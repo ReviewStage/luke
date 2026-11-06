@@ -20,9 +20,11 @@
  * the repository's credential taken off the firewall, then the session stopped, its filesystem kept for a later resume; where the
  * credential would not come off, the sandbox is left for the next sweep. One
  * a Terminal holds keeps running with the credentials only its exited runner
- * sent taken off (`RUNNER_SLOTS`), where they still stand: a runner a halt or
- * a Stop's force ended, one that died without its END, or a launch that
- * failed, which no END's own withdraw took them off for.
+ * sent taken off, where its launch is still kept at the firewall: a runner a
+ * halt or a Stop's force ended, one that died without its END, or a launch
+ * that failed, which no END's own let-go took them off for; the policy is
+ * written again without them, the agent's repository credential minted
+ * afresh for the shell.
  *
  * A runner that exited while its run's turn still runs died without its END
  * (it drains its END to us before it exits): the sweep settles that turn
@@ -60,8 +62,10 @@ import { redactCredentials } from "@repo/features/credential-redaction";
 import { TURN_FAILURE } from "@repo/features/turn-run";
 import { Cause, Data, Duration, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
+import { firewallSourcesAfterLaunch } from "../agents/coder-host/checkout.js";
 import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { describeFailure } from "../agents/machine/agent-machine.js";
 import {
   runnerTag,
   SANDBOX_NAME,
@@ -69,7 +73,7 @@ import {
   taggedRunner,
 } from "../agents/machine/vercel-machine.js";
 import { FAILURE_CHARS } from "../agents/native-events/runner-moments.js";
-import { type FirewallSession, RUNNER_SLOTS, sandboxFirewall } from "../agents/sandbox-firewall.js";
+import { type FirewallSession, sandboxFirewall } from "../agents/sandbox-firewall.js";
 import {
   COMMAND_GONE,
   type CommandExit,
@@ -80,6 +84,7 @@ import {
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
+import type { GitHubApp } from "../github/github-app.js";
 import {
   listOrderAt,
   listRunningSandboxes,
@@ -343,23 +348,28 @@ const runEnded = (sandbox: NativeSandbox, now: Date) =>
 
 /**
  * The credentials only a runner sends taken off a sandbox a Terminal keeps up
- * past its runner's exit, where they still stand, so a sweep that finds them
- * gone reads the record alone. One that would not come off is said and taken
- * off at a later sweep's read; a send that failed once its record moved on
- * is followed by the next write to the session, the Terminal's own renewal
- * of its GitHub credential among them, which sends what stands.
+ * past its runner's exit, where its launch is still kept, so a sweep that
+ * finds it let go reads the store alone: the launch let go, and the policy
+ * written without it, the agent's repository credential minted afresh for
+ * the shell where it can be minted, and nothing beside it where it cannot.
+ * One that would not come off is said and taken off at a later sweep's
+ * read.
  */
-const runnerCredentialsWithdrawn = (api: VercelSandboxApi, session: FirewallSession) =>
+const runnerCredentialsWithdrawn = (
+  api: VercelSandboxApi,
+  session: FirewallSession,
+  agentId: string,
+) =>
   Effect.gen(function* () {
     const firewall = sandboxFirewall(api);
-    const standing = yield* firewall.standing(session);
-    for (const slot of RUNNER_SLOTS) {
-      if (standing.has(slot)) yield* firewall.withdraw(session, slot);
-    }
+    const launch = yield* firewall.launchOf(session);
+    if (launch === undefined) return;
+    const sources = yield* firewallSourcesAfterLaunch(session.userId, launch.agentId ?? agentId);
+    yield* firewall.endLaunch(session, sources);
   }).pipe(
     Effect.catch((failure) =>
       Effect.logWarning(
-        `an exited runner's credentials stayed on a held sandbox: ${failure.message}`,
+        `an exited runner's credentials stayed on a held sandbox: ${describeFailure(failure)}`,
       ),
     ),
   );
@@ -386,10 +396,11 @@ const stoppedUnderLease = (
         const ended = yield* runEnded(sandbox, now);
         if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
         if (yield* sandboxHeld(ended.value.conversationId, now)) {
-          yield* runnerCredentialsWithdrawn(api, {
-            userId: ended.value.userId,
-            sandboxSessionId: sandbox.running,
-          });
+          yield* runnerCredentialsWithdrawn(
+            api,
+            { userId: ended.value.userId, sandboxSessionId: sandbox.running },
+            sandbox.agentId,
+          );
           return SANDBOX_ENDING.HELD;
         }
         return yield* stopWithinBudget(api, sandbox.running, budget, "an ended native sandbox");
@@ -416,7 +427,7 @@ const endSandbox = (
 ): Effect.Effect<
   SandboxEnding,
   QueryError | Schema.SchemaError,
-  DatabaseServices | HttpClient.HttpClient
+  DatabaseServices | HttpClient.HttpClient | GitHubApp
 > =>
   Effect.gen(function* () {
     const going = goingOf(standing);
@@ -452,7 +463,7 @@ export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSa
   ): Effect.fn.Return<
     NativeSandboxSweepOutcome,
     QueryError | Schema.SchemaError,
-    DatabaseServices | HttpClient.HttpClient
+    DatabaseServices | HttpClient.HttpClient | GitHubApp
   > {
     const api = yield* vercelSandboxApi(deploymentOidcToken);
     const listed = yield* Effect.result(
