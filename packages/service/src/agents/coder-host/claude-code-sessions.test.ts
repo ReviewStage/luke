@@ -32,6 +32,7 @@ import {
 } from "@repo/database/models/agent-store";
 import { appendSessionEntries } from "@repo/database/models/claude-session-entries";
 import { readNativeRewind, rewindConversation } from "@repo/database/models/conversation-rewind";
+import { deviceAgentLinesWaiting } from "@repo/database/models/device-agent-store";
 import { registerDevice } from "@repo/database/models/device-store";
 import { installSkill } from "@repo/database/models/installed-skill-store";
 import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
@@ -51,6 +52,10 @@ import { messages } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_FAILURE, AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import {
+  DEVICE_AGENT_LINE_KIND,
+  deviceAgentLaunchSecretsSchema,
+} from "@repo/features/device-agent-wire";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -72,6 +77,7 @@ import {
   Option,
   Redacted,
   Result,
+  Schema,
 } from "effect";
 import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
@@ -100,6 +106,7 @@ import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fak
 import { AGENT_DRIVE, agentDriveName } from "../agent-drive.js";
 import { AGENT_TAG, SANDBOX_NAME } from "../agent-sandbox-open.js";
 import { BASE_DRIVE } from "../base-drive.js";
+import { claimedDeviceAgentLine } from "../device-agent.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -107,6 +114,7 @@ import {
   KEY_REFUSAL,
   PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
+import { agentMachinesLayer } from "../machine/agent-machines.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
@@ -920,11 +928,28 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           new Date(0),
         );
         const onKey = runnerSandboxApi();
-        const keyed = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(onKey)));
+        const machines = agentMachinesLayer({
+          readToken: deploymentOidcToken,
+          run: () => assert.fail("a Mac's launch runs no sandbox checkout"),
+        }).pipe(Layer.provide(onKey.layer));
+        // Note that the machines are provided innermost, so the Mac's machine answers rather than the fake sandbox's.
+        const keyed = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(machines),
+          Effect.provide(services(onKey)),
+        );
         assert.equal((yield* keyed.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const [launch] = yield* deviceAgentLinesWaiting(userId, deviceId);
+        assert.ok(launch?.kind === DEVICE_AGENT_LINE_KIND.LAUNCH);
+        const claimed = Option.getOrThrow(
+          yield* claimedDeviceAgentLine(userId, deviceId, launch.id).pipe(
+            Effect.provide(Layer.succeed(HostedEnvironment, NO_KEYS)),
+          ),
+        );
+        assert.ok("secrets" in claimed);
+        const { env } = Schema.decodeUnknownSync(deviceAgentLaunchSecretsSchema)(claimed.secrets);
         // A Mac has no firewall of ours, so its CLI is handed the key itself, and no swap is set.
-        assert.equal(onKey.commands[0]?.env[RUNNER_ENV.API_KEY], API_KEY);
-        assert.equal(onKey.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
+        assert.equal(env[RUNNER_ENV.API_KEY], API_KEY);
+        assert.equal(env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         assert.deepEqual(onKey.policies, []);
       }),
   );
@@ -2667,6 +2692,73 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "messages after a launch whose clone failed make the checkout it left whole before its runner starts: cloned where it is missing, finished where it stands unfinished",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        // The fake runs no git, so the checkout holds what went through: its clone, then its identity.
+        const checkout = {
+          cloneRefused: true,
+          identityRefused: true,
+          cloned: false,
+          finished: false,
+        };
+        api.hooks.runExit = (args) => {
+          if (args[0] === "-d") return checkout.cloned ? 0 : 1;
+          if (args[0] === "config") return checkout.finished ? 0 : 1;
+          if (args.some((arg) => arg.includes("git clone"))) {
+            if (checkout.cloneRefused) return 1;
+            checkout.cloned = true;
+            return 0;
+          }
+          if (args.some((arg) => arg.includes("git config user.email"))) {
+            if (checkout.identityRefused) return 1;
+            checkout.finished = true;
+            return 0;
+          }
+          return 0;
+        };
+        const isIdentity = (run: { readonly args: readonly string[] }) =>
+          run.args.some((arg) => arg.includes("git config user.email"));
+        const kept = keptAfterResponse();
+        const opened = yield* sessions
+          .open(message(agent, "Fix the relay."))
+          .pipe(Effect.provide(kept.layer));
+        // The launch, then the base drive's fill, whose clone is refused too.
+        yield* kept.run;
+        yield* kept.run;
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal((yield* newestTurn(agent)).status, TURN_STATUS.FAILED);
+        const own = sandboxOfAgent(api, agent)?.currentSessionId;
+        const failedRuns = api.runs.length;
+
+        // The clone goes through now, and the identity is refused.
+        checkout.cloneRefused = false;
+        yield* sessions
+          .send(opened.sessionId, message(agent, "Try again."))
+          .pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+        const clonedRuns = api.runs.length;
+        checkout.identityRefused = false;
+        const sent = yield* sessions
+          .send(opened.sessionId, message(agent, "Try again."))
+          .pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const ownAfter = (from: number) =>
+          api.runs.slice(from).filter((run) => run.session === own);
+        assert.equal(ownAfter(failedRuns).filter(isClone).length, 1, "cloned once");
+        assert.equal(ownAfter(clonedRuns).filter(isClone).length, 0, "not cloned again");
+        assert.equal(ownAfter(clonedRuns).filter(isIdentity).length, 1, "finished");
+        assert.equal(api.commands.length, 1);
+        assert.equal(api.commands[0]?.sandboxSessionId, own);
+      }),
+  );
+
+  it.effect(
     "a Start on a repository with no base drive clones it whole onto a drive of its own, then fills the base drive past the answer apart from the launch",
     () =>
       Effect.gen(function* () {
@@ -2692,7 +2784,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [AGENT_DRIVE.MOUNT_PATH]: { drive: agentDriveName(opened.sessionId), mode: "read-write" },
         });
         assert.ok(api.runs.some((run) => run.session === own?.currentSessionId && isClone(run)));
-        assert.equal(api.driveForks.size, 0);
+        assert.equal(api.driveForks.has(agentDriveName(opened.sessionId)), false);
         const [base] = baseDrives(api);
         assert.ok(base !== undefined);
         assert.ok(api.sandboxes.some((each) => each.name === base && each.deleted));
@@ -2834,7 +2926,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* kept.run;
         const onBranch = yield* anotherAgent(userId, agent, "relay-fix");
 
-        yield* sessions.open(message(onBranch, "Go on.")).pipe(Effect.provide(kept.layer));
+        const opened = yield* sessions
+          .open(message(onBranch, "Go on."))
+          .pipe(Effect.provide(kept.layer));
         yield* kept.run;
         yield* kept.run;
 
@@ -2842,7 +2936,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(own?.image, IMAGE);
         const clone = api.runs.find((run) => run.session === own?.currentSessionId && isClone(run));
         assert.equal(clone?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.BRANCH], "relay-fix");
-        assert.equal(api.driveForks.size, 0);
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.driveForks.has(agentDriveName(opened.sessionId)), false);
         assert.equal(baseDrives(api).length, 1);
       }),
   );

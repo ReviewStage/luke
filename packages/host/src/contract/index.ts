@@ -5,9 +5,9 @@ import type {
   InferContractRouterOutputs,
 } from "@orpc/contract";
 import { accountActsContract } from "./account.js";
-import { accountAskActsContract } from "./account-asks.js";
-import { agentInboxActsContract } from "./agent-inbox.js";
-import { agentActsContract } from "./agents.js";
+import { ACCOUNT_ASK_ACTS, accountAskActsContract } from "./account-asks.js";
+import { AGENT_INBOX_ACTS, agentInboxActsContract } from "./agent-inbox.js";
+import { AGENT_ACTS, agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
 import { browserLiveActsContract } from "./browser-live.js";
 import { chaptersActsContract } from "./chapters.js";
@@ -42,8 +42,20 @@ export {
   type MacCommandAnswer,
   type MacCommandDecision,
 } from "../mac-command-ask.js";
+export { ACCOUNT_ASK_ACTS } from "./account-asks.js";
+export { AGENT_INBOX_ACTS } from "./agent-inbox.js";
+export { AGENT_ACTS } from "./agents.js";
 export { ACT_ERROR } from "./base.js";
 export { CLI_INSTALL_OUTCOME, type CliInstallAnswer } from "./cli.js";
+export {
+  type ActInput,
+  type ActOutput,
+  type AnyHostAct,
+  type AnyHostActDeclaration,
+  declaredActs,
+  hostAct,
+  panelOnlyOf,
+} from "./declared-act.js";
 export {
   ACCOUNT_ACT_KIND,
   ACCOUNT_ASK_ACT_KIND,
@@ -81,6 +93,13 @@ export {
 } from "./pushes.js";
 export type { SettingUpdatePayload } from "./settings.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
+
+/** Every act declared once (`declared-act.ts`), one domain's spread each, in alphabetical order: what the host's composers answer directly. */
+export const HOST_ACTS = {
+  ...ACCOUNT_ASK_ACTS,
+  ...AGENT_INBOX_ACTS,
+  ...AGENT_ACTS,
+};
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {

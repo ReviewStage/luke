@@ -3,7 +3,7 @@ import type { InboxItem } from "@repo/features/inbox-wire";
 import { GROUP_HEADING, GroupHeader, LIST_DENSITY, List, ListRow } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { agentTab, isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
+import { agentTab, STRIP_TAB_KIND, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { NEEDS_YOU, threadsWaitingWords } from "../tasks/inbox-model.js";
@@ -162,7 +162,9 @@ export function PlanAgents({
     {
       tab,
       onChoose: (chosen) => {
-        if (isAgentTab(chosen)) onOpenAgent(chosen.agent);
+        if (typeof chosen !== "string" && chosen.kind === STRIP_TAB_KIND.AGENT) {
+          onOpenAgent(chosen.agent);
+        }
       },
     },
     agents,

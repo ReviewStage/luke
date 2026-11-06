@@ -53,9 +53,8 @@ import {
   changesTab,
   draftTab,
   fileTab,
-  isAgentTab,
-  isDraftTab,
   pageTab,
+  STRIP_TAB_KIND,
   subagentTab,
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
@@ -964,7 +963,10 @@ test("a column whose last agent is archived opens a new agent's draft in its pla
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
   const shown = column().tab;
-  assert.ok(shown !== undefined && isDraftTab(shown), "a draft, as a task with no agent opens on");
+  assert.ok(
+    shown !== undefined && typeof shown !== "string" && shown.kind === STRIP_TAB_KIND.DRAFT,
+    "a draft, as a task with no agent opens on",
+  );
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, shown]);
 });
 
@@ -1636,14 +1638,15 @@ test("a Vespin link to an Inbox item opens it in the window's Inbox as it stands
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 
-test("a Vespin link to an Inbox item by its id alone opens it where the service says it stands, in the workspace the service names whatever the slug, and one the service does not find opens the Inbox on it", async () => {
+test("a Vespin link to an Inbox item by its id alone opens it where the service says it stands, in the workspace the service names whatever the slug, and one the service does not find opens the Inbox on it, which a link to it asks after again", async () => {
   const alerts = "alerts";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
   const unknownId = "7f3a4b5c-6d7e-4f80-9a12-a3b4c5d6e7f8";
-  // The service finds the first item, and then not the second.
+  // The service finds the first item, then not the second, and then finds the second once asked again.
   const homes = [
     { agentId: AGENT_ID, planId: alerts, workspaceId: ACME.id },
     { failure: AGENT_CALL_FAILURE.NOT_FOUND },
+    { agentId: AGENT_ID, planId: alerts, workspaceId: ACME.id },
   ] as const;
   let asked = 0;
   const tab = mount(
@@ -1675,6 +1678,20 @@ test("a Vespin link to an Inbox item by its id alone opens it where the service 
   assert.equal(listed, ACME.id);
   assert.equal(tab.control().inboxView.open, true);
   assert.deepEqual(tab.control().inboxView.chosen, { itemId: unknownId, opened: true });
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.INBOX_ITEM, itemId: unknownId },
+    }),
+  );
+  await settle();
+
+  assert.deepEqual(
+    tab.control().inboxView.chosen,
+    { taskId: alerts, itemAgentId: AGENT_ID, itemId: unknownId, opened: true },
+    "a link to the item standing missing asks the service again",
+  );
 });
 
 test("a task's Inbox door and its link narrow the Inbox to the task, an agent's waiting thread choosing that thread there, and the Inbox's own row lists everything", async () => {
@@ -3265,7 +3282,9 @@ test("archiving a task's last agent takes its tab at once, and a refused archive
   tab.stand({ tasks: withAgents([{ ...RUNNING_AGENT, archivedAt: 5 }]) });
   await settle();
   assert.ok(
-    !tab.control().mainTabs.tabs.some((each) => isAgentTab(each)),
+    !tab
+      .control()
+      .mainTabs.tabs.some((each) => typeof each !== "string" && each.kind === STRIP_TAB_KIND.AGENT),
     "the agent leaves at once",
   );
 

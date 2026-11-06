@@ -153,6 +153,7 @@ function tasksTab(
     sidePanel: {
       ...base.sidePanel,
       open: at.panel.open,
+      stop: onTask ? DOCUMENT_TASK.id : undefined,
       fullScreen: at.panel.open && narrow,
       fullScreenOnly: at.panel.open && narrow,
       tab: at.panel.tab,
@@ -283,6 +284,7 @@ function mount(
         onClose: automations.onClose,
       },
     };
+    const routed = useRoutedStanding();
     const copyLink = useCopyLink(
       tasks,
       settings.standing
@@ -291,11 +293,12 @@ function mount(
       true,
       room,
       admin.open ? admin.view : undefined,
+      routed?.place,
     );
     history = useWindowHistory({
       known: true,
       link: copyLink.placed,
-      routed: useRoutedStanding(),
+      routed,
       settingsList: settings.listAddress,
       onSettingsList: settings.list,
       automations,

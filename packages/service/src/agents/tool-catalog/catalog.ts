@@ -1,17 +1,23 @@
 /**
- * tools.ts -- our tools a native harness's agent is served over MCP, each by its eve tool's own schema and door.
+ * catalog.ts -- every tool of ours an agent is served, declared once: its words, its schema, its gate, and its door.
  *
- * A Claude Code or Codex agent keeps its harness's own shell, files, todos,
- * and subagents; what touches the app reaches it as an MCP tool of our own
- * server (`app.ts`). Each tool here is the one eve's agent was offered: the
- * same name, the same description, the same input schema, and the same door
- * the coder host's method for it
- * runs (`../coder-host/inbox-door.ts` for the inbox, `../coder-host/agent-doors.ts`
- * for the rest), so the two runtimes run one implementation. A door is
- * reached directly rather than through the coder host, because the host
- * composes eve's sandbox and tools, which the web function serving this
- * server does not bundle. The registry maps a tool's name to those three,
- * and, for the one tool whose answer is a picture, how it is shown.
+ * Claude Code and Codex keep their harness's own shell, files, todos, and
+ * subagents; what touches the app reaches the agent as a tool of our MCP
+ * server (`../workspace-mcp/app.ts`), and this catalog is that server's
+ * every tool. Each is declared once here: the name, the description, and
+ * the input schema its tool file declares; the gate it stands behind, if
+ * any (`gates.ts`); whether Claude Code loads it from the first turn; the
+ * door it runs through (`../coder-host/inbox-door.ts` for the inbox,
+ * `../coder-host/agent-doors.ts` for the rest); and, for the tools whose
+ * answer is a picture, how it is shown. A door is reached directly rather
+ * than through the coder host, because the host composes eve's sandbox and
+ * tools, which the web function serving the server does not bundle.
+ *
+ * What an agent is offered is read from here alone (`offeredTools`): the
+ * server's `tools/list` and the agent's MCP popover both ask it, so neither
+ * can name a tool the other does not. A call is answered through here as
+ * well (`callTool`): one of a tool left off an agent's list, which a harness
+ * may make anyway, is refused in its gate's words before its door is run.
  *
  * `browser` drives the Chromium in the agent's own sandbox, found by the
  * session the sandbox is tagged with (`admitted.runtimeSessionId`), as eve's
@@ -21,28 +27,23 @@
  * Left out, beside the harness's own shell, files, todos, waiting,
  * subagents, skills, and web reads: eve's `connection_search` and
  * `connection_execute`, since each integration the agent is handed is an
- * MCP server of its own beside this one (`app.ts`).
+ * MCP server of its own beside ours (`../workspace-mcp/app.ts`).
  *
  * Two things eve's tool files keep in the session's own state are kept
  * otherwise here, since the server keeps no session: a call's id, which the
  * agent tools key a start or a message on, is the key the store holds for the
  * agent's conversation, the tool, and the input within a window
- * (`call-key.ts`), so the call a harness retries after a timeout starts or
- * sends once, as eve's run again does; and the turn's count of description notes is
- * kept on the running turn's row in the store (`runTurnCappedEditDescription`), so
- * the cap holds per turn as eve's does. The list is narrowed per agent as
- * eve narrows its own (`offeredWorkspaceMcpTool`), `save_memory` and `search_memory` by its
- * starter's Memory among it, and a tool left out is still refused by its
- * door where a harness calls it anyway.
+ * (`../workspace-mcp/call-key.ts`), so the call a harness retries after a
+ * timeout starts or sends once, as eve's run again does; and the turn's
+ * count of description notes is kept on the running turn's row in the store
+ * (`runTurnCappedEditDescription`), so the cap holds per turn as eve's does.
  */
 
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import {
-  type Agent,
   reserveTurnDescriptionNotes,
   settleTurnDescriptionNotes,
 } from "@repo/database/models/agent-store";
-import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { INBOX_TOOL } from "@repo/features/inbox-wire";
 import { pictureTypeSchema } from "@repo/features/picture-wire";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@repo/wire";
@@ -64,7 +65,9 @@ import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import {
   LOOK_AT_PICTURE_TOOL,
   lookNamedOnly,
+  PICTURE_LOOK_REFUSAL,
   PICTURE_LOOK_STATUS,
+  pictureNotLooked,
 } from "../../tasks/picture-look.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
@@ -106,29 +109,23 @@ import {
   runAgentTools,
 } from "../coder-host/agent-doors.js";
 import { MESSAGE_AGENT_TOOL } from "../coder-host/agent-message.js";
+import {
+  DESCRIPTION_EDIT_REFUSAL,
+  descriptionEditRejected,
+  EDIT_DESCRIPTION_TOOL,
+  requestedNotes,
+} from "../coder-host/description-edit.js";
 import { INBOX_TOOLS } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
-import {
-  EDIT_DESCRIPTION_TOOL,
-  DESCRIPTION_EDIT_REFUSAL,
-  descriptionEditRejected,
-  requestedNotes,
-} from "../coder-host/description-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
-import {
-  CODER_TOOL,
-  machineToolsOf,
-  macToolsOf,
-  type OfferedBeside,
-  repositoryToolsOf,
-} from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
+import { macCommandNotRun, RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import { SAVE_MEMORY_TOOL, SEARCH_MEMORY_TOOL } from "../memory-tools.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
+import { type AgentStanding, GATES, standingOf, TOOL_GATE, type ToolGate } from "./gates.js";
 
 /** What a door answers: the tool's own result, the value its eve tool hands the model. */
 export type WorkspaceMcpToolResult = { readonly status?: string } & object;
@@ -143,14 +140,19 @@ export type WorkspaceMcpServices =
   | HostedEnvironment
   | SentryApp;
 
-/** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`app.ts`). */
+/** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`../workspace-mcp/app.ts`). */
 type WorkspaceMcpToolServices = WorkspaceMcpServices | AgentBrowser;
 
-/** What a call carries beside its input: the door to the agent's sandbox, where a tool reads a file the agent names by its path; the key it runs under, read from the store by the tools that key a row on it (`call-key.ts`); and the seams the doors that reach eve or the store's writer read. */
-interface WorkspaceMcpCallContext {
+/** What a call carries beside its input: the door to the agent's sandbox, where a tool reads a file the agent names by its path; the key it runs under, read from the store by the tools that key a row on it (`../workspace-mcp/call-key.ts`); and the seams the doors that reach eve or the store's writer read. */
+export interface WorkspaceMcpCallContext {
   readonly sandbox: InboxSandboxDoor;
   readonly callKey: Effect.Effect<string, StoreFailure, DatabaseServices>;
   readonly seams: AgentDoorSeams;
+}
+
+/** What a door runs with beside its input: the call's context, and where the agent stands against the gates, read once for the call (`callTool`). */
+interface DoorContext extends WorkspaceMcpCallContext {
+  readonly standing: AgentStanding;
 }
 
 /** One block of an MCP tool result: text, or an image or a sound as base64 with its type. */
@@ -158,64 +160,82 @@ export type McpContent =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "image" | "audio"; readonly data: string; readonly mimeType: string };
 
-/** One tool as the server offers and runs it. */
-export interface WorkspaceMcpTool {
+/** Runs one call through a tool's door, as the agent's admitted conversation. */
+type Door = (
+  admitted: AdmittedConversation,
+  input: UnparsedWireValue,
+  context: DoorContext,
+) => Effect.Effect<WorkspaceMcpToolResult, unknown, WorkspaceMcpToolServices>;
+
+/** One tool as the catalog declares it. */
+export interface CatalogTool<Name extends string = string> {
+  readonly name: Name;
   readonly description: string;
-  /** The input schema as JSON Schema, emitted from the eve tool's own. */
+  /** The input schema as JSON Schema, emitted from the tool file's own. */
   readonly inputSchema: object;
-  /** Runs one call through the tool's door, as the agent's admitted conversation. */
-  readonly run: (
-    admitted: AdmittedConversation,
-    input: UnparsedWireValue,
-    context: WorkspaceMcpCallContext,
-  ) => Effect.Effect<WorkspaceMcpToolResult, unknown, WorkspaceMcpToolServices>;
+  /** The gate the tool stands behind; a tool with none is offered every agent. */
+  readonly gate?: ToolGate;
+  /**
+   * Whether Claude Code lists it in its prompt from the first turn rather
+   * than deferring it behind its tool search, where the first call of each
+   * costs a `ToolSearch` step first. Note that every tool loaded so costs its
+   * definition on every turn, so the rarely called ones (`look_at_picture`,
+   * the automations, the sections) stay deferred.
+   */
+  readonly alwaysLoad?: true;
+  readonly run: Door;
   /** How a result is shown to the agent, where it is more than its JSON: a picture as an image. */
   readonly content?: (result: WorkspaceMcpToolResult) => readonly McpContent[];
+  /** How a call its gate shuts is answered, given the gate's words, where its door's refusal is no `rejected` with them (`gateRefusal`). */
+  readonly refused?: (words: string) => WorkspaceMcpToolResult;
 }
 
-/** A tool as its eve file declares it: its name, its words, and its input schema. */
-interface ToolSpec {
-  readonly name: string;
+/** A tool as its tool file declares it: its name, its words, and its input schema. */
+interface ToolSpec<Name extends string> {
+  readonly name: Name;
   readonly description: string;
   readonly inputSchema: Schema.Top;
 }
 
-function entry(
-  spec: ToolSpec,
-  run: WorkspaceMcpTool["run"],
-  content?: WorkspaceMcpTool["content"],
-): readonly [string, WorkspaceMcpTool] {
-  return entryOf(spec.name, spec.description, emitJsonSchema(spec.inputSchema), run, content);
-}
+/** What of a tool the catalog declares beside its spec and its door. */
+type Served = Pick<CatalogTool, "gate" | "alwaysLoad" | "content" | "refused">;
 
-function entryOf(
-  name: string,
-  description: string,
-  inputSchema: object,
-  run: WorkspaceMcpTool["run"],
-  content?: WorkspaceMcpTool["content"],
-): readonly [string, WorkspaceMcpTool] {
-  const tool: WorkspaceMcpTool = {
-    description,
-    inputSchema,
+function served<const Name extends string>(
+  spec: ToolSpec<Name>,
+  run: Door,
+  options: Served = {},
+): CatalogTool<Name> {
+  return {
+    name: spec.name,
+    description: spec.description,
+    inputSchema: emitJsonSchema(spec.inputSchema),
     run,
-    ...(content === undefined ? {} : { content }),
+    ...options,
   };
-  return [name, tool];
 }
 
 /** A tool about the workspace's agents and tasks, run through their one door under the call's key. */
-function agentTool(spec: ToolSpec & { readonly name: AgentToolCall["tool"] }) {
-  return entry(spec, (admitted, input, { seams, callKey }) =>
+function agentTool<const Name extends AgentToolCall["tool"]>(
+  spec: ToolSpec<Name>,
+  options?: Served,
+) {
+  const run: Door = (admitted, input, { seams, callKey, standing }) =>
     Effect.flatMap(callKey, (callId) =>
-      runAgentTools(seams, admitted, { tool: spec.name, input, callId }),
-    ),
-  );
+      runAgentTools(
+        seams,
+        admitted,
+        { tool: spec.name, input, callId },
+        standing.open.has(TOOL_GATE.DESCRIPTIONS),
+      ),
+    );
+  return served(spec, run, options);
 }
 
 /** A tool of the description's comment threads, run through the comment door. */
-function commentTool(spec: ToolSpec & { readonly name: CommentToolName }) {
-  return entry(spec, (admitted, input) => runAgentComment(admitted, spec.name, input));
+function commentTool<const Name extends CommentToolName>(spec: ToolSpec<Name>) {
+  return served(spec, (admitted, input, { standing }) =>
+    runAgentComment(admitted, spec.name, input, standing.open.has(TOOL_GATE.DESCRIPTIONS)),
+  );
 }
 
 /** A look that answered a picture: its bytes as base64 and an image's type, never a video's, which no model is handed. */
@@ -340,51 +360,68 @@ function runTurnCappedEditDescription(
   );
 }
 
-/** The tools served, by name, in the order `tools/list` names them. */
-export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Map<
-  string,
-  WorkspaceMcpTool
->([
+/** Loaded from the first turn (`CatalogTool`'s `alwaysLoad`). */
+const LOADED: Served = { alwaysLoad: true };
+
+/** Every tool served, in the order `tools/list` names them. */
+const CATALOG = [
   // The threads, posted to the inbox.
-  entry(INBOX_TOOLS.POST, (admitted, input, { sandbox }) =>
-    runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox }),
+  served(
+    INBOX_TOOLS.POST,
+    (admitted, input, { sandbox }) =>
+      runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox }),
+    LOADED,
   ),
-  entry(INBOX_TOOLS.READ, (admitted, input) =>
-    runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
+  served(
+    INBOX_TOOLS.READ,
+    (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
+    LOADED,
   ),
-  entry(INBOX_TOOLS.WITHDRAW, (admitted, input) =>
-    runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
+  served(
+    INBOX_TOOLS.WITHDRAW,
+    (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
+    LOADED,
   ),
   // The pull request, the description, and pages and pictures.
-  entry(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input)),
-  entry(EDIT_DESCRIPTION_TOOL, (admitted, input, { sandbox }) =>
-    runTurnCappedEditDescription(admitted, input, sandbox),
+  served(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input), {
+    gate: TOOL_GATE.REPOSITORY,
+    alwaysLoad: true,
+  }),
+  served(
+    EDIT_DESCRIPTION_TOOL,
+    (admitted, input, { sandbox }) => runTurnCappedEditDescription(admitted, input, sandbox),
+    { gate: TOOL_GATE.DESCRIPTIONS, alwaysLoad: true },
   ),
-  entry(
-    LOOK_AT_PICTURE_TOOL,
-    (admitted, input) => runAgentLookAtPicture(admitted, input),
-    lookedPictureContent,
+  served(LOOK_AT_PICTURE_TOOL, (admitted, input) => runAgentLookAtPicture(admitted, input), {
+    gate: TOOL_GATE.DESCRIPTIONS,
+    content: lookedPictureContent,
+    // Note that a look keeps its own words, because the gate's are a note's that was not saved.
+    refused: () => pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF),
+  }),
+  served(
+    SHOW_IMAGE_TOOL,
+    (admitted, input, { sandbox }) => runAgentShowImage(admitted, input, sandbox),
+    LOADED,
   ),
-  entry(SHOW_IMAGE_TOOL, (admitted, input, { sandbox }) =>
-    runAgentShowImage(admitted, input, sandbox),
-  ),
-  entry(CODER_SHOW_PAGE_TOOL, (admitted, input, { sandbox }) =>
-    runAgentShowPage(admitted, input, sandbox),
+  served(
+    CODER_SHOW_PAGE_TOOL,
+    (admitted, input, { sandbox }) => runAgentShowPage(admitted, input, sandbox),
+    LOADED,
   ),
   agentTool(READ_PAGE_TOOL),
   // The workspace's agents.
-  agentTool(START_AGENT_TOOL),
+  agentTool(START_AGENT_TOOL, LOADED),
   agentTool(STOP_AGENT_TOOL),
-  agentTool(LIST_AGENTS_TOOL),
+  agentTool(LIST_AGENTS_TOOL, LOADED),
   agentTool(CODER_READ_AGENT_TOOL),
-  agentTool(MESSAGE_AGENT_TOOL),
+  agentTool(MESSAGE_AGENT_TOOL, LOADED),
   agentTool(UPDATE_AGENT_TOOL),
   agentTool(LIST_MODELS_TOOL),
   // Tasks and sections.
   agentTool(LIST_TASKS_TOOL),
-  agentTool(READ_TASK_TOOL),
+  agentTool(READ_TASK_TOOL, LOADED),
   agentTool(CREATE_TASK_TOOL),
-  agentTool(UPDATE_TASK_TOOL),
+  agentTool(UPDATE_TASK_TOOL, LOADED),
   agentTool(CREATE_SECTION_TOOL),
   agentTool(DELETE_SECTION_TOOL),
   // Automations.
@@ -394,61 +431,54 @@ export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Ma
   agentTool(DELETE_AUTOMATION_TOOL),
   agentTool(RUN_AUTOMATION_TOOL),
   // The workspace's shared memory.
-  agentTool(SAVE_MEMORY_TOOL),
-  agentTool(SEARCH_MEMORY_TOOL),
+  agentTool(SAVE_MEMORY_TOOL, { gate: TOOL_GATE.MEMORY }),
+  agentTool(SEARCH_MEMORY_TOOL, { gate: TOOL_GATE.MEMORY }),
   // The description's comments.
   commentTool(READ_COMMENTS_TOOL),
   commentTool(REPLY_TO_COMMENT_TOOL),
   commentTool(UPDATE_COMMENT_TOOL),
   // The developer's Mac.
-  entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target, input)),
+  served(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target, input), {
+    gate: TOOL_GATE.SANDBOX,
+    refused: macCommandNotRun,
+  }),
   // The agent's browser.
-  entry(BROWSER_TOOL, runAgentBrowser, browserContent),
-]);
+  served(BROWSER_TOOL, runAgentBrowser, {
+    gate: TOOL_GATE.SANDBOX,
+    content: browserContent,
+    refused: browserNotRun,
+  }),
+] as const;
 
-/** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
-export type WorkspaceMcpOfferedTo = Pick<Agent, "repository" | "machine">;
+/** The name of a tool the catalog serves. */
+export type ServedTool = (typeof CATALOG)[number]["name"];
 
-/** The workspace's shared memory, offered only where the agent's starter turned Memory on. */
-const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
+/** The tools served, by name, in the order `tools/list` names them. */
+export const TOOL_CATALOG: ReadonlyMap<ServedTool, CatalogTool<ServedTool>> = new Map(
+  CATALOG.map((tool) => [tool.name, tool]),
+);
 
-/** The description's notes and pictures, offered only where the agent's starter has Task descriptions on (`descriptionsOnFor`). */
-const DESCRIPTION_TOOLS: readonly string[] = [
-  CODER_TOOL.EDIT_DESCRIPTION,
-  CODER_TOOL.LOOK_AT_PICTURE,
-];
+const SERVED_NAMES: ReadonlySet<string> = new Set(TOOL_CATALOG.keys());
 
-/** The tools eve offers some agents and not others: each one some agent's repository, machine, or starter's Memory or Task descriptions withholds. */
-const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
-  ...MEMORY_TOOLS,
-  ...DESCRIPTION_TOOLS,
-  ...repositoryToolsOf({ repository: "any" }),
-  ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
-  ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }),
-]);
+/** Whether a name a harness called is one of the catalog's tools. */
+export function isServedTool(name: string): name is ServedTool {
+  return SERVED_NAMES.has(name);
+}
+
+/** Whether the agent is offered the tool: one behind no gate always, and a gated one where its gate is open to the agent. */
+export function offers(standing: AgentStanding, tool: ServedTool): boolean {
+  const gate = TOOL_CATALOG.get(tool)?.gate;
+  return gate === undefined || standing.open.has(gate);
+}
 
 /**
- * Whether the server lists a tool to an agent: every tool eve offers every
- * agent, and each narrowed one where eve offers it to this agent, by its
- * repository, where it runs, and, beside its row, whether its starter has
- * Memory and Task descriptions on (`beside`), the same rules eve's tool files read
- * at each turn. Note that a harness reads the list as its launch begins, so
- * an agent is narrowed launch by launch, as eve's is turn by turn, and that
- * a tool left off the list still runs when called, so each narrowed tool's
- * door refuses on its own.
+ * The tools an agent is offered, in the catalog's order. Note that a
+ * harness reads the list as its launch begins, so an agent is narrowed
+ * launch by launch, and that a tool left off the list may still be called,
+ * which `callTool` refuses.
  */
-export function offeredWorkspaceMcpTool(
-  agent: WorkspaceMcpOfferedTo,
-  beside: OfferedBeside,
-): (name: string) => boolean {
-  const offered: ReadonlySet<string> = new Set<string>([
-    ...(beside.memoryOn ? MEMORY_TOOLS : []),
-    ...(beside.descriptionsOn ? DESCRIPTION_TOOLS : []),
-    ...repositoryToolsOf(agent),
-    ...machineToolsOf(agent),
-    ...macToolsOf(agent),
-  ]);
-  return (name) => !NARROWED_TOOLS.has(name) || offered.has(name);
+export function offeredTools(standing: AgentStanding): readonly CatalogTool<ServedTool>[] {
+  return [...TOOL_CATALOG.values()].filter((tool) => offers(standing, tool.name));
 }
 
 /** The prefix of every status a door answers for a call it did not carry out (`not-run`, `not-looked`, `not-saved`, …). */
@@ -466,4 +496,54 @@ export function refusedByDoor(result: WorkspaceMcpToolResult): boolean {
   return (
     status !== undefined && (REFUSED_STATUSES.has(status) || status.startsWith(NOT_DONE_PREFIX))
   );
+}
+
+/** One call's answer: the tool's own result, and MCP's tool result of it, what the agent is shown and whether it is the tool's error. */
+export interface ToolCallAnswer {
+  readonly result: WorkspaceMcpToolResult;
+  readonly content: readonly McpContent[];
+  readonly isError: boolean;
+}
+
+/** A call refused at the tool's gate: in the tool's own refusal where it words one, else `rejected` with the gate's words. */
+function gateRefusal(tool: CatalogTool, gate: ToolGate): WorkspaceMcpToolResult {
+  const { refusal } = GATES[gate];
+  const rejected = { status: ACTION_RESULT_STATUS.REJECTED, reason: refusal };
+  return tool.refused?.(refusal) ?? rejected;
+}
+
+/** A result as the call answers it: as the tool shows it (a picture as an image), else its JSON as one text block, marked an error where it is a refusal. */
+function answerOf(tool: CatalogTool, result: WorkspaceMcpToolResult): ToolCallAnswer {
+  return {
+    result,
+    content: tool.content?.(result) ?? [{ type: "text", text: JSON.stringify(result) }],
+    isError: refusedByDoor(result),
+  };
+}
+
+/**
+ * Runs one call of a served tool as the agent's admitted conversation: the
+ * agent's standing read once (`standingOf`), the call refused in its gate's
+ * words without its door run where the gate is shut to the agent, and run
+ * through its door with the standing otherwise. Note that the gate is read
+ * on every call, not only on the list, because a harness may call a tool
+ * it was not listed, or a gate may shut mid-run.
+ */
+export function callTool(
+  admitted: AdmittedConversation,
+  name: ServedTool,
+  input: UnparsedWireValue,
+  context: WorkspaceMcpCallContext,
+): Effect.Effect<ToolCallAnswer, unknown, WorkspaceMcpToolServices> {
+  const tool = TOOL_CATALOG.get(name);
+  if (tool === undefined) return Effect.die(new Error(`${name} has no catalog entry`));
+  return Effect.flatMap(standingOf(admitted), (standing) => {
+    const { gate } = tool;
+    if (gate !== undefined && !standing.open.has(gate)) {
+      return Effect.succeed(answerOf(tool, gateRefusal(tool, gate)));
+    }
+    return Effect.map(tool.run(admitted, input, { ...context, standing }), (result) =>
+      answerOf(tool, result),
+    );
+  });
 }

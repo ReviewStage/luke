@@ -68,6 +68,7 @@
 
 import {
   AGENT_USER,
+  CODEX_PIN,
   RUNNER_DIRECTORY,
   SANDBOX_TOOLS_DIRECTORY,
   SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME,
@@ -84,7 +85,7 @@ import { type Agent, hasRepository, type WithRepository } from "@repo/database/m
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { Brand, type Context, Duration, Effect, Layer, Option, Result } from "effect";
+import { Brand, type Context, Duration, Effect, Layer, Option, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
@@ -121,8 +122,12 @@ import {
 import { NATIVE_SKILLS_PATH } from "../coder-host/native-skills.js";
 import type { RepositoryFirewall, RepositorySandbox } from "../repository-shell.js";
 import {
+  type FirewallEntry,
   type FirewallSession,
   type FirewallSources,
+  type LaunchSwapKind,
+  newPlaceholder,
+  placeholderSwap,
   sandboxFirewall,
 } from "../sandbox-firewall.js";
 import {
@@ -142,6 +147,7 @@ import {
 import {
   AgentMachine,
   type AgentMachineService,
+  type DeliveredCredentials,
   type FoundPlace,
   type MachineKept,
   type MachineLayout,
@@ -152,6 +158,7 @@ import {
   PLACE_RESUME,
   type RecordedRunner,
   RUNNER_RECORD,
+  type RunnerCredential,
   type RunnerHandle,
   type RunnerMark,
   type RunnerRecord,
@@ -187,7 +194,8 @@ const SANDBOX_LAYOUT: MachineLayout = {
   attachments: ATTACHMENT_DIRECTORY,
   sharedFiles: SHARED_FILES_DIRECTORY,
   claudeExecutable: undefined,
-  codexExecutable: undefined,
+  codexExecutable: CODEX_PIN.LINK,
+  codexHome: CODEX_PIN.HOME,
   linesRead: true,
   transcriptsKept: true,
 };
@@ -244,6 +252,15 @@ const SHARE_WAIT = Duration.minutes(2);
 
 /** Why checkouts cloned under a running runner were not shared with its user. */
 const NOT_SHARED = "the checkouts cloned beside the agent's could not be shared with its runner";
+
+/** What a place holds where it holds the agent's own checkout: its repository's git folder. */
+const CHECKOUT_GIT_PATH = `${CODER.CHECKOUT_PATH}/.git`;
+
+/** Where a finished checkout's commit identity stands (`finishCheckoutWith`): its repository's own config, read as a file so no ownership check stands in the way. */
+const CHECKOUT_CONFIG_PATH = `${CHECKOUT_GIT_PATH}/config`;
+
+/** Why a checkout cloned before a relaunch was not finished: the store did not answer for its commit identity. */
+const RESTORE_PLAN_UNREAD = "the restored checkout's commit identity could not be read";
 
 /**
  * The launch's readying, run by bash as root through `sudo`, waited on before the runner starts: the
@@ -330,6 +347,37 @@ function sessionOfPlace(place: OpenedPlace): SessionRef {
 /** The same session as its firewall names it, with the account whose agent it is. */
 function firewallSessionOf(place: OpenedPlace, userId: string): FirewallSession {
   return { userId, name: place.name, sandboxSessionId: place.running };
+}
+
+/**
+ * A launch's credentials as a sandbox's runner takes them: each a
+ * placeholder minted for the launch in its variable, and a swap its
+ * firewall keeps for the launch, which sets the value in the placeholder's
+ * place on requests to its target that present it, so no value enters the
+ * sandbox. Note that the swap matches the placeholder and not the target
+ * alone, because every process in the sandbox reaches out through that
+ * firewall, a Terminal's shell and a page in the agent's browser among them,
+ * and only one that reads the placeholder, the runner's own user, may act
+ * as the agent. A renewed credential is held the same way, and the sweep
+ * renews its swap.
+ */
+function heldAtFirewall(credentials: readonly RunnerCredential[]): DeliveredCredentials {
+  const env: Record<string, string> = {};
+  const swaps = new Map<LaunchSwapKind, FirewallEntry>();
+  for (const credential of credentials) {
+    const placeholder = Redacted.value(newPlaceholder());
+    env[credential.variable] = placeholder;
+    swaps.set(
+      credential.slot,
+      placeholderSwap({
+        ...credential.target,
+        header: credential.header,
+        placeholder: Redacted.make(`${credential.scheme}${placeholder}`),
+        value: Redacted.make(`${credential.scheme}${Redacted.value(credential.value)}`),
+      }),
+    );
+  }
+  return { env, swaps };
 }
 
 /** The launch a record tells of: its first event number and fingerprint, of a launch that reads its lines, as every sandbox's does. */
@@ -778,10 +826,58 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       return yield* gotOn(agent, sessionId, drive, checkout);
     });
 
+  /**
+   * The agent's own checkout made whole in a place about to be relaunched:
+   * cloned where the place holds none, and finished as an opening finishes
+   * it (`finishCheckoutWith`) where it holds no commit identity, as after a
+   * restore whose finish failed; nothing where it holds a finished one. Note
+   * that a place can stand without one, because a launch whose checkout
+   * failed leaves its sandbox and its drive for the next message, which
+   * resumes them as kept and checks nothing out, so its runner would start
+   * in a folder that is not there.
+   */
+  const ownCheckoutRestored = (
+    place: OpenedPlace,
+    target: ConversationTarget,
+    agent: WithRepository<Agent>,
+  ) =>
+    Effect.gen(function* () {
+      const session = yield* api.session(sessionOfPlace(place));
+      const finished = yield* session.run({
+        command: "git",
+        args: ["config", "--file", CHECKOUT_CONFIG_PATH, "--get", "user.email"],
+      });
+      if (finished.exitCode === 0) return;
+      const holds = yield* session.run({ command: "test", args: ["-d", CHECKOUT_GIT_PATH] });
+      const [read, plan] = yield* Effect.all(
+        [
+          agentRepositoryRead(target, agent),
+          agentCheckoutPlan(target, agent).pipe(
+            Effect.mapError((failure) =>
+              failure instanceof CheckoutRefused
+                ? failure
+                : new CheckoutRefused({ reason: RESTORE_PLAN_UNREAD }),
+            ),
+          ),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const sandbox = yield* checkoutIn(place, agent.userId);
+      if (holds.exitCode !== 0) yield* cloneAgentRepository(agent, sandbox, read);
+      yield* finishCheckoutWith(sandbox, plan);
+      yield* Effect.logWarning(
+        holds.exitCode === 0
+          ? "A relaunch found its agent's checkout unfinished and finished it"
+          : "A relaunch found no checkout of its agent's repository and cloned it",
+      );
+    });
+
   return {
     ...vercelLifecycle(api),
 
     layout: () => Effect.succeed(SANDBOX_LAYOUT),
+
+    deliverCredentials: (_agent, credentials) => heldAtFirewall(credentials),
 
     // What the checkout's finish reads of GitHub (`agentCheckoutPlan`) is read beside the sandbox's
     // opening and the caller's own reads, and kept as it ended, so a read that failed fails the
@@ -853,9 +949,12 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     // Note that a clone run again finds the folder of a checkout already standing and clones nothing,
     // so only a repository added since the place opened is cloned here. A runner already running
     // keeps its repository credential through the clone, minted afresh, since each write is whole.
-    checkOutExtras: (place, target, agent, shared) =>
+    // Before a relaunch (not `shared`), the agent's own checkout is cloned first where the place
+    // holds none (`ownCheckoutRestored`).
+    checkOutMissing: (place, target, agent, shared) =>
       Effect.gen(function* () {
         if (!hasRepository(agent)) return;
+        if (!shared) yield* ownCheckoutRestored(place, target, agent);
         const reads = yield* agentExtraReads(target, agent);
         if (reads.length === 0) return;
         const beside = shared ? yield* agentFirewallSources(target, agent) : {};

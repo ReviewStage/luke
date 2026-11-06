@@ -45,7 +45,6 @@ import {
   listWorkspaceAgentLines,
   markAgentReadCommitted,
   nativeRouteOfReached,
-  nativeRuntimesOfReached,
   readVisibleAgentWorkspace,
 } from "@repo/database/models/agent-store";
 import { devicesNamed } from "@repo/database/models/device-store";
@@ -104,7 +103,6 @@ import {
   acceptedAgentChoice,
   placeOfAgent,
   requestedChoice,
-  startedFromBefore,
   startRequestedAgent,
 } from "./coder-host/start.js";
 import {
@@ -123,10 +121,9 @@ import {
   stoppedForGood,
   summaryOf,
 } from "./coder-host/stop.js";
+import { startedFromBefore } from "./coder-host/takeover.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { descriptionsOnFor } from "./descriptions-on.js";
 import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
-import { memoryOnFor } from "./memory-tools.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import type { SandboxStopReach } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
@@ -301,25 +298,15 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       ...(started.txid === undefined ? undefined : { txid: started.txid }),
     },
   });
-  // Which of our own tools the agent is offered, by the rules its runtime narrows them by, and whether its `run_on_mac` would run now.
+  // Which of our own tools the agent is offered, as the catalog offers them, and whether its `run_on_mac` would run now.
   const workspaceToolsOf = (userId: string, agentId: string) =>
     Effect.gen(function* () {
       const { agent, target } = yield* reachedAgentById(userId, agentId);
       // A member who reaches the agent but not its task reads it as not found, since its transcript is the task's to show.
       const visible = yield* hostedStoreOrUnavailable(readVisibleAgentWorkspace(userId, agent.id));
       if (Option.isNone(visible)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const runtimes = yield* hostedStoreOrUnavailable(
-        nativeRuntimesOfReached([agent.conversationId]),
-      );
-      const memoryOn = yield* memoryOnFor(agent.userId);
-      const descriptionsOn = yield* descriptionsOnFor(agent.userId, agent.kind);
       return {
-        tools: offeredWorkspaceTools({
-          agent,
-          native: runtimes.has(agent.conversationId),
-          memoryOn,
-          descriptionsOn,
-        }),
+        tools: yield* offeredWorkspaceTools(agent),
         runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
       };
     });

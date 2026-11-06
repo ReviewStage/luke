@@ -83,6 +83,13 @@ import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
+  isServedTool,
+  refusedByDoor,
+  TOOL_CATALOG,
+  type WorkspaceMcpServices,
+} from "../tool-catalog/catalog.js";
+import { GATES, TOOL_GATE } from "../tool-catalog/gates.js";
+import {
   WORKSPACE_INTEGRATION_MCP_PATH,
   WORKSPACE_MCP_PATH,
   WORKSPACE_MCP_PROTOCOL_VERSIONS,
@@ -92,7 +99,6 @@ import {
 import { admitRunnerBearer, runnerTokenDigest } from "./bearer.js";
 import { NATIVE_CALL_KEY_WINDOW_MS } from "./call-key.js";
 import { workspaceMcpDoorSeams } from "./door-seams.js";
-import { refusedByDoor, WORKSPACE_MCP_TOOLS, type WorkspaceMcpServices } from "./tools.js";
 
 /**
  * Our MCP server, answered by its group the way a function answers it,
@@ -376,12 +382,12 @@ type DirectCall = (
 const agentTool =
   (tool: AgentToolCall["tool"]): DirectCall =>
   (admitted, input, seams) =>
-    runAgentTools(seams, admitted, { tool, input, callId: randomUUID() });
+    runAgentTools(seams, admitted, { tool, input, callId: randomUUID() }, true);
 
 const commentTool =
   (name: CommentToolName): DirectCall =>
   (admitted, input) =>
-    runAgentComment(admitted, name, input);
+    runAgentComment(admitted, name, input, true);
 
 /**
  * Each tool's own door, called as eve's tool calls it: the server's answer to
@@ -617,7 +623,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
         for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
         for (const tool of listed.tools) {
-          const served = WORKSPACE_MCP_TOOLS.get(tool.name);
+          const served = isServedTool(tool.name) ? TOOL_CATALOG.get(tool.name) : undefined;
           assert.ok(served !== undefined);
           assert.equal(tool.description, served.description);
           assert.deepEqual(tool.inputSchema, served.inputSchema);
@@ -758,11 +764,56 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
+    "a device agent's run_on_mac and browser are refused at the catalog in its sandbox gate's words, and neither door runs",
+    () =>
+      Effect.gen(function* () {
+        // A browser that would answer and keep its tab, were the door run.
+        const peer = yield* fakeCdpPeer({
+          pages: [{ targetId: "tab-1", url: "https://shop.test/", title: "Shop" }],
+          answer: (command) => PAGE_ANSWERS[command.method],
+        });
+        const fetch = yield* standingOver(
+          NO_SANDBOX,
+          undefined,
+          agentBrowserTestLayer(peer, SESSION),
+        );
+        const agent = yield* agentInSandbox;
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ machine: AGENT_MACHINE.DEVICE })
+            .where(eq(agentTable.id, agent.agentId)),
+        );
+        const client = yield* connected(fetch, agent.bearer);
+
+        const mac = yield* Effect.promise(() =>
+          client.callTool({ name: "run_on_mac", arguments: { command: "ls ~/code" } }),
+        );
+        const browser = yield* Effect.promise(() =>
+          client.callTool({
+            name: "browser",
+            arguments: { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] },
+          }),
+        );
+        yield* Effect.promise(() => client.close());
+
+        const refused = { status: "not-run", reason: GATES[TOOL_GATE.SANDBOX].refusal };
+        assert.deepEqual([mac.isError, firstJson(mac)], [true, refused]);
+        assert.deepEqual([browser.isError, firstJson(browser)], [true, refused]);
+        assert.deepEqual(yield* listAgentBrowserTabs(agent.conversationId), []);
+      }),
+  );
+
+  it.effect(
     "each tool answers as its own door does, called as eve's tool calls it, for the same agent and input",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
+        // Every gate stands open, so each call reaches its door.
+        yield* writeAccountPreferences(agent.userId, {
+          experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.DESCRIPTIONS]: true },
+        });
         const admitted = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer));
         const seams = yield* workspaceMcpDoorSeams.pipe(Effect.provide(yield* doorServices));
         const client = yield* connected(fetch, agent.bearer);

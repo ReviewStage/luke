@@ -6,7 +6,6 @@ import {
   hostsOfLiveRows,
 } from "@repo/features/host-live";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import { carried } from "@repo/gateway";
 import {
   type EntityPool,
   type FieldChange,
@@ -15,7 +14,6 @@ import {
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Effect, type Scope } from "effect";
 import { type AppHostReads, type AppHosts, NO_KEYS_HELD } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
@@ -166,16 +164,14 @@ export function heldHosts(
  */
 export function hostRemove(
   send: (id: string) => Effect.Effect<HostDoneAnswerView>,
-): WriteDeclaration<HostLiveRow, FieldChange<HostLiveRow>, string, WireValue> {
+): WriteDeclaration<HostLiveRow, FieldChange<HostLiveRow>, string, HostDoneAnswerView> {
   return {
     kind: HOST,
     keys: (id) => [id],
     change: () => () => ROW_GONE,
     send: (id) =>
       Effect.map(send(id), (answer) =>
-        "done" in answer
-          ? { answer: carried<HostDoneAnswerView>(answer), txid: answer.txid }
-          : { refused: carried<HostDoneAnswerView>(answer) },
+        "done" in answer ? { answer, txid: answer.txid } : { refused: answer },
       ),
   };
 }

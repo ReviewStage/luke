@@ -16,8 +16,9 @@
  * in or not, as an open terminal holds its machine: the attach writes the
  * lease, and it is written again every minute, each write reaching two, so
  * a slow write never lets it lapse under an open tab and a closed one stops
- * holding it within two minutes. Nothing closes a connection for want of
- * typing; the panel ends it when the tab goes. While a terminal is connected
+ * holding it within two minutes. Nothing here closes a connection for want
+ * of typing; the host ends it when the tab goes, or once the terminal has
+ * gone ten minutes unused (`@repo/host`'s `compose-terminals.ts`). While a terminal is connected
  * it also keeps the sandbox alive past its short timeout, every keep-alive
  * interval (`CODER.SANDBOX_KEEP_ALIVE_EVERY`,
  * `agents/sandbox-keep-alive.ts`), so a developer typing after the agent's

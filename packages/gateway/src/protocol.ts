@@ -286,8 +286,6 @@ export const GATEWAY_METHOD = {
   AGENTS_MODELS_UNFOLLOW: "agents.modelsUnfollow",
   /** The held models asked again at once, as Try again asks; answered once the ask has landed. */
   AGENTS_MODELS_RETRY: "agents.modelsRetry",
-  /** The account's default model and effort for a coding agent, drawn over the account's preferences at once and written to the service; the default as kept, or why it is unchanged. */
-  AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /**
    * The account's hosts, held for a window from now until it is let go,
    * followed on the service's live read into the sync engine's pool, and a
@@ -312,24 +310,6 @@ export const GATEWAY_METHOD = {
   HOSTS_PRESENCE_UNFOLLOW: "hosts.presenceUnfollow",
   /** The account's devices' beats asked again now, where a window holds them: the window came back online, or the Mac woke. */
   HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
-  /** One of the account's hosts removed; done, or why not. */
-  HOSTS_REMOVE: "hosts.remove",
-  /** Run agents on this Mac turned on, This Mac enrolled, or off, its host removed; done, or why not. */
-  HOSTS_THIS_MAC_SET: "hosts.thisMacSet",
-  /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
-  HOSTS_PAIRING_READ: "hosts.pairingRead",
-  /** A box's pending pairing approved by its code, which makes the account's host; its id, or why not. */
-  HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
-  /** A box's pending pairing denied by its code; done, or why not. */
-  HOSTS_PAIRING_DENY: "hosts.pairingDeny",
-  /** One task's coding agents with their status, read from the service now. */
-  AGENTS_LIST: "agents.list",
-  /** A workspace's coding agents, newest started first, narrowed to one repository where one is named. */
-  AGENTS_WORKSPACE_LIST: "agents.workspaceList",
-  /** A coding agent started on one task under the panel's own key; the agent, or why none started. */
-  AGENTS_START: "agents.start",
-  /** One agent's transcript past a cursor, held open by the service while the agent runs. */
-  AGENTS_MESSAGES: "agents.messages",
   /**
    * One agent's transcript, or one of its workers', held followed for a
    * window from now until it is let go, over the service's held poll, and
@@ -342,33 +322,6 @@ export const GATEWAY_METHOD = {
   AGENTS_TRANSCRIPT_UNFOLLOW: "agents.transcriptUnfollow",
   /** One held transcript read again at once, as Try again asks; never answered. */
   AGENTS_TRANSCRIPT_RETRY: "agents.transcriptRetry",
-  /** The page of a held transcript below the oldest message it holds, read at once and laid before them while they still begin where it was asked: whether it landed, or why it was not read. */
-  AGENTS_TRANSCRIPT_OLDER: "agents.transcriptOlder",
-  /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
-  AGENTS_MESSAGE: "agents.message",
-  /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
-  AGENTS_CHOOSE: "agents.choose",
-  /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
-  AGENTS_RENAME: "agents.rename",
-  /** One agent's MCP servers switched, the whole list of those off, for its next turn on; the agent as it then stands, or why it is unchanged. */
-  AGENTS_SERVERS: "agents.servers",
-  /** A repository added to one agent beside the ones it works in, checked out and told to it; the agent as it then stands, or why it was not added. */
-  AGENTS_ADD_REPOSITORY: "agents.addRepository",
-  AGENTS_QUEUE: "agents.queue",
-  /** One agent stopped; the agent as it then stands, or why it was not. */
-  AGENTS_STOP: "agents.stop",
-  /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
-  AGENTS_REWIND: "agents.rewind",
-  /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
-  AGENTS_ARCHIVE: "agents.archive",
-  /** One agent pinned for the account alone, or unpinned; the agent as it then stands, or why it is unchanged. */
-  AGENTS_PIN: "agents.pin",
-  /** The reader's own read mark of one agent moved on the service; the agent as it then stands, or why it is unchanged. */
-  AGENTS_MARK_READ: "agents.markRead",
-  /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
-  AGENTS_DELETE: "agents.delete",
-  /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
-  AGENTS_PAGE: "agents.page",
   /**
    * The run of an automation that started one agent, held followed for a
    * window from now until it is let go, over the service's held poll, and a
@@ -435,8 +388,6 @@ export const GATEWAY_METHOD = {
   AGENTS_PULL_REQUEST_PART_UNFOLLOW: "agents.pullRequestPartUnfollow",
   /** One pull request's held part asked again at once, as Try again asks; answered once the ask has landed. */
   AGENTS_PULL_REQUEST_PART_RETRY: "agents.pullRequestPartRetry",
-  /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
-  AGENTS_CHANGES: "agents.changes",
   /**
    * One agent's pull request's newest chapters, by the agent and the pull
    * request's number, held followed for a window from now until it is let
@@ -463,10 +414,6 @@ export const GATEWAY_METHOD = {
   AGENTS_WORKSPACE_TOOLS_UNFOLLOW: "agents.workspaceToolsUnfollow",
   /** One agent's held tools asked again at once, as Try again asks; answered once the ask has landed. */
   AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
-  /** One image an agent's pull request's overview names, read by the service on the App's token: its bytes in base64 and their type. */
-  AGENTS_GITHUB_IMAGE: "agents.githubImage",
-  /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
-  AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
   /**
    * The account's own provider keys an agent runs on, as hints and statuses
    * and never a key, held for a window from now until it is let go, asked
@@ -480,18 +427,6 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_UNFOLLOW: "providerKeys.unfollow",
   /** The account's held provider keys asked again at once, as Try again asks; answered once the ask has landed. */
   PROVIDER_KEYS_RETRY: "providerKeys.retry",
-  /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
-  PROVIDER_KEYS_SAVE: "providerKeys.save",
-  /** One provider's key of the kind named removed on the service, an API key where none is; the keys as they then stand. */
-  PROVIDER_KEYS_REMOVE: "providerKeys.remove",
-  /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
-  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
-  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
-  CHATGPT_DEVICE_START: "chatGpt.device.start",
-  /** A device-code login waited on, by its login id, asked after on the interval its start named until it settles or an ask goes unanswered; how it settled, the keys as they then stand once it connected. */
-  CHATGPT_DEVICE_WAIT: "chatGpt.device.wait",
-  /** A device-code login withdrawn, by its login id; how it then stands. */
-  CHATGPT_DEVICE_CANCEL: "chatGpt.device.cancel",
   /**
    * The member's own GitHub token as its login, hint, and status, never the
    * token, held for a window from now until it is let go, asked of the
@@ -505,10 +440,6 @@ export const GATEWAY_METHOD = {
   GITHUB_TOKEN_UNFOLLOW: "githubToken.unfollow",
   /** The member's held GitHub token asked again at once, as Try again asks; answered once the ask has landed. */
   GITHUB_TOKEN_RETRY: "githubToken.retry",
-  /** The member's GitHub token saved on the service, carried once in the params; the token as it then stands, or why nothing was kept, which is laid on its held read too. */
-  GITHUB_TOKEN_SAVE: "githubToken.save",
-  /** The member's GitHub token removed on the service; none then stands, which is laid on its held read too. */
-  GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /**
    * The memories our agents kept in one workspace, held for a window from
    * now until it is let go, followed on the service's live read, and a while
@@ -521,10 +452,6 @@ export const GATEWAY_METHOD = {
   MEMORIES_UNFOLLOW: "memories.unfollow",
   /** One workspace's held memories read again at once, as Try again asks; answered once the ask has landed. */
   MEMORIES_RETRY: "memories.retry",
-  /** One memory forgotten on the service for good, drawn gone at once over the workspace's held memories; the workspace's memories as they then stand. */
-  MEMORIES_FORGET: "memories.forget",
-  /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
-  DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
    * One plan's inbox, or one agent's, held followed for a window from now
    * until it is let go, over Neon Realtime, and a while after among the
@@ -536,25 +463,6 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_UNFOLLOW: "agents.inboxUnfollow",
   /** One plan's or agent's held inbox read again at once, as Try again asks; never answered. */
   AGENTS_INBOX_RETRY: "agents.inboxRetry",
-  /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
-  /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
-  AGENTS_INBOX_CLOSE: "agents.inboxClose",
-  /** A held close let go by its key, sent to the service or taken back as its Undo asks; whether it was still held. */
-  AGENTS_INBOX_CLOSE_RELEASE: "agents.inboxCloseRelease",
-  /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
-  AGENTS_INBOX_MESSAGE: "agents.inboxMessage",
-  /** A thread the account starts with one agent, its subject and first message under the panel's own key; the thread as it then stands, its message on it, or why there is no answer. */
-  AGENTS_INBOX_START: "agents.inboxStart",
-  /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
-  AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
-  /** One item's reminder set for the account for an instant, or canceled, whether it is read standing as it was; its read state, or why there is no answer. */
-  // Note that setting a reminder keeps Snooze's id, because a write queued offline is kept on disk by its method's id, and one under an id no host answers is dropped.
-  AGENTS_INBOX_REMIND: "agents.inboxSnooze",
-  /** Where one item the account may read stands, its agent, task, and workspace, as a link by its id alone is opened; or why there is no answer. */
-  AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
-  /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
-  AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
   /**
    * Where every one of the account's integrations stands, held for a window
    * from now until it is let go, followed on the service's live read with
@@ -614,12 +522,6 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_ITEMS_RETRY: "agents.inboxItemsRetry",
   /** The account's preferences row, which the host holds for the session, read again at once, as Try again asks; never answered. */
   AGENTS_PREFERENCES_RETRY: "agents.preferencesRetry",
-  /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  AGENTS_INBOX_ATTACHMENT: "agents.inboxAttachment",
-  /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  AGENTS_PICTURE: "agents.picture",
-  /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
-  AGENTS_PART: "agents.part",
   /**
    * A coding agent's terminals (`@repo/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the
@@ -637,6 +539,7 @@ export const GATEWAY_METHOD = {
   TERMINALS_INPUT: "terminals.input",
   TERMINALS_RESIZE: "terminals.resize",
   TERMINALS_ACK: "terminals.ack",
+  TERMINALS_SHOWN: "terminals.shown",
   TERMINALS_DISCONNECT: "terminals.disconnect",
   TERMINALS_WAKE: "terminals.wake",
   /**

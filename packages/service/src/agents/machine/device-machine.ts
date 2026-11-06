@@ -118,6 +118,8 @@ import {
 } from "../vercel-sandbox-api.js";
 import {
   type AgentMachineService,
+  CREDENTIAL_RENEWAL,
+  type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
   type MachineKept,
@@ -128,6 +130,7 @@ import {
   type MachineRunning,
   type OpenedPlace,
   RUNNER_RECORD,
+  type RunnerCredential,
   type RunnerHandle,
   type RunnerLaunch,
 } from "./agent-machine.js";
@@ -224,6 +227,20 @@ function objectOf(value: object): DeviceAgentObject {
 }
 
 /**
+ * A launch's credentials as a Mac's runner takes them, which no firewall of
+ * ours stands in front of: a fixed one's value in its variable, sealed with
+ * the launch, and a renewed one not at all, since the runner asks our token
+ * route for it.
+ */
+function handedOnMac(credentials: readonly RunnerCredential[]): DeliveredCredentials {
+  const fixed = credentials.filter((each) => each.renewal === CREDENTIAL_RENEWAL.FIXED);
+  return {
+    env: Object.fromEntries(fixed.map((each) => [each.variable, Redacted.value(each.value)])),
+    swaps: new Map(),
+  };
+}
+
+/**
  * The machine over the account's Macs, its store calls made on the services
  * given and its launches sealed under the deployment's key ring, where the
  * services carry one.
@@ -276,6 +293,8 @@ function deviceMachineOver(
         sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
+        // Note that a Mac's Codex keeps its threads at its default under the agent's own home.
+        codexHome: undefined,
         // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
         linesRead: false,
         transcriptsKept: false,
@@ -396,6 +415,8 @@ function deviceMachineOver(
     owns: (session) => Effect.map(pinOfSession(session), Option.isSome),
 
     layout: (agent) => layoutOf(agent.userId, agent.id, agent.deviceId),
+
+    deliverCredentials: (_agent, credentials) => handedOnMac(credentials),
 
     // The worktree is the device's to make of its shared clone as it takes the launch line, on the
     // agent's own GitHub token, or the device's own GitHub sign-in for an agent on its starter's
@@ -520,7 +541,7 @@ function deviceMachineOver(
     // its caller's record is undone; the Mac sets it in the agent's repository on every launch,
     // so an agent whose repository was made before the field gets it too.
     // Note that only an agent in the cloud works in repositories beside its own, so a device clones none.
-    checkOutExtras: () => Effect.void,
+    checkOutMissing: () => Effect.void,
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(place);

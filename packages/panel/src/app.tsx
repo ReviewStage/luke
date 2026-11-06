@@ -79,8 +79,8 @@ import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider, PreloadPersonProvider } from "./person-door.js";
 import { forgetPictures } from "./picture-query.js";
+import { ROUTED_PLACE } from "./places/routed-places.js";
 import { forgetAccountReads } from "./query-keys.js";
-import { ROUTED_PLACE } from "./route-gates.js";
 import { useOpenHostConnect } from "./settings/host-connect-dialog.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { type SettingsRoute, useSettingsRoute } from "./settings-link.js";
@@ -514,6 +514,7 @@ function AppWindow(): React.JSX.Element {
     !accountGated,
     room,
     adminView.open ? adminView.view : undefined,
+    routedHere?.place,
   );
   // A fixture run's profile opens the window on its place once, as a link to it would; an Automations page once its workspace is listed, whose address it stands under.
   const launchedOnce = useRef(false);
@@ -859,6 +860,7 @@ function AppWindow(): React.JSX.Element {
                               <TabSwitcher
                                 available={!accountGated}
                                 tab={tab}
+                                place={routedHere?.place}
                                 onTabChange={changeTab}
                                 tasks={tasks}
                               />

@@ -22,6 +22,7 @@ import {
 } from "@repo/gateway";
 import { Context, Data, Deferred, Effect, Layer, Ref, type Scope } from "effect";
 import type { Composer } from "../composer.js";
+import type { HostActTable } from "../host-acts.js";
 import type { HostConcern } from "../host-concerns.js";
 import { layersInOrder } from "./composer.js";
 
@@ -85,6 +86,8 @@ export const hostDrain = /* @__PURE__ */ Effect.fn("host/hostDrain")(function* (
 export interface HostAssembly {
   /** The one boundary a client reaches this host through. */
   readonly gateway: GatewayHost;
+  /** Every declared act's handler, which a window's act port answers directly. */
+  readonly acts: HostActTable;
   /** Where the client offers this machine's native capabilities and the host asks for them. */
   readonly nodes: NodeRegistry;
   /** The concerns this host runs: every one but the platform concerns it was built without. */
