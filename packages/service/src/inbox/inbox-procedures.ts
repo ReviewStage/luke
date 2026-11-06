@@ -34,6 +34,7 @@ import {
   INBOX_STATUS,
   type InboxAnswers,
   type InboxItem,
+  type InboxRemindRequest,
   type InboxReply,
   inboxAnswerHeard,
   inboxAnswerMessage,
@@ -88,9 +89,9 @@ import {
   postInboxMessage,
   readInboxItem,
   readInboxItemHome,
+  remindInboxItem,
   retitleInboxThread,
   type StoredInboxItem,
-  snoozeInboxItem,
   startInboxThread,
   withdrawInboxAnswer,
   withdrawInboxClose,
@@ -718,6 +719,20 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { item };
 });
 
+/** The item's reminder set for the member until the instant the body names, or ended where it names none: its id and read state, or not found. */
+const remindOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  input: { readonly params: { readonly id: string }; readonly body: InboxRemindRequest },
+) {
+  const itemId = yield* pathUuid(input.params.id);
+  const { until } = input.body;
+  const marked = yield* hostedStoreOrUnavailable(
+    remindInboxItem(userId, itemId, until === null ? null : new Date(until)),
+  );
+  if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return { id: itemId, ...marked };
+});
+
 /**
  * The inbox resource, to a signed-in caller: the three held reads, an
  * item answered or closed without an answer, a message on its thread, and the member's own read state,
@@ -825,17 +840,18 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { id: itemId, unread: true, ...marked };
     }),
+    remindItem: signedIn.remindItem.use(writeReceiptMiddleware).effect(function* ({
+      input,
+      context,
+    }) {
+      return yield* remindOf(context.userId, input);
+    }),
+    // `remindItem` under the path a desktop built before the rename still calls; goes once the releases after it are out.
     snoozeItem: signedIn.snoozeItem.use(writeReceiptMiddleware).effect(function* ({
       input,
       context,
     }) {
-      const itemId = yield* pathUuid(input.params.id);
-      const { until } = input.body;
-      const marked = yield* hostedStoreOrUnavailable(
-        snoozeInboxItem(context.userId, itemId, until === null ? null : new Date(until)),
-      );
-      if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { id: itemId, ...marked };
+      return yield* remindOf(context.userId, input);
     }),
     markAllRead: signedIn.markAllRead.use(writeReceiptMiddleware).effect(function* ({
       input,

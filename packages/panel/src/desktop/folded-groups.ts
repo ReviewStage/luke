@@ -131,18 +131,24 @@ const storedWhose = Schema.fromJsonString(
   ]),
 );
 
-/** The tabs an earlier version kept, before the scopes: Needs you, Unread, and All open; Everything was kept as All is. */
-const EARLIER_SHOW = { NEEDS_YOU: "needs-you", UNREAD: "unread", OPEN: "open" } as const;
+/** The tabs an earlier version kept, before the scopes: Needs you, Unread, and All open; Everything was kept as All is; and the scope Reminders was kept under while it was named Snoozed. */
+const EARLIER_SHOW = {
+  NEEDS_YOU: "needs-you",
+  UNREAD: "unread",
+  OPEN: "open",
+  SNOOZED: "snoozed",
+} as const;
 
-/** The scope each kept value now stands for: a tab before the scopes as the scope listing what it did. */
+/** The scope each kept value now stands for: a tab before the scopes as the scope listing what it did, and Snoozed as Reminders. */
 const SHOW_OF_KEPT = {
   [INBOX_SHOW.NEEDS_ME]: INBOX_SHOW.NEEDS_ME,
   [INBOX_SHOW.OPEN]: INBOX_SHOW.OPEN,
   [INBOX_SHOW.ALL]: INBOX_SHOW.ALL,
-  [INBOX_SHOW.SNOOZED]: INBOX_SHOW.SNOOZED,
+  [INBOX_SHOW.REMINDERS]: INBOX_SHOW.REMINDERS,
   [EARLIER_SHOW.NEEDS_YOU]: INBOX_SHOW.OPEN,
   [EARLIER_SHOW.UNREAD]: INBOX_SHOW.OPEN,
   [EARLIER_SHOW.OPEN]: INBOX_SHOW.ALL,
+  [EARLIER_SHOW.SNOOZED]: INBOX_SHOW.REMINDERS,
 } as const satisfies Record<
   InboxShow | (typeof EARLIER_SHOW)[keyof typeof EARLIER_SHOW],
   InboxShow

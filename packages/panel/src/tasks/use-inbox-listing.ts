@@ -306,7 +306,7 @@ export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
       }),
     [held, holdings, everyTask, holdingAgents, listedWorkspace],
   );
-  // Note that a snooze is weighed on the window's clock, since no read of the service's may read one, so an item comes back within the minute its snooze passes.
+  // Note that a reminder is weighed on the window's clock, since no read of the service's may read one, so an item comes back within the minute its reminder comes due.
   const now = useMinute();
   const standing = useMemo(
     () =>

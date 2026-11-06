@@ -888,11 +888,17 @@ export const inboxItemSchema = EffectSchema.Struct({
    */
   markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
-   * Until when the member reading it snoozed the item, in epoch
-   * milliseconds: it stays out of their Inbox while this is ahead, and
+   * When the reminder the member reading it set on the item comes due, in
+   * epoch milliseconds: it stays out of their Inbox while this is ahead, and
    * comes back once this passes, read or unread as it stands. Absent where
-   * they did not snooze it or a change woke it since, and from a service
-   * before snoozing.
+   * they set none or a change ended it since, and from a service before
+   * reminders.
+   */
+  remindAt: EffectSchema.optionalKey(countedNumber),
+  /**
+   * `remindAt` under the key a desktop from before the rename reads, which
+   * the service still fills and no client reads: the key goes with the
+   * minimum supported desktop version.
    */
   snoozedUntil: EffectSchema.optionalKey(countedNumber),
 });
@@ -1155,15 +1161,15 @@ export const inboxReadStateSchema = EffectSchema.Struct({
   ...writtenIn,
 });
 
-/** The latest instant a JavaScript date holds, in epoch milliseconds, past which a snooze names no moment. */
+/** The latest instant a JavaScript date holds, in epoch milliseconds, past which a reminder names no moment. */
 const LATEST_INSTANT = 8_640_000_000_000_000;
 
-/** Snoozing an item for the member until an instant, in epoch milliseconds, or ending its snooze where none is named. */
-export const inboxSnoozeRequestSchema = EffectSchema.Struct({
+/** Setting an item's reminder for the member for an instant, in epoch milliseconds, or canceling it where none is named. */
+export const inboxRemindRequestSchema = EffectSchema.Struct({
   until: EffectSchema.NullOr(countedNumber.check(EffectSchema.isLessThanOrEqualTo(LATEST_INSTANT))),
 });
 
-export type InboxSnoozeRequest = typeof inboxSnoozeRequestSchema.Type;
+export type InboxRemindRequest = typeof inboxRemindRequestSchema.Type;
 
 /**
  * Marking every item of the reader's Inbox read: every item it lists, in

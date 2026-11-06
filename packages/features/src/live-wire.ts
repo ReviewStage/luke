@@ -339,7 +339,7 @@ function digest(text: string): string {
  * The cursor of a live answer: a digest of what the held read's cursor
  * stamps, each item's id, revision, instant, read state, who it waits
  * on, so its task's assignee changing moves it, whether it asks, and until
- * when it is snoozed, and
+ * when its reminder comes due, and
  * each failed run, so an answer whose cursor is the last one's moved nothing
  * a reader announces or counts, as a held answer's does.
  */
@@ -351,7 +351,7 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     readonly unread?: boolean | undefined;
     readonly waitsOn?: string | undefined;
     readonly asking?: boolean | undefined;
-    readonly snoozedUntil?: number | null | undefined;
+    readonly remindAt?: number | null | undefined;
   }) => [
     item.id,
     item.revision,
@@ -359,7 +359,7 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     item.unread ?? null,
     item.waitsOn ?? null,
     item.asking ?? null,
-    item.snoozedUntil ?? null,
+    item.remindAt ?? null,
   ];
   return digest(
     JSON.stringify([
@@ -679,9 +679,12 @@ const inboxLiveFileSchema = EffectSchema.Struct({
   position: EffectSchema.NullOr(countedNumber),
 });
 
+/** An item's fields bar the key a hosted answer still fills for a desktop from before the rename, which a live row carries for that desktop alone. */
+const { snoozedUntil: _beforeRemindAt, ...liveItemFields } = inboxItemSchema.fields;
+
 /** One item as its row delivers it: what an item leaves out where it holds nothing is null. */
 const inboxLiveRowSchema = EffectSchema.Struct({
-  ...inboxItemSchema.fields,
+  ...liveItemFields,
   startedBy: EffectSchema.String,
   startedByName: EffectSchema.NullOr(EffectSchema.String),
   /** Absent from a service before it, as the item's own `waitsOn` is. */
@@ -695,8 +698,8 @@ const inboxLiveRowSchema = EffectSchema.Struct({
   openAskMessageId: EffectSchema.NullOr(EffectSchema.String),
   settledAt: EffectSchema.NullOr(countedNumber),
   unread: EffectSchema.Boolean,
-  /** Null where the reader did not snooze the item; absent from a service before snoozing. */
-  snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
+  /** Null where the reader set no reminder on the item; absent from a service before reminders. */
+  remindAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 
 /** A scope's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
@@ -798,7 +801,7 @@ function inboxItemOfLiveRow(
     openAskMessageId,
     settledAt,
     markedUnread,
-    snoozedUntil,
+    remindAt,
     ...item
   } = row;
   const thread = threadOf(threads.get(row.id) ?? [], openAskMessageId);
@@ -826,7 +829,7 @@ function inboxItemOfLiveRow(
     ...(thread.length === 0 ? undefined : { thread: thread.map(message) }),
     ...(settledAt === null ? undefined : { settledAt }),
     ...(markedUnread === true ? { markedUnread } : undefined),
-    ...(snoozedUntil === undefined || snoozedUntil === null ? undefined : { snoozedUntil }),
+    ...(remindAt === undefined || remindAt === null ? undefined : { remindAt }),
   };
 }
 
@@ -1008,8 +1011,8 @@ const inboxItemStampRowSchema = EffectSchema.Struct({
   status: inboxItemSchema.fields.status,
   updatedAt: countedNumber,
   unread: EffectSchema.Boolean,
-  /** Until when the reader snoozed the item, which a snooze moves without moving `updatedAt`; null where they did not, absent from a service before snoozing. */
-  snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
+  /** When the reader's reminder on the item comes due, which a reminder moves without moving `updatedAt`; null where they set none, absent from a service before reminders. */
+  remindAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   waitsOn: EffectSchema.String,
   messages: countedNumber,
 });

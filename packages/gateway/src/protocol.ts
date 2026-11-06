@@ -544,8 +544,9 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
-  /** One item snoozed for the account until an instant, or its snooze ended, whether it is read standing as it was; its read state, or why there is no answer. */
-  AGENTS_INBOX_SNOOZE: "agents.inboxSnooze",
+  /** One item's reminder set for the account for an instant, or canceled, whether it is read standing as it was; its read state, or why there is no answer. */
+  // Note that setting a reminder keeps Snooze's id, because a write queued offline is kept on disk by its method's id, and one under an id no host answers is dropped.
+  AGENTS_INBOX_REMIND: "agents.inboxSnooze",
   /** Where one item the account may read stands, its agent, task, and workspace, as a link by its id alone is opened; or why there is no answer. */
   AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */

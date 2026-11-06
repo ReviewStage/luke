@@ -29,8 +29,8 @@ import type {
   AgentInboxReadAllView,
   AgentInboxReadStateParams,
   AgentInboxReadStateView,
+  AgentInboxRemindParams,
   AgentInboxScope,
-  AgentInboxSnoozeParams,
   AgentInboxStartParams,
   AgentPictureParams,
 } from "@repo/features/agent-view";
@@ -54,7 +54,7 @@ export interface AgentInboxProceduresDependencies {
     agentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
     agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
     agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
-    agentInboxSnooze(params: AgentInboxSnoozeParams): Effect.Effect<AgentInboxReadStateView>;
+    agentInboxRemind(params: AgentInboxRemindParams): Effect.Effect<AgentInboxReadStateView>;
     /** Where one item stands, as a link by its id alone is opened. */
     agentInboxItemHome(params: AgentInboxItemHomeParams): Effect.Effect<AgentInboxItemHomeView>;
     agentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
@@ -135,11 +135,11 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.agentInboxReadState(input);
     }),
-    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_SNOOZE]: actPort[
-      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_SNOOZE
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_REMIND]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_REMIND
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.agentInboxSnooze(input);
+      return yield* host.agentInboxRemind(input);
     }),
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME]: actPort[
       AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME

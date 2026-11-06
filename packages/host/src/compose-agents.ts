@@ -19,7 +19,7 @@ import {
   type AgentInboxReadAllView,
   type AgentInboxReadStateParams,
   type AgentInboxReadStateView,
-  type AgentInboxSnoozeParams,
+  type AgentInboxRemindParams,
   type AgentListAnswer,
   type AgentMarkReadParams,
   type AgentMessagesAnswerView,
@@ -43,8 +43,8 @@ import {
   agentInboxMessageParamsSchema,
   agentInboxReadAllParamsSchema,
   agentInboxReadStateParamsSchema,
+  agentInboxRemindParamsSchema,
   agentInboxScopeSchema,
-  agentInboxSnoozeParamsSchema,
   agentInboxStartParamsSchema,
   agentListParamsSchema,
   agentMarkReadParamsSchema,
@@ -342,7 +342,7 @@ export type AgentClient = Pick<
   | "messageInbox"
   | "startInboxThread"
   | "markInboxItemRead"
-  | "snoozeInboxItem"
+  | "remindInboxItem"
   | "inboxItemHome"
   | "markInboxItemUnread"
   | "markInboxRead"
@@ -1169,14 +1169,14 @@ function composed(
       queued: ({ itemId, unread }) => ({ id: itemId, unread }),
     },
   );
-  /** An item snoozed until an instant, or its snooze ended, drawn at once; whether it is read stands as it was. */
-  const snoozed = inboxWrite<AgentInboxSnoozeParams, AgentInboxReadStateView>(
+  /** An item's reminder set for an instant, or canceled, drawn at once; whether it is read stands as it was. */
+  const reminded = inboxWrite<AgentInboxRemindParams, AgentInboxReadStateView>(
     ({ itemId }) => [itemId],
-    ({ itemId, until }) => ({ kind: INBOX_CHANGE.SNOOZED, itemId, until, at: kernel.now() }),
-    ({ itemId, until }, key) => asked(client.snoozeInboxItem(itemId, until, key)),
+    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until, at: kernel.now() }),
+    ({ itemId, until }, key) => asked(client.remindInboxItem(itemId, until, key)),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_SNOOZE,
-      input: agentInboxSnoozeParamsSchema,
+      name: GATEWAY_METHOD.AGENTS_INBOX_REMIND,
+      input: agentInboxRemindParamsSchema,
       queued: ({ itemId }) => ({
         id: itemId,
         unread: dependencies.pool.row(INBOX_ITEM, itemId)?.unread === true,
@@ -1961,14 +1961,14 @@ function composed(
           "marking an inbox item names the item and whether it reads as unread",
         ),
     ),
-    [GATEWAY_METHOD.AGENTS_INBOX_SNOOZE]: declaredMethod(
+    [GATEWAY_METHOD.AGENTS_INBOX_REMIND]: declaredMethod(
       dependencies.pool,
-      snoozed,
+      reminded,
       (params: WireRecord) =>
         readParams(
-          agentInboxSnoozeParamsSchema,
+          agentInboxRemindParamsSchema,
           params,
-          "snoozing an inbox item names the item and until when, or none to end its snooze",
+          "setting an inbox item's reminder names the item and when, or none to cancel it",
         ),
     ),
     [GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME]: (params) =>
@@ -2067,7 +2067,7 @@ function composed(
       anyWrite(nodded),
       anyWrite(closed),
       anyWrite(marked),
-      anyWrite(snoozed),
+      anyWrite(reminded),
       anyWrite(markedAll),
     ],
   };

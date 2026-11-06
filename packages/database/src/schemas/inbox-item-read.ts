@@ -4,7 +4,7 @@ import { user } from "./auth.js";
 import { inboxItem } from "./inbox.js";
 
 /**
- * inbox-item-read.ts -- one member's read marker on one inbox item: how far they have read it, whether they marked it unread, and until when, and over which change, they snoozed it.
+ * inbox-item-read.ts -- one member's read marker on one inbox item: how far they have read it, whether they marked it unread, and when, and over which change, it reminds them of it.
  *
  * An item is unread for a member while it changed after the last change
  * they read through, or while they marked it unread and have not read it
@@ -34,19 +34,23 @@ export const inboxItemRead = pgTable(
     /** Whether the member marked the item unread and has not read it since; any change leaves it standing. */
     markedUnread: boolean("marked_unread").notNull().default(false),
     /**
-     * Until when the member snoozed the item: it stays out of their Inbox
-     * while this is still ahead and the item has not changed since
-     * `snoozed_through`. Snoozing leaves whether it is read alone, and
-     * reading it leaves the snooze alone. Null where it is not snoozed, or
-     * the member ended the snooze.
+     * When the reminder the member set on the item comes due: it stays out
+     * of their Inbox while this is still ahead and the item has not changed
+     * since `remind_through`. Setting a reminder leaves whether it is read
+     * alone, and reading it leaves the reminder alone. Null where the member
+     * set none. Note that `snoozed_until`, its name before, stands beside it
+     * until a later migration drops it, kept equal by a trigger
+     * (`20261105235359_inbox_item_read_remind_expand`), because the release
+     * before this one still writes it.
      */
-    snoozedUntil: timestamptz("snoozed_until"),
+    remindAt: timestamptz("remind_at"),
     /**
-     * The item's last change as it stood when the member snoozed it, its
-     * `updated_at` then: a later change ends the snooze early. Null where
-     * `snoozed_until` is.
+     * The item's last change as it stood when the member set the reminder,
+     * its `updated_at` then: a later change ends the reminder early. Null
+     * where `remind_at` is. Note that `snoozed_through` stands beside it on
+     * the same terms as `snoozed_until` beside `remind_at`.
      */
-    snoozedThrough: timestamptz("snoozed_through"),
+    remindThrough: timestamptz("remind_through"),
   },
   (table) => [
     // One marker per member per item, which every read of an item's unread state looks up.

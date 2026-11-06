@@ -4,7 +4,7 @@
  * The writes that may wait for the service (`WriteDeclaration.queue` on
  * each: a task's start, rename, standing, and pin, a repository's pin, a
  * section write, an agent's start, rename, and pin, and an inbox item's read
- * mark, snooze, nod, and close, and every item marked read) do what each
+ * mark, reminder, nod, and close, and every item marked read) do what each
  * does when sent at once: a start that names an agent starts it, and a nod
  * or a close on an item its agent waits on is handed to that agent. Each is
  * sent under its idempotency key, but a start that names an agent, which

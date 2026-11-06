@@ -350,8 +350,8 @@ const READ = {
   userId: qualified(inboxItemRead, inboxItemRead.userId),
   readThrough: qualified(inboxItemRead, inboxItemRead.readThrough),
   markedUnread: qualified(inboxItemRead, inboxItemRead.markedUnread),
-  snoozedUntil: qualified(inboxItemRead, inboxItemRead.snoozedUntil),
-  snoozedThrough: qualified(inboxItemRead, inboxItemRead.snoozedThrough),
+  remindAt: qualified(inboxItemRead, inboxItemRead.remindAt),
+  remindThrough: qualified(inboxItemRead, inboxItemRead.remindThrough),
 };
 
 /**
@@ -373,22 +373,32 @@ function markedUnreadFor(readerId: string): SQL<boolean> {
 }
 
 /**
- * Until when the reader snoozed the item, as their marker holds it, while
- * the item has not changed since they snoozed it; null where they did not,
- * ended the snooze, keep no marker, or a change woke it. Note that a snooze
- * whose time has passed still answers its time, which the reader lists the
- * item by, since it came back then, and that a snooze with no change of its
- * own stands as the release before it weighed one, while the item is read,
- * because that release snoozed by marking the item read, ended a snooze by
- * marking it unread, and goes on serving the migrated database for a while.
+ * When the reader's reminder on the item comes due, as their marker holds
+ * it, while the item has not changed since they set it; null where they
+ * set none, canceled it, keep no marker, or a change ended it. Note that a
+ * reminder whose time has passed still answers its time, which the reader
+ * lists the item by, since it came back then, and that a reminder with no
+ * change of its own stands as the release before it weighed one, while the
+ * item is read, because that release set one by marking the item read,
+ * canceled one by marking it unread, and goes on serving the migrated
+ * database for a while.
  */
-function snoozedUntilFor(readerId: string): SQL<Date | null> {
-  return sql<Date | null>`(select ${READ.snoozedUntil} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId} and coalesce(${READ.snoozedThrough} >= ${ITEM_UPDATED_AT}, not ${READ.markedUnread} and ${READ.readThrough} >= ${ITEM_UPDATED_AT}))`;
+function remindAtFor(readerId: string): SQL<Date | null> {
+  return sql<Date | null>`(select ${READ.remindAt} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId} and coalesce(${READ.remindThrough} >= ${ITEM_UPDATED_AT}, not ${READ.markedUnread} and ${READ.readThrough} >= ${ITEM_UPDATED_AT}))`;
 }
 
-/** `snoozedUntilFor` in epoch milliseconds, as the wire carries an instant; null where the reader did not snooze the item. */
-function snoozedUntilMillisFor(readerId: string): SQL<number | null> {
-  return sql<number | null>`floor(extract(epoch from ${snoozedUntilFor(readerId)}) * 1000)::float8`;
+/** `remindAtFor` in epoch milliseconds, as the wire carries an instant; null where the reader set no reminder on the item. */
+function remindAtMillisFor(readerId: string): SQL<number | null> {
+  return sql<number | null>`floor(extract(epoch from ${remindAtFor(readerId)}) * 1000)::float8`;
+}
+
+/**
+ * The reader's reminder as a live read carries it: under `remindAt`, and
+ * under `snoozedUntil`, the key a desktop from before the rename reads,
+ * which goes with the minimum supported desktop version.
+ */
+function liveReminderFor(readerId: string): { remindAt: SQL; snoozedUntil: SQL } {
+  return { remindAt: remindAtFor(readerId), snoozedUntil: remindAtFor(readerId) };
 }
 
 /**
@@ -424,7 +434,7 @@ function inboxColumns(readerId: string) {
     ...INBOX_ITEM_COLUMNS,
     unread: unreadFor(readerId),
     markedUnread: markedUnreadFor(readerId),
-    snoozedUntil: snoozedUntilMillisFor(readerId),
+    remindAt: remindAtMillisFor(readerId),
   };
 }
 
@@ -539,7 +549,7 @@ const InboxRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
   markedUnread: Schema.Boolean,
-  snoozedUntil: Schema.NullOr(Schema.Number),
+  remindAt: Schema.NullOr(Schema.Number),
 });
 
 type InboxRow = typeof InboxRowSchema.Type;
@@ -582,7 +592,10 @@ function storedItem(row: InboxRow, keysFor?: string): StoredInboxItem {
       updatedAt: row.updatedAt.getTime(),
       unread: row.unread,
       ...(row.markedUnread ? { markedUnread: true } : undefined),
-      ...(row.snoozedUntil === null ? undefined : { snoozedUntil: row.snoozedUntil }),
+      // Note that the reminder is carried under `snoozedUntil` too, as `liveReminderFor` carries it.
+      ...(row.remindAt === null
+        ? undefined
+        : { remindAt: row.remindAt, snoozedUntil: row.remindAt }),
     },
     answerKey: row.answerKey,
   };
@@ -1216,7 +1229,7 @@ const WaitingRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
   asking: Schema.Boolean,
-  snoozedUntil: Schema.NullOr(Schema.Number),
+  remindAt: Schema.NullOr(Schema.Number),
 });
 
 const findWaitingItems = SqlSchema.findAll({
@@ -1240,7 +1253,7 @@ const findWaitingItems = SqlSchema.findAll({
           updatedAt: inboxItem.updatedAt,
           unread: unreadFor(userId),
           asking: ASKING,
-          snoozedUntil: snoozedUntilMillisFor(userId),
+          remindAt: remindAtMillisFor(userId),
         })
         .from(inboxItem)
         .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
@@ -1268,7 +1281,7 @@ const TasklessRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
   asking: Schema.Boolean,
-  snoozedUntil: Schema.NullOr(Schema.Number),
+  remindAt: Schema.NullOr(Schema.Number),
 });
 
 const findTasklessWaitingItems = SqlSchema.findAll({
@@ -1295,7 +1308,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           updatedAt: inboxItem.updatedAt,
           unread: unreadFor(userId),
           asking: ASKING,
-          snoozedUntil: snoozedUntilMillisFor(userId),
+          remindAt: remindAtMillisFor(userId),
         })
         .from(inboxItem)
         .innerJoin(agentTable, eq(agentTable.id, inboxItem.agentId))
@@ -1496,7 +1509,7 @@ export function accountInboxLiveStatements(
         {
           postedAt: inboxItem.postedAt,
           updatedAt: inboxItem.updatedAt,
-          snoozedUntil: snoozedUntilFor(userId),
+          ...liveReminderFor(userId),
         },
       ),
     )
@@ -1525,7 +1538,7 @@ export function accountInboxLiveStatements(
         {
           postedAt: inboxItem.postedAt,
           updatedAt: inboxItem.updatedAt,
-          snoozedUntil: snoozedUntilFor(userId),
+          ...liveReminderFor(userId),
         },
       ),
     )
@@ -1692,7 +1705,7 @@ function itemsLiveStatements(
           {
             postedAt: inboxItem.postedAt,
             updatedAt: inboxItem.updatedAt,
-            snoozedUntil: snoozedUntilFor(readerId),
+            ...liveReminderFor(readerId),
             // As `SETTLED_AT` reads it, the instant read at UTC as every live instant is.
             settledAt: sql`coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)`,
           },
@@ -1753,7 +1766,7 @@ export interface AccountItemsLiveStatements extends ScopeInboxLiveStatements {
 /**
  * Every inbox item the account reaches written for Neon Realtime: where
  * each stands (`stamps`), every open item, every settled one changed,
- * settled, or brought back by the reader's snooze at or after
+ * settled, or brought back by the reader's reminder at or after
  * `settledSince`, and the items among those changed at or after
  * `since` whole, with their threads and files, as a scope's inbox carries
  * them (`itemsLiveStatements`). A stamp carries what moves an item without
@@ -1784,10 +1797,10 @@ function accountItemsOf(
   const carried = and(
     // Every item the account may read, as its read of what waits names them (`accountWaiting`, `tasklessWaiting`).
     itemVisibleTo(userId),
-    // Note that a settled item stands by the latest of its last change, its settling, and the time the reader's snooze brings it back, since a nod on an old notice settles it without moving its last change, and a snooze must find it still carried when it comes back.
+    // Note that a settled item stands by the latest of its last change, its settling, and the time the reader's reminder brings it back, since a nod on an old notice settles it without moving its last change, and a reminder must find it still carried when it comes back.
     or(
       eq(inboxItem.status, INBOX_STATUS.OPEN),
-      sql`greatest(${inboxItem.updatedAt}, ${inboxItem.settledAt}, ${snoozedUntilFor(userId)}) >= ${settledSince}`,
+      sql`greatest(${inboxItem.updatedAt}, ${inboxItem.settledAt}, ${remindAtFor(userId)}) >= ${settledSince}`,
     ),
     narrowed,
   );
@@ -1807,7 +1820,7 @@ function accountItemsOf(
             channelId: inboxItem.organizationId,
             messages: sql<number>`(select count(*)::int from ${inboxMessage} where ${qualified(inboxMessage, inboxMessage.itemId)} = ${ITEM_ID})`,
           },
-          { updatedAt: inboxItem.updatedAt, snoozedUntil: snoozedUntilFor(userId) },
+          { updatedAt: inboxItem.updatedAt, ...liveReminderFor(userId) },
         ),
       )
       .from(inboxItem)
@@ -1992,8 +2005,8 @@ const READ_ON = {
 /**
  * Whether a read moves the marker that stands: it was marked unread, or the
  * read reaches a later change than it had read through. Note that a read
- * never touches a snooze, so opening an item in the Snoozed list leaves it
- * snoozed.
+ * never touches a reminder, so opening an item in the Reminders list
+ * leaves its reminder standing.
  */
 const READ_MOVES = sql`${inboxItemRead.markedUnread} or ${inboxItemRead.readThrough} is null or ${inboxItemRead.readThrough} < ${excluded(inboxItemRead.readThrough)}`;
 
@@ -2062,17 +2075,18 @@ const upsertUnread = SqlSchema.findOneOption({
 });
 
 /**
- * The member's marker on the item snoozed until the instant over its last
- * change, or, where none is named, its snooze ended now, where the account
- * reaches the item. Note that it leaves whether the item is read alone: a
- * marker it makes reads through no change and is marked unread by no one,
- * which reads the item as having none does (`unreadFor`). A change after
- * it ends the snooze (`snoozedUntilFor`). A snooze ended is one that came
- * due now rather than none, because the item came back then, which keeps a
+ * The member's marker on the item reminding them at the instant over its
+ * last change, or, where none is named, its reminder canceled now, where
+ * the account reaches the item. Note that it leaves whether the item is
+ * read alone: a marker it makes reads through no change and is marked
+ * unread by no one, which reads the item as having none does
+ * (`unreadFor`). A change after it ends the reminder (`remindAtFor`). A
+ * reminder canceled is one that came due now rather than none, because the
+ * item came back then, which keeps a
  * settled one carried as long as it would have been had it come due
  * (`accountItemsOf`); one already past stands as it came due.
  */
-const upsertSnooze = SqlSchema.findOneOption({
+const upsertReminder = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     itemId: Schema.String,
@@ -2088,14 +2102,14 @@ const upsertSnooze = SqlSchema.findOneOption({
             .select({
               itemId: inboxItem.id,
               userId: sql<string>`${userId}::text`.as(inboxItemRead.userId.name),
-              snoozedUntil:
+              remindAt:
                 sql<Date | null>`${until === null ? null : until.toISOString()}::timestamptz`.as(
-                  inboxItemRead.snoozedUntil.name,
+                  inboxItemRead.remindAt.name,
                 ),
-              snoozedThrough: (until === null
+              remindThrough: (until === null
                 ? sql<Date | null>`null::timestamptz`
                 : sql<Date | null>`${inboxItem.updatedAt}`
-              ).as(inboxItemRead.snoozedThrough.name),
+              ).as(inboxItemRead.remindThrough.name),
             })
             .from(inboxItem)
             .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
@@ -2104,13 +2118,13 @@ const upsertSnooze = SqlSchema.findOneOption({
           target: [inboxItemRead.itemId, inboxItemRead.userId],
           set:
             until === null
-              ? // Note that `least` passes over a null, so a marker with no snooze keeps none.
+              ? // Note that `least` passes over a null, so a marker with no reminder keeps none.
                 {
-                  snoozedUntil: sql`case when ${inboxItemRead.snoozedUntil} is null then null else least(${inboxItemRead.snoozedUntil}, now()) end`,
+                  remindAt: sql`case when ${inboxItemRead.remindAt} is null then null else least(${inboxItemRead.remindAt}, now()) end`,
                 }
               : {
-                  snoozedUntil: excluded(inboxItemRead.snoozedUntil),
-                  snoozedThrough: excluded(inboxItemRead.snoozedThrough),
+                  remindAt: excluded(inboxItemRead.remindAt),
+                  remindThrough: excluded(inboxItemRead.remindThrough),
                 },
         })
         .returning({ itemId: inboxItemRead.itemId, txid: TXID }),
@@ -2143,7 +2157,7 @@ const findReachedItem = SqlSchema.findOneOption({
     ),
 });
 
-/** Every item the account's Inbox lists that is unread for it, snoozed or not, in the one workspace named or in all of them, marked read through its last change: the markers moved, which leaves out one a write of the member's own moved further meanwhile. */
+/** Every item the account's Inbox lists that is unread for it, with a reminder or not, in the one workspace named or in all of them, marked read through its last change: the markers moved, which leaves out one a write of the member's own moved further meanwhile. */
 const upsertAllRead = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, workspaceId: Schema.NullOr(Schema.String) }),
   Result: MarkedSchema,
@@ -2867,19 +2881,19 @@ export function markInboxItemUnread(
 }
 
 /**
- * The item snoozed for the member until `until`, or its snooze ended now
+ * The item's reminder set for the member for `until`, or canceled now
  * where `until` is null, leaving whether it is read alone; the transaction that
  * wrote it and whether the item is unread for them, or false where the
  * account reaches no such item. Another member's marker is never touched.
  */
-export function snoozeInboxItem(
+export function remindInboxItem(
   userId: string,
   itemId: string,
   until: Date | null,
 ): InboxStoreEffect<(InboxMarked & { readonly unread: boolean }) | false> {
   const request = { userId, itemId };
   return Effect.gen(function* () {
-    const marked = yield* markerFound(yield* upsertSnooze({ ...request, until }), request);
+    const marked = yield* markerFound(yield* upsertReminder({ ...request, until }), request);
     if (marked === false) return false;
     const read = yield* findReaderUnread(request);
     return { ...marked, unread: Option.isSome(read) && read.value.unread };
@@ -2889,7 +2903,7 @@ export function snoozeInboxItem(
 /**
  * Every item the member's Inbox lists marked read for them, open or
  * settled, in the one workspace named or in every workspace of theirs
- * where none is: how many were unread, an item back from a snooze counted
+ * where none is: how many were unread, an item back from a reminder counted
  * among them, and the transaction that marked them, none where none was. An
  * item already read is not written, and another member's markers are never
  * touched.
@@ -4010,6 +4024,8 @@ export function accountWaitingItems(
   return Effect.map(findWaitingItems({ userId }), (rows) =>
     rows.map(({ taskId, ...row }) => ({
       ...row,
+      // Note that the reminder is carried under `snoozedUntil` too, as `liveReminderFor` carries it.
+      snoozedUntil: row.remindAt,
       planId: taskId,
       postedAt: row.postedAt.getTime(),
       updatedAt: row.updatedAt.getTime(),
@@ -4034,6 +4050,7 @@ export function accountTasklessItems(
   return Effect.map(findTasklessWaitingItems({ userId, repositoryless }), (rows) =>
     rows.map(({ workspaceId, ...row }) => ({
       ...row,
+      snoozedUntil: row.remindAt,
       ...(workspaceId === null ? undefined : { workspaceId }),
       postedAt: row.postedAt.getTime(),
       updatedAt: row.updatedAt.getTime(),
