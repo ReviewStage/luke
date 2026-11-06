@@ -5899,7 +5899,10 @@ test("a thread whose file the changes no longer hold stays in the Conversation, 
   await settle();
   await frames();
 
-  assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true");
+  // Note that the Conversation is chosen through the route a Query notification later than the press.
+  await vi.waitFor(() =>
+    assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true"),
+  );
   assert.deepEqual(listReveals, [], "no file is scrolled to");
   const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread stands");
   assert.equal(card.hasAttribute("data-landed"), true, "the thread is shown where it stays");
