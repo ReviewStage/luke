@@ -71,9 +71,11 @@ export const PAGE_REVIEW_WORDS = {
   NOT_SENT: "Some comments could not be sent.",
   NOT_REMOVED: "A comment already posted could not be deleted.",
   FULL: "Your review is full. Comments you write now post at once.",
-  /** What the panel says of the comments it holds. */
-  lead: (count: number) =>
-    `${count} ${count === 1 ? "comment" : "comments"} only you can see. The agent hears them together when you send them.`,
+  /** What the panel says of the comments it holds, `posted` of them already standing for every member by a send that stopped part way. */
+  lead: (count: number, posted: number) =>
+    posted === 0
+      ? `${count} ${count === 1 ? "comment" : "comments"} only you can see. The agent hears them together when you send them.`
+      : `${count} ${count === 1 ? "comment" : "comments"}, ${posted} already posted for everyone to see. The agent hears them together when you send them.`,
   /** The Review press's name to a reader, with the comments it holds. */
   openWith: (count: number) => `Review, ${count} held ${count === 1 ? "comment" : "comments"}`,
   /** A held pin's name. */
@@ -246,8 +248,12 @@ export function usePageReview(
       if (planId === undefined || full) return;
       setAll((now) => [...now, { ...comment, planId, pageId, posted: false }]);
     },
-    remove: (clientKey) => removeAll(held.filter((comment) => comment.clientKey === clientKey)),
+    // Note that nothing is let go while a send is out, since a start on its way may still post the comment whose record would be gone.
+    remove: (clientKey) => {
+      if (!sending) removeAll(held.filter((comment) => comment.clientKey === clientKey));
+    },
     discard: () => {
+      if (sending) return;
       setFailed(false);
       removeAll(held);
     },
@@ -259,11 +265,14 @@ export function usePageReview(
 function HeldRow({
   comment,
   words,
+  sending,
   onRemove,
 }: {
   comment: HeldComment;
   /** Its words as every comment's are drawn. */
   words: React.ReactNode;
+  /** Whether the review is on its way, which takes Remove away until it lands. */
+  sending: boolean;
   onRemove: () => void;
 }): React.JSX.Element {
   return (
@@ -274,11 +283,13 @@ function HeldRow({
         </QuietWords>
       ) : null}
       {words}
-      <div>
-        <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={onRemove}>
-          <ReplayUnmask>{PAGE_REVIEW_WORDS.REMOVE}</ReplayUnmask>
-        </TextButton>
-      </div>
+      {sending ? null : (
+        <div>
+          <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={onRemove}>
+            <ReplayUnmask>{PAGE_REVIEW_WORDS.REMOVE}</ReplayUnmask>
+          </TextButton>
+        </div>
+      )}
     </li>
   );
 }
@@ -306,6 +317,7 @@ export function PageReview({
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const count = review.held.length;
+  const posted = review.held.filter((comment) => comment.posted).length;
   const discarding = useConfirmDialog(
     { subject: count > 0, surfaceOpen: open },
     () => {
@@ -358,8 +370,8 @@ export function PageReview({
           <p className="m-0 -mt-ui-8 text-muted-foreground">
             <ReplayUnmask>
               {review.full
-                ? `${PAGE_REVIEW_WORDS.lead(count)} ${PAGE_REVIEW_WORDS.FULL}`
-                : PAGE_REVIEW_WORDS.lead(count)}
+                ? `${PAGE_REVIEW_WORDS.lead(count, posted)} ${PAGE_REVIEW_WORDS.FULL}`
+                : PAGE_REVIEW_WORDS.lead(count, posted)}
             </ReplayUnmask>
           </p>
           <ul className="page-review-list m-0 flex list-none flex-col gap-item-gap p-0">
@@ -368,6 +380,7 @@ export function PageReview({
                 key={comment.clientKey}
                 comment={comment}
                 words={wordsOf(comment)}
+                sending={review.sending}
                 onRemove={() => review.remove(comment.clientKey)}
               />
             ))}
