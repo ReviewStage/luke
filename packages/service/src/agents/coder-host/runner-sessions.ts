@@ -209,7 +209,7 @@ import {
   agentFirewallSources,
   CheckoutRefused,
   type CheckoutServices,
-  firewallSourcesOfAgent,
+  firewallSourcesAfterLaunch,
 } from "./checkout.js";
 import { nativeSkillFiles } from "./native-skills.js";
 import type { RunnerBundle } from "./runner-bundle.js";
@@ -2198,7 +2198,7 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
   // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the place,
   // less the credentials only the ended runner sent, its repository's credential minted afresh for the shell.
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate)) {
-    const sources = yield* firewallSourcesOfAgent(ending.target.userId, agentId);
+    const sources = yield* firewallSourcesAfterLaunch(ending.target.userId, agentId);
     yield* machine.firewall.endLaunch(running, ending.target.userId, sources);
     return RUNNER_ENDED.HELD;
   }

@@ -44,7 +44,7 @@ const PROJECT = "prj_fixture";
 const NOW = new Date(Date.UTC(2026, 9, 14, 12));
 const GRACE_MS = Duration.toMillis(NATIVE_SANDBOX_SWEEP.GRACE);
 
-/** No GitHub App: the agents here work in no repository, so a sweep mints no credential. */
+/** No GitHub App: no repository credential can be minted, which the agents here need none of but one. */
 const NO_GITHUB_APP = GitHubApp.layer(undefined);
 
 const minutesBefore = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000);
@@ -152,13 +152,20 @@ function vercel(
   };
 }
 
-/** An agent on the runtime given, its newest turn in the status given where one is, settled at the instant given. */
-const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at: Date }) =>
+/** An agent on the runtime given, its newest turn in the status given where one is, settled at the instant given, working in the repository given where one is. */
+const openAgent = (
+  runtime: ConversationRuntime,
+  turn?: { status: TurnStatus; at: Date },
+  repository: string | null = null,
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
-    const task = yield* startTask(userId, { name: "Teammate invitations" });
+    const task = yield* startTask(userId, {
+      name: "Teammate invitations",
+      ...(repository === null ? undefined : { repository }),
+    });
     const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: "start-1",
@@ -166,7 +173,7 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
       effort: "high",
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
-      repository: null,
+      repository,
       runtime,
     });
     const agent = Option.getOrThrow(started).agent;
@@ -400,14 +407,16 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
   );
 
   it.effect(
-    "a held sandbox whose run ended and whose runner exited, its END's own let-go never run, has its launch's swaps taken off it once, and nothing after",
+    "a held sandbox whose run ended and whose runner exited, its END's own let-go never run, has its launch's swaps taken off it once, though its repository's credential could not be minted, and nothing after",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const agent = yield* openAgent(CONVERSATION_RUNTIME.CODEX, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
+        // No App reaches the agent's repository, so its credential cannot be minted for the shell.
+        const agent = yield* openAgent(
+          CONVERSATION_RUNTIME.CODEX,
+          { status: TURN_STATUS.SETTLED, at: minutesBefore(10) },
+          "acme/relay",
+        );
         yield* holdSandbox(agent.conversationId, new Date(NOW.getTime() + 60_000));
         const api = vercel();
         const sandbox = nativeSandbox(agent.id);
@@ -443,7 +452,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         assert.equal(first.held, 1);
         assert.equal(sandbox.status, "running");
         assert.equal(yield* firewall.launchOf(session).pipe(withRing), undefined);
-        // One send takes the swap off, the agent having no repository to carry; the next sweep finds no launch and sends nothing.
+        // One send takes the swap off with nothing beside it; the next sweep finds no launch and sends nothing.
         assert.deepEqual([afterFirst, api.policies.length], [1, 1]);
       }),
   );

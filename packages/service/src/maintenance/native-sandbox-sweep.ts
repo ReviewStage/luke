@@ -67,7 +67,7 @@ import { TURN_FAILURE } from "@repo/features/turn-run";
 import { Cause, Data, Duration, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { firewallSourcesOfAgent } from "../agents/coder-host/checkout.js";
+import { firewallSourcesAfterLaunch } from "../agents/coder-host/checkout.js";
 import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
 import { retireWarmRunner } from "../agents/coder-host/runner-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -387,8 +387,9 @@ const retiredPastWarm = (
  * past its runner's exit, where its launch is still kept, so a sweep that
  * finds it let go reads the store alone: the launch let go, and the policy
  * written without it, the agent's repository credential minted afresh for
- * the shell. One that would not come off is said and taken off at a later
- * sweep's read.
+ * the shell where it can be minted, and nothing beside it where it cannot.
+ * One that would not come off is said and taken off at a later sweep's
+ * read.
  */
 const runnerCredentialsWithdrawn = (
   api: VercelSandboxApi,
@@ -399,7 +400,7 @@ const runnerCredentialsWithdrawn = (
     const firewall = sandboxFirewall(api);
     const launch = yield* firewall.launchOf(session);
     if (launch === undefined) return;
-    const sources = yield* firewallSourcesOfAgent(session.userId, launch.agentId ?? agentId);
+    const sources = yield* firewallSourcesAfterLaunch(session.userId, launch.agentId ?? agentId);
     yield* firewall.endLaunch(session, sources);
   }).pipe(
     Effect.catch((failure) =>
