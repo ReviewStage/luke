@@ -42,4 +42,6 @@ export const QUERY_ROOT = {
   AGENT_MESSAGES: "agent-messages",
   REPOSITORY_SKILLS: "repository-skills",
   TERMINAL_LIST: "terminal-list",
+  /** One version of a plan, as its version history draws it (`tasks/use-plan-history.ts`). */
+  TASK_REVISION: "task-revision",
 } as const;
