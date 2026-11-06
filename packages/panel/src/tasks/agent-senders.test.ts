@@ -246,7 +246,8 @@ async function drawnFor(
             readerId: reader,
             children: createElement(AutomationDirectory, {
               workspace: { id: ACME.id, name: "Acme" },
-              wanted: automations !== undefined,
+              // Note that the place around the tab reads no automations, since no agent of it was started by one.
+              wanted: false,
               onOpen: (automationId: string) => automations?.opened.push(automationId),
               children: createElement(AgentTab, {
                 agent,
@@ -398,40 +399,33 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   fakeAppBridge({});
 });
 
-test("an automation's later runs' lines hang its card and open its page, by the id the line keeps or, kept before it was, by the agent's own automation", async () => {
-  const automation = { name: TRIAGE.name, kind: AGENT_SENDER.AUTOMATION };
+test("a line an automation sent hangs its card and opens its page, on an agent it did not start", async () => {
   const messages = [
-    line("run", TRIAGE.action.prompt, automation),
-    line("kept", "Triage the failures again.", { ...automation, automationId: TRIAGE.id }),
-    line("earlier", "Triage the failures once more.", automation),
+    line("task", "Add the invite flow."),
+    line("run", "Triage the failures.", {
+      name: TRIAGE.name,
+      kind: AGENT_SENDER.AUTOMATION,
+      automationId: TRIAGE.id,
+    }),
   ];
   const opened: string[] = [];
-  const drawn = await drawnFor(
-    DEAN.userId,
-    [],
-    { ...AGENT, automationId: TRIAGE.id, automationName: TRIAGE.name },
-    messages,
-    { rows: [TRIAGE], opened },
+  const drawn = await drawnFor(DEAN.userId, [], AGENT, messages, { rows: [TRIAGE], opened });
+  const sender = drawn[1]?.querySelector<HTMLElement>(`${SENDER} [data-actor-ref]`);
+  assert.ok(sender instanceof HTMLButtonElement, "the sender is a door");
+
+  restOn(sender);
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  assert.ok(
+    document.querySelector(".ui-tooltip-card [data-actor-card='automation']"),
+    "the automation's card hangs",
   );
-  for (const id of ["kept", "earlier"]) {
-    const sender = drawn[messages.findIndex((each) => each.id === id)]?.querySelector<HTMLElement>(
-      `${SENDER} [data-actor-ref]`,
-    );
-    assert.ok(sender instanceof HTMLButtonElement, `${id}: the sender is a door`);
-    restOn(sender);
-    await act(async () => {
-      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-    });
-    assert.ok(
-      document.querySelector(".ui-tooltip-card [data-actor-card='automation']"),
-      `${id}: the automation's card hangs`,
-    );
-    act(() => {
-      sender.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
-    });
-    act(() => sender.click());
-  }
-  assert.deepEqual(opened, [TRIAGE.id, TRIAGE.id]);
+  act(() => {
+    sender.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+  act(() => sender.click());
+  assert.deepEqual(opened, [TRIAGE.id]);
   fakeAppBridge({});
 });
 

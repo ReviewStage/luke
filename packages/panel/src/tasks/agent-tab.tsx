@@ -3,6 +3,7 @@ import { TRANSCRIPT_KIND } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_FAILURE,
+  AGENT_SENDER,
   AGENT_STATUS,
   type AgentBrief,
   type AgentFailure,
@@ -112,7 +113,7 @@ import {
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan.js";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
-import { useAutomation } from "../automation-directory.js";
+import { AutomationsWanted, useAutomation } from "../automation-directory.js";
 import { useConnected } from "../connection.js";
 import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { failureShown, unreadShown } from "../failure-report.js";
@@ -1386,27 +1387,17 @@ function agentOrigin(input: {
   };
 }
 
-/** The automation whose run started the agent whose transcript is drawn, by its id and the name the run kept; none for an agent started by hand. */
-const TranscriptAutomation = createContext<
-  { readonly id: string; readonly name: string | undefined } | undefined
->(undefined);
-
 /**
  * An automation that sent a line: the automation, hanging its card and
  * opening its page where the window knows it, as the run's prompt names it
- * (`AutomationSender`), and named plainly where it does not. A line kept
- * before its automation's id was names it by name alone, which is read as
- * the agent's own automation where the names agree.
+ * (`AutomationSender`), and named plainly where it does not.
  */
 function AutomationLineSender({
   actor,
 }: {
   actor: Extract<Actor, { kind: typeof ACTOR_KIND.AUTOMATION }>;
 }): React.JSX.Element {
-  const own = useContext(TranscriptAutomation);
-  const automationId =
-    actor.automationId ?? (own !== undefined && own.name === actor.name ? own.id : undefined);
-  const known = useAutomation(automationId);
+  const known = useAutomation(actor.automationId);
   return known === undefined ? (
     <ActorRef actor={actor} />
   ) : (
@@ -2946,9 +2937,14 @@ function AgentTabView({
     // Note that the agent is read for how it was briefed alone, which these name.
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
-  const ownAutomation = useMemo(
-    () => (automationId === undefined ? undefined : { id: automationId, name: automationName }),
-    [automationId, automationName],
+  // An automation may send its runs to an agent it did not start, whose lines then name it all the same.
+  const automationLines = useMemo(
+    () =>
+      lines.some(
+        (line) =>
+          line.sentBy?.kind === AGENT_SENDER.AUTOMATION && line.sentBy.automationId !== undefined,
+      ),
+    [lines],
   );
   return (
     <AgentTabFrame ref={tab} label={name}>
@@ -2959,7 +2955,7 @@ function AgentTabView({
               <UndeliveredLines value={marks}>
                 <RewindProvider value={rewind}>
                   <ReplyDoorProvider value={replies ? replyThroughBox : undefined}>
-                    <TranscriptAutomation value={ownAutomation}>
+                    <AutomationsWanted wanted={automationLines}>
                       <AgentTranscriptView
                         messages={lines}
                         brief={agent.brief}
@@ -3042,7 +3038,7 @@ function AgentTabView({
                         overComposer
                         bringIn={bringIn}
                       />
-                    </TranscriptAutomation>
+                    </AutomationsWanted>
                   </ReplyDoorProvider>
                 </RewindProvider>
               </UndeliveredLines>
