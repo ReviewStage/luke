@@ -134,6 +134,9 @@ const HOSTED_ASK_SPAN = "hosted.ask";
 /** The code the link's own error names an error the service declares no refusal for under, its status and oRPC code kept beneath. */
 const UNDECLARED_CODE = "UNDECLARED";
 
+/** The monotonic clock's nanoseconds in a millisecond, which a budget is counted in. */
+const NANOS_PER_MILLI = 1_000_000;
+
 /** The content type the link names a JSON body with, which the account call writes itself. */
 const CONTENT_TYPE_HEADER = "content-type";
 
@@ -377,7 +380,8 @@ function readWhole(
   HttpClient.HttpClient
 > {
   return Effect.gen(function* () {
-    const startedAt = yield* Clock.currentTimeMillis;
+    // Note that the time spent is read off the monotonic clock, so a wall clock set back or forward moves no budget.
+    const startedAt = yield* Clock.monotonicTimeNanos;
     const answer = yield* send(request).pipe(
       Effect.timeoutOrElse({
         duration: Duration.millis(budgetMs),
@@ -387,7 +391,8 @@ function readWhole(
     );
     if (!callAnswered(answer)) return { answer };
     // The body gets what the headers left of the budget, never a deadline of its own.
-    const leftMs = Math.max(0, budgetMs - ((yield* Clock.currentTimeMillis) - startedAt));
+    const spentMs = Number((yield* Clock.monotonicTimeNanos) - startedAt) / NANOS_PER_MILLI;
+    const leftMs = Math.max(0, budgetMs - spentMs);
     const text = yield* textWithin(answer.response, Duration.millis(leftMs));
     return { answer, text };
   });

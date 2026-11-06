@@ -251,6 +251,39 @@ it.effect("a body that arrives past what is left of the deadline is let go at th
   }),
 );
 
+it.effect("a 401's renewal and retry share the one deadline rather than starting a fresh one", () =>
+  Effect.gen(function* () {
+    let refuse: (response: Response) => void = () => undefined;
+    const recording = recordingHttpClient((request) =>
+      request.authorization === "Bearer stale"
+        ? new Promise<Response>((resolve) => {
+            refuse = resolve;
+          })
+        : new Promise<Response>(() => undefined),
+    );
+
+    const asked = yield* Effect.forkChild(
+      Effect.flip(Effect.provide(askModels(account(["stale", "fresh"])), recording.layer)),
+    );
+    yield* untilAsked(recording.requests);
+    yield* TestClock.adjust("4 seconds");
+    refuse(invalidToken());
+    while (recording.requests.length < 2) yield* Effect.yieldNow;
+    yield* TestClock.adjust("5 seconds");
+    assert.equal(asked.pollUnsafe(), undefined, "still waiting short of the one deadline");
+    yield* TestClock.adjust("1 second");
+    const failure = yield* Fiber.join(asked);
+    assert.deepEqual(
+      failure,
+      new HostedUnanswered({
+        fault: CALL_FAULT.NETWORK,
+        errorName: "TimeoutError",
+        traceId: traceOf(failure),
+      }),
+    );
+  }),
+);
+
 it.effect("a repository out of reach reaches the caller with why", () =>
   Effect.gen(function* () {
     const unreached = { reason: REPOSITORY_UNREACHED.GONE, repository: "Acme/Relay" };
