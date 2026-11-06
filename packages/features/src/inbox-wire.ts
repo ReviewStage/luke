@@ -943,8 +943,7 @@ function inboxAsksOpen(item: InboxItem): boolean {
 
 /**
  * Whether a thread needs the reader: its ask stands open and waits on them.
- * The one reading of it, which a to-do count (`inbox-store.ts`'s
- * `askingReader`) must agree with and Needs you and the tint draw from.
+ * The one reading of it, which Needs you and the tint draw from.
  */
 export function threadNeedsReader(item: InboxItem, readerId: string | undefined): boolean {
   return readerId !== undefined && inboxAsksOpen(item) && inboxWaitsOn(item)?.userId === readerId;
@@ -1032,7 +1031,7 @@ export const INBOX_CLOSE_LEAD = "Thread closed";
  */
 export function inboxClosedMessage(item: Pick<InboxItem, "key" | "title">, note = ""): string {
   const title = item.title.replace(/\s+/gu, " ").trim();
-  const header = `${INBOX_CLOSE_LEAD} on "${title}" (key ${item.key}): Closed without an answer.`;
+  const header = `${INBOX_CLOSE_LEAD} on "${title}" (key ${item.key}): Resolved without an answer.`;
   return note.trim() === "" ? header : `${header}\n\n${note.trim()}`;
 }
 

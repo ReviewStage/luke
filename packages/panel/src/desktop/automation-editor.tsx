@@ -72,8 +72,8 @@ import {
 } from "@repo/features/trigger-catalog";
 import {
   andList,
-  INTEGRATION_LABEL,
   IRREVERSIBLE_WORDS,
+  MCP_SERVER_LABEL,
   noMatchWords,
   readFailedWords,
   readingWords,
@@ -192,6 +192,7 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { mentionableAgent } from "../tasks/task-mentions.js";
 import { useKnownNames } from "../tasks/use-known-names.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
+import { useListedAgent } from "../tasks/use-workspace-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
@@ -202,7 +203,11 @@ import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PhoneHead, phoneFindGroups } from "./phone-head.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
-import { AUTOMATION_DELETE_MUTATION, WEBHOOK_SECRET_MUTATION } from "./use-automations.js";
+import {
+  AUTOMATION_DELETE_MUTATION,
+  type AutomationWriteAnswer,
+  WEBHOOK_SECRET_MUTATION,
+} from "./use-automations.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
 /**
@@ -280,9 +285,9 @@ const SENTRY_UNREAD = readFailedWords("the workspace's Sentry");
 
 /** The writes the editor makes, as the list's hook answers them (`use-automations.ts`). */
 export interface AutomationWrites {
-  create(params: AutomationCreateParams): Promise<AutomationView>;
-  change(params: AutomationChangeParams): Promise<AutomationView>;
-  toggle(automationId: string, enabled: boolean): Promise<AutomationView>;
+  create(params: AutomationCreateParams): Promise<AutomationWriteAnswer>;
+  change(params: AutomationChangeParams): Promise<AutomationWriteAnswer>;
+  toggle(automationId: string, enabled: boolean): Promise<AutomationWriteAnswer>;
 }
 
 /** The kinds of schedule as the picker offers them, in its order. */
@@ -378,7 +383,7 @@ export const RUN_REFUSAL_WORDS = {
 } as const satisfies Record<AutomationCallFailure, string>;
 
 /** Why a switch did not move, as its toast says it. */
-function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
+function toggleRefusal(answer: AutomationWriteAnswer, enabled: boolean): string | undefined {
   if (!("failure" in answer)) return undefined;
   if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
     return SAVE_REFUSAL_WORDS[AUTOMATION_CALL_FAILURE.NOT_PERMITTED];
@@ -401,7 +406,7 @@ export function AutomationSwitch({
   write,
 }: {
   automation: AutomationSummary;
-  write: (enabled: boolean) => Promise<AutomationView>;
+  write: (enabled: boolean) => Promise<AutomationWriteAnswer>;
 }): React.JSX.Element {
   const toast = useToast();
   const turn = (enabled: boolean) => {
@@ -630,14 +635,14 @@ function ServersRow({
   if (!mine) {
     return (
       <SettingsRow
-        label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
+        label={<ReplayUnmask>{MCP_SERVER_LABEL.many}</ReplayUnmask>}
         description={
           <ReplayUnmask>
             {disabled.length === 0 ? (
-              "All of its creator's connected integrations."
+              "All of its creator's connected MCP servers."
             ) : (
               <>
-                Its creator's connected integrations, but{" "}
+                Its creator's connected MCP servers, but{" "}
                 <ReplayMask>{andList(disabled.map(switchedOffName))}</ReplayMask> switched off.
               </>
             )}
@@ -677,14 +682,14 @@ function UnreadServersRow({
   if (failed) {
     return (
       <SettingsRow
-        label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
+        label={<ReplayUnmask>{MCP_SERVER_LABEL.many}</ReplayUnmask>}
         below={() => (
           <ReplayUnmask>
             <ErrorState
               onRetry={onRetry}
               failure={unreadShown(FAILURE_SURFACE.AUTOMATION_INTEGRATIONS_READ)}
             >
-              Your connected integrations could not be read.
+              Your connected MCP servers could not be read.
             </ErrorState>
           </ReplayUnmask>
         )}
@@ -698,11 +703,11 @@ function UnreadServersRow({
 function ServersRowSkeleton(): React.JSX.Element {
   return (
     <SettingsRow
-      label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
+      label={<ReplayUnmask>{MCP_SERVER_LABEL.many}</ReplayUnmask>}
       description={<Skeleton width={SERVERS_DETAIL_SKELETON} />}
     >
       {() => (
-        <SkeletonRegion label="Reading your connected integrations…">
+        <SkeletonRegion label="Reading your connected MCP servers…">
           <SettingsControlSkeleton control={SETTINGS_SKELETON_CONTROL.SELECT} />
         </SkeletonRegion>
       )}
@@ -733,13 +738,13 @@ function OwnServersRow({
   const shown = on.slice(0, SERVERS_CHIP_MARKS);
   return (
     <SettingsRow
-      label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
+      label={<ReplayUnmask>{MCP_SERVER_LABEL.many}</ReplayUnmask>}
       description={
         <ReplayUnmask>
           {connected.length === 0
             ? "None connected yet."
             : off.length === 0
-              ? "Every connected integration is on."
+              ? "Every connected MCP server is on."
               : `${namesSaid(off)} off.`}
         </ReplayUnmask>
       }
@@ -1214,7 +1219,7 @@ function EditorToolbar({
   saveRefused: boolean;
   onBack: () => void;
   onSave: () => void;
-  onToggle: (enabled: boolean) => Promise<AutomationView>;
+  onToggle: (enabled: boolean) => Promise<AutomationWriteAnswer>;
   onDelete: () => void;
   /** Whether a Run now is out. */
   running: boolean;
@@ -1932,8 +1937,8 @@ function ModelRow({
   );
 }
 
-/** What the agent picker names the saved agent the workspace's list no longer holds. */
-const KEPT_AGENT_LABEL = "The agent it goes to now";
+/** What the agent picker names the saved agent the task list holds no longer, such as one deleted. */
+const KEPT_AGENT_LABEL = "An agent no longer listed";
 
 /** What the agent row says where the workspace's agents could not be read, and where the search among them did not answer. */
 const AGENTS_UNREAD = readFailedWords("the workspace's agents");
@@ -1956,7 +1961,8 @@ const FIRST_RUN_DETAIL =
  * the service finds on the repository, so an agent past the newest is
  * found; the agent chosen from a search stays named after the list moves
  * on. The agent it goes to as saved is kept first in the menu where the
- * list no longer holds it, so another pick can still be taken back.
+ * newest no longer hold it, named as the task list carries it, so another
+ * pick can still be taken back.
  */
 function AgentRow({
   draft,
@@ -1982,6 +1988,7 @@ function AgentRow({
   const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
   const known = useKnownNames();
   const place = useAgentRowPlace();
+  const savedAgent = useListedAgent(savedAgentId);
   // Note that the catalog this row read names the models, since the window's own may not hold it yet.
   const drawn = { ...place, models: models ?? place.models };
   const detail = draft.agentId === null ? FIRST_RUN_DETAIL : AGENT_DETAIL;
@@ -2022,19 +2029,32 @@ function AgentRow({
           ...offered.filter((agent) => matched.has(agent.id)),
           ...(searched ?? []).filter((agent) => !matched.has(agent.id)),
         ];
-  const chosen =
-    offered.find((agent) => agent.id === draft.agentId) ??
-    searched?.find((agent) => agent.id === draft.agentId) ??
-    (picked?.id === draft.agentId ? picked : undefined);
-  const chosenRow = chosen === undefined ? undefined : agentMenuRow(chosen, drawn);
   const kept =
     savedAgentId !== null && !offered.some((agent) => agent.id === savedAgentId)
       ? savedAgentId
       : undefined;
+  // Note that the saved agent past the newest is found by its id among every agent the list carries.
+  const keptAgent =
+    kept === undefined || savedAgent === undefined
+      ? undefined
+      : mentionableAgent(savedAgent, known.tasks, drawn.models);
+  const keptRow = keptAgent === undefined ? undefined : agentMenuRow(keptAgent, drawn);
+  const chosen =
+    offered.find((agent) => agent.id === draft.agentId) ??
+    searched?.find((agent) => agent.id === draft.agentId) ??
+    (picked?.id === draft.agentId ? picked : undefined) ??
+    (keptAgent?.id === draft.agentId ? keptAgent : undefined);
+  const chosenRow = chosen === undefined ? undefined : agentMenuRow(chosen, drawn);
   // Note that a search lists only what it found, so choosing none and the kept agent stand in the menu while none is typed.
   const rows = [
     ...(words !== "" ? [] : [{ id: FIRST_RUN_ROW, label: FIRST_RUN_LABEL }]),
-    ...(kept === undefined || words !== "" ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
+    ...(kept === undefined || words !== ""
+      ? []
+      : [
+          keptRow === undefined
+            ? { id: kept, label: KEPT_AGENT_LABEL }
+            : { ...keptRow, replayMasked: true },
+        ]),
     ...listed.map((agent) => ({ ...agentMenuRow(agent, drawn), replayMasked: true })),
   ];
   return (
@@ -2733,7 +2753,7 @@ export function AutomationEditor({
     setDraft((was) => ({ ...was, ...patch }));
     setRefusal(undefined);
   };
-  const landed = (answer: AutomationView) => {
+  const landed = (answer: AutomationWriteAnswer) => {
     setSaving(false);
     if ("failure" in answer) {
       setRefusal(SAVE_REFUSAL_WORDS[answer.failure]);

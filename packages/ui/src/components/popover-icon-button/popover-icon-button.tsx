@@ -2,6 +2,7 @@ import type { PopoverRoot } from "@base-ui/react/popover";
 import { type ReactNode, type RefObject, useRef } from "react";
 import { Popover, PopoverContent } from "../../shadcn/popover.js";
 import { type ButtonSize, type ButtonVariant, IconButton } from "../button/button.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * popover-icon-button.tsx -- a glyph button that hangs a panel of its own under it, on the window's layer, so nothing the button stands in clips the panel.
@@ -20,7 +21,8 @@ import { type ButtonSize, type ButtonVariant, IconButton } from "../button/butto
  * which no blur says again once the panel is gone. Note that a press on the button while the
  * panel stands is the button's alone, which closes it, rather than also a
  * press away, which would close it only for the button's own press to open
- * it again.
+ * it again. A button given a `hint` raises it as the window's hover pill,
+ * and, unavailable, stays in the tab order so the pill can say why.
  */
 
 /** Which layer the panel stands in: the window's, or over a dialog's card. */
@@ -66,6 +68,7 @@ export function PopoverIconButton({
   size,
   variant,
   disabled,
+  hint,
   initialFocus,
   ref,
   children,
@@ -81,25 +84,31 @@ export function PopoverIconButton({
   size?: ButtonSize | undefined;
   variant?: ButtonVariant | undefined;
   disabled?: boolean | undefined;
+  /** The hover pill the button raises, which says why where it is unavailable; none where its glyph says enough. */
+  hint?: string | undefined;
   initialFocus?: RefObject<HTMLElement | null> | undefined;
   ref?: RefObject<HTMLButtonElement | null> | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   const own = useRef<HTMLButtonElement | null>(null);
   const button = ref ?? own;
+  const opener = (
+    <IconButton
+      ref={button}
+      icon={icon}
+      label={label}
+      {...(size === undefined ? undefined : { size })}
+      {...(variant === undefined ? undefined : { variant })}
+      disabled={disabled}
+      focusableWhenDisabled={hint !== undefined && disabled === true ? true : undefined}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      onClick={() => onOpenChange(!open, false)}
+    />
+  );
   return (
     <>
-      <IconButton
-        ref={button}
-        icon={icon}
-        label={label}
-        {...(size === undefined ? undefined : { size })}
-        {...(variant === undefined ? undefined : { variant })}
-        disabled={disabled}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => onOpenChange(!open, false)}
-      />
+      {hint === undefined ? opener : <Tooltip label={hint}>{opener}</Tooltip>}
       <Popover
         open={open}
         onOpenChange={(next, details) => {

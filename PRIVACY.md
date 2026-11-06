@@ -213,7 +213,10 @@ data with:
 - **Infrastructure providers:** Vercel (hosting, agent sandboxes, and Vercel
   Connect, which holds integration tokens), Neon (database), PostHog (usage
   data, screen recordings, and feedback), Sentry (error and performance
-  monitoring), Resend (email), and Slack (feedback and Vespin's Slack bot).
+  monitoring), Resend (email: for the onboarding emails a new account is sent,
+  Resend is told your email address, your first name, when you signed up, whether
+  you accepted a workspace invitation, and on which days you started a task),
+  and Slack (feedback and Vespin's Slack bot).
 - **Integrations and connected apps:** the services and MCP clients you connect
   receive what your agents send them, or what our tools answer, and keep it
   under their own policies.

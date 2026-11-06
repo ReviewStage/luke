@@ -2,16 +2,18 @@
 
 import assert from "node:assert/strict";
 import { COMMAND_KEY, installCommandKey } from "@repo/settings/shortcuts";
-import { afterEach, beforeEach, test } from "vitest";
-import { TERMINAL_FIND, type TerminalHandle } from "./contract.js";
+import { FitAddon } from "@xterm/addon-fit";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { relayout } from "../testing/resize-observer.js";
+import { TERMINAL_FIND, type TerminalHandle, type TerminalSize } from "./contract.js";
 import { terminal } from "./index.js";
 
 /**
  * The terminal bundle, through the one door a terminal session makes its
  * screen by (its entry's `terminal`): which keys reach the shell, which pass
  * to the window, a palette color drawn by its class rather than a style
- * attribute, and a screen moved out of its box and into another keeping
- * what it drew.
+ * attribute, a screen moved out of its box and into another keeping
+ * what it drew, and the sizes it says as its box is fitted.
  */
 
 /** A key press as the window reports one: the key, its legacy code, and the modifiers held. */
@@ -48,6 +50,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   mounted?.dispose();
   mounted = undefined;
   document.body.innerHTML = "";
@@ -58,12 +61,13 @@ function mountTerminal() {
   const host = document.createElement("div");
   document.body.append(host);
   const sent: string[] = [];
+  const sizes: TerminalSize[] = [];
   const heard: KeyboardEvent[] = [];
   const hear = (event: KeyboardEvent) => heard.push(event);
   window.addEventListener("keydown", hear);
   mounted = terminal.create({
     onInput: (data) => sent.push(data),
-    onResize: () => undefined,
+    onResize: (size) => sizes.push(size),
     onLink: () => undefined,
   });
   mounted.attach(host);
@@ -82,6 +86,7 @@ function mountTerminal() {
   return {
     host,
     sent,
+    sizes,
     heard,
     press,
     done: () => window.removeEventListener("keydown", hear),
@@ -242,4 +247,26 @@ test("a screen taken out of its box and shown in another keeps what it drew", as
   mounted.find.find("kept across tabs", TERMINAL_FIND.TYPED);
   stop();
   assert.deepEqual(tallies, [1]);
+});
+
+test("a screen fitted again says its new size as columns and rows alone, the shape a shell's attach takes", async () => {
+  // jsdom lays out no box and measures no cell, so the window's layout is staged: a box with room, and the cells it fits.
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
+  const fits = vi
+    .spyOn(FitAddon.prototype, "proposeDimensions")
+    .mockReturnValue({ cols: 80, rows: 24 });
+  const terminal = mountTerminal();
+  terminal.done();
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+  relayout();
+  await frame();
+  fits.mockReturnValue({ cols: 100, rows: 30 });
+  relayout();
+  await frame();
+
+  assert.deepEqual(terminal.sizes, [
+    { cols: 80, rows: 24 },
+    { cols: 100, rows: 30 },
+  ]);
 });

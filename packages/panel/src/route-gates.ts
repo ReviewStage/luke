@@ -6,7 +6,8 @@
  * gate is therefore a predicate of its own, handed what it reads, which the
  * route's `beforeLoad` asks of the router's context (`panel-router.tsx`)
  * and the window's history asks of the window's state
- * (`navigation-history.ts`'s `reachable`), so the two never disagree.
+ * (`navigation-history.ts`'s `reachable`), so the two never disagree. Each
+ * routed place's declaration names its gate (`places/routed-places.ts`).
  */
 
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
@@ -19,13 +20,12 @@ import {
   NO_EXPERIMENTS,
 } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
-import { useQuery } from "@tanstack/react-query";
-import type { RegisteredRouter, RouteIds } from "@tanstack/react-router";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useKeptChoice } from "./desktop/chosen-workspace.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import {
-  appStateNow,
+  appStateIn,
   appStateQuery,
   selectSettingsHeld,
   selectStoredExperimentChoices,
@@ -60,9 +60,9 @@ export const UNREAD_ROUTE_ACCESS: RouteAccess = {
   listed: undefined,
 };
 
-/** The window's access as it stands now, for a route's `beforeLoad`, which cannot wait a render. */
-export function routeAccessNow(): RouteAccess {
-  const state = appStateNow();
+/** The window's access by the document `client` holds now, for a route's `beforeLoad`, which cannot wait a render. */
+export function routeAccessNow(client: QueryClient): RouteAccess {
+  const state = appStateIn(client);
   const access = state?.access;
   return {
     // A reloaded Admin address waits on an access still being read rather than being refused.
@@ -169,63 +169,8 @@ export function versionHistoryRouteStands(access: RouteAccess, workspace: string
   );
 }
 
-/** The places the router alone says the window stands on, rather than the window's state: Settings, Admin, a workspace's Board, a person's page, the Automations pages, a task's version history, and the Inbox. */
-export const ROUTED_PLACE = {
-  SETTINGS: "settings",
-  ADMIN: "admin",
-  BOARD: "board",
-  PERSON: "person",
-  AUTOMATIONS: "automations",
-  VERSION_HISTORY: "version-history",
-  INBOX: "inbox",
-} as const;
-
-export type RoutedPlace = (typeof ROUTED_PLACE)[keyof typeof ROUTED_PLACE];
-
-/** Each routed place's routes, by id, under whichever parent it stands (`panel-router.tsx`). */
-const ROUTED_ROUTES = {
-  "/$workspace/settings": ROUTED_PLACE.SETTINGS,
-  "/app/settings": ROUTED_PLACE.SETTINGS,
-  "/places/$workspace/admin": ROUTED_PLACE.ADMIN,
-  "/places/$workspace/tasks": ROUTED_PLACE.BOARD,
-  "/places/$workspace/person/$userId": ROUTED_PLACE.PERSON,
-  "/places/$workspace/automation-pages": ROUTED_PLACE.AUTOMATIONS,
-  "/version-history": ROUTED_PLACE.VERSION_HISTORY,
-  "/places/$workspace/inbox": ROUTED_PLACE.INBOX,
-} as const satisfies Partial<Record<RouteIds<RegisteredRouter["routeTree"]>, RoutedPlace>>;
-
-/** What a routed place's gate reads of a match: its route and the params it was matched with. */
-interface RouteMatchSeen {
-  readonly routeId: string;
-  readonly params: Readonly<Record<string, string | undefined>>;
-}
-
-/** The routed place `matches` stand on; none where they stand on a place the window's state says. */
-export function routedPlaceOf(matches: readonly RouteMatchSeen[]): RoutedPlace | undefined {
-  for (const match of matches) {
-    const place = Object.entries(ROUTED_ROUTES).find(([id]) => id === match.routeId)?.[1];
-    if (place !== undefined) return place;
-  }
-  return undefined;
-}
-
-/** Whether the window may stand on what `matches` name, as their routes' `beforeLoad` would let it: a place its state says always may. */
-export function routedStands(matches: readonly RouteMatchSeen[], access: RouteAccess): boolean {
-  const place = routedPlaceOf(matches);
-  if (place === ROUTED_PLACE.ADMIN) return adminRouteStands(access);
-  const workspace = matches.find((match) => match.params.workspace !== undefined)?.params.workspace;
-  if (place === ROUTED_PLACE.VERSION_HISTORY) {
-    return workspace === undefined || versionHistoryRouteStands(access, workspace);
-  }
-  if (
-    place === ROUTED_PLACE.BOARD ||
-    place === ROUTED_PLACE.PERSON ||
-    place === ROUTED_PLACE.AUTOMATIONS ||
-    place === ROUTED_PLACE.INBOX
-  ) {
-    return workspace === undefined || workspaceRouteStands(workspace, access);
-  }
-  if (place !== ROUTED_PLACE.SETTINGS) return true;
-  const page = matches.find((match) => match.params.page !== undefined)?.params.page;
-  return page === undefined || settingsPageRouteStands(page, access, workspace);
+/** The same path under the workspace whose address step is `workspace`, in place of the step it names first. */
+export function pathUnder(pathname: string, workspace: string): string {
+  const [, , ...rest] = pathname.split("/");
+  return ["", encodeURIComponent(workspace), ...rest].join("/");
 }

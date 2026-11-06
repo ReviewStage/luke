@@ -84,7 +84,7 @@ function fixture(options: { connectTaken?: boolean } = {}) {
         asked.push(`list:${agentId}`);
         return { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] };
       }),
-    terminalCreate: () => Effect.succeed({ refused: TERMINAL_REFUSAL.SANDBOX_STOPPED }),
+    terminalCreate: () => Effect.succeed({ failure: TERMINAL_REFUSAL.SANDBOX_STOPPED }),
     terminalRename: () => Effect.succeed(undefined),
     terminalKill: () => Effect.succeed({ sandbox: SANDBOX_STATE.RUNNING, terminals: [] }),
     terminalResume: () => Effect.succeed({ sandbox: SANDBOX_STATE.RUNNING }),
@@ -100,6 +100,8 @@ function fixture(options: { connectTaken?: boolean } = {}) {
       Effect.sync(() => void asked.push(`resize:${connectionId}:${cols}x${rows}`)),
     terminalAck: ({ connectionId, bytes }) =>
       Effect.sync(() => void asked.push(`ack:${connectionId}:${bytes}`)),
+    terminalShown: ({ connectionId }) =>
+      Effect.sync(() => void asked.push(`shown:${connectionId}`)),
     terminalDisconnect: ({ connectionId }) =>
       Effect.sync(() => void asked.push(`disconnect:${connectionId}`)),
     onTerminalOutput: (listener) => {
@@ -202,7 +204,7 @@ it.effect(
         answer: { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] },
       });
       assert.deepEqual(created, {
-        answer: { refused: TERMINAL_REFUSAL.SANDBOX_STOPPED },
+        answer: { failure: TERMINAL_REFUSAL.SANDBOX_STOPPED },
       });
       assert.deepEqual(renamed, refusedAs(ACT_KIND.TERMINAL_RENAME));
       assert.deepEqual(asked, [`list:${AGENT_ID}`]);
@@ -276,6 +278,7 @@ it.effect(
       port.send({ type: TERMINAL_PORT_MESSAGE.INPUT, data: "ls\r" });
       port.send({ type: TERMINAL_PORT_MESSAGE.RESIZE, cols: 100, rows: 30 });
       port.send({ type: TERMINAL_PORT_MESSAGE.ACK, bytes: 5_000 });
+      port.send({ type: TERMINAL_PORT_MESSAGE.SHOWN });
       port.send({ type: "eval", code: "rm -rf /" });
       port.send({ type: TERMINAL_PORT_MESSAGE.RESIZE, cols: 0, rows: 30 });
       yield* drain;
@@ -284,6 +287,7 @@ it.effect(
         "input:connection-1:ls\r",
         "resize:connection-1:100x30",
         "ack:connection-1:5000",
+        "shown:connection-1",
       ]);
     }),
 );

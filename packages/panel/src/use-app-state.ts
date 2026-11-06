@@ -1,4 +1,3 @@
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { LIVE_READ } from "@repo/features/live-wire";
 import {
@@ -16,123 +15,29 @@ import {
   NO_EXPERIMENTS,
 } from "@repo/settings";
 import { type AppSettingsView, appSettingsView } from "@repo/settings/wire";
-import { queryOptions, useQueryClient } from "@tanstack/react-query";
-import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { useContext, useEffect } from "react";
+import { type QueryClient, queryOptions, useQueryClient } from "@tanstack/react-query";
+import { Data, Effect } from "effect";
+import { useEffect } from "react";
 import { appBridge } from "./app-bridge.js";
 import { QUERY_ROOT } from "./query-keys.js";
-import { rendererPromise, rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
+import { rendererPromise } from "./renderer-runtime.js";
 import { onFixtureMoved } from "./tasks/fixture-moves.js";
-import { loadedTasksFixture, loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
+import {
+  handFixtureClient,
+  loadedTasksFixture,
+  loadTasksFixture,
+} from "./tasks/tasks-fixture-loader.js";
 
-/** The two bridge calls a window reads its state through, and nothing else. */
-interface AppStateSource {
-  subscribe: (onDelivered: (delivered: AppStateDelivery) => void) => () => void;
-  read: () => Promise<AppStateSnapshot>;
-}
-
-/** One reading of the document: the read that bootstraps the window, a delivery of what moved in it since, or a fixture run's stage moving on its own (`fixture-moves.ts`). */
-type AppStateReading =
-  | { readonly read: AppStateSnapshot }
-  | { readonly delivered: AppStateDelivery }
-  | typeof STAGE_MOVED;
-
-/** A fixture run's stage moved, so the document held is staged again. */
-const STAGE_MOVED = { stageMoved: true } as const;
-
-/**
- * The bridge refused the one read, so this window has no document to draw.
- * Local to this module: what a reader outside it holds is `AppStateUnavailable`,
- * the union below, and the `_tag` is what tells the two arms apart.
- */
+/** The bridge refused the one read, so this window has no document to draw. */
 class AppStateUnread extends Data.TaggedError("AppStateUnread")<{
   readonly cause: unknown;
 }> {}
-
-/**
- * The two ways this window can be left without a document, which are one thing
- * to every reader: the bridge refused the read, or the deliveries ended before
- * one arrived — an atom over a stream that completes having emitted nothing
- * fails with `Cause.NoSuchElementError`, which is the same emptiness by
- * another name.
- */
-type AppStateUnavailable = AppStateUnread | Cause.NoSuchElementError;
-
-/**
- * Where the state is read from: the bridge this window holds. The two calls
- * are thunks read at each use rather than at module load, and the atom is kept
- * alive so the source stands in the registry for that registry's life rather
- * than being swept between the set and the read it was set for.
- */
-const appStateSourceAtom: Atom.Writable<AppStateSource> = Atom.keepAlive(
-  Atom.make({
-    subscribe: (onDelivered: (delivered: AppStateDelivery) => void) =>
-      appBridge().onAppState(onDelivered),
-    read: () => appBridge().requestAppState(),
-  }),
-);
-
-/**
- * Every reading the bridge has for this window, the subscription installed
- * before anything is asked for: a delivery landing while the read is in
- * flight is then kept rather than lost, which is what makes that read a
- * bootstrap and not a race. A fixture run's stage moving on its own is a
- * reading too, heard from the stage rather than the bridge
- * (`fixture-moves.ts`), which hands the document held on to be staged anew.
- */
-const readings = (source: AppStateSource): Stream.Stream<AppStateReading, AppStateUnread> =>
-  Stream.callback<AppStateReading, AppStateUnread>((queue) =>
-    Effect.gen(function* () {
-      yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          source.subscribe((delivered) => {
-            Queue.offerUnsafe(queue, { delivered });
-          }),
-        ),
-        (stop) => Effect.sync(stop),
-      );
-      yield* Effect.acquireRelease(
-        Effect.sync(() => onFixtureMoved(() => Queue.offerUnsafe(queue, STAGE_MOVED))),
-        (stop) => Effect.sync(stop),
-      );
-      yield* Effect.forkScoped(
-        Effect.matchEffect(
-          Effect.tryPromise({
-            try: () => source.read(),
-            catch: (cause) => new AppStateUnread({ cause }),
-          }),
-          {
-            onFailure: (refusal) => Queue.fail(queue, refusal),
-            onSuccess: (read) => Queue.offer(queue, { read }),
-          },
-        ),
-      );
-    }),
-  );
 
 /**
  * The one rule a window adopts a delivery by. A delivery older than the one
  * held is dropped and nothing else is: the version rises with the document,
  * and a delivery that repeats it is this window's own facts having moved — its
  * mode, or the display under it — which the document does not number.
- */
-function adopt(held: AppStateSnapshot, delivery: AppStateDelivery): AppStateSnapshot {
-  return delivery.version < held.version ? held : withAppStateDelivery(held, delivery);
-}
-
-/** The document as this window holds it, and the deliveries heard before the read that bootstraps it answered. */
-interface Adopting {
-  readonly held: Option.Option<AppStateSnapshot>;
-  readonly early: readonly AppStateDelivery[];
-}
-
-/**
- * The document this window draws, one reading at a time. A delivery is what
- * moved since the last its stream sent, so one heard before the read answered
- * waits for it and is laid over it then, by the same rule as any later one.
  *
  * What is adopted keeps the identity of every part of the held document a
  * delivery did not move (`withAppStateDelivery`): an entry it does not name
@@ -141,29 +46,9 @@ interface Adopting {
  * that every memo and comparison keyed on what it carried would miss, and
  * every reader redraw, whatever moved.
  */
-const adopted = (
-  read: Stream.Stream<AppStateReading, AppStateUnread>,
-): Stream.Stream<AppStateSnapshot, AppStateUnread> =>
-  Stream.mapAccum(
-    read,
-    (): Adopting => ({ held: Option.none(), early: [] }),
-    (state, reading): [Adopting, AppStateSnapshot[]] => {
-      if ("read" in reading) {
-        const held = state.early.reduce(adopt, reading.read);
-        return [{ held: Option.some(held), early: [] }, [held]];
-      }
-      // Note that a stage that moved hands the document held on again, to be staged anew (`staged`).
-      if ("stageMoved" in reading) {
-        return [state, Option.isSome(state.held) ? [state.held.value] : []];
-      }
-      if (Option.isNone(state.held)) {
-        return [{ ...state, early: [...state.early, reading.delivered] }, []];
-      }
-      const next = adopt(state.held.value, reading.delivered);
-      if (next === state.held.value) return [state, []];
-      return [{ held: Option.some(next), early: [] }, [next]];
-    },
-  );
+function adopt(held: AppStateSnapshot, delivery: AppStateDelivery): AppStateSnapshot {
+  return delivery.version < held.version ? held : withAppStateDelivery(held, delivery);
+}
 
 /**
  * The document as this window draws it: main's, but in a fixture run, which
@@ -172,85 +57,161 @@ const adopted = (
  * that the fixture is imported before the run's first document is handed
  * on, because no reader may draw that document unstaged first.
  */
-function staged(state: AppStateSnapshot): Effect.Effect<AppStateSnapshot> {
-  if (!state.run.fixtureMode) return Effect.succeed(state);
-  return Effect.map(
-    Effect.promise(loadTasksFixture),
-    () => loadedTasksFixture()?.fixtureAppState(state) ?? state,
-  );
+function staged(state: AppStateSnapshot): Promise<AppStateSnapshot> {
+  return loadTasksFixture().then(() => loadedTasksFixture()?.fixtureAppState(state) ?? state);
 }
 
-/**
- * This window's copy of the one document main holds, and the one subscription
- * behind it.
- *
- * Every reader shares it, so `app:state` is subscribed to exactly once however
- * many components read state, and a component that mounts late is handed what
- * already arrived rather than asking again. It is kept alive because the
- * subscription is every reader's: a component unmounting is no reason to stop
- * listening, and the window going away is the whole of its life.
- */
-const appStateAtom: Atom.Atom<AsyncResult.AsyncResult<AppStateSnapshot, AppStateUnavailable>> =
-  Atom.keepAlive(
-    rendererRuntime.atom((get) =>
-      Stream.mapEffect(adopted(readings(get(appStateSourceAtom))), staged),
-    ),
-  );
-
-/**
- * The document as main holds it, read before anything is drawn over it: the
- * first reading the atom answers with, which is the read the subscription was
- * installed for. Every later reading arrives on that subscription, or, in a
- * fixture run, from its stage moving. Run at the window root
- * (`window-root.tsx`) and nowhere else.
- */
-export const appStateFirstRead: Effect.Effect<AppStateSnapshot, AppStateUnavailable> =
-  AtomRegistry.getResult(rendererRegistry, appStateAtom);
+/** The document as main holds it, read once and staged in a fixture run. */
+const firstRead: Effect.Effect<AppStateSnapshot, AppStateUnread> = Effect.flatMap(
+  Effect.tryPromise({
+    try: () => appBridge().requestAppState(),
+    catch: (cause) => new AppStateUnread({ cause }),
+  }),
+  (read) => (read.run.fixtureMode ? Effect.promise(() => staged(read)) : Effect.succeed(read)),
+);
 
 /**
  * The document as one TanStack Query query, which a surface reads its part of
  * with `useQuery({ ...appStateQuery, select })` and a callback that cannot
  * wait a render with `getQueryData(appStateQuery.queryKey)` on the client
- * `useQueryClient` hands it. Its `queryFn` is the first read, and every
+ * `useQueryClient` hands it. Its `queryFn` is the first read alone, and every
  * later reading is written into the cache as it arrives
  * (`useAppStateSubscription`), so it is never stale (`staleTime: Infinity`,
  * as the docs' guide to data pushed over a socket has it) and never read
  * again. A first read the bridge refused is not tried again, since the
  * window shows that failure at once.
+ *
+ * Note that the read answers the document the client holds where that is as
+ * new, because the subscription may have written a later reading while the
+ * read was in flight, and Query lays what the `queryFn` answers over it.
  */
 export const appStateQuery = queryOptions({
   queryKey: [QUERY_ROOT.APP_STATE],
-  queryFn: () => rendererPromise(appStateFirstRead),
+  queryFn: ({ client }) =>
+    rendererPromise(firstRead).then((read) => {
+      const held: AppStateSnapshot | undefined = client.getQueryData([QUERY_ROOT.APP_STATE]);
+      return held !== undefined && held.version >= read.version ? held : read;
+    }),
   staleTime: Infinity,
   retry: false,
 });
 
+/** A window's subscription to `app:state`: how it stops, and how the whole document is asked for. */
+interface Hearing {
+  readonly stop: () => void;
+  readonly read: () => Promise<AppStateSnapshot>;
+}
+
+/**
+ * Subscribes to `app:state`; none where the bridge cannot be heard, as a
+ * test's fake answering other calls alone cannot, which leaves the client on
+ * the document seeded into it.
+ */
+function heard(onDelivered: (delivered: AppStateDelivery) => void): Hearing | undefined {
+  try {
+    const bridge = appBridge();
+    return { stop: bridge.onAppState(onDelivered), read: () => bridge.requestAppState() };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Writes every reading of the document into `client` as it arrives, and
+ * answers what stops it. A delivery is what moved since the last `app:state`
+ * sent, not the whole document, and names no version it was built on, so it
+ * is laid only over a whole read asked after subscribing: one heard before
+ * that read answers waits for it and is laid over it then (`adopt`), and
+ * none sent between the root's own read and this subscription is lost. A
+ * refused read leaves the deliveries waiting, and the next one heard asks
+ * for the whole document again, rather than lay them over a document they
+ * were not built on, such as the root's older read or another account's.
+ *
+ * A fixture run's stage moving on its own (`fixture-moves.ts`) hands the
+ * document held on to be staged anew, and its staging waits on the fixture,
+ * so its writes queue behind one another; one that throws is reported and
+ * passed over. The client is handed to the fixture while it is written
+ * into, whose staged acts read the run from it (`act.ts`).
+ */
+function followAppState(client: QueryClient): () => void {
+  let following = true;
+  let held: AppStateSnapshot | undefined;
+  let early: AppStateDelivery[] = [];
+  let reading = false;
+  let staging: Promise<void> | undefined;
+  const write = (state: AppStateSnapshot): void => {
+    if (!state.run.fixtureMode && staging === undefined) {
+      client.setQueryData(appStateQuery.queryKey, state);
+      return;
+    }
+    // Note that a staging that throws is reported and passed over, because the readings queued behind it must still land.
+    const next = (staging ?? Promise.resolve())
+      .then(() => staged(state))
+      .then(
+        (shown) => {
+          if (following) client.setQueryData(appStateQuery.queryKey, shown);
+        },
+        (error: unknown) => {
+          console.error("A fixture run's document could not be staged.", error);
+        },
+      )
+      .then(() => {
+        if (staging === next) staging = undefined;
+      });
+    staging = next;
+  };
+  const readWhole = (): void => {
+    if (hearing === undefined) return;
+    reading = true;
+    hearing.read().then(
+      (read) => {
+        reading = false;
+        if (!following) return;
+        held = early.reduce(adopt, read);
+        early = [];
+        write(held);
+      },
+      (cause: unknown) => {
+        reading = false;
+        console.error("The window's state could not be read; the next delivery asks again.", cause);
+      },
+    );
+  };
+  const takeBack = handFixtureClient(client);
+  const hearing = heard((delivered) => {
+    if (held === undefined) {
+      early.push(delivered);
+      if (!reading) readWhole();
+      return;
+    }
+    const next = adopt(held, delivered);
+    if (next === held) return;
+    held = next;
+    write(next);
+  });
+  // Note that the read is asked after the subscription stands, so a delivery sent while it is in flight is heard.
+  readWhole();
+  const stopMoves = onFixtureMoved(() => {
+    if (held !== undefined) write(held);
+  });
+  return () => {
+    following = false;
+    hearing?.stop();
+    stopMoves();
+    takeBack();
+  };
+}
+
 /**
  * Writes every reading of the document into the window's Query client with
  * `setQueryData`, as the docs' guide to data pushed over a socket does from
- * a hook mounted once: the readings are the one subscription's
- * (`appStateAtom`), so `app:state` is still subscribed to once however many
- * readers the cache and the registry have. `AppStateSubscription` mounts it
- * beside each root's `QueryProvider`, and beside a test's own client
- * (`testing/copy-feedback.ts`).
+ * a component mounted once, and stops as it unmounts (`followAppState`).
+ * `AppStateSubscription` mounts it beside each root's `QueryProvider`, and
+ * beside a test's own client (`testing/copy-feedback.ts`).
  */
 export function useAppStateSubscription(): void {
   const queryClient = useQueryClient();
-  const registry = useContext(RegistryContext);
-  // Note that the reading held now is written as the hook mounts (`immediate`), because a
-  // delivery adopted between the root's first read and this mount would otherwise wait for the next.
-  useEffect(
-    () =>
-      registry.subscribe(
-        appStateAtom,
-        (result) => {
-          const state = AsyncResult.value(result);
-          if (Option.isSome(state)) queryClient.setQueryData(appStateQuery.queryKey, state.value);
-        },
-        { immediate: true },
-      ),
-    [queryClient, registry],
-  );
+  useEffect(() => followAppState(queryClient), [queryClient]);
 }
 
 /** `useAppStateSubscription` as an element, for a root to mount beside the surface it draws. */
@@ -260,17 +221,15 @@ export function AppStateSubscription(): null {
 }
 
 /**
- * The snapshot as it stands, for a callback that cannot wait a render: two
- * acts asked in one breath arrive as two calls in one turn, and the second
- * has to read what the first left. Not a hook, so nothing redraws for it.
+ * The document as `client` holds it, for a callback that cannot wait a
+ * render: two acts asked in one breath arrive as two calls in one turn, and
+ * the second has to read what the first left. The client is the caller's,
+ * `useQueryClient`'s in a component and the one a test drew with in a test,
+ * read with `getQueryData` as the docs' guide to reading the cache outside a
+ * component does. Not a hook, so nothing redraws for it.
  */
-export function appStateNow(): AppStateSnapshot | undefined {
-  return Option.getOrUndefined(AsyncResult.value(rendererRegistry.get(appStateAtom)));
-}
-
-/** Whether the platform this window runs on offers `capability` (`selectCapability`), for a callback that cannot wait a render. */
-export function capabilityNow(capability: HostCapability): boolean {
-  return appStateNow()?.run.capabilities.includes(capability) === true;
+export function appStateIn(client: QueryClient): AppStateSnapshot | undefined {
+  return client.getQueryData(appStateQuery.queryKey);
 }
 
 /**

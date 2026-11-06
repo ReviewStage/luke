@@ -53,7 +53,7 @@ export const SERVICE_UNREACHED: TerminalState = {
 };
 
 /** A shell opened, or the state the tab is left in where none could be. */
-export type ShellOpened = { readonly terminalId: string } | { readonly state: TerminalState };
+type ShellOpened = { readonly terminalId: string } | { readonly state: TerminalState };
 
 /** What an attach answered: asked, so the port is on its way, or the state the tab is left in. */
 export type ShellAttached = { readonly asked: true } | { readonly state: TerminalState };
@@ -105,8 +105,6 @@ function returnAction(state: TerminalState): TerminalAction | undefined {
     case TERMINAL_STATE.RECONNECTING:
     case TERMINAL_STATE.UNREACHABLE:
       return TERMINAL_ACTION.RETRY;
-    case TERMINAL_STATE.STOPPED:
-      return TERMINAL_ACTION.RESUME;
     default:
       return undefined;
   }
@@ -129,6 +127,10 @@ export class TerminalSession {
   /** How many bytes the screen has drawn since it last said so. */
   #unacked = 0;
   #listeners = new Set<() => void>();
+  /** Whether the tab draws the screen now, which a stopped sandbox is resumed for. */
+  #shown = false;
+  /** Whether the session resumed the sandbox since the shell last attached or the developer last asked again, so a sandbox that stays stopped is said once rather than resumed in a loop. */
+  #resumed = false;
   #openLink: (url: string) => void = () => undefined;
 
   constructor(link: ShellLink, terminalId: string | undefined) {
@@ -160,8 +162,9 @@ export class TerminalSession {
     this.#openLink = opener;
   }
 
-  /** Shows the screen in `host`, making it the first time. */
+  /** Shows the screen in `host`, making it the first time, and resumes the sandbox where it stopped while the tab was hidden. */
   show(module: TerminalModule, host: HTMLElement): void {
+    this.#shown = true;
     this.#screen ??= module.create({
       onInput: (data) => this.#input(data),
       onResize: (size) => this.#resized(size),
@@ -169,17 +172,24 @@ export class TerminalSession {
     });
     this.#screen.attach(host);
     this.#screen.dim(terminalLook(this.#state).dim);
+    if (this.#state.kind === TERMINAL_STATE.STOPPED) this.#enter(this.#state);
+  }
+
+  /** Says on the shell's port that its tab is shown in the window the developer is using; nothing while no port stands. */
+  sayShown(): void {
+    this.#post({ type: TERMINAL_PORT_MESSAGE.SHOWN });
   }
 
   /** Takes the screen out of its box; the shell and the screen go on. */
   hide(): void {
+    this.#shown = false;
     this.#screen?.detach();
   }
 
   /** Runs the bar's action. Note that the screen takes the keyboard back, because the button pressed goes with the bar. */
-  act(action: TerminalAction): void {
+  act(_action: TerminalAction): void {
     this.#screen?.focus();
-    if (action === TERMINAL_ACTION.RESUME) return void this.#resume();
+    this.#resumed = false;
     this.#letGo();
     this.connect();
   }
@@ -246,8 +256,10 @@ export class TerminalSession {
     );
   }
 
+  // The sandbox resumed, the tab saying it is connecting meanwhile.
   async #resume(): Promise<void> {
-    this.#enter({ kind: TERMINAL_STATE.RESUMING, since: Date.now() });
+    this.#resumed = true;
+    this.#enter({ kind: TERMINAL_STATE.CONNECTING });
     try {
       const refused = await this.link.resume?.();
       if (refused !== undefined) return this.#enter(refused);
@@ -264,7 +276,18 @@ export class TerminalSession {
     this.#awaiting = undefined;
   }
 
+  // A stopped sandbox is resumed where the tab is shown, and only there, so
+  // a reload never wakes every hidden tab's; one still stopped after the
+  // session resumed it says it did not answer, whose action asks again.
   #enter(next: TerminalState): void {
+    if (next.kind === TERMINAL_STATE.STOPPED && this.#shown) {
+      if (!this.#resumed) return void this.#resume();
+      return void this.#enter({
+        kind: TERMINAL_STATE.UNREACHABLE,
+        why: TERMINAL_UNREACHED.SANDBOX,
+      });
+    }
+    if (next.kind === TERMINAL_STATE.ATTACHED) this.#resumed = false;
     this.#state = next;
     this.#screen?.dim(terminalLook(next).dim);
     for (const listener of this.#listeners) listener();

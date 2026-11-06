@@ -11,12 +11,11 @@
  * function is compiled by Vercel's builder, and handing it JavaScript leaves
  * that builder nothing to resolve, transpile, or fail on.
  *
- * Deployment needs two values: `RESEND_API_KEY`, a Resend key for a domain
- * verified to send as the `from` address, and `FEEDBACK_TO`, the inbox
- * submissions are forwarded to — held in the deployment rather than this
- * public repository, so the address cannot be scraped from source.
- * `FEEDBACK_FROM` may override the sender. Without either required value the
- * endpoint answers 503 and the composer reports the service unavailable;
+ * Deployment needs three values: `RESEND_API_KEY`, a Resend key for a domain
+ * verified to send as `FEEDBACK_FROM`, the sender, and `FEEDBACK_TO`, the
+ * inbox submissions are forwarded to — held in the deployment rather than this
+ * public repository, so neither address can be scraped from source. There is
+ * no default sender. Without any of the three the endpoint answers 503 and the composer reports the service unavailable;
  * nothing else about the app depends on it. Where the deployment also holds
  * `POSTHOG_PROJECT_API_KEY` (production does, a Preview does not), a note the
  * mail service took is recorded as a response to the feedback survey: its
@@ -26,7 +25,6 @@
  */
 
 const RESEND_URL = "https://api.resend.com/emails";
-const DEFAULT_FROM = "Vespin <feedback@vespin.dev>";
 
 /**
  * Vespin's feedback survey in PostHog: an API survey, shown to no one, that
@@ -370,7 +368,8 @@ function json(status, body) {
 export async function POST(request) {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const destination = process.env.FEEDBACK_TO?.trim();
-  if (!apiKey || !destination) {
+  const sender = process.env.FEEDBACK_FROM?.trim();
+  if (!apiKey || !destination || !sender) {
     return json(503, { reason: "The feedback service is not configured." });
   }
   if (rateLimited(senderAddress(request), Date.now())) {
@@ -396,7 +395,7 @@ export async function POST(request) {
   let response;
   try {
     const mailBody = {
-      from: process.env.FEEDBACK_FROM?.trim() || DEFAULT_FROM,
+      from: sender,
       to: [destination],
       subject,
       text: emailBody(submission),

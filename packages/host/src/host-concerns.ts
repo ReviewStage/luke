@@ -114,8 +114,8 @@ export function hostCapabilities(
 /** The methods each platform concern answers, which a host that left it out refuses. */
 const PLATFORM_CONCERN_METHODS = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: [GATEWAY_METHOD.MAC_COMMAND_ANSWER],
-  // Note that This Mac's host tells the windows itself, and is asked only to turn on or off.
-  [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: [GATEWAY_METHOD.HOSTS_THIS_MAC_SET],
+  // Note that This Mac's host tells the windows itself, and is asked only to turn on or off, a declared act (`HOSTS_THIS_MAC_SET`).
+  [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: [],
   [HOST_PLATFORM_CONCERN.TERMINALS]: [
     GATEWAY_METHOD.TERMINALS_LIST,
     GATEWAY_METHOD.TERMINALS_CREATE,
@@ -126,6 +126,7 @@ const PLATFORM_CONCERN_METHODS = {
     GATEWAY_METHOD.TERMINALS_INPUT,
     GATEWAY_METHOD.TERMINALS_RESIZE,
     GATEWAY_METHOD.TERMINALS_ACK,
+    GATEWAY_METHOD.TERMINALS_SHOWN,
     GATEWAY_METHOD.TERMINALS_DISCONNECT,
     GATEWAY_METHOD.TERMINALS_WAKE,
     GATEWAY_METHOD.BROWSER_LIVE_CONNECT,

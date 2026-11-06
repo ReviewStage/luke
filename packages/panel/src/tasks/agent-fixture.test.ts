@@ -12,13 +12,14 @@ import {
   type PortActResult,
 } from "@repo/host/contract";
 import { Effect, Result, Schema } from "effect";
+import { onTestFinished } from "vitest";
 import { askAct } from "../act.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
-import { appStateFirstRead } from "../use-app-state.js";
+import { readAppState, testQueryClientNow } from "../testing/copy-feedback.js";
 import { agentActAnswer, FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { FIXTURE_TASK_ID } from "./tasks-fixture.js";
-import { loadTasksFixture } from "./tasks-fixture-loader.js";
+import { handFixtureClient, loadTasksFixture } from "./tasks-fixture-loader.js";
 
 /**
  * agent-fixture.test.ts -- a fixture run's agent profiles answer the reads
@@ -55,7 +56,7 @@ const READS: readonly Read[] = [
     lastLine: 200,
   }),
   read(ACT_KIND.TASKS_TREE, { planId: FIXTURE_TASK_ID, path: "src/members" }),
-  read(ACT_KIND.TERMINAL_LIST, AGENT),
+  read(ACT_KIND.TERMINAL_CREATE, AGENT),
 ];
 
 /** Whether a procedure's declared schema is an Effect Schema, which encodes with no service, as every act's output but a stream's is. */
@@ -172,7 +173,9 @@ it.effect(
         {},
         { run: { ...run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PULL_REQUEST } },
       );
-      yield* appStateFirstRead;
+      // The document is read into the test's client and that client handed to the fixture, as the window's subscription does.
+      yield* Effect.promise(readAppState);
+      onTestFinished(handFixtureClient(testQueryClientNow()));
       // The window is drawn once the synthetic tasks have landed (`App`).
       yield* Effect.promise(loadTasksFixture);
       const sent: PortActKind[] = [];

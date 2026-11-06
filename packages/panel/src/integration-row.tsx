@@ -46,6 +46,7 @@ import {
   Reveal,
   revealArea,
   ScrollArea,
+  SETTINGS_ROW_CONTROLS,
   SETTINGS_ROW_STATE,
   SettingsRowMark,
   type SettingsRowState,
@@ -85,8 +86,9 @@ import { MenuRow } from "./settings/menu-row.js";
  * browser is waited on with Reopen and Cancel, one that failed or never
  * finished with Try again, or one expired with Reconnect. A row with nothing
  * of that to say and not connected says instead what the provider gives
- * agents (`INTEGRATION_PURPOSE`), so a Connect is never pressed blind. Its
- * ⋯ keeps Reconnect, Disconnect (asked first), and, where the provider
+ * agents (`INTEGRATION_PURPOSE`), so a Connect is never pressed blind. A
+ * connected or expired account's ⋯ keeps Reconnect (but where Reconnect is
+ * the row's button), Disconnect (asked first), and, where the provider
  * allows, Add another account and Rename. A surface that hands it the server's
  * tools (`tools`) lets the row open onto them in place; one that hands none
  * says their count alone. Settings › Integrations' own words
@@ -208,41 +210,15 @@ function grantLabel(status: IntegrationStatus | undefined, signIn: SignIn | unde
   return status === INTEGRATION_STATUS.EXPIRED ? ROW_ACT.RECONNECT : "Connect";
 }
 
-/** What mends a row's connection, pressed on its line after the words saying what went wrong. */
-interface LineAct {
-  readonly label: string;
-  /** What the press is named, beginning with the words it shows. */
-  readonly name: string;
-  readonly onPress: () => void;
-}
-
 /**
  * A row's line, with the ring before a wait's words, and where the server or
  * the sign-in said words of its own, those quoted on a plain line under ours.
- * Where the row's mend stands on its line (`act`), it follows our words as a
- * press of its own words, so the row's end keeps to its ⋯ and a narrow row
- * never drops a button under its words.
  */
-function RowLineText({
-  line,
-  act,
-}: {
-  line: RowLine;
-  act?: LineAct | undefined;
-}): React.JSX.Element {
+function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
   const state = (
-    <SettingsRowStateLine
-      state={ROW_STATE[line.state]}
-      block={line.said !== undefined}
-      wrap={act !== undefined}
-    >
+    <SettingsRowStateLine state={ROW_STATE[line.state]} block={line.said !== undefined}>
       {line.state === LINE_STATE.WAITING ? <SpinnerRing size={SPINNER_SIZE.SMALL} /> : null}
-      {act === undefined ? line.text : `${line.text} · `}
-      {act === undefined ? null : (
-        <TextButton aria-label={act.name} onClick={act.onPress}>
-          {act.label}
-        </TextButton>
-      )}
+      {line.text}
     </SettingsRowStateLine>
   );
   if (line.said === undefined) return state;
@@ -503,12 +479,10 @@ export function IntegrationRow({
   };
 
   const connect = useCallback(() => {
-    // Note that a mend pressed on the row's line shows no wait of its own, so a second press while the first begins is dropped here.
-    if (connecting) return;
     setConnecting(true);
     setRejection(undefined);
     void grant.begin(connection).then(began);
-  }, [connecting, grant, connection, name]);
+  }, [grant, connection, name]);
 
   const addAccount = () => {
     setConnecting(true);
@@ -539,6 +513,9 @@ export function IntegrationRow({
   };
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
+  const expired = status === INTEGRATION_STATUS.EXPIRED;
+  // An account the service still holds, connected or expired, is managed from its ⋯.
+  const held = connected || expired;
   const disconnecting = useMutation({
     mutationKey: [ACT_KIND.INTEGRATIONS_DISCONNECT],
     mutationFn: () =>
@@ -553,7 +530,7 @@ export function IntegrationRow({
     answered: sameAnswer,
   });
   const disconnect = useConfirmDialog(
-    { subject: connected, surfaceOpen: true },
+    { subject: held, surfaceOpen: true },
     disconnectAct,
     confirmFailure(FAILURE_SURFACE.INTEGRATION_DISCONNECT),
   );
@@ -561,16 +538,14 @@ export function IntegrationRow({
   const line = rowLine(provider, status, health, signIn);
   const broken = connected && health.kind === CONNECTION_HEALTH.BROKEN && health.reconnect;
   const waiting = !connected && signIn?.kind === SIGN_IN.WAITING;
-  // Whether the row offers its grant (Connect, Reconnect, or Try again), and
-  // whether that stands on its line: a row whose line says what went wrong
-  // mends it there, and only a row with no line, a Connect, keeps a button.
+  // Whether the row offers its grant (Connect, Reconnect, or Try again) as
+  // the button at its end, where a row not connected keeps its Connect.
   const granting =
     !waiting &&
     !(connected && health.kind === CONNECTION_HEALTH.FAILED) &&
     !(status === undefined || status === INTEGRATION_STATUS.UNAVAILABLE || (connected && !broken));
-  const mendOnLine = granting && line !== undefined;
-  // A broken connection's Reconnect is the row's button, so its ⋯ keeps it
-  // only while the connection stands quiet.
+  // A broken or expired connection's Reconnect is the row's button, so its ⋯
+  // keeps it only while the connection stands quiet.
   const reconnect = {
     label: ROW_ACT.RECONNECT,
     icon: <RefreshCwIcon />,
@@ -597,8 +572,8 @@ export function IntegrationRow({
           },
         ]
       : [];
-  const actions = connected
-    ? [[...naming, ...adding], broken ? [] : [reconnect], [leave]].filter(
+  const actions = held
+    ? [[...naming, ...adding], broken || expired ? [] : [reconnect], [leave]].filter(
         (group) => group.length > 0,
       )
     : [];
@@ -611,6 +586,8 @@ export function IntegrationRow({
         anchor={connection}
         {...(bySignIn ? { heading: ROW_LINE.GITHUB_SIGN_IN } : undefined)}
         row={{
+          // Note that every row of a provider ends in a short button, a ⋯, or both, so on a narrow page each keeps its end beside its name and lets its words wrap, rather than one row dropping its end below them.
+          controls: SETTINGS_ROW_CONTROLS.BESIDE,
           leading: (
             <SettingsRowMark>
               <ProviderMark provider={provider} />
@@ -643,18 +620,7 @@ export function IntegrationRow({
                 INTEGRATION_PURPOSE[provider]
               )
             ) : (
-              <RowLineText
-                line={line}
-                act={
-                  mendOnLine
-                    ? {
-                        label: grantLabel(status, signIn),
-                        name: `${grantLabel(status, signIn)} ${name}`,
-                        onPress: connect,
-                      }
-                    : undefined
-                }
-              />
+              <RowLineText line={line} />
             ),
           error: refusedShown(rejection, FAILURE_SURFACE.INTEGRATION_RENAME),
           control: waiting ? (
@@ -680,11 +646,13 @@ export function IntegrationRow({
             </>
           ) : connected && health.kind === CONNECTION_HEALTH.FAILED ? (
             <RetryButton onRetry={onRetryTools} />
-          ) : !granting || mendOnLine ? null : (
+          ) : !granting ? null : (
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
+              // Note that the name starts with the words the button shows, so a voice command that says them finds it, and names the row, since several rows may offer the same words.
+              label={`${grantLabel(status, signIn)} ${name}`}
               busy={connecting}
-              busyLabel="Connecting"
+              busyLabel={`Connecting ${name}`}
               onClick={connect}
             >
               {grantLabel(status, signIn)}

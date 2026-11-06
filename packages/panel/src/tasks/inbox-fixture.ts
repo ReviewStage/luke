@@ -379,7 +379,12 @@ const INBOXES: ReadonlyMap<string, readonly InboxItem[]> = new Map([
   [TASK.ROUNDING, ROUNDING_ITEMS],
 ]);
 
-/** Whether the item is a question waiting on the account: open, its thread holding an ask still open, as the service counts one (`askingReader`); a notice is not. */
+/** When an inbox last changed: its newest item's change. */
+function newest(items: readonly InboxItem[]): number {
+  return Math.max(...items.map((each) => each.updatedAt));
+}
+
+/** Whether the item is a question: open, its thread holding an ask still open; a notice is not. */
 function asking(item: InboxItem): boolean {
   return (
     item.status === INBOX_STATUS.OPEN &&
@@ -387,17 +392,12 @@ function asking(item: InboxItem): boolean {
   );
 }
 
-/** When an inbox last changed: its newest item's change. */
-function newest(items: readonly InboxItem[]): number {
-  return Math.max(...items.map((each) => each.updatedAt));
-}
-
 /** Every task holding items as main's read of the account names it, the latest changed first. */
 const HOLDINGS: readonly AppInboxTaskHolding[] = [...INBOXES]
   .map(([taskId, items]) => ({
     taskId,
     items: items.length,
-    toDo: items.filter(asking).length,
+    toDo: items.filter((each) => each.status === INBOX_STATUS.OPEN).length,
     updatedAt: newest(items),
   }))
   .toSorted((a, b) => b.updatedAt - a.updatedAt);
@@ -532,12 +532,22 @@ const OWN_TASKS: readonly TaskSummary[] = [
  */
 export function inboxTasksView(profile: string, list: TasksView): TasksView {
   if (!STAGED_PROFILES.has(profile)) return list;
-  const tasks = list.tasks.map((task) =>
-    task.id === TASK.INVITES
-      ? { ...task, ownerId: ADA.userId, createdBy: ADA, assignee: ADA, ...agentsLine(task.id) }
-      : task,
-  );
-  return { ...list, tasks: [...tasks, ...OWN_TASKS] };
+  const tasks = [
+    ...list.tasks.map((task) =>
+      task.id === TASK.INVITES
+        ? { ...task, ownerId: ADA.userId, createdBy: ADA, assignee: ADA, ...agentsLine(task.id) }
+        : task,
+    ),
+    ...OWN_TASKS,
+  ];
+  // Note that the list follows each task's agent live too, which a person's page lists them from.
+  const followed = tasks.flatMap((task) => {
+    const agent = AGENTS.get(task.id);
+    return agent === undefined
+      ? []
+      : [{ ...agent, workspaceId: task.workspaceId, repository: task.repository }];
+  });
+  return { ...list, tasks, taskAgents: [...(list.taskAgents ?? []), ...followed] };
 }
 
 /* ----- The window's document ----- */

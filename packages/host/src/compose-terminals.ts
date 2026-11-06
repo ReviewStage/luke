@@ -1,13 +1,8 @@
-import {
-  type HostedTerminalClient,
-  TERMINAL_UNANSWERED,
-  type TerminalUnanswered,
-  terminalRelayAddress,
-  webSocketOrigin,
-} from "@repo/features";
+import { type HostedTerminalClient, terminalRelayAddress, webSocketOrigin } from "@repo/features";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_FLOW,
+  TERMINAL_REFUSAL,
   type TerminalConnection,
   terminalAckParamsSchema,
   terminalAgentParamsSchema,
@@ -28,6 +23,7 @@ import { carried, GATEWAY_EVENT, GATEWAY_METHOD, RefusedRefusal, readParams } fr
 import { unparsedWire, type WireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import {
+  Clock,
   Data,
   Duration,
   Effect,
@@ -63,7 +59,13 @@ import type { RunMode } from "./run-mode.js";
  * to ten seconds and starts over once the shell attaches; one whose agent
  * has not opened its sandbox is asked after every five seconds; and one the
  * relay ended as stopped, gone, or exited, or one the deployment
- * serves no relay for, stays ended until the tab attaches again. A wake
+ * serves no relay for, stays ended until the tab attaches again, as does
+ * one gone `TERMINAL_IDLE` with nothing typed in it, nothing printed by its
+ * shell, and no word from the panel that its tab is shown in the window the
+ * developer is using: its socket closes, so a tab forgotten behind others
+ * stops holding its sandbox, and the tab hears it idle, where a key
+ * attaches again. The bound runs across the socket's drops, the relay
+ * function's own among them, so a reopen is never a use. A wake
  * after the Mac slept cuts every wait short. Output is paced to what the
  * tab has drawn: past `PAUSE_ABOVE_BYTES` unacked the socket is no longer
  * read, so the relay backs up rather than this process. Nothing a shell
@@ -110,6 +112,9 @@ export const TERMINAL_RECONNECT = {
   /** The wait between asks while the agent has not opened its sandbox. */
   STARTING_EVERY: Duration.seconds(5),
 } as const;
+
+/** How long a connection stays open with nothing typed, printed, or shown. */
+const TERMINAL_IDLE = Duration.minutes(10);
 
 /** The service's side of the terminals, as this concern asks it. */
 export type TerminalClient = Pick<
@@ -186,6 +191,8 @@ interface Connection {
   paused: boolean;
   /** What was typed while the connection was reopening, in order, for the socket that attaches next. */
   typedWhileAway: Uint8Array[];
+  /** When the connection was last used: attached by the tab, typed in, printed to, or said to be shown. */
+  usedAt: number;
 }
 
 /** The most typing a reopening connection holds for its next socket; typing past it is let go, as a terminal far behind would. */
@@ -245,9 +252,16 @@ function composed(
       ),
     );
 
+  /** The connection noted as used now, which moves its idle bound on. */
+  const used = (connection: Connection) =>
+    Effect.map(Clock.currentTimeMillis, (at) => {
+      connection.usedAt = at;
+    });
+
   /** A shell's bytes handed up, and the socket paused once the tab has fallen far enough behind. */
   const output = (connection: Connection, socket: TerminalSocket, bytes: Uint8Array) =>
     Effect.gen(function* () {
+      yield* used(connection);
       kernel.emit(
         GATEWAY_EVENT.TERMINAL_OUTPUT,
         carried({ connectionId: connection.connectionId, data: Base64.encode(bytes) }),
@@ -343,10 +357,9 @@ function composed(
       }),
     );
 
-  /** A connection's whole life, from its first open until the relay ends it or the tab lets it go. */
-  const session = (connection: Connection) =>
+  /** The connection's socket opened, and opened again after each drop, until the relay ends it. */
+  const reopening = (connection: Connection) =>
     Effect.gen(function* () {
-      yield* tell(connection, TERMINAL_CONNECTION.CONNECTING);
       yield* attempt(connection).pipe(
         Effect.retry({
           schedule: Schedule.spaced(TERMINAL_RECONNECT.STARTING_EVERY),
@@ -364,18 +377,41 @@ function composed(
       );
     });
 
+  /** Ends once the connection has gone the idle bound unused, waking only when the bound since its last use falls due. */
+  const idle = (connection: Connection) =>
+    Effect.gen(function* () {
+      for (;;) {
+        const left =
+          connection.usedAt + Duration.toMillis(TERMINAL_IDLE) - (yield* Clock.currentTimeMillis);
+        if (left <= 0) return;
+        yield* Effect.sleep(Duration.millis(left));
+      }
+    });
+
+  /** A connection's whole life, from its first open until the relay ends it, it goes the idle bound unused, or the tab lets it go. */
+  const session = (connection: Connection) =>
+    Effect.gen(function* () {
+      yield* tell(connection, TERMINAL_CONNECTION.CONNECTING);
+      // Note that an idle connection's socket is closed with the race's loser, and its tab hears it idle.
+      const wentIdle = yield* Effect.race(
+        Effect.as(reopening(connection), false),
+        Effect.as(idle(connection), true),
+      );
+      if (wentIdle) yield* tell(connection, TERMINAL_CONNECTION.IDLE);
+    });
+
   /** The connection's fiber started, or started over, in the map under its id. */
   const run = (connection: Connection) =>
     Effect.asVoid(FiberMap.run(fibers, connection.connectionId, session(connection)));
 
   /** The service asked behind the gate, over the host's own HTTP client; an answer it could not give is the call's refusal. */
   const asked = <Answer extends object>(
-    call: Effect.Effect<Answer | TerminalUnanswered, never, HttpClient.HttpClient>,
+    call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
   ): Effect.Effect<WireValue, RefusedRefusal> =>
     Effect.gen(function* () {
       if (!gate()) return yield* Effect.fail(new RefusedRefusal({ message: "signed out" }));
       const answer = yield* Effect.provideService(call, HttpClient.HttpClient, http);
-      if (answer === TERMINAL_UNANSWERED) {
+      if ("failure" in answer && answer.failure === TERMINAL_REFUSAL.UNANSWERED) {
         return yield* Effect.fail(new RefusedRefusal({ message: "the service did not answer" }));
       }
       return carried(answer);
@@ -446,6 +482,7 @@ function composed(
           unacked: 0,
           paused: false,
           typedWhileAway: [],
+          usedAt: yield* Clock.currentTimeMillis,
         };
         connections.set(ask.connectionId, connection);
         yield* run(connection);
@@ -460,6 +497,7 @@ function composed(
         );
         const connection = named(connectionId);
         if (connection === undefined) return {};
+        yield* used(connection);
         const bytes = encoder.encode(data);
         if (connection.socket !== undefined) {
           yield* connection.socket.send({ bytes });
@@ -500,6 +538,17 @@ function composed(
         if (!connection.paused || connection.unacked >= TERMINAL_FLOW.RESUME_BELOW_BYTES) return {};
         connection.paused = false;
         if (connection.socket !== undefined) yield* connection.socket.resume;
+        return {};
+      }),
+    [GATEWAY_METHOD.TERMINALS_SHOWN]: (params) =>
+      Effect.gen(function* () {
+        const { connectionId } = yield* readParams(
+          terminalConnectionParamsSchema,
+          params,
+          "saying a tab is shown names the connection",
+        );
+        const connection = named(connectionId);
+        if (connection !== undefined) yield* used(connection);
         return {};
       }),
     [GATEWAY_METHOD.TERMINALS_DISCONNECT]: (params) =>

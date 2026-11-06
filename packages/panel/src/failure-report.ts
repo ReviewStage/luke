@@ -62,12 +62,13 @@ import type { ConfirmFailure } from "@repo/ui/confirm-state";
 import type { PictureUnread } from "@repo/ui/picture-read";
 import type { ReportedFailure, ShownError } from "@repo/ui/reported-failure";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import type { QueryClient } from "@tanstack/react-query";
 import { Clock, Context, Predicate } from "effect";
 import type { ReactNode } from "react";
 import { appPlatform } from "./app-platform.js";
 import { rendererServicesNow } from "./renderer-runtime.js";
 import type { SettingRefusal } from "./settings/row-write.js";
-import { appStateNow } from "./use-app-state.js";
+import { appStateIn } from "./use-app-state.js";
 
 /**
  * A failure the panel shows: the surface showing it, what failed, and what
@@ -137,7 +138,13 @@ interface KeptFailure {
   readonly reported: ReportedFailure;
 }
 
-let reporter: ShownFailureReporter | undefined;
+/** The window's reporter, and the Query client whose document its reports carry. */
+interface InstalledReporter {
+  readonly report: ShownFailureReporter;
+  readonly client: QueryClient;
+}
+
+let reporter: InstalledReporter | undefined;
 
 /** The failures drawn in place, the one seen last at the end. */
 let kept: readonly KeptFailure[] = [];
@@ -281,12 +288,21 @@ export function refusedShown(
  */
 export function failureOfConnection(failure: ShownFailure): boolean {
   if (kindOf(failure) === FAILURE_KIND.REFUSED) return false;
-  const state = appStateNow();
+  const state = reporter === undefined ? undefined : appStateIn(reporter.client);
   return state !== undefined && !networkConnected(state.network);
 }
 
-/** Installs what this window reports its shown failures through, and answers what takes it back. */
-export function installShownFailureReporter(installed: ShownFailureReporter): () => void {
+/**
+ * Installs what this window reports its shown failures through, with the
+ * Query client whose document each report reads, and answers what takes it
+ * back. Note that the client is held from the install, because a failure is
+ * reported from callers that hold none to hand in, as `@repo/ui`'s `shown()`.
+ */
+export function installShownFailureReporter(
+  report: ShownFailureReporter,
+  client: QueryClient,
+): () => void {
+  const installed: InstalledReporter = { report, client };
   reporter = installed;
   return () => {
     if (reporter === installed) reporter = undefined;
@@ -296,7 +312,7 @@ export function installShownFailureReporter(installed: ShownFailureReporter): ()
 /** Sends `report` through the window's reporter, where it has one; a report that throws answers nothing. */
 function sent(report: ShownFailureReport): ShownFailureSent | undefined {
   try {
-    return reporter?.(report);
+    return reporter?.report(report);
   } catch (error) {
     console.error("A failure shown could not be reported.", error);
     return undefined;
@@ -316,7 +332,7 @@ function sent(report: ShownFailureReport): ShownFailureSent | undefined {
 export function reportShownFailure(failure: ShownFailure, at: number): string | undefined {
   if (reporter === undefined) return undefined;
   try {
-    const state = appStateNow();
+    const state = appStateIn(reporter.client);
     const report: ShownFailureReport = {
       surface: failure.surface,
       kind: kindOf(failure),

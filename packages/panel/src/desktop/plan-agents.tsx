@@ -1,33 +1,16 @@
 import type { AgentPullRequest } from "@repo/features/agent-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
-import {
-  AttentionMark,
-  GAP,
-  GROUP_HEADING,
-  GroupHeader,
-  Inline,
-  LIST_DENSITY,
-  List,
-  ListRow,
-  RowHint,
-  RowHintOptions,
-  VisuallyHidden,
-} from "@repo/ui";
+import { GROUP_HEADING, GroupHeader, LIST_DENSITY, List, ListRow } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { agentTab, STRIP_TAB_KIND, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
-import { useChangesPeople } from "../tasks/changes-people.js";
 import { NEEDS_YOU, threadsWaitingWords } from "../tasks/inbox-model.js";
-import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
-import { PullRequestChip } from "../tasks/pull-request-chip.js";
-import { RunsOnPlace } from "../tasks/runs-on.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
-import { openerOf } from "../tasks/use-link-standing.js";
 import type { MainTabsControl } from "../tasks/use-main-tabs.js";
 import type { MenuAction } from "./action-menu.js";
-import { SUMMARY_GLYPH } from "./agent-archive.js";
+import { AgentListRow } from "./agent-list-row.js";
 import { agentEntries } from "./main-tabs.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 
@@ -37,7 +20,8 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * The agents stand under a group head, Agents and how many, which folds
  * them, folded where the page asks, the same shape every group of
  * the head takes, a `GroupHeader` over a dense `List`. Each row is the
- * task's agent as its "+" row and the summary draw it (`agentEntries`): its
+ * task's agent as its "+" row and the summary draw it (`agentEntries`),
+ * drawn as a person's page draws its agents too (`agent-list-row.tsx`): its
  * tab's glyph, which gives way to the working mark while it works, its
  * tab's name, where it runs (`runs-on.tsx`), Cloud or the device, each
  * agent's own, the failed mark at its end once its
@@ -50,11 +34,11 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * plan opens the agent as its tab's own press does. The chip opens the pull
  * request as the agent's own pull request chip does, in its Pull request
  * tab; it is still a link to its page, so a right-click offers its address.
- * An agent with a thread waiting on the developer is marked as that
- * thread's Inbox row is: the attention mark at its end, before where it
- * runs, so a task opened on its plan says which agent waits, with no pill
- * or word beside the mark for the eye; the thread itself, title and all,
- * is the Inbox's to say, so the row stays one dense line.
+ * An agent with threads waiting on the developer counts them at its end,
+ * before where it runs, in the orange figure its tab and the sidebar's
+ * Inbox row draw (`WaitingCount`), so a task opened on its plan says which
+ * agent waits and on how much; the threads themselves, titles and all, are
+ * the Inbox's to say, so the row stays one dense line.
  * Those agents come first, then those at work, then the newest started; an
  * archived agent is not listed. New agent follows them at every width, as
  * the strip's "+" offers it (`newAgentStarts`), so the group stands even on a
@@ -101,7 +85,7 @@ function listedOrder(
   );
 }
 
-/** One agent's row: its tab's look, whether a thread of it waits on the developer, where it runs, its failed mark, and its pull request's chip where it opened one. */
+/** One agent's row (`AgentListRow`): its tab's look and card, how many of its threads wait on the developer, where it runs, its failed mark, and its pull request's chip where it opened one. */
 function PlanAgentRow({
   entry,
   waits,
@@ -112,70 +96,30 @@ function PlanAgentRow({
   onOpenPullRequest,
 }: {
   entry: AddEntry;
-  /** Whether a thread of it waits on the developer. */
-  waits: boolean;
+  /** How many of its threads wait on the developer. */
+  waits: number;
   pullRequest: AgentPullRequest | undefined;
   agents: AgentsControl;
   held: HeldTranscripts;
   tab: MainTabsControl["tab"];
   onOpenPullRequest: () => void;
-}): React.JSX.Element {
-  const { row, endMark, card } = entry;
-  const agentId = row.id;
-  const chosen = tab !== undefined && sameTab({ agent: agentId }, tab);
-  const changesPeople = useChangesPeople(pullRequest === undefined ? undefined : agentId);
-  const people = pullRequest === undefined ? undefined : peopleOf(changesPeople, pullRequest);
+}): React.JSX.Element | null {
+  const { row, agent, card } = entry;
+  if (agent === undefined) return null;
+  const chosen = tab !== undefined && sameTab(agentTab(row.id), tab);
   return (
-    <RowHintOptions card={card}>
-      <ListRow
-        motionKey={row.id}
-        leading={<span className={SUMMARY_GLYPH}>{row.icon}</span>}
-        title={<ReplayMask>{row.label}</ReplayMask>}
-        hint={card === undefined ? undefined : { Hint: RowHint, label: row.label }}
-        meta={
-          <Inline gap={GAP.ITEM} wrap={false}>
-            {!waits ? null : (
-              <>
-                <AttentionMark />
-                <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
-              </>
-            )}
-            <ReplayMask>
-              {entry.agent === undefined ? null : (
-                <RunsOnPlace agent={entry.agent} devices={agents.macs} />
-              )}
-              {endMark}
-            </ReplayMask>
-          </Inline>
-        }
-        actions={
-          pullRequest === undefined ? undefined : (
-            <ReplayMask>
-              <PullRequestChip
-                pullRequest={pullRequest}
-                card={
-                  <PullRequestCard
-                    pullRequest={pullRequest}
-                    place={{ taskId: entry.agent?.planId ?? null }}
-                    lines={pullRequest}
-                    files={pullRequest.changedFiles}
-                    opener={people?.author ?? openerOf(pullRequest)}
-                    agent={{
-                      subject: agentSubject(agents, agentId, held, chosen),
-                      models: agents.models,
-                      onOpen: entry.onPick,
-                    }}
-                    reviewers={people?.reviewers}
-                  />
-                }
-                onOpen={onOpenPullRequest}
-              />
-            </ReplayMask>
-          )
-        }
-        onPress={entry.onPick}
-      />
-    </RowHintOptions>
+    <AgentListRow
+      agent={agent}
+      subject={agentSubject(agents, row.id, held, chosen)}
+      card={card}
+      models={agents.models}
+      devices={agents.macs}
+      pullRequest={pullRequest}
+      waits={waits}
+      motionKey={row.id}
+      onPress={entry.onPick}
+      onOpenPullRequest={onOpenPullRequest}
+    />
   );
 }
 
@@ -218,7 +162,9 @@ export function PlanAgents({
     {
       tab,
       onChoose: (chosen) => {
-        if (isAgentTab(chosen)) onOpenAgent(chosen.agent);
+        if (typeof chosen !== "string" && chosen.kind === STRIP_TAB_KIND.AGENT) {
+          onOpenAgent(chosen.agent);
+        }
       },
     },
     agents,
@@ -258,7 +204,7 @@ export function PlanAgents({
                   <PlanAgentRow
                     key={entry.row.id}
                     entry={entry}
-                    waits={waiting.has(entry.row.id)}
+                    waits={waiting.get(entry.row.id)?.length ?? 0}
                     pullRequest={agents.pullRequests.get(entry.row.id)}
                     agents={agents}
                     held={held}

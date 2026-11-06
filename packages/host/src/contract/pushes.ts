@@ -10,11 +10,11 @@
  * the guards are the declaration the pushes have.
  */
 
+import { eventIterator, type } from "@orpc/contract";
 import { isAccountPlace, isLinkPlace, type ShownLink } from "@repo/features/link-grammar";
 import { type AppCommand, isAppCommand } from "@repo/settings/shortcuts";
 import { isRecord, isWireString } from "@repo/wire";
 import { wireResult as result, type WireGuard, type WireGuardValue } from "@repo/wire/wire-guard";
-import { eventIterator, type } from "@orpc/contract";
 import { type AppStateDelivery, isAppStateDelivery } from "../app-state.js";
 import { actProcedure } from "./base.js";
 

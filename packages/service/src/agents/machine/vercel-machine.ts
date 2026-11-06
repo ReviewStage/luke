@@ -5,7 +5,7 @@
  * (`../coder-host/agent-image.ts`), which carries the runner and every tool
  * the harnesses run, with its session's drive mounted at the workspace
  * (`../agent-drive.ts`), through `Sandbox.getOrCreate` under a name of the
- * session's own (`agentSandboxName`), as Vercel's persistent sandboxes are
+ * session's own (`../agent-sandbox-open.ts`), as Vercel's persistent sandboxes are
  * opened: the one standing under it is resumed, one is created where none
  * stands, and one whose snapshot is gone is deleted and created again under
  * the same name, on the same drive. A sandbox the call created is set up in
@@ -66,7 +66,6 @@
  * its place is the session's own.
  */
 
-import { createHash } from "node:crypto";
 import {
   AGENT_USER,
   CODEX_PIN,
@@ -82,21 +81,34 @@ import {
   readAgentRunnerRecord,
   writeAgentRunnerRecord,
 } from "@repo/database/models/agent-runner-record";
-import { type Agent, hasRepository, type WithRepository } from "@repo/database/models/agent-store";
+import {
+  type Agent,
+  hasRepository,
+  readAgent,
+  type WithRepository,
+} from "@repo/database/models/agent-store";
+import type { FirewallOwner } from "@repo/database/models/provider-key-seal";
+import { recordedRuntimeSession } from "@repo/database/models/recorded-session";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { Brand, type Context, Duration, Effect, Layer, Option, Result, Schedule } from "effect";
+import { Brand, type Context, Duration, Effect, Layer, Option, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
-  AGENT_DRIVE,
   AGENT_DRIVE_FROM,
   type AgentDrive,
   type AgentDriveFrom,
   agentDrive,
   agentDriveName,
 } from "../agent-drive.js";
+import {
+  AGENT_TAG,
+  agentSandboxName,
+  agentSandboxTags,
+  openAgentSandbox,
+  SANDBOX_ENV,
+} from "../agent-sandbox-open.js";
 import { type BaseDriveOf, fillBaseDrive, installDependencies } from "../base-drive.js";
 import { AgentImage } from "../coder-host/agent-image.js";
 import { CODER, sandboxVcpus } from "../coder-host/bounds.js";
@@ -108,28 +120,34 @@ import {
   agentFirewallSources,
   agentRepositoryRead,
   CheckoutRefused,
+  type CheckoutServices,
   cloneAgentExtras,
   cloneAgentRepository,
   finishCheckoutWith,
+  firewallSourcesOfAgent,
   openWorkingFolder,
   refreshAgentCheckout,
 } from "../coder-host/checkout.js";
 import { NATIVE_SKILLS_PATH } from "../coder-host/native-skills.js";
 import type { RepositoryFirewall, RepositorySandbox } from "../repository-shell.js";
 import {
+  type FirewallEntry,
   type FirewallSession,
   type FirewallSources,
+  type LaunchSwapKind,
+  newPlaceholder,
+  placeholderSwap,
+  renewedSwap,
+  type SandboxFirewall,
   sandboxFirewall,
 } from "../sandbox-firewall.js";
 import {
-  IMAGE_NOT_READY,
   type ListedSandbox,
   type OidcTokenRead,
   type OpenedSandbox,
   SANDBOX_STATUS,
   type SandboxSessionApi,
   SandboxUnavailable,
-  SESSION_TAG,
   type SessionRef,
   sessionOnFirstUse,
   snapshotGone,
@@ -140,6 +158,7 @@ import {
 import {
   AgentMachine,
   type AgentMachineService,
+  type DeliveredCredentials,
   type FoundPlace,
   type MachineKept,
   type MachineLayout,
@@ -150,17 +169,14 @@ import {
   PLACE_RESUME,
   type RecordedRunner,
   RUNNER_RECORD,
+  type RunnerCredential,
   type RunnerHandle,
   type RunnerMark,
   type RunnerRecord,
+  SWAP_RENEWAL,
+  type SwapRenewal,
+  type SwapRenewalAsk,
 } from "./agent-machine.js";
-
-/**
- * The tag a sandbox we open carries beside its session's: the agent it was
- * opened for, so a later call and the sweep tell whose it is. Its runner is
- * recorded in our store instead (`@repo/database/models/agent-runner-record`).
- */
-export const AGENT_TAG = "agentId";
 
 /**
  * The agent tag's name before the product's rename, read after `AGENT_TAG`'s
@@ -192,27 +208,11 @@ const SANDBOX_LAYOUT: MachineLayout = {
   attachments: ATTACHMENT_DIRECTORY,
   sharedFiles: SHARED_FILES_DIRECTORY,
   claudeExecutable: undefined,
-  codexExecutable: undefined,
+  codexExecutable: CODEX_PIN.LINK,
+  codexHome: CODEX_PIN.HOME,
   linesRead: true,
+  transcriptsKept: true,
 };
-
-/**
- * What a sandbox we open is named as, beside a digest of its session's id
- * (`agentSandboxName`), or a fresh UUID for one opened before `getOrCreate`;
- * the sweep tells a native sandbox from eve's by it.
- */
-export const SANDBOX_NAME = "agent-sandbox-";
-
-/**
- * The session's sandbox's name, which `getOrCreate` opens it under: the
- * prefix and a digest of the session's id, as its drive is named
- * (`../agent-drive.ts`'s `agentDriveName`), so every open of the session
- * finds the one sandbox standing under it.
- */
-function agentSandboxName(sessionId: string): string {
-  const digest = createHash("sha256").update(sessionId).digest("hex");
-  return `${SANDBOX_NAME}${digest.slice(0, 32)}`;
-}
 
 /**
  * What a sandbox opened before the product's rename is named as, which the
@@ -225,12 +225,6 @@ export const SANDBOX_NAME_BEFORE_RENAME = "luke-agent-";
 
 /** The runner as the image carries it (`apps/web/agent-image/Dockerfile`). */
 const RUNNER_SCRIPT = `${RUNNER_DIRECTORY}/agent-runner.mjs`;
-
-/** The folders the `agent` user's home holds from its making: Codex's `CODEX_HOME`, which Codex refuses to start without. */
-const AGENT_HOME_FOLDERS = [CODEX_PIN.HOME];
-
-/** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
-const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;
 
 /**
  * The link a sandbox made before the product's rename is given on each
@@ -273,6 +267,15 @@ const SHARE_WAIT = Duration.minutes(2);
 /** Why checkouts cloned under a running runner were not shared with its user. */
 const NOT_SHARED = "the checkouts cloned beside the agent's could not be shared with its runner";
 
+/** What a place holds where it holds the agent's own checkout: its repository's git folder. */
+const CHECKOUT_GIT_PATH = `${CODER.CHECKOUT_PATH}/.git`;
+
+/** Where a finished checkout's commit identity stands (`finishCheckoutWith`): its repository's own config, read as a file so no ownership check stands in the way. */
+const CHECKOUT_CONFIG_PATH = `${CHECKOUT_GIT_PATH}/config`;
+
+/** Why a checkout cloned before a relaunch was not finished: the store did not answer for its commit identity. */
+const RESTORE_PLAN_UNREAD = "the restored checkout's commit identity could not be read";
+
 /**
  * The launch's readying, run by bash as root through `sudo`, waited on before the runner starts: the
  * member's installed skills, where the sandbox's opening uploaded them,
@@ -314,18 +317,6 @@ const READ_SCRIPT = [
   `[ -f "$1" ] && [ -r "$1" ] || exit ${READ_EXIT.NO_FILE}`,
   `head -c "$2" -- "$1" | base64 | tr -d '\\n'`,
 ].join("\n");
-
-/**
- * How a create on an image the registry is still preparing is asked again:
- * every `SPACED`, at most `TIMES` times, as Vercel's docs say to retry once
- * the preparation finishes. Note that CI pushes each image and waits for
- * Vercel to prepare it before the deploy that names it lands, so only a
- * Preview opened as its image is pushed waits here.
- */
-const IMAGE_RETRY = {
-  SPACED: Duration.seconds(10),
-  TIMES: 18,
-} as const;
 
 /** Runs one effect on the edge's runtime; the checkout reaches the sandbox through promises (`repository-shell.ts`). */
 export type SandboxRunner = <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
@@ -370,6 +361,37 @@ function sessionOfPlace(place: OpenedPlace): SessionRef {
 /** The same session as its firewall names it, with the account whose agent it is. */
 function firewallSessionOf(place: OpenedPlace, userId: string): FirewallSession {
   return { userId, name: place.name, sandboxSessionId: place.running };
+}
+
+/**
+ * A launch's credentials as a sandbox's runner takes them: each a
+ * placeholder minted for the launch in its variable, and a swap its
+ * firewall keeps for the launch, which sets the value in the placeholder's
+ * place on requests to its target that present it, so no value enters the
+ * sandbox. Note that the swap matches the placeholder and not the target
+ * alone, because every process in the sandbox reaches out through that
+ * firewall, a Terminal's shell and a page in the agent's browser among them,
+ * and only one that reads the placeholder, the runner's own user, may act
+ * as the agent. A renewed credential is held the same way, and the sweep
+ * renews its swap.
+ */
+function heldAtFirewall(credentials: readonly RunnerCredential[]): DeliveredCredentials {
+  const env: Record<string, string> = {};
+  const swaps = new Map<LaunchSwapKind, FirewallEntry>();
+  for (const credential of credentials) {
+    const placeholder = Redacted.value(newPlaceholder());
+    env[credential.variable] = placeholder;
+    swaps.set(
+      credential.slot,
+      placeholderSwap({
+        ...credential.target,
+        header: credential.header,
+        placeholder: Redacted.make(`${credential.scheme}${placeholder}`),
+        value: Redacted.make(`${credential.scheme}${Redacted.value(credential.value)}`),
+      }),
+    );
+  }
+  return { env, swaps };
 }
 
 /** The launch a record tells of: its first event number and fingerprint, of a launch that reads its lines, as every sandbox's does. */
@@ -543,6 +565,82 @@ function readFileCommand(path: string, maxBytes: number) {
 }
 
 /**
+ * The firewall session a kept launch runs in, its sandbox found by name the
+ * way an agent's sandbox is found: the agent the launch named, the session
+ * its conversation records, the sandboxes tagged with it, and among them the
+ * one still running the owner's session. None where any of them no longer
+ * stands, as for a row its session outlived, or one kept before launches
+ * named their agent.
+ */
+const launchSession = (api: VercelSandboxApi, owner: FirewallOwner, agentId: string | undefined) =>
+  Effect.gen(function* () {
+    if (agentId === undefined) return undefined;
+    const agent = yield* readAgent(owner.userId, agentId);
+    if (Option.isNone(agent)) return undefined;
+    const runtime = yield* recordedRuntimeSession({
+      userId: owner.userId,
+      conversationId: agent.value.conversationId,
+    });
+    if (runtime === undefined) return undefined;
+    const sandboxes = yield* api.listTagged(runtime);
+    const sandbox = sandboxes.find((each) => each.currentSessionId === owner.sandboxSessionId);
+    if (sandbox === undefined) return undefined;
+    return { ...owner, name: sandbox.name } satisfies FirewallSession;
+  });
+
+/** What a renewal writes once it gathered it: the session found running, the swap renewed, and the sources sent beside it. */
+interface SwapWrite {
+  readonly session: FirewallSession;
+  readonly entry: FirewallEntry;
+  readonly sources: FirewallSources;
+}
+
+/**
+ * A standing launch's swap renewed at its sandbox session's firewall
+ * (`MachineFirewall`'s `renew`): the fresh value asked only where the launch
+ * kept for the session holds the slot, set behind the same placeholder where
+ * the swap stands on the target's host alone and sets another value, and the
+ * session's whole policy sent with the agent's repository credential minted
+ * afresh beside it (`firewallSourcesOfAgent`). A launch whose sandbox no
+ * longer runs its session is left (`launchSession`), for the sweep's drop.
+ */
+const swapRenewed = <E extends { readonly _tag: string }, R>(
+  api: VercelSandboxApi,
+  firewall: SandboxFirewall,
+  owner: FirewallOwner,
+  { credential, fresh }: SwapRenewalAsk<E, R>,
+): Effect.Effect<SwapRenewal, SandboxUnavailable, R | CheckoutServices> =>
+  Effect.gen(function* () {
+    const launch = yield* firewall.launchOf(owner);
+    const standing = launch?.swaps.get(credential.slot);
+    if (launch === undefined || standing === undefined) return { outcome: SWAP_RENEWAL.LEFT };
+    const next: SwapRenewal | SwapWrite = yield* Effect.gen(function* () {
+      const value = yield* fresh;
+      if (value === undefined) return { outcome: SWAP_RENEWAL.UNANSWERED } as const;
+      const hosts = Redacted.value(standing.rules).map(([host]) => host);
+      if (!hosts.every((host) => host === credential.target.domain)) {
+        return { outcome: SWAP_RENEWAL.ELSEWHERE } as const;
+      }
+      const entry = renewedSwap(
+        standing,
+        Redacted.make(`${credential.scheme}${Redacted.value(value)}`),
+      );
+      if (entry === undefined) return { outcome: SWAP_RENEWAL.LEFT } as const;
+      const session = yield* launchSession(api, owner, launch.agentId);
+      if (session === undefined) return { outcome: SWAP_RENEWAL.LEFT } as const;
+      const sources = yield* firewallSourcesOfAgent(owner.userId, launch.agentId);
+      return { session, entry, sources };
+    }).pipe(
+      Effect.catch((failure) =>
+        Effect.succeed({ outcome: SWAP_RENEWAL.FAILED, failure: failure._tag } as const),
+      ),
+    );
+    if ("outcome" in next) return next;
+    yield* firewall.renew(next.session, launch, credential.slot, next.entry, next.sources);
+    return { outcome: SWAP_RENEWAL.RENEWED };
+  });
+
+/**
  * What the machine does to a place it already opened, over the API given:
  * everything but opening one and launching a runner in it, so a caller with
  * no edge's runner to hand the checkout, as a launch's end, still reaches it.
@@ -576,9 +674,8 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
       write: (place, userId, sources) => firewall.write(firewallSessionOf(place, userId), sources),
       keepLaunch: (place, userId, launch) =>
         firewall.keepLaunch(firewallSessionOf(place, userId), launch),
-      endLaunch: (place, userId, sources) =>
-        firewall.endLaunch(firewallSessionOf(place, userId), sources),
       clear: (place) => firewall.clear(sessionOfPlace(place)),
+      renew: (owner, ask) => swapRenewed(api, firewall, owner, ask),
     },
 
     stop: (place) =>
@@ -717,95 +814,68 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     });
 
   /**
-   * A sandbox `getOrCreate` created set up, as its `onCreate` sets it up: the
-   * `agent` user made in it as the SDK makes one, then, for an agent with a
-   * repository, that repository checked out on the drive
-   * (`checkedOutOnDrive`), on the read the caller made of it, which confirmed
-   * its workspace still reaches it before any sandbox opens on its code, and
-   * each repository it works in beside its own cloned whole into its folder
+   * A sandbox `getOrCreate` created set up for a launch, in its `onCreate`
+   * beside the `agent` user it makes (`../agent-sandbox-open.ts`): the
+   * agent's repository checked out on the drive (`checkedOutOnDrive`), on
+   * the read the caller made of it, which confirmed its workspace still
+   * reaches it before any sandbox opens on its code, and each repository it
+   * works in beside its own cloned whole into its folder
    * (`cloneAgentExtras`), one already standing on a kept drive left as it is.
    */
-  const setUp = (
+  const checkedOutIn = (
     context: Context.Context<DatabaseServices>,
-    agent: Agent,
-    checkout: AgentCheckoutReads | undefined,
+    checkout: AgentCheckoutReads,
     drive: AgentDrive,
     opened: OpenedPlace,
   ) =>
-    Effect.andThen(
-      api.createUser(opened.name, AGENT_USER, AGENT_HOME_FOLDERS),
-      Effect.suspend(() => {
-        if (checkout === undefined) return Effect.void;
-        const sandbox = checkoutOver(context, opened, agent.userId);
-        return Effect.andThen(
-          checkedOutOnDrive(checkout.agent, sandbox, checkout.read, drive.from),
-          cloneAgentExtras(sandbox, checkout.extras),
-        );
-      }),
-    );
+    Effect.suspend(() => {
+      const sandbox = checkoutOver(context, opened, checkout.agent.userId);
+      return Effect.andThen(
+        checkedOutOnDrive(checkout.agent, sandbox, checkout.read, drive.from),
+        cloneAgentExtras(sandbox, checkout.extras),
+      );
+    });
 
   /**
-   * The session's sandbox got or created under its name from the image at
-   * the size its repository asks for, with the session's drive mounted at
-   * the workspace, set up in its `onCreate` where it was created (`setUp`),
-   * and asked again while the registry still prepares the image
-   * (`IMAGE_RETRY`), with whether it was created. A setup that fails fails
-   * the open, and what it made is left as it stands. Note that the setup's
-   * own failure is the open's, because the SDK hands `onCreate`'s rejection
-   * on as the call's, which would read as Vercel's rather than in the
-   * checkout's words.
+   * The session's sandbox opened through `getOrCreate`
+   * (`../agent-sandbox-open.ts`) at the size the agent's repository asks
+   * for, with whether it was created, its checkout made in its `onCreate`
+   * where the agent has a repository and the sandbox was created
+   * (`checkedOutIn`). A setup that fails fails the open, and what it made is
+   * left as it stands. Note that the setup's own failure is the open's,
+   * because the SDK hands `onCreate`'s rejection on as the call's, which
+   * would read as Vercel's rather than in the checkout's words.
    */
   const gotOn = (
     agent: Agent,
     sessionId: string,
-    image: string,
     drive: AgentDrive,
     checkout: AgentCheckoutReads | undefined,
   ) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<DatabaseServices>();
-      let created = false;
-      const opened = yield* Effect.suspend(() => {
-        let refused: CheckoutRefused | SandboxUnavailable | undefined;
-        return api
-          .getOrCreate(
-            {
-              name: agentSandboxName(sessionId),
-              image,
-              tags: { [SESSION_TAG]: sessionId, [AGENT_TAG]: agent.id },
-              timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
-              vcpus: sandboxVcpus(agent.repository),
-              keepLastSnapshots: {
-                count: CODER.SANDBOX_SNAPSHOTS.count,
-                expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
-                deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
-              },
-              env: SANDBOX_ENV,
-              mounts: { [AGENT_DRIVE.MOUNT_PATH]: drive.name },
-            },
-            (sandbox) => {
-              created = true;
-              return run(
-                setUp(context, agent, checkout, drive, runningOf(sandbox)).pipe(
+      let refused: CheckoutRefused | undefined;
+      const { sandbox, created } = yield* openAgentSandbox(
+        api,
+        {
+          sessionId,
+          tags: agentSandboxTags(sessionId, agent.id),
+          vcpus: sandboxVcpus(agent.repository),
+        },
+        checkout === undefined
+          ? undefined
+          : (opened) =>
+              run(
+                checkedOutIn(context, checkout, drive, runningOf(opened)).pipe(
                   Effect.tapError((failure) =>
                     Effect.sync(() => {
                       refused = failure;
                     }),
                   ),
                 ),
-              );
-            },
-          )
-          .pipe(Effect.mapError((failure) => refused ?? failure));
-      }).pipe(
-        Effect.retry({
-          schedule: Schedule.spaced(IMAGE_RETRY.SPACED),
-          times: IMAGE_RETRY.TIMES,
-          while: (failure) =>
-            failure instanceof SandboxUnavailable && failure.code === IMAGE_NOT_READY,
-        }),
-      );
-      return { ...runningOf(opened), created };
+              ),
+      ).pipe(Effect.mapError((failure) => refused ?? failure));
+      return { ...runningOf(sandbox), created };
     });
 
   /**
@@ -842,13 +912,61 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         Option.getOrUndefined(base),
         agent.startedFrom?.drive,
       );
-      return yield* gotOn(agent, sessionId, image, drive, checkout);
+      return yield* gotOn(agent, sessionId, drive, checkout);
+    });
+
+  /**
+   * The agent's own checkout made whole in a place about to be relaunched:
+   * cloned where the place holds none, and finished as an opening finishes
+   * it (`finishCheckoutWith`) where it holds no commit identity, as after a
+   * restore whose finish failed; nothing where it holds a finished one. Note
+   * that a place can stand without one, because a launch whose checkout
+   * failed leaves its sandbox and its drive for the next message, which
+   * resumes them as kept and checks nothing out, so its runner would start
+   * in a folder that is not there.
+   */
+  const ownCheckoutRestored = (
+    place: OpenedPlace,
+    target: ConversationTarget,
+    agent: WithRepository<Agent>,
+  ) =>
+    Effect.gen(function* () {
+      const session = yield* api.session(sessionOfPlace(place));
+      const finished = yield* session.run({
+        command: "git",
+        args: ["config", "--file", CHECKOUT_CONFIG_PATH, "--get", "user.email"],
+      });
+      if (finished.exitCode === 0) return;
+      const holds = yield* session.run({ command: "test", args: ["-d", CHECKOUT_GIT_PATH] });
+      const [read, plan] = yield* Effect.all(
+        [
+          agentRepositoryRead(target, agent),
+          agentCheckoutPlan(target, agent).pipe(
+            Effect.mapError((failure) =>
+              failure instanceof CheckoutRefused
+                ? failure
+                : new CheckoutRefused({ reason: RESTORE_PLAN_UNREAD }),
+            ),
+          ),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const sandbox = yield* checkoutIn(place, agent.userId);
+      if (holds.exitCode !== 0) yield* cloneAgentRepository(agent, sandbox, read);
+      yield* finishCheckoutWith(sandbox, plan);
+      yield* Effect.logWarning(
+        holds.exitCode === 0
+          ? "A relaunch found its agent's checkout unfinished and finished it"
+          : "A relaunch found no checkout of its agent's repository and cloned it",
+      );
     });
 
   return {
     ...vercelLifecycle(api),
 
     layout: () => Effect.succeed(SANDBOX_LAYOUT),
+
+    deliverCredentials: (_agent, credentials) => heldAtFirewall(credentials),
 
     // What the checkout's finish reads of GitHub (`agentCheckoutPlan`) is read beside the sandbox's
     // opening and the caller's own reads, and kept as it ended, so a read that failed fails the
@@ -897,15 +1015,8 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     resume: (found, agent) =>
       Effect.gen(function* () {
         if (found.name === agentSandboxName(found.session)) {
-          const image = yield* Effect.flatMap(AgentImage, (agentImage) => agentImage.reference);
           const drive = { name: agentDriveName(found.session), from: AGENT_DRIVE_FROM.KEPT };
-          const { name, running, created } = yield* gotOn(
-            agent,
-            found.session,
-            image,
-            drive,
-            undefined,
-          );
+          const { name, running, created } = yield* gotOn(agent, found.session, drive, undefined);
           return { place: vercelPlace(found.session, name, running), created };
         }
         const resumed = yield* Effect.result(api.resume(found.name));
@@ -927,9 +1038,12 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     // Note that a clone run again finds the folder of a checkout already standing and clones nothing,
     // so only a repository added since the place opened is cloned here. A runner already running
     // keeps its repository credential through the clone, minted afresh, since each write is whole.
-    checkOutExtras: (place, target, agent, shared) =>
+    // Before a relaunch (not `shared`), the agent's own checkout is cloned first where the place
+    // holds none (`ownCheckoutRestored`).
+    checkOutMissing: (place, target, agent, shared) =>
       Effect.gen(function* () {
         if (!hasRepository(agent)) return;
+        if (!shared) yield* ownCheckoutRestored(place, target, agent);
         const reads = yield* agentExtraReads(target, agent);
         if (reads.length === 0) return;
         const beside = shared ? yield* agentFirewallSources(target, agent) : {};

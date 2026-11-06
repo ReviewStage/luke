@@ -16,7 +16,6 @@ import {
   workspaceIntegrationsLiveRowsSchema,
   workspaceIntegrationsOfLive,
 } from "@repo/features/workspace-integrations-live";
-import { carried } from "@repo/gateway";
 import {
   type EntityPool,
   type FieldChange,
@@ -25,7 +24,6 @@ import {
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Effect, type Scope } from "effect";
 import { type AppHostReads, type AppWorkspaceIntegrations, NO_KEYS_HELD } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
@@ -269,18 +267,20 @@ export function heldWorkspaceIntegrations(
   });
 }
 
-/** The window's answer carried as it crosses back, with no transaction, which is the host's to wait on and never the window's. */
-function sentryAnswered(answer: TasksWorkspaceSentryAnswer): WireValue {
-  if (!("sentry" in answer)) return carried<TasksWorkspaceSentryAnswer>(answer);
+/** The window's answer with no transaction, which is the host's to wait on and never the window's. */
+function sentryAnswered(answer: TasksWorkspaceSentryAnswer): TasksWorkspaceSentryAnswer {
+  if (!("sentry" in answer)) return answer;
   const { txid: _txid, ...sentry } = answer.sentry;
-  return carried<TasksWorkspaceSentryAnswer>({ sentry });
+  return { sentry };
 }
 
-/** The window's answer carried as it crosses back, with no transaction, as a Sentry answer is. */
-export function slackBotAnswered(answer: TasksWorkspaceSlackBotAnswer): WireValue {
-  if (!("slackBot" in answer)) return carried<TasksWorkspaceSlackBotAnswer>(answer);
+/** The window's answer with no transaction, as a Sentry answer is. */
+export function slackBotAnswered(
+  answer: TasksWorkspaceSlackBotAnswer,
+): TasksWorkspaceSlackBotAnswer {
+  if (!("slackBot" in answer)) return answer;
   const { txid: _txid, ...slackBot } = answer.slackBot;
-  return carried<TasksWorkspaceSlackBotAnswer>({ slackBot });
+  return { slackBot };
 }
 
 /** A Slack write's answer as the pool reads it: taken, standing until its transaction, or refused, which takes back what it drew. */
@@ -303,7 +303,7 @@ export function sentryDisconnect(
   SentryInstallationLiveRow,
   FieldChange<SentryInstallationLiveRow>,
   TasksWorkspaceSentryDisconnectParams,
-  WireValue
+  TasksWorkspaceSentryAnswer
 > {
   return {
     kind: SENTRY_INSTALLATION,
@@ -321,7 +321,12 @@ export function sentryDisconnect(
 /** The workspace's Slack bot disconnected, gone at once from every held read of the workspace, its channels' repositories with it; a refusal puts it back. */
 export function slackBotDisconnect(
   send: (params: TasksWorkspaceParams) => Effect.Effect<TasksWorkspaceSlackBotAnswer>,
-): WriteDeclaration<SlackBotRow, FieldChange<SlackBotRow>, TasksWorkspaceParams, WireValue> {
+): WriteDeclaration<
+  SlackBotRow,
+  FieldChange<SlackBotRow>,
+  TasksWorkspaceParams,
+  TasksWorkspaceSlackBotAnswer
+> {
   return {
     kind: SLACK_BOT,
     keys: (params) => [params.workspaceId],
@@ -339,7 +344,7 @@ export function slackBotRepository(
   SlackBotRow,
   FieldChange<SlackBotRow>,
   TasksWorkspaceSlackBotRepositoryParams,
-  WireValue
+  TasksWorkspaceSlackBotAnswer
 > {
   return {
     kind: SLACK_BOT,
@@ -368,7 +373,7 @@ export function slackBotChannel(
   SlackBotRow,
   FieldChange<SlackBotRow>,
   TasksWorkspaceSlackBotChannelParams,
-  WireValue
+  TasksWorkspaceSlackBotAnswer
 > {
   return {
     kind: SLACK_BOT,

@@ -53,7 +53,6 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { appPlatform } from "../app-platform.js";
 import { useDraft } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import type { MenuAction } from "../desktop/action-menu.js";
@@ -127,7 +126,6 @@ import { FileTreePane } from "./file-tree-pane.js";
 import {
   barMenuItems,
   FileViewBar,
-  gitHubAction,
   paneToggleAction,
   type TreeShown,
   TreeToggle,
@@ -173,9 +171,8 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  * under a header of its own that folds it, names it, with the letter of
  * what became of it and the lines it adds and removes, and stays at the top
  * while its lines scroll by; a file with no hunks says why under its header.
- * Its bar holds the pull request's files on GitHub, the diff
- * settings, every one stage-cli offers in a popover (`view-settings.tsx`),
- * Collapse all or Expand all, the ⋯ (the pull request's patch copied or
+ * Its bar holds the diff settings, every one stage-cli offers in a popover
+ * (`view-settings.tsx`), Collapse all or Expand all, the ⋯ (the pull request's patch copied or
  * saved, and the changes read again), and the tree's toggle, which shows
  * and hides the tree for every File and Changes tab alike. A view a host
  * draws inside its own page, as a chapter is (`agent-chapters-tab.tsx`),
@@ -286,9 +283,6 @@ function useChangesMenu({
     ],
   };
 }
-
-/** What a phone's ⋯ calls Files changed's own Open on GitHub, told from the pull request's beside it. */
-const OPEN_FILES_ON_GITHUB = "Open files on GitHub";
 
 /** Collapse all or Expand all as an item of a phone's ⋯, as the bar's button is. */
 function foldAllAction(list: ChangesList): MenuAction {
@@ -1726,8 +1720,8 @@ export interface FileReveal {
  * A bar of the host's that draws the view's tools in place of its own
  * (`FileViewBar`), as a chapter's header does: its diff settings and Collapse
  * all, drawn into `tools`, and the tree's toggle, drawn into `end`, at the
- * bar's very end past its ⋯, as every tab's bar stands it; the view's pull
- * request on GitHub and its ⋯ over the whole pull request left to the host, and no strip standing in the closed tree's place.
+ * bar's very end past its ⋯, as every tab's bar stands it; the view's ⋯
+ * over the whole pull request left to the host, and no strip standing in the closed tree's place.
  */
 export interface ChangesBarHost {
   /** The box in the host's bar the tools are drawn into; none until it is drawn. */
@@ -1849,20 +1843,14 @@ export function AgentChangesTab({
   // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown;
   // a host's own bar offers nothing that acts on the whole pull request.
   const phone = usePhoneRoom();
-  const url = pullRequest?.url;
   useTabActions(
-    phone && shown && url !== undefined && shownFileOf(changed.files, list.current) !== undefined
+    phone &&
+      shown &&
+      pullRequest?.url !== undefined &&
+      shownFileOf(changed.files, list.current) !== undefined
       ? host === undefined
         ? [
-            [
-              paneToggleAction(room),
-              {
-                ...gitHubAction(() => appPlatform().openGitHub(`${url}/files`)),
-                label: OPEN_FILES_ON_GITHUB,
-              },
-              settings.action,
-              foldAllAction(list),
-            ],
+            [paneToggleAction(room), settings.action, foldAllAction(list)],
             ...barMenuItems(changesMenu),
           ]
         : [[paneToggleAction(room), settings.action, foldAllAction(list)]]
@@ -1942,10 +1930,6 @@ export function AgentChangesTab({
         </>
       ) : (
         <FileViewBar
-          github={{
-            href: `${pullRequest.url}/files`,
-            open: (url) => appPlatform().openGitHub(url),
-          }}
           menu={
             <>
               <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />

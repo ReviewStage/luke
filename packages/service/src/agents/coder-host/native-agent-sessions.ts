@@ -20,7 +20,6 @@ import { type Agent, hasRepository } from "@repo/database/models/agent-store";
 import { readNativeSequence } from "@repo/database/models/native-projection-store";
 import { readTaskHeader } from "@repo/database/models/task-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
-import { EXPERIMENT } from "@repo/settings";
 import { Effect, Layer, Option } from "effect";
 import { deploymentOrigin } from "../../deployment-origin.js";
 import { logStoreFailure } from "../../http/store-failure.js";
@@ -34,9 +33,10 @@ import type { SandboxRunner } from "../machine/vercel-machine.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { RUNNER_LINES_PATH } from "../native-events/runner-lines-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
+import { RUNNER_TRANSCRIPTS_PATH } from "../native-events/runner-transcripts-app.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
+import { standingOfAgent } from "../tool-catalog/gates.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
-import { experimentOnIn } from "../workspace-experiment-on.js";
 import { WORKSPACE_MCP_PATH, workspaceIntegrationMcpUrl } from "../workspace-mcp/app.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { agentAuthorship, agentCiReadable } from "./checkout.js";
@@ -93,7 +93,7 @@ const agentExtraCheckouts = (userId: string, agent: Agent) =>
  * what its row names (`instructions.ts`'s `agentCoderInstructions`): whether
  * its token reads the repository's CI, whose its commits are and the
  * co-author trailer where its starter's choice credits one, the workspace its links are written under, the number
- * its task goes by there, and whether its workspace has Memory and Task descriptions on.
+ * its task goes by there, and where it stands against our tools' gates, read once (`standingOfAgent`).
  */
 const nativeCoderInstructions = (
   userId: string,
@@ -110,16 +110,14 @@ const nativeCoderInstructions = (
       Effect.orElseSucceed(() => agent.organizationId),
     );
     const taskNumber = yield* agentTaskNumber(userId, agent);
-    const memoryOn = yield* experimentOnIn(agent.organizationId, EXPERIMENT.MEMORY);
-    const descriptionsOn = yield* experimentOnIn(agent.organizationId, EXPERIMENT.DESCRIPTIONS);
+    const standing = yield* standingOfAgent(Option.some(agent));
     const extraRepositories = hasRepository(agent) ? yield* agentExtraCheckouts(userId, agent) : [];
     return agentCoderInstructions(agent, {
       ciReadable,
       authorship,
       workspace,
       taskNumber,
-      memoryOn,
-      descriptionsOn,
+      standing,
       harness,
       place,
       ...(extraRepositories.length === 0 ? undefined : { extraRepositories }),
@@ -161,6 +159,7 @@ export function nativeAgentSessionsLayer(
         eventsUrl: new URL(RUNNER_EVENTS_PATH, origin).href,
         linesUrl: new URL(RUNNER_LINES_PATH, origin).href,
         mcpUrl: new URL(WORKSPACE_MCP_PATH, origin).href,
+        transcriptsUrl: new URL(RUNNER_TRANSCRIPTS_PATH, origin).href,
         integrations: (agent) =>
           nativeIntegrations(account, agent, origin).pipe(Effect.provideContext(context)),
         instructions: (agent, place) =>

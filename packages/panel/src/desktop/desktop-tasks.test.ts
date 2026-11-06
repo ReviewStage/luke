@@ -47,6 +47,7 @@ import { TASKS_ACT_KIND } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
+import { agentTab, changesTab, draftTab, fileTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
 import { act, createElement, Fragment } from "react";
@@ -91,7 +92,7 @@ afterEach(() => {
 
 /** The side panel shown on the description's comments beside it. */
 /** A File tab of the task, which the panel draws in these tests. */
-const NOTES = { file: "docs/notes.md" };
+const NOTES = fileTab("docs/notes.md");
 
 /** The file the File tab shows, opened on the task. */
 const NOTES_OPENED = { path: NOTES.file, range: undefined, opened: 0, browsedOn: TASK.id };
@@ -249,8 +250,8 @@ test("a task with no agent tab draws a new agent's draft", () => {
             region: { kind: DOCUMENT_REGION.READY, task: TASK },
             mainTabs: {
               ...tasksControl().mainTabs,
-              tabs: [{ draft: DRAFT_ID }],
-              tab: { draft: DRAFT_ID },
+              tabs: [draftTab(DRAFT_ID)],
+              tab: draftTab(DRAFT_ID),
             },
             agents: agentsControl({
               agentIds: [],
@@ -313,13 +314,13 @@ test("a wide task's details with no agent offer New agent at their head, which o
     ) ?? assert.fail("the way back to the agents stands");
   act(() => back.click());
 
-  assert.deepEqual(chosen, [{ draft: "draft" }, { draft: "draft" }], "both open a draft alike");
+  assert.deepEqual(chosen, [draftTab("draft"), draftTab("draft")], "both open a draft alike");
   act(() => root.unmount());
   container.remove();
 });
 
 /** A draft agent's tab, which a page beside its side panel shows. */
-const DRAFT_TAB = { draft: "draft" };
+const DRAFT_TAB = draftTab("draft");
 
 /** The task's page with the side panel open on `tab`, as markup. */
 function panelTab(): HTMLElement {
@@ -867,7 +868,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   act(() => own.click());
   assert.deepEqual(opened, [
     { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
-    { changes: agent.id },
+    changesTab(agent.id),
   ]);
   assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
 
@@ -877,9 +878,9 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   act(() => chip("relay#9")?.click());
   assert.deepEqual(opened.slice(2), [
     { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
-    { changes: agent.id, number: 7 },
+    changesTab(agent.id, 7),
     { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
-    { changes: agent.id, number: 9 },
+    changesTab(agent.id, 9),
   ]);
   assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
 
@@ -934,7 +935,7 @@ test("the description stays drawn, hidden, while an agent's tab of the column is
   const column = (tab: MainTab): Partial<TasksControl> => ({
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
+      tabs: [MAIN_TAB.OVERVIEW, agentTab(agentId)],
       tab,
       openAgents: [agentId],
     },
@@ -944,7 +945,7 @@ test("the description stays drawn, hidden, while an agent's tab of the column is
   assert.ok(document, "the description is drawn on Overview");
   assert.equal(document.hasAttribute("hidden"), false);
 
-  page.draw(NOTES, column({ agent: agentId }));
+  page.draw(NOTES, column(agentTab(agentId)));
   assert.equal(
     page.container.querySelector(".desktop-document"),
     document,
@@ -969,8 +970,8 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
     {
       mainTabs: {
         ...tasksControl().mainTabs,
-        tabs: [MAIN_TAB.OVERVIEW, { agent: agentId }],
-        tab: { agent: agentId },
+        tabs: [MAIN_TAB.OVERVIEW, agentTab(agentId)],
+        tab: agentTab(agentId),
         onClose: () => closed.push("column"),
       },
       sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },

@@ -15,10 +15,10 @@ import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import type { WireValue } from "@repo/wire";
 import { describe, test } from "vitest";
 import {
+  type AppDescriptionDocuments,
   type AppHolderInboxes,
   type AppInboxItems,
   type AppPages,
-  type AppDescriptionDocuments,
   type AppStateDelivery,
   type AppStateSnapshot,
   type AppTranscript,

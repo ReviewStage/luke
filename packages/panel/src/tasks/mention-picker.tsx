@@ -30,7 +30,7 @@ import { TASK_TREE_ENTRY, type TaskSummary } from "@repo/features/task-wire";
 import { thingOfMention } from "@repo/features/thing-kind";
 import {
   countWords,
-  INTEGRATION_LABEL,
+  MCP_SERVER_LABEL,
   noMatchWords,
   readFailedWords,
   TERM,
@@ -259,7 +259,7 @@ const MENTION_GROUP = {
   AUTOMATIONS: "Automations",
   PULL_REQUESTS: "Pull requests",
   SKILLS: "Skills",
-  SERVERS: INTEGRATION_LABEL.many,
+  SERVERS: MCP_SERVER_LABEL.many,
   FROM: "Mention from",
 } as const;
 
@@ -332,7 +332,7 @@ const PICK_DATE_KEY = "pick-date";
 const SKILL_DETAIL = "Skill";
 
 /** What a server's row says beside its name. */
-const SERVER_DETAIL = INTEGRATION_LABEL.one;
+const SERVER_DETAIL = MCP_SERVER_LABEL.one;
 
 /** What a tool's row says beside its name, which already names its server. */
 const TOOL_DETAIL = "Tool";

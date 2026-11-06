@@ -176,6 +176,10 @@
           "dest": "/api/default.js?route=agents/runner-token"
         },
         {
+          "src": "/api/agents/runner-transcripts",
+          "dest": "/api/default.js?route=agents/runner-transcripts"
+        },
+        {
           "src": "/api/envelopes/forward",
           "dest": "/api/default.js?route=envelopes/forward"
         },

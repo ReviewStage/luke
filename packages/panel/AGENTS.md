@@ -20,7 +20,8 @@ State arrives on `app:state` alone, read through `use-app-state.ts` and never
 subscribed to twice. Read it with `useQuery({ ...appStateQuery, select })` and the narrowest slice a surface
 draws from (a `select…` of `use-app-state.ts`, or a `memoizedSelect` over several), so a patch to one slice draws only
 its readers; `appStateQuery` with no `select` only where the whole document is handed on; or
-`appStateNow` for a callback that cannot wait a render — never the registry
+`appStateIn(client)` for a callback that cannot wait a render, on the client its
+caller holds (`useQueryClient`'s, a root's, or a test's) — never the registry
 directly, so a hook and a callback cannot disagree. The channels beside it carry
 events rather than state: a one-shot to a named receiver a late subscriber must
 not receive, or a reading that expires before the next version could carry it.

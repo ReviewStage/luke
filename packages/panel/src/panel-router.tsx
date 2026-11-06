@@ -57,6 +57,7 @@ import {
 } from "./desktop/desktop-shell.js";
 import {
   adminRouteStands,
+  pathUnder,
   type RouteAccess,
   settingsPageRouteStands,
   UNREAD_ROUTE_ACCESS,
@@ -64,7 +65,6 @@ import {
   versionHistoryRouteStands,
   workspaceRouteStands,
 } from "./route-gates.js";
-import { pathUnder } from "./routed-location.js";
 
 /** A task's link naming one of its comment threads, `?comment=<threadId>`; every other key the address carries is left as it stands. */
 const taskSearchSchema = Schema.toStandardSchemaV1(

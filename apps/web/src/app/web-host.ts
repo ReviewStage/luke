@@ -316,10 +316,12 @@ function portDependencies(
   return {
     account: {
       host,
+      acts: operator.acts,
       haltSessionReplay: operator.haltSessionReplay,
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    acts: operator.acts,
     agentInbox: { host },
     agents: { host, notices },
     automations: { host },
@@ -333,6 +335,7 @@ function portDependencies(
     pushes: new WindowPushes(),
     settings: {
       host,
+      acts: operator.acts,
       reporterOf: (actor) => (actor.sender === window ? reporter : undefined),
       lastSettings: () => operator.settings(),
       sideEffects: {
@@ -421,6 +424,7 @@ const composedWeb = (
       const operator = yield* createOperatorClient({
         report,
         gateway: assembly.gateway,
+        acts: assembly.acts,
         nodes: assembly.nodes,
         node: { openExternal: async (url) => tabs.open(url) },
         state,

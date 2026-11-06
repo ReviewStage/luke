@@ -13,6 +13,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentModelChip } from "./agent-model-chip.js";
@@ -123,7 +124,7 @@ test("turning Fast on in the chip's menu leaves the menu where it stood", () => 
   document.body.append(view);
   const root = createRoot(view);
   roots.push(root);
-  act(() => root.render(createElement(Owned)));
+  act(() => root.render(withQueryClient(createElement(Owned))));
 
   const chip = view.querySelector<HTMLButtonElement>(".agent-model-chip button");
   assert.ok(chip);
@@ -206,19 +207,21 @@ function openMenuOn(
   roots.push(root);
   act(() =>
     root.render(
-      createElement(AgentModelChip, {
-        model: {
-          choice,
-          note: undefined,
-          choose: () => undefined,
-          runtime,
-        },
-        models,
-        modelsFailed: false,
-        readModels: () => undefined,
-        usage,
-        payer,
-      }),
+      withQueryClient(
+        createElement(AgentModelChip, {
+          model: {
+            choice,
+            note: undefined,
+            choose: () => undefined,
+            runtime,
+          },
+          models,
+          modelsFailed: false,
+          readModels: () => undefined,
+          usage,
+          payer,
+        }),
+      ),
     ),
   );
   const chip = view.querySelector<HTMLButtonElement>(".agent-model-chip button");
@@ -313,18 +316,20 @@ test("an automation's chip, whose choice a new agent starts on, says a model not
     roots.push(root);
     act(() =>
       root.render(
-        createElement(AgentModelChip, {
-          model: {
-            choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
-            note: undefined,
-            choose: () => undefined,
-          },
-          models: unconnected,
-          modelsFailed: false,
-          readModels: () => undefined,
-          usage: undefined,
-          startsNew,
-        }),
+        withQueryClient(
+          createElement(AgentModelChip, {
+            model: {
+              choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
+              note: undefined,
+              choose: () => undefined,
+            },
+            models: unconnected,
+            modelsFailed: false,
+            readModels: () => undefined,
+            usage: undefined,
+            startsNew,
+          }),
+        ),
       ),
     );
     const chip = view.querySelector<HTMLButtonElement>(".agent-model-chip button");

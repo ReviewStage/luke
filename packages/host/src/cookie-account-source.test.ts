@@ -8,10 +8,9 @@ import { accountCall, CALL_FAULT, HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@re
 import { PRODUCT_EVENT, PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { ProductEventSender } from "@repo/features/analytics/sender";
 import { LINK_OPEN } from "@repo/features/link-open";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { EXPERIMENT } from "@repo/settings";
-import { ACTION_RESULT_STATUS, HTTP_METHOD, isRecord } from "@repo/wire";
+import { ACTION_RESULT_STATUS, HTTP_METHOD } from "@repo/wire";
 import {
   HTTP_STATUS,
   jsonResponse,
@@ -50,7 +49,6 @@ const ACCOUNT_BASE_URL = `${ORIGIN}/api/auth`;
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
 /** A hosted route the account reaches, which refuses a request with no session behind it. */
 const HOSTED_ROUTE = HOSTED_SERVICE_PATH.ACCOUNT_ACCESS;
-const CONTEXT = { client: { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 const USER = {
   id: "user-1",
@@ -1153,18 +1151,15 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     assert.equal(state.linkOpen, LINK_OPEN.MAC_APP);
 
     // An experiment's switch is written for the same account and lands.
-    const set = settings.methods[GATEWAY_METHOD.EXPERIMENTS_SET];
-    assert.ok(set);
-    const result = yield* Effect.orDie(set({ experiment: EXPERIMENT.MEMORY, on: true }, CONTEXT));
-    assert.ok(isRecord(result));
+    const set = settings.acts.EXPERIMENT_SET;
+    const result = yield* Effect.orDie(set({ experiment: EXPERIMENT.MEMORY, on: true }));
     assert.equal(result.status, ACTION_RESULT_STATUS.ACCEPTED);
     assert.equal((yield* experiments)[EXPERIMENT.MEMORY], true);
     assert.equal(state.experiments[EXPERIMENT.MEMORY], true);
 
     // Another tab signs in as someone else; a switch pressed here for the first account is sent for no one.
     state.user = { ...USER, id: "user-2", email: "other@example.com" };
-    const stale = yield* Effect.orDie(set({ experiment: EXPERIMENT.PILOT, on: true }, CONTEXT));
-    assert.ok(isRecord(stale));
+    const stale = yield* Effect.orDie(set({ experiment: EXPERIMENT.PILOT, on: true }));
     assert.equal(stale.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(stale.reason, EXPERIMENT_ACCOUNT_CHANGED);
     assert.equal(state.experiments[EXPERIMENT.PILOT], undefined);

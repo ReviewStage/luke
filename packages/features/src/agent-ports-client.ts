@@ -2,15 +2,13 @@
  * agent-ports-client.ts -- a coding agent's listening ports, as the desktop's host asks the service for them while it forwards them: the ports read, and the tunnel address one port's socket opens on.
  *
  * Every call is a procedure of the hosted contract over the one account
- * call (`hosted-link.ts`). Anything the service did not answer, a refusal
- * among it, answers nothing, which the host reads as no new look.
+ * call (`hosted-link.ts`), answering what the service said or how the call
+ * failed (`hostedCall`); the host reads any failure as no new look.
  */
 
-import { Effect } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
-import { askHosted, type HostedClient, hostedClient } from "./hosted-link.js";
-import type { ListeningPortsAnswer } from "./listening-ports-wire.js";
+import { hostedCall } from "./hosted-call.js";
+import { type HostedClient, hostedClient } from "./hosted-link.js";
 import { SANDBOX_TUNNEL, TUNNEL_KIND } from "./sandbox-tunnel-wire.js";
 
 export interface HostedAgentPortsClientOptions {
@@ -44,12 +42,7 @@ export class HostedAgentPortsClient {
   }
 
   /** The ports listened on in the agent's sandbox, and whether it runs; a stopped sandbox is never woken by it. */
-  list(
-    agentId: string,
-  ): Effect.Effect<ListeningPortsAnswer | undefined, never, HttpClient.HttpClient> {
-    return Effect.orElseSucceed(
-      askHosted(this.#hosted.agentPorts.list, { id: agentId }),
-      () => undefined,
-    );
+  list(agentId: string) {
+    return hostedCall(this.#hosted.agentPorts.list, { id: agentId });
   }
 }

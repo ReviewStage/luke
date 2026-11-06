@@ -32,18 +32,23 @@ import {
   localAgentRefusalSchema,
   refusedDeviceSchema,
 } from "./agent-wire.js";
+import { accountContract } from "./contract/account.js";
+import { dictationContract } from "./contract/dictation.js";
+import { githubTokenContract } from "./contract/github-token.js";
+import { modelsContract } from "./contract/models.js";
 import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
-import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
+import { dictationRequestSchema } from "./dictation-wire.js";
 import { failureFactsSchema } from "./failure-facts.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
-import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
+import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   devicePresenceAnswerSchema,
   hostDoneAnswerSchema,
   hostIdRequestSchema,
   hostsAnswerSchema,
 } from "./host-wire.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
 import {
   inboxAcknowledgeRequestSchema,
   inboxAnsweredSchema,
@@ -57,17 +62,14 @@ import {
   inboxReadStateSchema,
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
-import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
-import { modelChoiceSchema, modelProviderSchema, modelsAnswerSchema } from "./models-wire.js";
+import { memoryIdSchema } from "./memory-wire.js";
+import { modelChoiceSchema, modelProviderSchema } from "./models-wire.js";
 import {
   chatGptDeviceLoginRequestSchema,
-  chatGptDevicePollAnswerSchema,
-  chatGptDeviceStartAnswerSchema,
   PROVIDER_KEY_PROVIDER,
   providerKeyForAgentsRequestSchema,
   providerKeyKindSchema,
   providerKeySaveRequestSchema,
-  providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
 import {
   pullRequestActionRequestSchema,
@@ -75,7 +77,7 @@ import {
   pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
-import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { countedNumber, HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
 import { workspaceToolsAnswerSchema } from "./workspace-tools-wire.js";
 
 /**
@@ -103,20 +105,53 @@ import { workspaceToolsAnswerSchema } from "./workspace-tools-wire.js";
  * the reasons.
  */
 
-/** Why a coding-agent call answered nothing a window can draw. */
+/**
+ * The failures the window reads in an older spelling than the refusal's
+ * own: a choice the service refuses as an invalid request is one it does
+ * not offer now.
+ */
+export const AGENT_RENAMES = {
+  [HOSTED_API_ERROR.INVALID_REQUEST]: "invalid-choice",
+} as const;
+
+/** The procedures of the account's own the agent client asks through `hostedCall`, as their contracts declare their refusals. */
+const AGENT_ACCOUNT_CALLS = {
+  models: modelsContract,
+  dictation: dictationContract,
+  githubToken: githubTokenContract,
+  account: {
+    writePreferences: accountContract.writePreferences,
+    providerKeys: accountContract.providerKeys,
+    saveProviderKey: accountContract.saveProviderKey,
+    setProviderKeyForAgents: accountContract.setProviderKeyForAgents,
+    removeProviderKey: accountContract.removeProviderKey,
+    memories: accountContract.memories,
+    forgetMemory: accountContract.forgetMemory,
+    startChatGptDeviceLogin: accountContract.startChatGptDeviceLogin,
+    pollChatGptDeviceLogin: accountContract.pollChatGptDeviceLogin,
+    cancelChatGptDeviceLogin: accountContract.cancelChatGptDeviceLogin,
+  },
+};
+
+/**
+ * Why a coding-agent call answered nothing a window can draw: the failures
+ * the account's own procedures declare (`AGENT_ACCOUNT_CALLS`), among them
+ * no answer at all (`unanswered`), the task, agent, or workspace not one
+ * the account holds (`not-found`), one only another member may act on
+ * (`not-permitted`), a model or effort the service does not offer now
+ * (`invalid-choice`), a clip dictated with no OpenAI key saved
+ * (`openai-key-missing`), and a ChatGPT sign-in braked (`quota-exhausted`)
+ * or given no code (`upstream-error`); and beside them those of the calls
+ * that still read their refusals through a table of their own.
+ */
 export const AGENT_CALL_FAILURE = {
-  /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
-  UNANSWERED: "unanswered",
-  /** The task or the agent is not one the account holds: deleted, or never the caller's. */
-  NOT_FOUND: "not-found",
+  ...failureSetOf(AGENT_ACCOUNT_CALLS, { as: AGENT_RENAMES }),
   /** The task names no repository, so there is nothing for an agent to check out. */
   NO_REPOSITORY: "no-repository",
   /** The task's workspace's GitHub installation does not reach the task's repository; why travels beside it where the service said. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** GitHub did not answer whether the workspace reaches the repository; the same call a moment later may be taken. */
   GITHUB_UNANSWERED: "github-unanswered",
-  /** The model or effort named is not one the service offers now. */
-  INVALID_CHOICE: "invalid-choice",
   /** The message spells more characters than one message to an agent may; shortened, it is taken. */
   MESSAGE_TOO_LONG: "message-too-long",
   /** The agent's session is still coming up and could not take the message yet; the same message a moment later is taken. */
@@ -125,8 +160,6 @@ export const AGENT_CALL_FAILURE = {
   AGENT_RETIRED: "agent-retired",
   /** The agent ran on a host its starter removed, so no message reaches it again; only a new agent goes on from here. */
   DEVICE_REMOVED: "device-removed",
-  /** The agent runs on its starter's own GitHub token, so only its starter messages it or starts an agent from it. */
-  NOT_PERMITTED: "not-permitted",
   /** The agent runs on Claude Code or Codex, which this part of the app cannot reach yet. */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again. */
@@ -141,8 +174,6 @@ export const AGENT_CALL_FAILURE = {
   AGENT_CREDENTIAL_MISSING: "agent-credential-missing",
   /** The agent runs on its starter's API key, which is saved but cannot be read here, so it is saved again in Settings › Agents. */
   AGENT_API_KEY_UNREADABLE: "agent-api-key-unreadable",
-  /** A dictated clip is heard on the account's own OpenAI API key, and the account saved none. */
-  OPENAI_KEY_MISSING: "openai-key-missing",
   /** The device the Start would run its agent on would not take it, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
   /** The repositories the Start named beside its agent's own were refused, for the reason that travels beside it where the service said (`EXTRA_REPOSITORY_REFUSAL`), with the repository where one is why. */
@@ -172,7 +203,7 @@ const failedReaching = EffectSchema.Struct({
 });
 
 /** The models the service offers, as the window hears them: the list and the Mac a Start may run on where it offers one (`modelsAnswerSchema`), or why there is none. */
-export const agentModelsAnswerSchema = EffectSchema.Union([modelsAnswerSchema, failed]);
+export const agentModelsAnswerSchema = answerView(modelsContract.list);
 
 export type AgentModelsAnswer = typeof agentModelsAnswerSchema.Type;
 
@@ -182,7 +213,7 @@ export const agentDefaultAnswerViewSchema = EffectSchema.Union([
     choice: modelChoiceSchema,
     txid: EffectSchema.optionalKey(EffectSchema.String),
   }),
-  failed,
+  answerView(accountContract.writePreferences, { as: AGENT_RENAMES }).members[1],
 ]);
 
 export type AgentDefaultAnswer = typeof agentDefaultAnswerViewSchema.Type;
@@ -217,7 +248,7 @@ export const thisMacHostSetParamsSchema = EffectSchema.Struct({
 export type ThisMacHostSetParams = typeof thisMacHostSetParamsSchema.Type;
 
 /** The account's own provider keys, as the window hears them read, saved, or removed: the keys as they stand, or why there are none. */
-export const providerKeysAnswerViewSchema = EffectSchema.Union([providerKeysAnswerSchema, failed]);
+export const providerKeysAnswerViewSchema = answerView(accountContract.providerKeys);
 
 export type ProviderKeysAnswerView = typeof providerKeysAnswerViewSchema.Type;
 
@@ -226,10 +257,9 @@ export type ProviderKeysAnswerView = typeof providerKeysAnswerViewSchema.Type;
  * enter, where, how often to ask again, and when it lapses; or why there is
  * none. What claims the sign-in stays on the service.
  */
-export const chatGptDeviceStartAnswerViewSchema = EffectSchema.Union([
-  chatGptDeviceStartAnswerSchema,
-  failed,
-]);
+export const chatGptDeviceStartAnswerViewSchema = answerView(
+  accountContract.startChatGptDeviceLogin,
+);
 
 export type ChatGptDeviceStartAnswerView = typeof chatGptDeviceStartAnswerViewSchema.Type;
 
@@ -253,10 +283,7 @@ export const chatGptDeviceWaitParamsSchema = EffectSchema.Struct({
 export type ChatGptDeviceWaitParams = typeof chatGptDeviceWaitParamsSchema.Type;
 
 /** How a device-code login stands, as the window hears a wait or a cancel end: its outcome, a failure's fixed sentence, and the keys once connected; or why there is no answer. */
-export const chatGptDevicePollAnswerViewSchema = EffectSchema.Union([
-  chatGptDevicePollAnswerSchema,
-  failed,
-]);
+export const chatGptDevicePollAnswerViewSchema = answerView(accountContract.pollChatGptDeviceLogin);
 
 export type ChatGptDevicePollAnswerView = typeof chatGptDevicePollAnswerViewSchema.Type;
 
@@ -279,7 +306,7 @@ export const providerKeyForAgentsParamsSchema = providerKeyForAgentsRequestSchem
 export type ProviderKeyForAgentsParams = typeof providerKeyForAgentsParamsSchema.Type;
 
 /** The member's own GitHub token, as the window hears it read, saved, or removed: what it is, or why there is no answer. */
-export const githubTokenAnswerViewSchema = EffectSchema.Union([githubTokenAnswerSchema, failed]);
+export const githubTokenAnswerViewSchema = answerView(githubTokenContract.read);
 
 export type GitHubTokenAnswerView = typeof githubTokenAnswerViewSchema.Type;
 
@@ -289,7 +316,7 @@ export const githubTokenSaveParamsSchema = githubTokenSaveRequestSchema;
 export type GitHubTokenSaveParams = typeof githubTokenSaveParamsSchema.Type;
 
 /** A workspace's memories, as the window hears one forgotten: the memories as they stand, or why there are none. */
-export const memoriesAnswerViewSchema = EffectSchema.Union([memoriesAnswerSchema, failed]);
+export const memoriesAnswerViewSchema = answerView(accountContract.forgetMemory);
 
 export type MemoriesAnswerView = typeof memoriesAnswerViewSchema.Type;
 
@@ -692,10 +719,7 @@ export const dictationTranscribeParamsSchema = dictationRequestSchema;
 export type DictationTranscribeParams = typeof dictationTranscribeParamsSchema.Type;
 
 /** A dictated clip's words, as the window hears them: the text, or why there is none. */
-export const dictationTranscribeAnswerViewSchema = EffectSchema.Union([
-  dictationAnswerSchema,
-  failed,
-]);
+export const dictationTranscribeAnswerViewSchema = answerView(dictationContract.transcribe);
 
 export type DictationTranscribeAnswerView = typeof dictationTranscribeAnswerViewSchema.Type;
 
@@ -731,13 +755,36 @@ export const agentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSch
 
 export type AgentInboxAnsweredView = typeof agentInboxAnsweredViewSchema.Type;
 
-/** A close of one item without an answer, as the window asks it: the item, and the close request the service takes, its key the window's own. It is heard as an answer is (`agentInboxAnsweredViewSchema`). */
+/**
+ * A close of one item without an answer, as the window asks it: the item,
+ * and the close request the service takes, its key the window's own; and,
+ * where it is `held`, that the window offers Undo for it, so the host draws
+ * it at once and sends it only once the window lets it go
+ * (`agentInboxCloseReleaseParamsSchema`). It is heard as an answer is
+ * (`agentInboxAnsweredViewSchema`).
+ */
 export const agentInboxCloseParamsSchema = EffectSchema.Struct({
   itemId: EffectSchema.NonEmptyString,
   ...inboxCloseRequestSchema.fields,
+  held: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type AgentInboxCloseParams = typeof agentInboxCloseParamsSchema.Type;
+
+/** A held close let go by the window that asked it, by the close's key: sent to the service, or, where `send` is false, taken back as its Undo asks. */
+export const agentInboxCloseReleaseParamsSchema = EffectSchema.Struct({
+  clientKey: EffectSchema.NonEmptyString,
+  send: EffectSchema.Boolean,
+});
+
+export type AgentInboxCloseReleaseParams = typeof agentInboxCloseReleaseParamsSchema.Type;
+
+/** What letting a held close go found: whether it was still held, which an Undo that came too late hears as false. */
+export const agentInboxCloseReleasedViewSchema = EffectSchema.Struct({
+  held: EffectSchema.Boolean,
+});
+
+export type AgentInboxCloseReleasedView = typeof agentInboxCloseReleasedViewSchema.Type;
 
 /** A message on one item's thread, as the window asks it: the item, and the message request the service takes, its key the window's own. */
 export const agentInboxMessageParamsSchema = EffectSchema.Struct({

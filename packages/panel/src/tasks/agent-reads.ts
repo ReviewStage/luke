@@ -64,15 +64,6 @@ export function repositorySkillsQueryOptions(params: TasksSkillsParams) {
   });
 }
 
-/** An agent's sandbox and the shells it holds, as the terminal picker reads them as it opens. */
-export function terminalListQueryOptions(agentId: string) {
-  return queryOptions({
-    queryKey: [QUERY_ROOT.TERMINAL_LIST, agentId],
-    queryFn: () => askAct(ACT_KIND.TERMINAL_LIST, { agentId }),
-    retry: false,
-  });
-}
-
 /** An agent's changes the service did not carry, as their query's error, carrying the answer it gave. */
 export class ChangesFailed extends Error {
   readonly answer: Extract<AgentChangesAnswerView, { readonly failure: unknown }>;

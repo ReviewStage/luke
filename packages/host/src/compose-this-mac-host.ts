@@ -1,8 +1,8 @@
 import { type HostedDeviceAgentClient, OWN_ENROLL_OUTCOME } from "@repo/features";
-import { AGENT_CALL_FAILURE, thisMacHostSetParamsSchema } from "@repo/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { HOST_RELEASE } from "@repo/features/host-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
+import { carried, GATEWAY_EVENT } from "@repo/gateway";
 import { EXPERIMENT, type Experiment } from "@repo/settings";
 import {
   Duration,
@@ -23,7 +23,9 @@ import type { ChildProcessSpawner } from "effect/process";
 import { type AppThisMacHost, type AppThisMacHosts, NO_KEYS_HELD } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { AGENT_ACTS } from "./contract/index.js";
 import { Reporter, ThisMacHost } from "./effect/seams.js";
+import type { HostActTable } from "./host-acts.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import {
   type HostDevice,
@@ -145,9 +147,17 @@ type ThisMacHostServices =
   | Path.Path
   | HttpClient.HttpClient;
 
+/** The one act This Mac's host answers, asked only to turn it on or off. */
+export type ThisMacHostActs = Pick<typeof AGENT_ACTS, "HOSTS_THIS_MAC_SET">;
+
+export interface ThisMacHostComposer extends Composer {
+  /** Run agents on this Mac turned on or off, as the panel's port asks it. */
+  readonly acts: HostActTable<ThisMacHostActs>;
+}
+
 export function composeThisMacHost(
   dependencies: ThisMacHostDependencies,
-): Effect.Effect<Composer, never, ThisMacHostServices> {
+): Effect.Effect<ThisMacHostComposer, never, ThisMacHostServices> {
   return Effect.gen(function* () {
     const { report } = yield* Reporter;
     const host = yield* ThisMacHost;
@@ -377,20 +387,16 @@ export function composeThisMacHost(
       ),
     );
 
-    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.THIS_MAC_HOST> = {
+    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.THIS_MAC_HOST> = {};
+    const acts: HostActTable<ThisMacHostActs> = {
       /** Run agents on this Mac turned on or off; done, or that it could not be, its windows told where it now stands. */
-      [GATEWAY_METHOD.HOSTS_THIS_MAC_SET]: (params) =>
+      HOSTS_THIS_MAC_SET: ({ on, deleteFolders }) =>
         Effect.gen(function* () {
-          const { on, deleteFolders } = yield* readParams(
-            thisMacHostSetParamsSchema,
-            params,
-            "a set says whether This Mac is on",
-          );
           const done = yield* on ? turnedOn : turnedOff(deleteFolders ?? true);
           yield* tellThisMac;
-          return carried(done ? DONE : UNDONE);
+          return done ? DONE : UNDONE;
         }).pipe(Effect.provideContext(services)),
     };
-    return { methods, lifetime: Effect.asVoid(lifetime) } satisfies Composer;
+    return { methods, acts, lifetime: Effect.asVoid(lifetime) } satisfies ThisMacHostComposer;
   });
 }

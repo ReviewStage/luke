@@ -79,7 +79,7 @@ export function mountWindow(
   // What the panel times, recorded through the same SDK once it stands, and
   // every failure it shows, reported through it.
   installPanelSpanRecorder(sentry.recordSpan);
-  installShownFailureReporter(sentry.reportShownFailure);
+  installShownFailureReporter(sentry.reportShownFailure, queryClient);
 
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Renderer root element is missing");

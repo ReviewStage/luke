@@ -7,6 +7,12 @@
  * account's like every other. The client rides in the revoke's query, since
  * a `DELETE` carries no body.
  *
+ * Neither answers a refusal of its own: each refuses only as any procedure
+ * may (`ANY_PROCEDURE_REFUSALS`), a bearer or session not taken, a client id
+ * its schema refuses, and a store or auth service that could not answer,
+ * the consent's delete among them, so each is built from `declaredProcedure`
+ * as it stands.
+ *
  * The outputs are the wire schemas flipped, so oRPC's output check encodes
  * the handler's value into the bytes the wire carries (`packages/service/src/orpc/base.ts`).
  */
@@ -16,13 +22,13 @@ import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { MCP_CLIENT_QUERY, mcpClientIdSchema, mcpClientsAnswerSchema } from "../mcp-client-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { hostedProcedure } from "./base.js";
+import { declaredProcedure } from "./base.js";
 
 export const mcpClientsContract = {
-  list: hostedProcedure
+  list: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_MCP_CLIENTS }))
     .output(EffectSchema.flip(mcpClientsAnswerSchema)),
-  revoke: hostedProcedure
+  revoke: declaredProcedure
     .meta(
       openapi({
         method: HTTP_METHOD.DELETE,

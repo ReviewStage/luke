@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { githubShapes, wholeRendering } from "./github-html.js";
+import { githubShapes, INLINE_PICTURE, inlinePictures, wholeRendering } from "./github-html.js";
 
 /**
  * github-html.test.ts -- GitHub's rendering reaches the window's HTML steps
@@ -8,7 +8,8 @@ import { githubShapes, wholeRendering } from "./github-html.js";
  * draws its own: a highlighted block into a fenced one in its language, and
  * a diagram into a fenced mermaid block of its source, a themed picture
  * into its `<img>` alone, and a picture GitHub links to itself into the
- * picture alone. The trees are as the parse leaves them.
+ * picture alone; and a picture sharing its line with words is marked to
+ * stand in it. The trees are as the parse leaves them.
  */
 
 /** A node of the parsed tree, as the step reads it. */
@@ -135,6 +136,37 @@ test("a suggested change becomes a fenced block of its rows in order, a removed 
       element("code", { className: ["language-suggested-change"] }, [
         text("-const a = 1;\n+\n+  const a = 2;"),
       ]),
+    ]),
+  ]);
+});
+
+test("a picture sharing its line with words is marked to stand in it, a bot's glyph in its bold lead and in a summary alike; one alone in its paragraph is not", () => {
+  const glyph = () => element("img", { src: "https://camo.githubusercontent.com/major", alt: "" });
+  const inline = () =>
+    element("img", {
+      src: "https://camo.githubusercontent.com/major",
+      alt: "",
+      [INLINE_PICTURE]: true,
+    });
+  const screenshot = element("img", { src: "https://camo.githubusercontent.com/shot", alt: "" });
+  const tree: HtmlNode = {
+    type: "root",
+    children: [
+      element("p", {}, [
+        element("strong", {}, [element("picture", {}, [glyph()]), text(" Major")]),
+      ]),
+      element("details", {}, [
+        element("summary", {}, [element("picture", {}, [glyph()]), text(" Supported")]),
+        element("p", {}, [screenshot]),
+      ]),
+    ],
+  };
+  inlinePictures()(tree);
+  assert.deepEqual(tree.children, [
+    element("p", {}, [element("strong", {}, [element("picture", {}, [inline()]), text(" Major")])]),
+    element("details", {}, [
+      element("summary", {}, [element("picture", {}, [inline()]), text(" Supported")]),
+      element("p", {}, [screenshot]),
     ]),
   ]);
 });

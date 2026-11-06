@@ -6,9 +6,8 @@ import { type InboxListed, type InboxListView, inboxEnds, inboxSteps } from "./i
 /**
  * inbox-pager.tsx -- stepping through the Inbox's items one at a time: where the chosen one stands, "2 of 8", and the presses and keys that choose the one above or below it.
  *
- * The steps follow the list's own order, its grouping and its Needs-you
- * filter as drawn, settled items among them and a folded group's left out,
- * so the count matches the rows, and they stop at its ends rather than
+ * The steps follow the list's own order and its scope as drawn, settled
+ * items among them, so the count matches the rows, and they stop at its ends rather than
  * wrapping round. The item read keeps its place among the steps where the
  * filter draws it no row, once it is answered, so they still reach the rows
  * either side; the pager then counts nothing, there being no row to count it

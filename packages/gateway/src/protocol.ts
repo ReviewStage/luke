@@ -163,34 +163,6 @@ export const GATEWAY_METHOD = {
   TASKS_RESTORE: "tasks.restore",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
-  /** A workspace made on the service under a name, owned by the account; the view's workspaces are read again. */
-  WORKSPACES_CREATE: "workspaces.create",
-  /** A workspace renamed on the service by an owner or admin; the view's workspaces are read again. */
-  WORKSPACES_RENAME: "workspaces.rename",
-  /** One experiment turned on or off for everyone in a workspace on the service by an owner or admin, drawn on the view ahead of its answer. */
-  WORKSPACES_EXPERIMENT_SET: "workspaces.experimentSet",
-  /** A workspace's slug changed on the service by its owner; the view's workspaces are read again. */
-  WORKSPACES_SLUG_SET: "workspaces.slugSet",
-  /** A workspace's photo set or removed on the service by an owner or admin; the view's workspaces are read again. */
-  WORKSPACES_PHOTO_SET: "workspaces.photoSet",
-  /** A GitHub organization's connection to a workspace begun on the service: our GitHub App's install address, for the caller to open. */
-  WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
-  /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
-  WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
-  /** A workspace's Sentry install begun on the service by an owner or admin: Sentry's install address, for the caller to open. */
-  WORKSPACES_SENTRY_INSTALL: "workspaces.sentryInstall",
-  /** One of a workspace's Sentry installations disconnected on the service, drawn gone at once over the workspace's held integrations; the workspace's Sentry as it then stands. */
-  WORKSPACES_SENTRY_DISCONNECT: "workspaces.sentryDisconnect",
-  /** A workspace's Slack bot connected on the service by an owner or admin, answered with the bot as it then stands once the workspace's held integrations carry it. */
-  WORKSPACES_SLACK_BOT_CONNECT: "workspaces.slackBotConnect",
-  /** A workspace's Slack bot disconnected on the service by an owner or admin, drawn gone at once over the workspace's held integrations; the bot as it then stands. */
-  WORKSPACES_SLACK_BOT_DISCONNECT: "workspaces.slackBotDisconnect",
-  /** The reader's own Slack notifications turned on or off on the service, answered with the bot as it then stands. */
-  WORKSPACES_SLACK_BOT_NOTIFICATIONS: "workspaces.slackBotNotifications",
-  /** A workspace's default repository for Slack starts named or cleared on the service by an owner or admin, drawn at once over the workspace's held integrations; the bot as it then stands. */
-  WORKSPACES_SLACK_BOT_REPOSITORY: "workspaces.slackBotRepository",
-  /** One channel's bot membership or default repository changed on the service by an owner or admin, its repository drawn at once over the workspace's held integrations and its membership laid on the held channels as answered; the bot as it then stands. */
-  WORKSPACES_SLACK_BOT_CHANNEL: "workspaces.slackBotChannel",
   /**
    * One workspace's own integrations, its Sentry installations and its Slack
    * bot, held followed for a window from now until it is let go, over Neon
@@ -252,20 +224,6 @@ export const GATEWAY_METHOD = {
   WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW: "workspaces.tokenRepositoriesUnfollow",
   /** One workspace's held token repositories asked again at once, as Try again asks; answered once the ask has landed. */
   WORKSPACES_TOKEN_REPOSITORIES_RETRY: "workspaces.tokenRepositoriesRetry",
-  /** A repository added to a workspace on the account's own GitHub token, or removed from it, on the service; answered to the caller with the workspace's token repositories as they then stand, which are laid on its held read too. */
-  WORKSPACES_TOKEN_REPOSITORY_SET: "workspaces.tokenRepositorySet",
-  /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
-  WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
-  /** Another member made an admin or an admin a member on the service by the owner, answered with the members as they then stand; the view's workspaces are read again. */
-  WORKSPACES_MEMBER_ROLE: "workspaces.memberRole",
-  /** A workspace handed by its owner to one of its admins on the service, the owner becoming an admin, answered with the members as they then stand; the view's workspaces are read again, the account's role in it among them. */
-  WORKSPACES_TRANSFER: "workspaces.transfer",
-  /** The account left one workspace on the service; the view's workspaces and tasks are read again. */
-  WORKSPACES_LEAVE: "workspaces.leave",
-  /** An invitation to a workspace made on the service, answered with its accept link; the held invitations draw it until their read carries it. */
-  WORKSPACES_INVITE: "workspaces.invite",
-  /** A pending invitation canceled on the service, answered with those still pending; the held invitations draw it gone until their read carries it. */
-  WORKSPACES_INVITATION_CANCEL: "workspaces.invitationCancel",
   /** The page that connects the account's GitHub, asked of the service now and used once; the next workspaces read is owed at once. */
   GITHUB_CONNECT: "github.connect",
   /** The account's GitHub disconnected on the service under the Mac's session; the view takes the connection, and the next workspaces read is owed at once. */
@@ -288,8 +246,6 @@ export const GATEWAY_METHOD = {
   AGENTS_MODELS_UNFOLLOW: "agents.modelsUnfollow",
   /** The held models asked again at once, as Try again asks; answered once the ask has landed. */
   AGENTS_MODELS_RETRY: "agents.modelsRetry",
-  /** The account's default model and effort for a coding agent, drawn over the account's preferences at once and written to the service; the default as kept, or why it is unchanged. */
-  AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /**
    * The account's hosts, held for a window from now until it is let go,
    * followed on the service's live read into the sync engine's pool, and a
@@ -314,24 +270,6 @@ export const GATEWAY_METHOD = {
   HOSTS_PRESENCE_UNFOLLOW: "hosts.presenceUnfollow",
   /** The account's devices' beats asked again now, where a window holds them: the window came back online, or the Mac woke. */
   HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
-  /** One of the account's hosts removed; done, or why not. */
-  HOSTS_REMOVE: "hosts.remove",
-  /** Run agents on this Mac turned on, This Mac enrolled, or off, its host removed; done, or why not. */
-  HOSTS_THIS_MAC_SET: "hosts.thisMacSet",
-  /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
-  HOSTS_PAIRING_READ: "hosts.pairingRead",
-  /** A box's pending pairing approved by its code, which makes the account's host; its id, or why not. */
-  HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
-  /** A box's pending pairing denied by its code; done, or why not. */
-  HOSTS_PAIRING_DENY: "hosts.pairingDeny",
-  /** One task's coding agents with their status, read from the service now. */
-  AGENTS_LIST: "agents.list",
-  /** A workspace's coding agents, newest started first, narrowed to one repository where one is named. */
-  AGENTS_WORKSPACE_LIST: "agents.workspaceList",
-  /** A coding agent started on one task under the panel's own key; the agent, or why none started. */
-  AGENTS_START: "agents.start",
-  /** One agent's transcript past a cursor, held open by the service while the agent runs. */
-  AGENTS_MESSAGES: "agents.messages",
   /**
    * One agent's transcript, or one of its workers', held followed for a
    * window from now until it is let go, over the service's held poll, and
@@ -344,33 +282,6 @@ export const GATEWAY_METHOD = {
   AGENTS_TRANSCRIPT_UNFOLLOW: "agents.transcriptUnfollow",
   /** One held transcript read again at once, as Try again asks; never answered. */
   AGENTS_TRANSCRIPT_RETRY: "agents.transcriptRetry",
-  /** The page of a held transcript below the oldest message it holds, read at once and laid before them while they still begin where it was asked: whether it landed, or why it was not read. */
-  AGENTS_TRANSCRIPT_OLDER: "agents.transcriptOlder",
-  /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
-  AGENTS_MESSAGE: "agents.message",
-  /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
-  AGENTS_CHOOSE: "agents.choose",
-  /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
-  AGENTS_RENAME: "agents.rename",
-  /** One agent's MCP servers switched, the whole list of those off, for its next turn on; the agent as it then stands, or why it is unchanged. */
-  AGENTS_SERVERS: "agents.servers",
-  /** A repository added to one agent beside the ones it works in, checked out and told to it; the agent as it then stands, or why it was not added. */
-  AGENTS_ADD_REPOSITORY: "agents.addRepository",
-  AGENTS_QUEUE: "agents.queue",
-  /** One agent stopped; the agent as it then stands, or why it was not. */
-  AGENTS_STOP: "agents.stop",
-  /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
-  AGENTS_REWIND: "agents.rewind",
-  /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
-  AGENTS_ARCHIVE: "agents.archive",
-  /** One agent pinned for the account alone, or unpinned; the agent as it then stands, or why it is unchanged. */
-  AGENTS_PIN: "agents.pin",
-  /** The reader's own read mark of one agent moved on the service; the agent as it then stands, or why it is unchanged. */
-  AGENTS_MARK_READ: "agents.markRead",
-  /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
-  AGENTS_DELETE: "agents.delete",
-  /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
-  AGENTS_PAGE: "agents.page",
   /**
    * The run of an automation that started one agent, held followed for a
    * window from now until it is let go, over the service's held poll, and a
@@ -383,12 +294,6 @@ export const GATEWAY_METHOD = {
   AGENTS_ORIGIN_UNFOLLOW: "agents.originUnfollow",
   /** One agent's held origin read again at once, as Try again asks; never answered. */
   AGENTS_ORIGIN_RETRY: "agents.originRetry",
-  AUTOMATIONS_CREATE: "automations.create",
-  AUTOMATIONS_CHANGE: "automations.change",
-  AUTOMATIONS_DELETE: "automations.delete",
-  AUTOMATIONS_RUN: "automations.run",
-  /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
-  AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
   /**
    * A workspace's automations, a workspace's runs, or an automation's runs
    * held followed for the windows from now until let go, and a while after
@@ -413,14 +318,6 @@ export const GATEWAY_METHOD = {
   INSTALLED_SKILLS_UNFOLLOW: "installedSkills.unfollow",
   /** One workspace's held skills read again at once, as Try again asks; answered once the ask has landed. */
   INSTALLED_SKILLS_RETRY: "installedSkills.retry",
-  /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
-  INSTALLED_SKILLS_READ: "installedSkills.read",
-  /** What a pasted GitHub source or skill text would install, read by the service; nothing is written. */
-  INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
-  /** The skills a paste makes, installed for the account or its workspace, all or none, drawn over every held read whose scope they are in once the service answers; or why none were. */
-  INSTALLED_SKILLS_INSTALL: "installedSkills.install",
-  /** One installed skill removed with its files, drawn gone at once over the held skills; or why it stands. */
-  INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
   /**
    * One part of one agent's pull request as its Pull request tab draws it,
    * by the part, the agent, and the pull request's number, or no number for
@@ -437,8 +334,6 @@ export const GATEWAY_METHOD = {
   AGENTS_PULL_REQUEST_PART_UNFOLLOW: "agents.pullRequestPartUnfollow",
   /** One pull request's held part asked again at once, as Try again asks; answered once the ask has landed. */
   AGENTS_PULL_REQUEST_PART_RETRY: "agents.pullRequestPartRetry",
-  /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
-  AGENTS_CHANGES: "agents.changes",
   /**
    * One agent's pull request's newest chapters, by the agent and the pull
    * request's number, held followed for a window from now until it is let
@@ -451,8 +346,6 @@ export const GATEWAY_METHOD = {
   AGENTS_CHAPTERS_UNFOLLOW: "agents.chaptersUnfollow",
   /** One agent's pull request's held chapters read again at once, as Try again asks; never answered. */
   AGENTS_CHAPTERS_RETRY: "agents.chaptersRetry",
-  /** One agent's pull request's chapters generated for its head on our own model key, or the generation already under way, answered as a read of them is. */
-  AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
   /**
    * Our own tools one agent is offered, held for a window from now until it
    * is let go, asked of the service at once and again as a window comes
@@ -465,10 +358,6 @@ export const GATEWAY_METHOD = {
   AGENTS_WORKSPACE_TOOLS_UNFOLLOW: "agents.workspaceToolsUnfollow",
   /** One agent's held tools asked again at once, as Try again asks; answered once the ask has landed. */
   AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
-  /** One image an agent's pull request's overview names, read by the service on the App's token: its bytes in base64 and their type. */
-  AGENTS_GITHUB_IMAGE: "agents.githubImage",
-  /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
-  AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
   /**
    * The account's own provider keys an agent runs on, as hints and statuses
    * and never a key, held for a window from now until it is let go, asked
@@ -482,18 +371,6 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_UNFOLLOW: "providerKeys.unfollow",
   /** The account's held provider keys asked again at once, as Try again asks; answered once the ask has landed. */
   PROVIDER_KEYS_RETRY: "providerKeys.retry",
-  /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
-  PROVIDER_KEYS_SAVE: "providerKeys.save",
-  /** One provider's key of the kind named removed on the service, an API key where none is; the keys as they then stand. */
-  PROVIDER_KEYS_REMOVE: "providerKeys.remove",
-  /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
-  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
-  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
-  CHATGPT_DEVICE_START: "chatGpt.device.start",
-  /** A device-code login waited on, by its login id, asked after on the interval its start named until it settles or an ask goes unanswered; how it settled, the keys as they then stand once it connected. */
-  CHATGPT_DEVICE_WAIT: "chatGpt.device.wait",
-  /** A device-code login withdrawn, by its login id; how it then stands. */
-  CHATGPT_DEVICE_CANCEL: "chatGpt.device.cancel",
   /**
    * The member's own GitHub token as its login, hint, and status, never the
    * token, held for a window from now until it is let go, asked of the
@@ -507,10 +384,6 @@ export const GATEWAY_METHOD = {
   GITHUB_TOKEN_UNFOLLOW: "githubToken.unfollow",
   /** The member's held GitHub token asked again at once, as Try again asks; answered once the ask has landed. */
   GITHUB_TOKEN_RETRY: "githubToken.retry",
-  /** The member's GitHub token saved on the service, carried once in the params; the token as it then stands, or why nothing was kept, which is laid on its held read too. */
-  GITHUB_TOKEN_SAVE: "githubToken.save",
-  /** The member's GitHub token removed on the service; none then stands, which is laid on its held read too. */
-  GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /**
    * The memories our agents kept in one workspace, held for a window from
    * now until it is let go, followed on the service's live read, and a while
@@ -523,10 +396,6 @@ export const GATEWAY_METHOD = {
   MEMORIES_UNFOLLOW: "memories.unfollow",
   /** One workspace's held memories read again at once, as Try again asks; answered once the ask has landed. */
   MEMORIES_RETRY: "memories.retry",
-  /** One memory forgotten on the service for good, drawn gone at once over the workspace's held memories; the workspace's memories as they then stand. */
-  MEMORIES_FORGET: "memories.forget",
-  /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
-  DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
    * One plan's inbox, or one agent's, held followed for a window from now
    * until it is let go, over Neon Realtime, and a while after among the
@@ -538,23 +407,6 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_UNFOLLOW: "agents.inboxUnfollow",
   /** One plan's or agent's held inbox read again at once, as Try again asks; never answered. */
   AGENTS_INBOX_RETRY: "agents.inboxRetry",
-  /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
-  /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
-  AGENTS_INBOX_CLOSE: "agents.inboxClose",
-  /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
-  AGENTS_INBOX_MESSAGE: "agents.inboxMessage",
-  /** A thread the account starts with one agent, its subject and first message under the panel's own key; the thread as it then stands, its message on it, or why there is no answer. */
-  AGENTS_INBOX_START: "agents.inboxStart",
-  /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
-  AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
-  /** One item's reminder set for the account for an instant, or canceled, whether it is read standing as it was; its read state, or why there is no answer. */
-  // Note that setting a reminder keeps Snooze's id, because a write queued offline is kept on disk by its method's id, and one under an id no host answers is dropped.
-  AGENTS_INBOX_REMIND: "agents.inboxSnooze",
-  /** Where one item the account may read stands, its agent, task, and workspace, as a link by its id alone is opened; or why there is no answer. */
-  AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
-  /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
-  AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
   /**
    * Where every one of the account's integrations stands, held for a window
    * from now until it is let go, followed on the service's live read with
@@ -568,8 +420,6 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_UNFOLLOW: "integrations.unfollow",
   /** The account's held integrations read again at once, as Try again asks. */
   INTEGRATIONS_RETRY: "integrations.retry",
-  /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
-  INTEGRATIONS_CONNECT: "integrations.connect",
   /**
    * The tools one account's server offers the account's agents, held for a
    * window from now until it is let go, asked of the service at once and
@@ -582,12 +432,6 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_TOOLS_UNFOLLOW: "integrations.toolsUnfollow",
   /** One server's held tools asked again at once, as Try again asks; answered once the ask has landed. */
   INTEGRATIONS_TOOLS_RETRY: "integrations.toolsRetry",
-  /** The account's sign-in to one account at a provider under way ended on the service, revoking nothing; where it then stands. */
-  INTEGRATIONS_CANCEL: "integrations.cancel",
-  /** The account's connection to one account at a provider ended on the service; where it then stands. */
-  INTEGRATIONS_DISCONNECT: "integrations.disconnect",
-  /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
-  INTEGRATIONS_RENAME: "integrations.rename",
   /**
    * The outside MCP clients the account allowed, held for the windows from
    * now until let go, under the account signed in: read from the service as
@@ -599,8 +443,6 @@ export const GATEWAY_METHOD = {
   MCP_CLIENTS_UNFOLLOW: "mcpClients.unfollow",
   /** The outside MCP clients the windows hold read again now, as Try again asks; answered once the read has landed. */
   MCP_CLIENTS_RETRY: "mcpClients.retry",
-  /** One outside MCP client revoked on the service under the Mac's session; the clients as they then stand. */
-  MCP_CLIENTS_REVOKE: "mcpClients.revoke",
   /**
    * What waits on the developer across the account, followed from now until
    * it is let go or the account signs out: every open inbox item, heard as
@@ -614,12 +456,6 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_ITEMS_RETRY: "agents.inboxItemsRetry",
   /** The account's preferences row, which the host holds for the session, read again at once, as Try again asks; never answered. */
   AGENTS_PREFERENCES_RETRY: "agents.preferencesRetry",
-  /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  AGENTS_INBOX_ATTACHMENT: "agents.inboxAttachment",
-  /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  AGENTS_PICTURE: "agents.picture",
-  /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
-  AGENTS_PART: "agents.part",
   /**
    * A coding agent's terminals (`@repo/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the
@@ -637,6 +473,7 @@ export const GATEWAY_METHOD = {
   TERMINALS_INPUT: "terminals.input",
   TERMINALS_RESIZE: "terminals.resize",
   TERMINALS_ACK: "terminals.ack",
+  TERMINALS_SHOWN: "terminals.shown",
   TERMINALS_DISCONNECT: "terminals.disconnect",
   TERMINALS_WAKE: "terminals.wake",
   /**
@@ -666,25 +503,9 @@ export const GATEWAY_METHOD = {
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
-  SETTINGS_UPDATE: "settings.update",
-  SETTINGS_RESET: "settings.reset",
   /** The developer's answer to one command an agent asked to run on this Mac (`@repo/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
   MAC_COMMAND_ANSWER: "macCommands.answer",
-  /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
-  EXPERIMENTS_SET: "experiments.set",
   ACCOUNT_SNAPSHOT: "account.snapshot",
-  ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
-  ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
-  /** The sign-in taken again over the session that stands, answering whether a new one landed. */
-  ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
-  ACCOUNT_SIGN_OUT: "account.signOut",
-  ACCOUNT_DELETE: "account.delete",
-  /**
-   * The member's grant of support access granted for seven days or revoked
-   * on the service, under the account's own session (`{ grant }`); the
-   * grant as it then stands, which the account's access is read again for.
-   */
-  ACCOUNT_SUPPORT_ACCESS: "account.supportAccess",
   ANALYTICS_RECORD: "analytics.record",
 } as const;
 
