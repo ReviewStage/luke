@@ -130,13 +130,19 @@ export function reportToStarter(
       agentName(agent.value),
       step,
     );
-    const eve = yield* sessionsFor(turn.userId);
-    yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), turn.userId, starter.value, {
-      text: reportLine(agent.value, mention, turn, words),
-      clientKey: turn.turnId,
-      sender: agentLineSender(agent.value),
-      metadata: { channel: MESSAGE_CHANNEL.AGENT_MESSAGE },
-    });
+    const agentSessions = yield* sessionsFor(turn.userId);
+    yield* steerAgent(
+      agentSessions,
+      storeWriter({ tools: CODER_TOOL_SET }),
+      turn.userId,
+      starter.value,
+      {
+        text: reportLine(agent.value, mention, turn, words),
+        clientKey: turn.turnId,
+        sender: agentLineSender(agent.value),
+        metadata: { channel: MESSAGE_CHANNEL.AGENT_MESSAGE },
+      },
+    );
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("a started agent's final message was not handed to its starter", {

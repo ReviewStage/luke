@@ -1,6 +1,6 @@
 /**
  * agent-instructions.test.ts -- an agent's instructions read its brief from its row
- * alike on every harness, so a native session is told what an eve one is.
+ * alike on every harness, so a Claude Code session is told what a Codex one is.
  */
 
 import assert from "node:assert/strict";

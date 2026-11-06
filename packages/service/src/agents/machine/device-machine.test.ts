@@ -429,7 +429,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           const turnId = randomUUID();
           yield* writer.enqueueTurn(
             { userId, conversationId: agent.conversationId },
-            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+            { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
           );
           const statusNow = Effect.map(
             latestTurnsOfReached([agent.conversationId]),
@@ -570,7 +570,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             const turnId = randomUUID();
             yield* writer.enqueueTurn(
               { userId, conversationId: agent.conversationId },
-              { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+              { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
             );
           }
           yield* TestClock.adjust("6 minutes");

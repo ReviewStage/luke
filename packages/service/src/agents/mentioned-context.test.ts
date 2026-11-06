@@ -16,7 +16,7 @@ import {
 import type { Task } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { test } from "vitest";
-import { eveContent, receivedMessage, senderLabel } from "./attached-files.js";
+import { receivedMessage, senderLabel, turnContent } from "./attached-files.js";
 import {
   MENTIONED_BOUNDS,
   type MentionedAgent,
@@ -28,7 +28,7 @@ import {
 /**
  * What a coding agent's message mentions of its plan, handed beside its
  * words as it stood at the send, within its bounds; and the line that
- * carried it matched by eve's receipt of what eve was handed, its words
+ * carried it matched by the retired runtime's receipt of what it was handed, its words
  * alone read back as the developer's. Synthetic plan.
  */
 
@@ -160,10 +160,10 @@ test("a long section is cut on a line, saying how much was left out, and a full 
   assert.match(part, /\d+ more mentions? of the plan left out, since this part is full/u);
 });
 
-test("a line carrying what it mentioned is matched by eve's receipt of it, and reads back as its words alone", () => {
+test("a line carrying what it mentioned is matched by the retired runtime's receipt of it, and reads back as its words alone", () => {
   const words = `Do what ${section("Rollout")} says.`;
   const mentioned = mentionedContext(words, TASK);
-  const handed = eveContent(words, [], mentioned);
+  const handed = turnContent(words, [], mentioned);
   assert.ok(Array.isArray(handed));
   const receipt = receivedMessage({
     message: words,
@@ -178,10 +178,10 @@ test("a line carrying what it mentioned is matched by eve's receipt of it, and r
   assert.equal(receipt.words, words);
 });
 
-test("a member's line handed behind the label naming them is matched by eve's receipt of it, and reads back as its words alone", () => {
+test("a member's line handed behind the label naming them is matched by the retired runtime's receipt of it, and reads back as its words alone", () => {
   const words = `Do what ${section("Rollout")} says.`;
   const mentioned = mentionedContext(words, TASK);
-  const handed = eveContent(
+  const handed = turnContent(
     words,
     [],
     mentioned,
@@ -213,8 +213,8 @@ test("a developer's words of a sender label's shape, sent with a file, read back
   assert.equal(receipt.words, "[sender: reminder, a teammate]");
 });
 
-test("words that mention nothing of the plan go to eve as the words alone, as every message did before", () => {
-  assert.equal(eveContent("Use the helper.", [], undefined), "Use the helper.");
+test("words that mention nothing of the plan go to the harness as the words alone, as every message did before", () => {
+  assert.equal(turnContent("Use the helper.", [], undefined), "Use the helper.");
 });
 
 test("however long the headings of what is left out, the part stays inside its bound", () => {

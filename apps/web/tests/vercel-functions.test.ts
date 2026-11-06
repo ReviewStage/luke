@@ -35,8 +35,8 @@ function bundledFunctions() {
 
 /**
  * The whole map, not one package: every bundle's external set is the one the
- * record holds. The outage deploy moved three externals on one edge and the
- * eve check names one of them; this is the assertion that would have named
+ * record holds. The outage deploy moved three externals on one edge and an
+ * earlier check named one of them; this is the assertion that would have named
  * all three, and it fails as data, naming the bundle and what it gained or
  * lost, so a legitimate widening is a one-line edit to the record and a
  * review moment rather than a silent change to what a function loads.

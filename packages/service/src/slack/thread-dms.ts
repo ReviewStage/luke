@@ -42,7 +42,7 @@
  *
  * Every call here waits on Slack, so each is handed to `afterResponse` by
  * its caller and never yielded inside a transaction; a runtime that holds
- * no bot, a test's or an eve root's, writes nothing.
+ * no bot, such as a test's, writes nothing.
  */
 
 import { randomUUID } from "node:crypto";

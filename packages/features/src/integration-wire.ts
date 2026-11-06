@@ -29,8 +29,8 @@ import { Schema as EffectSchema } from "effect";
 
 /**
  * The services an account may connect. A provider's value is also the name
- * its eve connection is registered under, which is its file's name in every
- * agent's `connections/`, and the path segment its routes are addressed by.
+ * its MCP server is handed to an agent under, and the path segment its
+ * routes are addressed by.
  */
 export const INTEGRATION_PROVIDER = {
   EXECUTOR: "executor",
@@ -216,13 +216,13 @@ export function integrationProviderFromWire(value: string | null): IntegrationPr
 export const integrationProviderSchema = EffectSchema.Literals(INTEGRATION_PROVIDER_LIST);
 
 /**
- * The name one account at a provider goes by everywhere: the eve connection
+ * The name one account at a provider goes by everywhere: the MCP server
  * an agent reaches it through, a coding agent's switch and mention, and the
  * routes' `connection` query. The first account at a provider is named after
  * the provider (`notion`), so every name stored before a second account was
  * possible keeps naming it; another is the provider and its place, `notion-2`.
- * eve allows a connection's name lowercase letters, digits, and dashes, from
- * a letter, up to 64 characters, and qualifies a tool's name with two
+ * A connection's name is lowercase letters, digits, and dashes, from a
+ * letter, up to 64 characters, and a tool's name was qualified with two
  * underscores, which this grammar never spells.
  */
 const CONNECTION_NAME_PATTERN = new RegExp(
@@ -247,8 +247,8 @@ export function integrationConnectionOf(
 /**
  * The name a new account at the provider takes: the provider's own while no
  * account holds it, else the lowest free place. Note that this is the one
- * place a name is spelled from its parts, because eve takes a connection by
- * one flat name; everywhere else reads it back from the row it was minted on.
+ * place a name is spelled from its parts, because an agent is handed a
+ * connection by one flat name; everywhere else reads it back from the row it was minted on.
  */
 export function mintIntegrationConnectionName(
   provider: IntegrationProvider,
@@ -312,7 +312,7 @@ export const integrationRemoteCallSchema = EffectSchema.Struct({
   remoteTool: EffectSchema.String.check(EffectSchema.isPattern(REMOTE_TOOL_PATTERN)),
   /** The `connection_execute` call it ran under. */
   parentCallId: EffectSchema.String,
-  /** The input eve validated against the tool's schema and sent; empty where it sent none. */
+  /** The input the call sent the tool; empty where it sent none. */
   input: verbatimJsonSchema(WireValueSchema, { type: "object", additionalProperties: true }),
   /** The account it ran against, by connection name, where it was not the provider's first. */
   connection: EffectSchema.optionalKey(integrationConnectionNameSchema),

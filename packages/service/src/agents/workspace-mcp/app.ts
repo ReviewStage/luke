@@ -21,7 +21,7 @@
  * Beside it stands one server per integration the agent is handed, at
  * `WORKSPACE_INTEGRATION_MCP_PATH/<connection>` (`notion-2` for a member's second
  * Notion account), on the same bearer and the same JSON-RPC: its
- * `initialize` tells the client what eve tells the model of the connection,
+ * `initialize` tells the client what the model is told of the connection,
  * which account it is among them, as its `instructions`; its
  * `tools/list` is the provider's own tools, and its `tools/call` forwards to
  * the provider on the member's own grant and answers the provider's result
@@ -71,7 +71,7 @@ import {
 import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
   callTool,
   isServedTool,
@@ -241,8 +241,8 @@ function renamedToolResult(name: string, renamed: string): McpToolCallResult {
  * What each listed tool declares to Claude Code: the most of its result it
  * takes whole, the pinned CLI's (2.1.304) own ceiling, where past 50,000
  * characters it would save the result to a file and hand the model a path
- * (code.claude.com/docs/en/mcp, "Raise the limit for a specific tool"). Eve
- * hands its model the whole result of a tool of ours, which each door bounds.
+ * (code.claude.com/docs/en/mcp, "Raise the limit for a specific tool"). So
+ * the model is handed the whole result of a tool of ours, which each door bounds.
  */
 const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 

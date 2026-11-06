@@ -79,7 +79,7 @@ import { DESCRIPTION_EDIT_REFUSAL } from "../coder-host/description-edit.js";
 import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
   isServedTool,
   refusedByDoor,
@@ -103,7 +103,7 @@ import { workspaceMcpDoorSeams } from "./door-seams.js";
  * over a real dialect, and driven by the MCP SDK's own client, the one a
  * harness speaks: a runner's bearer admits its agent's conversation, the
  * server lists `read_threads` and runs it through the coder host's inbox door
- * as the agent's starter, the door eve's tool reaches through the coder host, and a wrong bearer, a missing one, and a retired
+ * as the agent's starter, the door the tool catalog names for it, and a wrong bearer, a missing one, and a retired
  * one are each refused before anything is read. Synthetic accounts and
  * words throughout.
  *
@@ -120,7 +120,7 @@ const PICTURE: Picture = {
   bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]),
 };
 
-/** A deployment that names nothing of its environment: no eve to reach, no keys. */
+/** A deployment that names nothing of its environment: nothing to reach, no keys. */
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -140,7 +140,7 @@ const NO_INTEGRATIONS = integrationConnectOf(() => ({
   configured: false,
 }));
 
-/** The services the doors run against, over the test's database: GitHub, the catalog, Linear and eve none of them reach. */
+/** The services the doors run against, over the test's database: GitHub, the catalog, and Linear none of them reach. */
 const doorServices = Effect.gen(function* () {
   return Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -355,7 +355,7 @@ const AGENT_TOOLS = [
   "search_memory",
 ] as const;
 
-/** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
+/** The tools a native agent is served: every tool of our catalog that its harness has no equal of. */
 const SERVED_TOOLS = [
   "post_thread",
   "read_threads",
@@ -375,7 +375,7 @@ const SERVED_TOOLS = [
 
 type ServedTool = (typeof SERVED_TOOLS)[number];
 
-/** A call of a door made directly, as eve's tool for it makes one through the coder host. */
+/** A call of a door made directly, as the catalog makes one for the server's tool. */
 type DirectCall = (
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
@@ -388,7 +388,7 @@ const commentTool =
     runAgentComment(admitted, name, input, true);
 
 /**
- * Each tool's own door, called as eve's tool calls it: the server's answer to
+ * Each tool's own door, called directly as the catalog calls it: the server's answer to
  * a tool is to be this one's, so a tool routed to any other door, or to
  * none, answers otherwise. The agent tools are left out, since each one's
  * catalog entry names its run itself, and no door of theirs stands apart
@@ -411,7 +411,7 @@ const DOOR_OF: Readonly<
   update_comment: commentTool("update_comment"),
 };
 
-/** The eve tools a harness has its own of, which the server never serves. */
+/** The tools a harness has its own of, as the retired runtime named them, which the server never serves. */
 const HARNESS_TOOLS = [
   "bash",
   "read_file",
@@ -587,7 +587,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "tools/list names every Vespin tool the agent's harness has no equal of, each with its eve tool's schema, and none the harness has",
+    "tools/list names every Vespin tool the agent's harness has no equal of, each with its catalog entry's schema, and none the harness has",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -634,7 +634,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       withheld: ["browser", "run_on_mac"],
     },
   ])(
-    "tools/list leaves out what eve offers no agent $why, and the memory and the description's tools where its starter has Memory and Task descriptions off",
+    "tools/list leaves out what the catalog's gates offer no agent $why, and the memory and the description's tools where its starter has Memory and Task descriptions off",
     ({ agent: made, withheld }) =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -786,7 +786,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "each tool answers as its own door does, called as eve's tool calls it, for the same agent and input",
+    "each tool answers as its own door does, called directly as the catalog calls it, for the same agent and input",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -818,7 +818,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         const client = yield* connected(fetch, agent.bearer);
-        // Note that a task's row is keyed on the call as a start and a message are (`AgentCall`'s `clientKey`), and needs no eve to be made; on no repository, since no GitHub stands here to reach one.
+        // Note that a task's row is keyed on the call as a start and a message are (`AgentCall`'s `clientKey`), and needs no harness to be made; on no repository, since no GitHub stands here to reach one.
         const create = (input: Readonly<Record<string, string | null>>) =>
           Effect.promise(() => client.callTool({ name: "create_task", arguments: input }));
         const name = "Expire stale invitations";

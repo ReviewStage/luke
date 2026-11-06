@@ -192,10 +192,10 @@ export function recordingSentry(delivered?: () => Promise<void>): RecordingSentr
 }
 
 /**
- * Sentry as an eve root starts it (`instrumentation/sentry.ts`, then the
- * runtime's `sentryReportingLayer`) over the same recording transport, so
- * the AI SDK integration eve's start brings in reports as it does in an
- * agent's process.
+ * Sentry as the retired runtime's root started it (Sentry's own agent
+ * instrumentation, then the runtime's `sentryReportingLayer`) over the same
+ * recording transport, so the AI SDK integration that start brings in
+ * reports as it did in an agent's process.
  */
 export function recordingEveSentry(): RecordingSentry {
   const sent: SentItem[] = [];

@@ -121,12 +121,12 @@ import type { ConversationTarget } from "./writer.js";
  * serializes two Starts of one task, so a retry carrying the key of a Start
  * already made finds that agent rather than opening a second conversation
  * beside it, and says which it did, since only a Start that made the agent
- * opens its eve session. The agent's conversation is a `coding_agent`
+ * opens its runtime session. The agent's conversation is a `coding_agent`
  * conversation of the account that started it, opened here and named on the
  * row, which carries that account as `userId`, so a member reads the
  * conversation under its starter; its messages and turns are the
  * relay's to write, and the newest turn is what the agent's status is read
- * from. A Start whose eve session could not be opened discards the agent
+ * from. A Start whose session could not be opened discards the agent
  * again, rows and conversation, so a retry under the same key starts afresh
  * rather than finding an agent nothing runs. The model, effort, and context
  * window on the row are read at every step, so a change to them is the next
@@ -134,19 +134,17 @@ import type { ConversationTarget } from "./writer.js";
  * branch is the head of the pull request the agent opened, written as it
  * opens one (`coder-host/pull-request.ts`) and read where the agent's pull
  * request is looked up (`coder-host/published.ts`). A delegation is a child
- * conversation under the agent's, which an eve agent's `delegate` opened
+ * conversation under the agent's, which `delegate` opened for an agent on the retired runtime
  * ahead of its worker's session with the model and effort the agent chose
  * for it written beside it here, so the tabs read the worker's transcript
  * under the agent's; the worker's title stands on its child conversation
  * (`child-titles.ts`) and is read back here by the call that delegated it,
- * which is kept on the delegation for that. Note that nothing here reaches the eve host's modules,
- * because the routes bundle this module and the eve host's modules reach
- * eve, which runs in a service of its own (`function-bundles.ts`). The
+ * which is kept on the delegation for that. The
  * title is written two ways: filled where none stands, which is how the
  * one generated as the agent starts lands without ever covering a name the
  * developer gave, and renamed, which replaces whatever stands. The newest
- * model step of the agent's own conversation and eve's last compaction of
- * it are written by the coder host as eve tells them, and read back with
+ * model step of the agent's own conversation and its harness's last compaction of
+ * it are written by the runner events route as the harness tells them, and read back with
  * the transcript, which is what the tab's context ring draws. The pull
  * request from the agent's branch is written as GitHub answered each read
  * of it (`coder-host/published.ts`), and read back beside the agents of
@@ -362,12 +360,12 @@ export interface NewAgentRepository {
 
 /**
  * How an agent is run, as its rows hold it: what answers its conversation,
- * eve for a conversation from before the column, the harness's own session
+ * the retired runtime for a conversation from before the column, the harness's own session
  * or thread id, the digest of its runner's bearer, and who pays for it.
  */
 export interface AgentRouting {
   readonly runtime: ConversationRuntime;
-  /** The harness's session or thread id; null on eve and before the harness answers one. */
+  /** The harness's session or thread id; null on the retired runtime and before the harness answers one. */
   readonly nativeSession: string | null;
   /** The digest of the runner's bearer at our MCP server; null where no runner holds one. */
   readonly runnerTokenHash: string | null;
@@ -1445,33 +1443,6 @@ const findNativeAgentConversations = SqlSchema.findAll({
 });
 
 /**
- * The agents whose conversation runs on eve in the session named, read with
- * no account in hand, because the sweep that asks acts for every account at
- * once. Note that a conversation from before the runtime column runs on eve
- * too, and that a deleted conversation is still its agent's: its sandbox is
- * no less the agent's to stop once its turn ended. At most two, which is
- * enough to tell one from several.
- */
-const findEveAgentsOfSession = SqlSchema.findAll({
-  Request: Schema.Struct({ runtimeSessionId: Schema.String }),
-  Result: Schema.Struct({ agentId: Schema.String, conversationId: Schema.String }),
-  execute: ({ runtimeSessionId }) =>
-    Database.use((db) =>
-      db
-        .select({ agentId: agentTable.id, conversationId: conversations.id })
-        .from(conversations)
-        .innerJoin(agentTable, eq(agentTable.conversationId, conversations.id))
-        .where(
-          and(
-            eq(conversations.runtimeSessionId, runtimeSessionId),
-            or(isNull(conversations.runtime), eq(conversations.runtime, CONVERSATION_RUNTIME.EVE)),
-          ),
-        )
-        .limit(2),
-    ),
-});
-
-/**
  * The native runtime of each conversation named that runs on one, read with
  * no account in hand: only for ids a gate already read, as
  * `latestTurnsOfReached`, such as the agents a member's workspace reaches.
@@ -1514,24 +1485,6 @@ const findNativeRoute = SqlSchema.findOneOption({
             inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
           ),
         )
-        .limit(1),
-    ),
-});
-
-/** The conversation's newest turn: where it stands, and when it settled. */
-const findNewestTurnStanding = SqlSchema.findOneOption({
-  Request: Schema.Struct({ conversationId: Schema.String }),
-  Result: Schema.Struct({
-    status: Schema.String,
-    settledAt: Schema.NullOr(InstantColumnSchema),
-  }),
-  execute: ({ conversationId }) =>
-    Database.use((db) =>
-      db
-        .select({ status: turns.status, settledAt: turns.settledAt })
-        .from(turns)
-        .where(eq(turns.conversationId, conversationId))
-        .orderBy(desc(turns.queuedAt), desc(turns.id))
         .limit(1),
     ),
 });
@@ -2528,7 +2481,7 @@ export function createAgent(
 }
 
 /**
- * Discards an agent a Start could not open an eve session for: its row and
+ * Discards an agent a Start could not open a session for: its row and
  * its conversation, with every message and turn the conversation holds,
  * which is none. The agents a continue of a pilot took over go back to the
  * pilot it was started from first, since the row's delete would leave them
@@ -2572,7 +2525,7 @@ export interface AgentDeleteGuard<R> {
  * Everything runs under the agent's conversation lock, the one every write
  * of its lines and turns takes, and the agent is read again under it, so a
  * message handed over after the caller stopped it either landed first, its
- * line standing from before eve hears it (`dispatch-claim.ts`), and
+ * line standing from before its runtime hears it (`dispatch-claim.ts`), and
  * `standsStopped` refuses with `TaskAgentUnstopped`, nothing written, or
  * waits on the lock and finds no agent.
  */
@@ -3102,19 +3055,19 @@ export function updateAgentServersCommitted(
 }
 
 /**
- * The hand-over of a message mentioning MCP servers to eve, run with those
+ * The hand-over of a message mentioning MCP servers to the runtime, run with those
  * servers standing among the ones the agent's next turn takes whatever its
- * switches say, and left standing only where the hand-over answers that eve
+ * switches say, and left standing only where the hand-over answers that the runtime
  * took the message. The servers not already standing are added, the
  * hand-over run, and those same servers taken out again for one that
  * answered nothing, failed, or was interrupted at its deadline, so a send
- * eve did not take leaves no server for a later turn.
+ * the runtime did not take leaves no server for a later turn.
  * No transaction is open across the hand-over, so a turn may take the
  * servers meanwhile; each change is one statement over the row as it then
  * stands, so the take-out never writes back what that turn took. Note that
  * the caller runs this as the dispatch under the conversation's dispatch claim
  * (`writeAwaitingLine`), after its repeat check, so a send's servers are
- * added only for a send eve hears, and no other send's hand-over stands
+ * added only for a send the runtime hears, and no other send's hand-over stands
  * between this one's servers and its message. Nothing is added for no
  * server, or for an agent of a workspace the account is not in.
  */
@@ -3191,7 +3144,7 @@ export interface TurnDescriptionNotes {
  * nothing where no turn of the conversation runs, or the account does not
  * hold it. Note that the count is raised in one statement, because a
  * native agent's calls of one step run at once, and each must see the
- * other's reservation, as eve's session state does (`description-edit.ts`).
+ * other's reservation (`description-edit.ts`).
  */
 export function reserveTurnDescriptionNotes(
   userId: string,
@@ -3612,7 +3565,8 @@ export function readAgentRouting(
 ): AgentStoreEffect<Option.Option<AgentRouting>> {
   return Effect.map(
     findAgentRouting({ userId, agentId }),
-    Option.map((row) => ({ ...row, runtime: row.runtime ?? CONVERSATION_RUNTIME.EVE })),
+    // Note that a conversation from before the runtime column ran on the retired runtime, so it reads as that one.
+    Option.map((row) => ({ ...row, runtime: row.runtime ?? CONVERSATION_RUNTIME.RETIRED })),
   );
 }
 
@@ -3629,7 +3583,7 @@ export function readVisibleAgentWorkspace(
 
 /**
  * The native runtime of each conversation named, keyed by conversation;
- * one on eve, or from before the column, is absent. Only for ids a gate
+ * one on the retired runtime, or from before the column, is absent. Only for ids a gate
  * already read, as above.
  */
 export function nativeRuntimesOfReached(
@@ -3651,7 +3605,7 @@ export interface NativeRoute {
 
 /**
  * The native runtime of the agent of the conversation named and its payer;
- * none on eve, or from before the column. Only for an id a gate already
+ * none on the retired runtime, or from before the column. Only for an id a gate already
  * read, as above.
  */
 export function nativeRouteOfReached(
@@ -3732,7 +3686,6 @@ export function readRunnerTokenConversation(
   });
 }
 
-/** When the conversation's newest turn ended; null while it is queued or running, or before any turn. */
 /** When the newest turn ended, or null where it has not or there is none. */
 function endedAtOf(
   newest: Option.Option<{ readonly status: string; readonly settledAt: Date | null }>,
@@ -3742,10 +3695,6 @@ function endedAtOf(
   );
   // An ended turn with no settle time stamped reads as ended long ago, so the sweep takes it at once.
   return Option.isSome(ended) ? (ended.value.settledAt ?? new Date(0)) : null;
-}
-
-function newestTurnEndedAt(conversationId: string): AgentStoreEffect<Date | null> {
-  return Effect.map(findNewestTurnStanding({ conversationId }), endedAtOf);
 }
 
 /** Where a native agent's run stands, as the sweep reads it from its sandbox's agent tag. */
@@ -3762,7 +3711,7 @@ export interface NativeRunStanding {
  * Where the run of the agent under this id stands, read with no account in
  * hand, because the scheduled sweep stops ended native sandboxes for every
  * account: its conversation, and when its newest turn ended. Nothing for an
- * id that names no agent, an agent on eve, or one whose conversation was
+ * id that names no agent, an agent on the retired runtime, or one whose conversation was
  * deleted. Only for an id a sandbox we opened carries; it answers nothing
  * a member wrote.
  */
@@ -3796,37 +3745,7 @@ export function readNativeRunStandings(
   });
 }
 
-/** Where an eve agent's run stands, as the sweep reads it from its sandbox's session tag. */
-export interface EveRunStanding {
-  readonly agentId: string;
-  /** The agent's conversation, which a Terminal's or a watched browser's lease is held on. */
-  readonly conversationId: string;
-  /** When its newest turn ended; null while that turn is queued or running, or before it has any turn. */
-  readonly endedAt: Date | null;
-}
-
-/**
- * Where the run of the eve agent whose conversation runs in the session
- * named stands, read with no account in hand, because the scheduled sweep
- * stops orphaned eve sandboxes for every account: the agent, its
- * conversation, and when its newest turn ended. Nothing where no agent's
- * eve conversation runs in the session, or where more than one does, since
- * a sandbox the sweep cannot name one agent for is not its to stop. Only
- * for a session id a sandbox's tag carries; it answers nothing a member
- * wrote.
- */
-export function readEveRunStanding(
-  runtimeSessionId: string,
-): AgentStoreEffect<Option.Option<EveRunStanding>> {
-  return Effect.gen(function* () {
-    const found = yield* findEveAgentsOfSession({ runtimeSessionId });
-    const [only] = found;
-    if (only === undefined || found.length > 1) return Option.none();
-    return Option.some({ ...only, endedAt: yield* newestTurnEndedAt(only.conversationId) });
-  });
-}
-
-/** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */
+/** The agent whose conversation this is, which is what a session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */
 export function readAgentOfConversation(
   userId: string,
   conversationId: string,
@@ -3852,7 +3771,7 @@ export function readAgentHeaderOfConversation(
   return findAgentHeaderOfConversation({ userId, conversationId });
 }
 
-/** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */
+/** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when its harness last compacted it; null for each of the last two before it happens. */
 export interface AgentContextRow {
   readonly model: string;
   readonly contextWindow: ContextWindow;
@@ -3869,7 +3788,7 @@ export function recordAgentStep(
   return updateAgentStep({ userId, agentId, lastStep });
 }
 
-/** When eve compacted the agent's own conversation; nothing written for an agent of a workspace the account is not in. */
+/** When the harness compacted the agent's own conversation; nothing written for an agent of a workspace the account is not in. */
 export function recordAgentCompaction(
   userId: string,
   agentId: string,

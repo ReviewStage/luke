@@ -2,14 +2,14 @@
  * runner-sessions.ts -- a coding agent's sessions on a native harness: the runner launched on the machine we open for it, its stdin written to, and the machine's place stopped, resumed, and thrown away around it.
  *
  * The launch machinery the `claude_code` and `codex` implementations of
- * `AgentSessions` (`eve-host/eve-sessions.ts`) share; each names what is
+ * `AgentSessions` (`sessions/agent-sessions.ts`) share; each names what is
  * its own as a `RunnerHarness` (`claude-code-sessions.ts`,
  * `codex-sessions.ts`): the credential its runner is started with, its
  * config line, and the lines that go ahead of a message to a runner already
  * running. Its session is our own: an id minted as the session opens,
  * which the machine finds the agent's place by (in a sandbox, its
  * `sessionId` tag, so the Terminal tab, the stop and the cleanup sweep find
- * the sandbox by it exactly as they find eve's: `terminal/agent-sandbox.ts`,
+ * the sandbox by it: `terminal/agent-sandbox.ts`,
  * `session-sandboxes.ts`). The
  * harness's own session or thread id is the conversation's
  * `native_session`, which the events route records from what the runner
@@ -75,7 +75,7 @@
  * the earlier one launched. A call that waits past `CODER.RUNNER_LEASE.WAIT`
  * fails as unavailable.
  *
- * Every call answers in eve's outcomes, so a caller holds one interface
+ * Every call answers in `AgentSessions`' outcomes, so a caller holds one interface
  * whichever runtime answers. What fails here (the machine, the store, GitHub, a
  * missing credential or snapshot) answers `failed`, said once in the log as an
  * error naming the agent, in the failure's own words, Vercel's answer for a
@@ -158,16 +158,6 @@ import {
   SERVER_HANDOFF_PATH,
 } from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
-import type { EveHostTurn } from "../eve-host/bounds.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  PLAN_REFUSAL,
-  RUNTIME_REFUSAL,
-} from "../eve-host/eve-sessions.js";
 import {
   AgentMachine,
   type AgentMachineService,
@@ -190,6 +180,16 @@ import { deploymentLifecycle } from "../machine/agent-machines.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { LAUNCH_SWAP } from "../sandbox-firewall.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
+import {
+  PLAN_REFUSAL,
+  RUNTIME_REFUSAL,
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+  type SessionMessage,
+  type SessionTurn,
+} from "../sessions/agent-sessions.js";
 import {
   COMMAND_GONE,
   NOT_FOUND_STATUS,
@@ -312,8 +312,7 @@ const MINTED_AT_DIGITS = 12;
  * A session id the harness's prefix begins, minted at the instant given: the
  * instant in fixed-width hex, then a fresh UUID. The instant first is what
  * lets a session opened later claim the conversation's record over one that
- * ended (`claimRuntimeSession`, forward only, by the ids' order), as eve's
- * own ids do.
+ * ended (`claimRuntimeSession`, forward only, by the ids' order).
  */
 function sessionIdOf(prefix: string, mintedAt: number): string {
   return `${prefix}${mintedAt.toString(16).padStart(MINTED_AT_DIGITS, "0")}-${randomUUID()}`;
@@ -360,7 +359,7 @@ type MessageLine = Extract<InputLine, { readonly type: typeof INPUT_LINE.MESSAGE
 interface RunnerMessage {
   readonly line: MessageLine;
   readonly files: readonly SandboxFile[];
-  readonly turn: EveHostTurn;
+  readonly turn: SessionTurn;
   readonly timeZone: string | undefined;
 }
 
@@ -387,8 +386,8 @@ function attachmentFileName(name: string, at: number): string {
  * A message's content as the runner's lines carry it, and the files it
  * names: words as text, an image as an image block, and any other file,
  * such as a PDF, written into the machine under the line's own folder of
- * the attachments folder given and named by its path, as eve stages a file
- * part in its sandbox. A file whose bytes are not in the message, a URL
+ * the attachments folder given and named by its path. A file whose bytes
+ * are not in the message, a URL
  * elsewhere, is named as not passed.
  */
 function runnerContent(
@@ -714,7 +713,7 @@ function namedOutcome(failure: { readonly _tag: string }): boolean {
 /** The sessions for one account on the harness given, over the calling fiber's services. */
 export const runnerSessions = <
   E extends { readonly _tag: string },
-  Turn extends EveHostTurn = EveHostTurn,
+  Turn extends SessionTurn = SessionTurn,
 >(
   harness: RunnerHarness<E>,
   options: RunnerSessionsOptions,
@@ -975,7 +974,7 @@ export const runnerSessions = <
       deliveredTo(machine, userId, agent.id, runner, lines);
 
     /** The message as a line, under our id for it where the caller named one, and the files it names, where the machine's layout keeps them. */
-    const messageLine = (message: EveMessage<Turn>, layout: MachineLayout): RunnerMessage => {
+    const messageLine = (message: SessionMessage<Turn>, layout: MachineLayout): RunnerMessage => {
       const uuid = message.lineId ?? randomUUID();
       const { content, files } = runnerContent(
         message.message,
@@ -1040,7 +1039,7 @@ export const runnerSessions = <
           !namedOutcome(failure),
         ),
         {
-          outcome: EVE_SEND_OUTCOME.FAILED,
+          outcome: SESSION_SEND_OUTCOME.FAILED,
           status: failedStatus(failure),
           ...(failure instanceof LaunchRefused && failure.planRefusal !== undefined
             ? { planRefusal: failure.planRefusal }
@@ -1238,7 +1237,7 @@ export const runnerSessions = <
      */
     const sendHolding = (
       sessionId: string,
-      message: EveMessage<Turn>,
+      message: SessionMessage<Turn>,
       layout: MachineLayout,
       sent: RunnerMessage,
       handsOn: boolean,
@@ -1249,15 +1248,15 @@ export const runnerSessions = <
           [firstPlace(machine, userId, sessionId), Effect.exit(agentOf(message.conversationId))],
           { concurrency: "unbounded" },
         );
-        if (Option.isNone(found)) return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+        if (Option.isNone(found)) return { outcome: SESSION_SEND_OUTCOME.RETIRED } as const;
         const agent = yield* agentRead;
         // The session must be the conversation's own agent's, which the account reaches.
         if (found.value.agentId !== agent.id) {
-          return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+          return { outcome: SESSION_SEND_OUTCOME.RETIRED } as const;
         }
         const target = { userId, conversationId: agent.conversationId };
         const accepted = {
-          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          outcome: SESSION_SEND_OUTCOME.ACCEPTED,
           sessionId,
           deliveryId: sent.line.uuid,
         } as const;
@@ -1460,16 +1459,16 @@ export const runnerSessions = <
       Effect.gen(function* () {
         const found = yield* firstPlace(machine, userId, sessionId);
         if (Option.isNone(found) || found.value.agentId !== agent.id) {
-          return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+          return { outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
         }
         const { conversationId } = agent;
         const turn = (yield* latestTurnsOfReached([conversationId])).get(conversationId);
         if (turn?.id !== turnId || !RUNNING_TURN_STATUSES.has(turn.status)) {
-          return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+          return { outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
         }
         // Note that its exit is read at most `CODER.RUNNER_EXIT_READ`, as a message reads it, so a Stop never waits out a live runner's exit.
         const live = yield* liveRunner(machine, found.value, CODER.RUNNER_EXIT_READ);
-        if (live === undefined) return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
+        if (live === undefined) return { outcome: SESSION_CANCEL_OUTCOME.ACCEPTED } as const;
         yield* delivered(agent, live, [stopLine(live.mark.firstSequence)]).pipe(
           Effect.catchIf(
             (failure) =>
@@ -1477,7 +1476,10 @@ export const runnerSessions = <
             () => Effect.void,
           ),
         );
-        return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED, launch: live.mark.firstSequence } as const;
+        return {
+          outcome: SESSION_CANCEL_OUTCOME.ACCEPTED,
+          launch: live.mark.firstSequence,
+        } as const;
       });
 
     /**
@@ -1680,7 +1682,7 @@ export const runnerSessions = <
           const turnId = randomUUID();
           yield* writer.enqueueTurn(
             { userId, conversationId: agent.conversationId },
-            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+            { turnId, runtimeTurnId: turnId, origin: TURN_ORIGIN.TYPED },
           );
           // The checkout's own sentence names GitHub or the sandbox (`status.ts`'s `FAILURE_WORDS`);
           // any other failure, a missing snapshot among them, reads as the sandbox's, with its reason,
@@ -1808,7 +1810,7 @@ export const runnerSessions = <
     const sentTo = (
       agent: Agent,
       sessionId: string,
-      message: EveMessage<Turn>,
+      message: SessionMessage<Turn>,
       answersFirst: boolean,
     ) =>
       Effect.gen(function* () {
@@ -1827,7 +1829,7 @@ export const runnerSessions = <
         // opening its sandbox holds the lease, which is the very case this queue is for.
         const found = yield* firstPlace(machine, userId, sessionId);
         if (Option.isSome(found) && found.value.agentId !== agent.id) {
-          return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+          return { outcome: SESSION_SEND_OUTCOME.RETIRED } as const;
         }
         // The harness's lines are read as `sendHolding` reads them, so a plan refused now refuses
         // the message, and go ahead of it for a recorded runner's launch; with none recorded, the
@@ -1842,7 +1844,7 @@ export const runnerSessions = <
           : queued(agent, recorded.mark.firstSequence, [...ahead.lines, sent.line]);
         yield* handedOnAfter(sessionId, agent, sent.line.uuid);
         return {
-          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          outcome: SESSION_SEND_OUTCOME.ACCEPTED,
           sessionId,
           deliveryId: sent.line.uuid,
         } as const;
@@ -1884,7 +1886,7 @@ export const runnerSessions = <
                   withdrawn,
                 ),
               ).pipe(Effect.onError(() => withdrawn));
-              return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
+              return { outcome: SESSION_SEND_OUTCOME.ACCEPTED, sessionId } as const;
             }).pipe(
               Effect.catch(failed("open")),
               Effect.annotateLogs(agentLogIds(agent, sessionId)),
@@ -1937,13 +1939,13 @@ export const runnerSessions = <
             const agentId = Option.isSome(found) ? found.value.agentId : undefined;
             const agent = agentId === undefined ? Option.none() : yield* readAgent(userId, agentId);
             if (Option.isNone(agent)) {
-              return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+              return { outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
             }
             const canceled = yield* holdingRunner(
               agent.value.id,
               cancelHolding(sessionId, turnId, agent.value),
             );
-            if (canceled.outcome !== EVE_CANCEL_OUTCOME.ACCEPTED || Option.isNone(after)) {
+            if (canceled.outcome !== SESSION_CANCEL_OUTCOME.ACCEPTED || Option.isNone(after)) {
               return { outcome: canceled.outcome } as const;
             }
             const launch = "launch" in canceled ? canceled.launch : undefined;
@@ -1966,7 +1968,8 @@ export const runnerSessions = <
       reset: (sessionId) =>
         Effect.gen(function* () {
           const places = yield* machine.findPlaces(userId, sessionId);
-          if (places.length === 0) return { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+          if (places.length === 0)
+            return { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
           let retired = 0;
           for (const place of places) {
             if (!(yield* ownsPlace(place))) continue;
@@ -1978,11 +1981,11 @@ export const runnerSessions = <
             yield* machine.discard(place);
           }
           // A session whose places are all another account's agents' is none of this account's to retire.
-          if (retired === 0) return { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+          if (retired === 0) return { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
           // Note that the session's drive goes through the delete queue rather than here, because a
           // sandbox just deleted holds its drive a few seconds more, which the queue's next pass waits out.
           yield* queueSessionSandboxes([sessionId]);
-          return { outcome: EVE_RESET_OUTCOME.RESET } as const;
+          return { outcome: SESSION_RESET_OUTCOME.RESET } as const;
         }).pipe(
           Effect.catch(unavailable("reset")),
           Effect.annotateLogs(agentLogIds({}, sessionId)),

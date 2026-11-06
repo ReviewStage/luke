@@ -1,7 +1,7 @@
 /**
  * agent-browser.ts -- an agent's browser as the service reaches it: a Chromium kept running in the agent's own sandbox, and a DevTools protocol session with it over the sandbox's PTY.
  *
- * A sandbox is found as the Terminal tab finds it, by the eve session it is
+ * A sandbox is found as the Terminal tab finds it, by the session it is
  * tagged with (`vercel-sandbox-api.ts`): a root session's own id, which a
  * worker's session names as its root, since a worker works in its parent's
  * sandbox. The brain's
@@ -429,8 +429,7 @@ function ownScope<A, E>(
 }
 
 /**
- * The session whose sandbox an agent's browser runs in, as eve hands a tool
- * its session: a root session's own id, and a worker's root's, since a
+ * The session whose sandbox an agent's browser runs in: a root session's own id, and a worker's root's, since a
  * worker works in its parent's sandbox and opens none of its own.
  */
 export function browserSessionOf(session: {

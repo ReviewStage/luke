@@ -1,7 +1,7 @@
 /**
  * sentry-ai-content.test.ts -- an agent's turn reaches Sentry as timing alone: its spans leave, but no instructions, prompt, tool arguments, tool result, or reply of the model's.
- * Sentry is started as an eve root starts it, over the recording transport;
- * the model is a script. It stands in a file of its own because eve's start
+ * Sentry is started as the retired runtime's root started it, over the recording transport;
+ * the model is a script. It stands in a file of its own because that start
  * installs process-wide integrations the web suite's tests do not expect.
  */
 
@@ -66,7 +66,7 @@ it.effect("an agent's turn sends its spans to Sentry without the model's inputs 
           system: CONTENT.INSTRUCTIONS,
           prompt: CONTENT.PROMPT,
           stopWhen: stepCountIs(3),
-          // Note that the turn asks for its content to be recorded, as eve's trace policy does for a public audience, and Sentry still sends none.
+          // Note that the turn asks for its content to be recorded, as the retired runtime's trace policy did for a public audience, and Sentry still sends none.
           experimental_telemetry: { isEnabled: true, recordInputs: true, recordOutputs: true },
           tools: {
             read_file: tool({

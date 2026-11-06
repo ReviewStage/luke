@@ -1099,9 +1099,9 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
         : deliveryId;
     return yield* Effect.forEach(woken, ({ userId, agent, on }) =>
       Effect.gen(function* () {
-        const eve = yield* sessionsFor(userId);
+        const agentSessions = yield* sessionsFor(userId);
         const outside = yield* hostedStoreOrUnavailable(outsideWordsFor(wake, inline, userId));
-        yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
+        yield* steerAgent(agentSessions, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
           text: agentWakeText(wake, on.branch, inline, checks, agent.githubAccess),
           clientKey,
           sender: { kind: MESSAGE_SENDER.GITHUB, login: wake.by },

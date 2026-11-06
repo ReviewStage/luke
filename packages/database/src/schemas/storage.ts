@@ -72,7 +72,7 @@ export const conversations = pgTable(
       (): AnyPgColumn => conversations.id,
       { onDelete: "cascade" },
     ),
-    /** The runtime's own session id for this conversation: ours now, eve's later. */
+    /** The runtime's own session id for this conversation, claimed only forward (`claimRuntimeSession`). */
     runtimeSessionId: text("runtime_session_id"),
     createdAt: createdAt(),
     lastActivityAt: timestamptz("last_activity_at").notNull().defaultNow(),
@@ -84,11 +84,11 @@ export const conversations = pgTable(
     journalRevision: bigint("journal_revision", { mode: "number" }).notNull().default(0),
     /** A child's own short name, as the spawn call gave it; null on every other kind. */
     label: text("label"),
-    /** Whether a settled child owes its parent a completion; false on every child opened now, eve handing its findings to the parent turn itself. */
+    /** Whether a settled child owes its parent a completion; false on every child the retired runtime opened once it handed a worker's findings to the parent turn itself. */
     expectsCompletion: boolean("expects_completion").notNull().default(true),
-    /** What answers the conversation's turns, settled as it is opened; null on a conversation from before the column, which runs on eve. */
+    /** What answers the conversation's turns, settled as it is opened; null on a conversation from before the column, which is read as the retired runtime's. */
     runtime: text("runtime").$type<ConversationRuntime>(),
-    /** The harness's own session or thread id on a Claude Code or Codex conversation, which a relaunch resumes; null on eve's and before the harness answers one. */
+    /** The harness's own session or thread id on a Claude Code or Codex conversation, which a relaunch resumes; null on the retired runtime's and before the harness answers one. */
     nativeSession: text("native_session"),
     /** The number of the last runner event projected into the conversation, so a batch the runner posts again applies nothing twice; null before a runner's first event. */
     nativeSequence: bigint("native_sequence", { mode: "number" }),
@@ -331,8 +331,8 @@ export const turns = pgTable(
     toolSetHash: text("tool_set_hash"),
     responseIds: text("response_ids").array(),
     usage: jsonb("usage").$type<StoredTurnUsage>(),
-    /** eve's own id for the turn, so a relay can name to eve the turn this row is. */
-    eveTurnId: text("eve_turn_id"),
+    /** The runtime's own id for the turn, so a Stop can name to the harness the turn this row is. */
+    runtimeTurnId: text("eve_turn_id"),
     queuedAt: timestamptz("queued_at").notNull().defaultNow(),
     startedAt: timestamptz("started_at"),
     settledAt: timestamptz("settled_at"),
@@ -341,7 +341,7 @@ export const turns = pgTable(
     failureDetail: text("failure_detail"),
     cancelRequestedAt: timestamptz("cancel_requested_at"),
     /**
-     * eve's id for the tool call whose Stop stamped `cancel_requested_at`,
+     * The key of the tool call whose Stop stamped `cancel_requested_at`,
      * where an agent's `stop_agent` made it: the call run again finds the turn
      * it stopped by this key, and never stops a newer one in its place. Null
      * for a Stop the developer pressed, or none.
@@ -357,7 +357,7 @@ export const turns = pgTable(
     cancelRequestedBy: uuid("cancel_requested_by"),
     /** Whether Anthropic refused Fast for a step of the turn, which then ran at standard speed instead (`coder-host/model.ts`). */
     fastRefused: boolean("fast_refused").notNull().default(false),
-    /** How many notes a native coding agent's turn has taken on its plan over our MCP server, reserved before each save (`edit_description`'s per-turn cap); eve keeps its own count in its session. */
+    /** How many notes a native coding agent's turn has taken on its plan over our MCP server, reserved before each save (`edit_description`'s per-turn cap); the retired runtime kept its own count in its session. */
     descriptionNotesTaken: integer("description_notes_taken").notNull().default(0),
   },
   (table) => [

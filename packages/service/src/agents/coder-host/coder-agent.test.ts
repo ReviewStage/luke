@@ -23,7 +23,7 @@ const TASK_ADDRESS = {
 } as const;
 
 test("a Claude Code agent is told of Claude Code's own tools and never of Vespin's it is not offered", () => {
-  // The tools Claude Code owns in place of ours, as eve's instructions name ours.
+  // The tools Claude Code owns in place of ours, named as instructions would name ours.
   const LUKES = [
     "`bash`",
     "`read_file`",

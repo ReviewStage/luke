@@ -45,12 +45,11 @@ import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
  * deleted task's agent, whose conversation the purge takes once its
  * retention has passed and not before, and an automation the sweep starts,
  * whose agent's harness is reached acting for its owner, with nothing sent
- * to eve or under the cron's bearer the sweep itself was called with, over
- * GitHub and eve as one fake HTTP boundary.
+ * under the cron's bearer the sweep itself was called with, over
+ * GitHub as a fake HTTP boundary and a harness that writes down each call.
  */
 
 const CRON_SECRET = "cron-secret-1";
-/** The deployment's own secret at eve's door, which every deployment here holds beside the cron's. */
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -282,14 +281,14 @@ it.layer(getTestDB())("an automation the sweep starts", (it) => {
   it.effect("reaches its agent's harness acting for its owner", () =>
     Effect.gen(function* () {
       const owner = yield* openDueAutomation;
-      const eve = githubAndHarness();
+      const agentSessions = githubAndHarness();
       const sentry = recordingSentry();
       const database = yield* testDatabase;
-      const status = yield* sweep(CRON_SECRET, CRON_SECRET, database, eve.reached).pipe(
+      const status = yield* sweep(CRON_SECRET, CRON_SECRET, database, agentSessions.reached).pipe(
         Effect.provide(sentry.layer),
       );
       assert.equal(status, 200);
-      assert.deepEqual(eve.heard, [{ call: "open", account: owner }]);
+      assert.deepEqual(agentSessions.heard, [{ call: "open", account: owner }]);
     }),
   );
 });

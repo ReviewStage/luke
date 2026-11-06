@@ -100,7 +100,7 @@ export interface RelayAsk {
   readonly rows: number;
 }
 
-/** The agent a connection reached: whose agent it is, its conversation, whose lease it holds, and the eve session its sandbox is tagged with, none before it ran. */
+/** The agent a connection reached: whose agent it is, its conversation, whose lease it holds, and the session its sandbox is tagged with, none before it ran. */
 export interface RelayAgent {
   /** The account whose agent it is, under which the launch at its sandbox's firewall is kept. */
   readonly userId: string;
@@ -125,7 +125,7 @@ export interface RelayDependencies {
     shell: InteractiveShell,
   ) => Effect.Effect<RelaySocket, SandboxUnavailable, Scope.Scope>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
-  /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
+  /** Keeps the running sandbox the session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
   readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
   /** Claims the token's renewal on the running sandbox session, once per lease per session within the refresh rule. */
   readonly claimRenewal: (

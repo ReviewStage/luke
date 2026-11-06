@@ -15,14 +15,14 @@ import { Effect, Layer, Option } from "effect";
 import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
 import { endedAt } from "../../testing/agent-turns.js";
 import { githubReaching } from "../../testing/github-app-fake.js";
-import { recordingEve, sentTo } from "../../testing/recording-eve.js";
+import { recordingSessions, sentTo } from "../../testing/recording-sessions.js";
 import { reportToStarter } from "./starter-report.js";
 
 /**
  * A started agent's final message handed to its starter as the store writer
  * settles its turn, where the starter, which takes a turn only when a
  * message reaches it, would otherwise wait on a report that never comes.
- * Over a real dialect, eve a fake at the client's boundary, the writer told
+ * Over a real dialect, the agents' sessions a recording fake, the writer told
  * to hand each settled turn here as the deployment's listener does.
  * Synthetic accounts and agents.
  */
@@ -73,11 +73,13 @@ const openStarted = () =>
     return { member, starter, agent, sessionId };
   });
 
-/** The writer told to hand each turn it settles to the agent's starter over the eve given, as the deployment's listener does. */
-const reporting = (eve: ReturnType<typeof recordingEve>) =>
+/** The writer told to hand each turn it settles to the agent's starter over the sessions given, as the deployment's listener does. */
+const reporting = (agentSessions: ReturnType<typeof recordingSessions>) =>
   Layer.succeed(SettledTurnListener, {
     heard: (turn) =>
-      reportToStarter(eve.sessionsFor, turn).pipe(Effect.provide(githubReaching([]).layer)),
+      reportToStarter(agentSessions.sessionsFor, turn).pipe(
+        Effect.provide(githubReaching([]).layer),
+      ),
   });
 
 it.layer(getTestDB())("a started agent's final message handed to its starter", (it) => {
@@ -85,13 +87,13 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
     "a completed turn hands its last words to the starter once, under the agent's name and how it ended, however many times the settle is heard",
     () =>
       Effect.gen(function* () {
-        const eve = recordingEve();
+        const agentSessions = recordingSessions();
         const { agent, sessionId } = yield* openStarted();
 
         const turnId = yield* endedAt(agent, RUN_STATUS.SUCCEEDED, T0, REPORT).pipe(
-          Effect.provide(reporting(eve)),
+          Effect.provide(reporting(agentSessions)),
         );
-        const [told, ...more] = sentTo(eve, sessionId);
+        const [told, ...more] = sentTo(agentSessions, sessionId);
         assert.equal(more.length, 0, more.join("\n"));
         assert.ok(told !== undefined);
         assert.match(
@@ -102,7 +104,7 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
         assert.ok(told.endsWith(agentMessageReplyLine(agent.id)), told);
 
         // The settle heard again, as a retried batch or a second listener would, sends nothing twice.
-        yield* reportToStarter(eve.sessionsFor, {
+        yield* reportToStarter(agentSessions.sessionsFor, {
           userId: agent.userId,
           conversationId: agent.conversationId,
           turnId,
@@ -110,7 +112,7 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
           failure: null,
           ranMs: 1,
         }).pipe(Effect.provide(githubReaching([]).layer));
-        assert.equal(sentTo(eve, sessionId).length, 1);
+        assert.equal(sentTo(agentSessions, sessionId).length, 1);
       }),
   );
 
@@ -118,15 +120,15 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
     "a failed turn that said nothing hands its failure, and a stopped one that it was stopped",
     () =>
       Effect.gen(function* () {
-        const eve = recordingEve();
+        const agentSessions = recordingSessions();
         const { agent, sessionId } = yield* openStarted();
 
-        yield* endedAt(agent, RUN_STATUS.FAILED, T0).pipe(Effect.provide(reporting(eve)));
+        yield* endedAt(agent, RUN_STATUS.FAILED, T0).pipe(Effect.provide(reporting(agentSessions)));
         yield* endedAt(agent, RUN_STATUS.CANCELED, T0 + 1_000, "Stopping.").pipe(
-          Effect.provide(reporting(eve)),
+          Effect.provide(reporting(agentSessions)),
         );
 
-        const [failed, stopped] = sentTo(eve, sessionId);
+        const [failed, stopped] = sentTo(agentSessions, sessionId);
         assert.ok(
           failed?.includes(
             `failed its turn (${TURN_FAILURE.MODEL}). Its final message:\n\n(it said nothing)`,
@@ -142,13 +144,15 @@ it.layer(getTestDB())("a started agent's final message handed to its starter", (
 
   it.effect("nothing is handed to a starter archived since", () =>
     Effect.gen(function* () {
-      const eve = recordingEve();
+      const agentSessions = recordingSessions();
       const { member, starter, agent } = yield* openStarted();
       yield* archiveAgent(member, starter.id, true);
 
-      yield* endedAt(agent, RUN_STATUS.SUCCEEDED, T0, REPORT).pipe(Effect.provide(reporting(eve)));
+      yield* endedAt(agent, RUN_STATUS.SUCCEEDED, T0, REPORT).pipe(
+        Effect.provide(reporting(agentSessions)),
+      );
 
-      assert.deepEqual(eve.sent, []);
+      assert.deepEqual(agentSessions.sent, []);
     }),
   );
 });
