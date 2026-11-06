@@ -245,6 +245,26 @@ function TaskBody({ children }: { children: React.ReactNode }): React.JSX.Elemen
 }
 
 /**
+ * The row the agents' tabs stand in under the task's topbar, which a task's
+ * page tightens under the topbar (desktop.css's `task-tabs`): drawn by the
+ * loaded page and its skeleton alike, so the row stands where it will as the
+ * task lands; `hidden` where no strip stands, a phone's or the details'.
+ */
+function TaskTabsRow({
+  hidden,
+  children,
+}: {
+  hidden: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className={hidden ? undefined : "task-tabs contents"} hidden={hidden}>
+      {children}
+    </div>
+  );
+}
+
+/**
  * The task's page while the task is read, in the shape it lands in and
  * through the frames it lands in: the toolbar empty where it stands, the
  * column standing as an agent's tab does before its transcript lands
@@ -284,8 +304,11 @@ function TaskPageSkeleton({
         fullScreen={panel?.fullScreen === true}
         column={
           <>
+            {/* The tabs' row stands as the loaded one does, so nothing moves as the task lands. */}
             {head === undefined ? (
-              <Toolbar start={TOOLBAR_INSET.COLUMN} look={TOOLBAR_LOOK.TABS} measure />
+              <TaskTabsRow hidden={false}>
+                <Toolbar start={TOOLBAR_INSET.COLUMN} look={TOOLBAR_LOOK.TABS} measure />
+              </TaskTabsRow>
             ) : null}
             <TaskBody>
               <Fill className="desktop-task-column">
@@ -1344,10 +1367,7 @@ function DescriptionDocument({
                     column={
                       <>
                         {/* On a phone no strip stands, its details listing the agents instead, the strip drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`); wider, the task's details stand in place of the strip and the panel alike. */}
-                        <div
-                          className={phone || detailsWide ? undefined : "task-tabs contents"}
-                          hidden={phone || detailsWide}
-                        >
+                        <TaskTabsRow hidden={phone || detailsWide}>
                           <MainTabBars
                             task={listed}
                             main={mainTabs}
@@ -1366,7 +1386,7 @@ function DescriptionDocument({
                             onShown={phone ? setShownAgentTab : undefined}
                             waiting={waitingOf}
                           />
-                        </div>
+                        </TaskTabsRow>
                         {/* The plan's banner is the whole plan's, so it stands over every
             tab of the column, and over the panel's while that fills the window. */}
                         {sidePanel.fullScreen ? null : stranded.banner}
