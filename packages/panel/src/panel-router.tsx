@@ -51,7 +51,13 @@ import {
   routeAccessNow,
   settingsPageRouteStands,
 } from "./route-gates.js";
-import { useAdminAccess, useAdminAccessPending, useExperimentChoices } from "./use-app-state.js";
+import {
+  SETTINGS_HELD,
+  useAdminAccess,
+  useAdminAccessPending,
+  useAppSlice,
+  useExperimentChoices,
+} from "./use-app-state.js";
 
 /** A task's link naming one of its comment threads, `?comment=<threadId>`; every other key the address carries is left as it stands. */
 const taskSearchSchema = Schema.toStandardSchemaV1(
@@ -430,9 +436,10 @@ export function PanelRouterProvider({ router }: { router: PanelRouter }): React.
   const admin = useAdminAccess();
   const adminPending = useAdminAccessPending();
   const experiments = useExperimentChoices();
+  const experimentsRead = useAppSlice(SETTINGS_HELD);
   const access = useMemo(
-    (): RouteAccess => ({ admin: admin || adminPending, experiments }),
-    [admin, adminPending, experiments],
+    (): RouteAccess => ({ admin: admin || adminPending, experiments, experimentsRead }),
+    [admin, adminPending, experiments, experimentsRead],
   );
   const asked = useRef(access);
   useEffect(() => {

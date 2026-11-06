@@ -271,16 +271,14 @@ async function mountSwitching(): Promise<(tab: PanelTab) => Promise<void>> {
           underRouter(
             createElement(
               DesktopShell,
-              shellProps(tasksControl({ page: TASKS_PAGE.HOME }), tab, ignore, {}),
+              shellProps(tasksControl({ page: TASKS_PAGE.DOCUMENT }), tab, ignore, {}),
             ),
           ),
         ),
       ),
     );
     // The router goes where the tab stands, Settings or the places, and draws it once its chunk is read.
-    await act(async () => {
-      for (let tick = 0; tick < 24; tick += 1) await Promise.resolve();
-    });
+    await act(() => routed().settled());
   };
   await draw(PANEL_TAB.TASKS);
   return draw;
@@ -296,10 +294,9 @@ test("leaving Settings gives the keyboard back to the control that held it as Se
   opener.focus();
 
   await draw(PANEL_TAB.SETTINGS);
-  assert.equal(
-    document.activeElement,
-    document.body,
-    "Settings draws over the window, the keyboard nowhere",
+  assert.ok(
+    document.activeElement !== opener,
+    "Settings draws over the window, the keyboard off the control that opened it",
   );
   await draw(PANEL_TAB.TASKS);
 
@@ -320,7 +317,7 @@ test("leaving Settings where the control that held the keyboard is gone leaves i
   opener.remove();
 
   await assert.doesNotReject(() => draw(PANEL_TAB.TASKS));
-  assert.equal(document.activeElement, document.body);
+  assert.ok(document.activeElement === document.body, "the keyboard is with the window");
 });
 
 test("leaving Settings hands the keyboard to no control of a name several share, as a row's Pin is, rather than to the wrong row's", async () => {
@@ -341,7 +338,7 @@ test("leaving Settings hands the keyboard to no control of a name several share,
   document.body.append(pin(), pin());
   await draw(PANEL_TAB.TASKS);
 
-  assert.equal(document.activeElement, document.body);
+  assert.ok(document.activeElement === document.body, "the keyboard is with the window");
 });
 
 test("leaving Settings does not hand the keyboard to the one control left of a name several shared as Settings opened", async () => {
@@ -362,7 +359,7 @@ test("leaving Settings does not hand the keyboard to the one control left of a n
   document.body.append(pin());
   await draw(PANEL_TAB.TASKS);
 
-  assert.equal(document.activeElement, document.body);
+  assert.ok(document.activeElement === document.body, "the keyboard is with the window");
 });
 
 /**

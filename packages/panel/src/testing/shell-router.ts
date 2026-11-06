@@ -54,6 +54,10 @@ export interface ShellRouter {
   readonly draw: (shell: ReactElement, at?: string) => ReactElement;
   readonly under: (shell: ReactElement, standing?: string) => ReactElement;
   readonly router: AnyRouter;
+  /** Moves the router to `to`, as the window's own doors move it. */
+  readonly go: (to: string) => void;
+  /** Answers once the router's latest move has drawn where it went, its route's chunk read. */
+  readonly settled: () => Promise<void>;
 }
 
 /** Where a shell stands by its props: Settings where its tab is, Admin where it stands, else the places. */
@@ -104,14 +108,21 @@ export function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
     history: createMemoryHistory({ initialEntries: [at] }),
     context: { queryClient: new QueryClient(), access: routeAccessNow() },
   });
+  // The router's latest move, which a test awaits rather than guessing how many turns its chunk takes to read.
+  let moving: Promise<void> = Promise.resolve();
+  const go = (to: string) => {
+    if (router.history.location.href !== to) moving = router.navigate({ href: to });
+  };
   const draw = (shell: ReactElement, to?: string) => {
-    if (to !== undefined && router.history.location.href !== to) void router.navigate({ href: to });
+    if (to !== undefined) go(to);
     return createElement(ShellElement, { value: shell }, createElement(RouterProvider, { router }));
   };
   return {
     router,
     draw,
     under: (shell, standing) => draw(shell, standing ?? standingOf(shell)),
+    go,
+    settled: () => moving,
   };
 }
 

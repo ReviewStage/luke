@@ -139,7 +139,13 @@ import {
   type LeaveGuard,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
-import { useAdminAccess, useAdminAccessPending, useExperimentChoices } from "./use-app-state.js";
+import {
+  SETTINGS_HELD,
+  useAdminAccess,
+  useAdminAccessPending,
+  useAppSlice,
+  useExperimentChoices,
+} from "./use-app-state.js";
 import { useHostRead } from "./use-host-read.js";
 import { type OpenSurface, useSurfaceOpen } from "./use-surface-open.js";
 
@@ -1650,7 +1656,8 @@ export function useWindowHistory(input: {
   // A routed step is reachable as its route's gate would let the window stand there (`route-gates.ts`).
   const adminOn = useAdminAccess();
   const adminPending = useAdminAccessPending();
-  const access: RouteAccess = { admin: adminOn || adminPending, experiments };
+  const experimentsRead = useAppSlice(SETTINGS_HELD);
+  const access: RouteAccess = { admin: adminOn || adminPending, experiments, experimentsRead };
   const router = useRouter();
   // The window leaving the routed place standing for the place its state says, which it stands on as a visit.
   const [leaving, setLeaving] = useState(false);

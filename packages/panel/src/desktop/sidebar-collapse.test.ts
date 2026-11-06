@@ -134,9 +134,7 @@ function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
       // The window turns to Settings by the router, as its own doors do.
       onTabChange: (next: PanelTab) => {
         setTab(next);
-        void routed().router.navigate({
-          href: next === PANEL_TAB.SETTINGS ? SHELL_AT.SETTINGS : SHELL_AT.PLACES,
-        });
+        routed().go(next === PANEL_TAB.SETTINGS ? SHELL_AT.SETTINGS : SHELL_AT.PLACES);
       },
       tasks: tasksControl({
         page: TASKS_PAGE.HOME,
@@ -363,18 +361,13 @@ test("a floating sidebar left for Settings by its chord is away when the plans c
   assert.equal(standing(page), "floating");
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
   // Settings is its own chunk, so the test waits for it as the window does.
-  await act(async () => {
-    await import("./settings-route.lazy.js");
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  await act(() => routed().settled());
   assert.equal(page.querySelector("aside.desktop-sidebar"), null, "Settings draws its own list");
   const back = rowNamed(page.querySelector('nav[aria-label="Settings pages"]') ?? page, "Back");
   assert.ok(back, "Settings has its way back");
   // The plans come back once the router has gone back to them.
-  await act(async () => {
-    back.click();
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  act(() => back.click());
+  await act(() => routed().settled());
   assert.equal(standing(page), "away");
 });
 

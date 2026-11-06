@@ -15,10 +15,12 @@ import type { RegisteredRouter, RouteIds } from "@tanstack/react-router";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import { appStateNow } from "./use-app-state.js";
 
-/** What the gates read: whether the account may reach Admin, its access still being read counting as may, and its experiments. */
+/** What the gates read: whether the account may reach Admin, its access still being read counting as may, its experiments, and whether they are read yet. */
 export interface RouteAccess {
   readonly admin: boolean;
   readonly experiments: ExperimentChoices;
+  /** Whether the account's settings, its experiments among them, have been read; a page an experiment holds waits on the read rather than giving way. */
+  readonly experimentsRead: boolean;
 }
 
 /** The window's access as it stands now, for a route's `beforeLoad`, which cannot wait a render. */
@@ -29,6 +31,7 @@ export function routeAccessNow(): RouteAccess {
     // A reloaded Admin address waits on an access still being read rather than being refused.
     admin: access === undefined || access.pending === true || access.admin === true,
     experiments: state?.settings?.experiments ?? NO_EXPERIMENTS,
+    experimentsRead: state?.settings !== undefined,
   };
 }
 
@@ -42,10 +45,11 @@ export function settingsViewOfPage(page: string): SettingsView | undefined {
   return SETTINGS_PAGE_LIST.find((view) => view === page);
 }
 
-/** Whether a Settings page stands: every page but one an experiment the account has off holds. */
+/** Whether a Settings page stands: every page but one an experiment the account has off holds, which waits on the account's settings while they are unread, as a reloaded address's does. */
 export function settingsPageRouteStands(page: string, access: RouteAccess): boolean {
   const view = settingsViewOfPage(page);
-  return view === undefined || settingsPageExperimentStands(view, access.experiments);
+  if (view === undefined || !access.experimentsRead) return true;
+  return settingsPageExperimentStands(view, access.experiments);
 }
 
 /** The places the router alone says the window stands on, rather than the window's state: Settings and Admin. */
