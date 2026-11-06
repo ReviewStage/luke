@@ -10,9 +10,14 @@ description: "Work with tasks, agents, and your Inbox from a terminal"
 On a Mac with the app, open **Settings › Vespin CLI** and click **Install**. Anywhere else, use one of these:
 
 ```sh
-npm i -g vespin                                   # Node 20 or later
-curl -fsSL https://vespin.dev/install.sh | sh -s cli   # bundles its own Node; macOS (Apple silicon) or Linux
-npx vespin --help                                 # run once without installing
+# Node 20 or later
+npm i -g vespin
+
+# Bundles its own Node; macOS (Apple silicon) or Linux
+curl -fsSL https://vespin.dev/install.sh | sh -s cli
+
+# Run once without installing
+npx vespin --help
 ```
 
 `vespin update` updates a curl install in place. For an npm install it prints the command to run.
@@ -35,19 +40,31 @@ Run these inside a checkout. The CLI reads the repository from the folder.
 # Create a task here, with an agent on it
 echo "Fix the login redirect" | vespin task create "Login redirect" --prompt -
 
-vespin agent logs <id> --follow                       # stream the agent's turn
-vespin agent wait <id>                                # block until the turn ends
-vespin agent checkout <id>                            # fetch its branch, as gh pr checkout does
-vespin agent send <id> "Also cover the signup page"   # message the agent
+# Stream the agent's turn, or block until it ends
+vespin agent logs <id> --follow
+vespin agent wait <id>
+
+# Fetch its branch, as gh pr checkout does
+vespin agent checkout <id>
+
+# Message the agent
+vespin agent send <id> "Also cover the signup page"
 ```
 
 ## Answer your Inbox
 
 ```sh
-vespin inbox list                   # open threads, unread marked ●
-vespin inbox view <id>              # a thread and its open ask
-vespin inbox answer <id> <option>   # pick an option, or done for a to-do
-vespin inbox reply <id> "…"         # write on the thread
+# Open threads, unread marked ●
+vespin inbox list
+
+# A thread and its open ask
+vespin inbox view <id>
+
+# Pick an option, or done for a to-do
+vespin inbox answer <id> <option>
+
+# Write on the thread
+vespin inbox reply <id> "Use the staging database"
 ```
 
 ## Scripts and coding agents
