@@ -527,20 +527,22 @@ function launchFingerprint(
   );
   const names = integrations.map((each) => each.name).sort();
   const { held } = credential;
-  const slots =
-    held === undefined
-      ? declared.filter(isHeld).map((each) => ({
-          slot: each.slot,
-          credential:
-            each.renewal === CREDENTIAL_RENEWAL.FIXED ? Redacted.value(each.value) : undefined,
-        }))
+  const slots = [
+    ...(held === undefined
+      ? []
       : [
           {
             slot: held.kind,
             credential:
               held.fingerprint === undefined ? undefined : Redacted.value(held.fingerprint),
           },
-        ];
+        ]),
+    ...declared.filter(isHeld).map((each) => ({
+      slot: each.slot,
+      credential:
+        each.renewal === CREDENTIAL_RENEWAL.FIXED ? Redacted.value(each.value) : undefined,
+    })),
+  ];
   // Note that one slot is digested alone, as the one a launch could hold before credentials were declared.
   const swapped = slots.length === 0 ? undefined : slots.length === 1 ? slots[0] : slots;
   return createHash("sha256")
