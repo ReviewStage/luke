@@ -1,11 +1,7 @@
-import type {
-  HostedInstalledSkillClient,
-  InstalledSkillCallResult,
-} from "@repo/features/installed-skill-client";
+import type { HostedInstalledSkillClient } from "@repo/features/installed-skill-client";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillContentView,
-  type InstalledSkillFailedView,
   type InstalledSkillInstallView,
   type InstalledSkillPreviewView,
   installedSkillFollowParamsSchema,
@@ -77,16 +73,6 @@ export interface InstalledSkillsComposer extends Composer {
 
 const UNANSWERED = { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED } as const;
 
-/** A client's result as the window's view: the answer shaped by `shape`, or the failure with the skill it names. */
-function viewOf<Answer, View>(
-  result: InstalledSkillCallResult<Answer>,
-  shape: (answer: Answer) => View,
-): View | InstalledSkillFailedView {
-  if (result.ok) return shape(result.answer);
-  const { failure, skillName } = result;
-  return { failure, ...(skillName === undefined ? undefined : { skillName }) };
-}
-
 export function composeInstalledSkills(
   dependencies: InstalledSkillsDependencies,
 ): Effect.Effect<InstalledSkillsComposer, never, Scope.Scope | HttpClient.HttpClient> {
@@ -129,18 +115,11 @@ function composed(
 ): InstalledSkillsComposer {
   const { client, pool } = dependencies;
 
-  /** The service asked behind the gate, over the host's own HTTP client, its result as the window's view. */
-  const asked = <Answer, View>(
-    call: Effect.Effect<InstalledSkillCallResult<Answer>, never, HttpClient.HttpClient>,
-    shape: (answer: Answer) => View,
-  ): Effect.Effect<View | InstalledSkillFailedView> =>
-    gate()
-      ? Effect.map(Effect.provideService(call, HttpClient.HttpClient, http), (result) =>
-          viewOf(result, shape),
-        )
-      : Effect.succeed(UNANSWERED);
-
-  const whole = <Answer>(answer: Answer) => answer;
+  /** The service asked behind the gate, over the host's own HTTP client, its answer handed on as it stands, so a failure's cause reaches the window. */
+  const asked = <Answer>(
+    call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
+  ): Effect.Effect<Answer | typeof UNANSWERED> =>
+    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
 
   const methods: HostMethodTable = {
     // Note that the windows' hold on a workspace is one fiber standing until let go, so a window holding it again holds nothing anew.
@@ -186,7 +165,7 @@ function composed(
           params,
           "a read names a skill",
         );
-        const view = yield* asked(client.read(skillId), whole);
+        const view = yield* asked(client.read(skillId));
         return carried<InstalledSkillContentView>(view);
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW]: (params) =>
@@ -196,7 +175,7 @@ function composed(
           params,
           "a preview names a workspace and a paste",
         );
-        const view = yield* asked(client.preview(workspaceId, text), whole);
+        const view = yield* asked(client.preview(workspaceId, text));
         return carried<InstalledSkillPreviewView>(view);
       }),
     // An install's skills are drawn on every held read whose scope they are in the moment it answers, each standing until those reads carry its transaction.
@@ -207,7 +186,7 @@ function composed(
           params,
           "an install names a workspace, a scope, and a paste",
         );
-        const view = yield* asked(client.install(install), whole);
+        const view = yield* asked(client.install(install));
         if ("skills" in view) {
           yield* Effect.forEach(
             view.skills,
@@ -219,7 +198,7 @@ function composed(
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE]: declaredMethod(
       pool,
-      skillRemoved((removal) => asked(client.remove(removal.skillId), whole)),
+      skillRemoved((removal) => asked(client.remove(removal.skillId))),
       (params: WireRecord) =>
         readParams(installedSkillIdParamsSchema, params, "a removal names a skill"),
     ),

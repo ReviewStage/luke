@@ -103,12 +103,11 @@ function fakeService(options: { refuseInstall?: boolean } = {}) {
   const replies: Replies = {
     install: options.refuseInstall
       ? {
-          ok: false,
           failure: INSTALLED_SKILL_CALL_FAILURE.CREDENTIAL,
           skillName: "release-notes",
         }
-      : { ok: true, answer: { skills: [SKILL] } },
-    remove: { ok: true, answer: { id: SKILL_ID } },
+      : { skills: [SKILL] },
+    remove: { id: SKILL_ID },
     gate: Effect.void,
   };
   /** A write's ask written down, then answered with `reply` once the gate lets it. */
@@ -133,12 +132,12 @@ function fakeService(options: { refuseInstall?: boolean } = {}) {
     read: (skillId) =>
       Effect.sync(() => {
         asked.push(`read:${skillId}`);
-        return { ok: true as const, answer: CONTENT };
+        return CONTENT;
       }),
     preview: (workspaceId) =>
       Effect.sync(() => {
         asked.push(`preview:${workspaceId}`);
-        return { ok: true as const, answer: UNSUPPORTED_PREVIEW };
+        return UNSUPPORTED_PREVIEW;
       }),
     install: (params) => writing(`install:${params.scope}`, () => replies.install),
     remove: (skillId) => writing(`remove:${skillId}`, () => replies.remove),
@@ -282,7 +281,7 @@ it.effect(
       yield* holding({ [WORKSPACE_ID]: [SKILL] });
 
       const refusing = yield* Deferred.make<void>();
-      replies.remove = { ok: false, failure: INSTALLED_SKILL_CALL_FAILURE.NOT_PERMITTED };
+      replies.remove = { failure: INSTALLED_SKILL_CALL_FAILURE.NOT_PERMITTED };
       replies.gate = Deferred.await(refusing);
       const removing = yield* Effect.forkChild(
         call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, { skillId: SKILL_ID }),
@@ -306,7 +305,7 @@ it.effect(
       const { call, live, replies, shown, holding } = yield* subject();
       yield* holding({ [WORKSPACE_ID]: [], [OTHER_WORKSPACE_ID]: [] });
 
-      replies.install = { ok: true, answer: { skills: [SKILL], txid: "9300" } };
+      replies.install = { skills: [SKILL], txid: "9300" };
       yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, INSTALL);
       assert.deepEqual(shown(WORKSPACE_ID), [SKILL_ID]);
       assert.deepEqual(shown(OTHER_WORKSPACE_ID), [], "another workspace's skill is not its");
