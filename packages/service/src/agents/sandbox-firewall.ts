@@ -24,9 +24,9 @@
  * whichever lands last is right; a GitHub credential minted twice is two
  * tokens of the same reach. Note that this holds only while the sources
  * stand still between a writer's read and its send: a writer that read the
- * launch before a relaunch kept its own, or before an end or a clear let it
- * go, may land after them and send what it read until the session's next
- * write; a renewal that read a launch before a relaunch replaced it writes
+ * launch before a relaunch kept its own, before a clear let it go, or
+ * between an end's send and its let-go, may land after them and send what
+ * it read until the session's next write; a renewal that read a launch before a relaunch replaced it writes
  * the ended launch's swaps over the new runner's, which every later write
  * sends until the next launch keeps its own; one that read the plan's swap
  * before a renewal sends the token it read, which still has the renewal's
@@ -486,14 +486,14 @@ export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
           yield* DateTime.nowAsDate,
         );
       }).pipe(storeUnavailable("the firewall's launch could not be kept")),
-    // Note that a launch that would not go fails the end before anything is sent, because every later
-    // write would send its swaps again; the caller's retry finds it kept (`launchOf`).
+    // Note that the policy goes first and the launch is let go once it landed, so an end whose send or
+    // let-go failed leaves the launch kept for the caller's retry to find (`launchOf`).
     endLaunch: (session, sources) =>
       Effect.andThen(
+        sent(session, sources, NO_SWAPS),
         letGoFirewallLaunch(session).pipe(
           storeUnavailable("the firewall's launch could not be let go"),
         ),
-        sent(session, sources, NO_SWAPS),
       ),
     launchOf: (session) =>
       launchKept(session).pipe(storeUnavailable("the firewall's launch could not be read")),

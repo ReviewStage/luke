@@ -74,6 +74,7 @@ function vercel(
     readonly refuseList?: boolean;
     readonly refuseLaterPages?: boolean;
     readonly refusePolicy?: boolean;
+    readonly refuseFirstPolicy?: boolean;
   } = {},
 ) {
   const sandboxes: FakeSandbox[] = [];
@@ -82,6 +83,7 @@ function vercel(
   const stopped: string[] = [];
   const policies: string[] = [];
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
+  let policiesRefused = 0;
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
     const method = init.method ?? "GET";
@@ -139,6 +141,10 @@ function vercel(
     }
     assert.equal(rest, "network-policy", `an unexpected call: ${method} ${parsed.pathname}`);
     if (options.refusePolicy === true) return new Response(null, { status: 502 });
+    if (options.refuseFirstPolicy === true && policiesRefused === 0) {
+      policiesRefused += 1;
+      return new Response(null, { status: 502 });
+    }
     policies.push(sessionId);
     return Response.json({});
   };
@@ -407,7 +413,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
   );
 
   it.effect(
-    "a held sandbox whose run ended and whose runner exited, its END's own let-go never run, has its launch's swaps taken off it once, though its repository's credential could not be minted, and nothing after",
+    "a held sandbox whose run ended and whose runner exited, its END's own let-go never run, has its launch's swaps taken off it, though its repository's credential could not be minted and Vercel refused the first send, and nothing after",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -418,7 +424,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           "acme/relay",
         );
         yield* holdSandbox(agent.conversationId, new Date(NOW.getTime() + 60_000));
-        const api = vercel();
+        const api = vercel({ refuseFirstPolicy: true });
         const sandbox = nativeSandbox(agent.id);
         api.sandboxes.push(sandbox);
         const session = { userId: agent.userId, sandboxSessionId: sandbox.currentSessionId };
@@ -446,14 +452,18 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           .pipe(withRing);
 
         const first = yield* sweepNativeSandboxes(NOW).pipe(withRing);
-        const afterFirst = api.policies.length;
+        // The refused send leaves the launch kept, for the next sweep to take off.
+        const keptAfterRefusal = (yield* firewall.launchOf(session).pipe(withRing)) !== undefined;
+        yield* sweepNativeSandboxes(NOW).pipe(withRing);
+        const afterRetry = api.policies.length;
         yield* sweepNativeSandboxes(NOW).pipe(withRing);
 
         assert.equal(first.held, 1);
+        assert.equal(keptAfterRefusal, true);
         assert.equal(sandbox.status, "running");
         assert.equal(yield* firewall.launchOf(session).pipe(withRing), undefined);
-        // One send takes the swap off with nothing beside it; the next sweep finds no launch and sends nothing.
-        assert.deepEqual([afterFirst, api.policies.length], [1, 1]);
+        // One send lands, taking the swap off with nothing beside it; the sweep after finds no launch and sends nothing.
+        assert.deepEqual([afterRetry, api.policies.length], [1, 1]);
       }),
   );
 
