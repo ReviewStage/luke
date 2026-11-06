@@ -30,21 +30,23 @@ import { REVIEW_PANEL_WORDS, ReviewPress, type ReviewWords } from "./review-pane
  * A comment on a page reaches the agent that wrote it the moment it is
  * posted, and each one wakes it again. A member with several things to say
  * instead starts a review (`PAGE_REVIEW_WORDS.START`), which holds the
- * comment here; while one is held, every comment on the page joins it
- * until it is sent or discarded. Held comments are the reader's alone, kept
+ * comment here, a new thread's or a reply on a posted one, as a pull
+ * request's review holds both; while one is held, every comment on the
+ * page joins it until it is sent or discarded. Held comments are the reader's alone, kept
  * for the account signed in, in the renderer's storage as drafts are
  * (`keptLines`), so a reload or a relaunch finds them; their files stay in
  * the window that attached them, as a draft's do. Each stands where it was
  * written, pinned dashed to its element, and in the Review press's panel
  * (`review-panel.tsx`), never among the posted threads of the comments
  * column, as a pull request's pending comments stand on their lines and in
- * its Review panel. Each is edited in place, and deleted at once with Undo,
- * since it reaches no one but the reader.
+ * its Review panel; a held reply stands as the last comment of its thread,
+ * wherever the thread is drawn. Each is edited in place, and deleted at
+ * once with Undo, since it reaches no one but the reader.
  *
- * Sending the review starts each comment's thread held (`held`), which
- * posts it for every member to read and hands it to no agent, then starts
- * the last naming the others along (`along`), which hands each agent in any
- * of them every thread in one message, so the agent revises the page once
+ * Sending the review starts each comment's thread, or replies on it, held
+ * (`held`), which posts it for every member to read and hands it to no
+ * agent, then sends the last naming the others' threads along (`along`),
+ * which hands each agent in any of them every thread in one message, so the agent revises the page once
  * (the service's `reviewHandedOver`). The panel's summary, where one is
  * written, is held as a comment on the whole page and sent last. A start is
  * taken once under its key, so a send that stopped part way is simply sent
@@ -106,6 +108,8 @@ export interface HeldComment {
         readonly words?: true;
       }
     | undefined;
+  /** The posted thread it answers, its quote, and the element it is on, where it is a reply rather than a thread of its own. */
+  readonly reply?: { readonly threadId: string; readonly quote: string; readonly path?: string };
   readonly words: string;
   readonly attachments: readonly AgentAttachment[];
   /** Whether a send that stopped part way posted it held already, so it is sent no more, and neither edited nor deleted, since the service holds it as it stood. */
@@ -126,6 +130,13 @@ const keptHeldSchema = Schema.Struct({
       words: Schema.optionalKey(Schema.Literal(true)),
     }),
   ),
+  reply: Schema.optionalKey(
+    Schema.Struct({
+      threadId: Schema.String,
+      quote: Schema.String,
+      path: Schema.optionalKey(Schema.String),
+    }),
+  ),
   words: Schema.String,
   landed: Schema.optionalKey(Schema.Literal(true)),
 });
@@ -134,9 +145,10 @@ const keptHeldSchema = Schema.Struct({
 const reviewAtom = keptLines<HeldComment, typeof keptHeldSchema.Type>({
   key: "app.pageReviews",
   kept: keptHeldSchema,
-  toKept: ({ attachments: _files, element, ...rest }) => ({
+  toKept: ({ attachments: _files, element, reply, ...rest }) => ({
     ...rest,
     ...(element === undefined ? undefined : { element }),
+    ...(reply === undefined ? undefined : { reply }),
   }),
   fromKept: (kept) => ({ ...kept, element: kept.element, attachments: [] }),
   idOf: (kept) => kept.clientKey,
@@ -159,11 +171,35 @@ function startOf(comment: HeldComment): DescriptionCommentStart {
   };
 }
 
+/** The thread a held comment stands in once sent: the one it answers, or the one it starts, under its key. */
+function threadOfHeld(comment: HeldComment): string {
+  return comment.reply?.threadId ?? comment.clientKey;
+}
+
+/** Sends one held comment, held or naming the threads `along`: a reply on its thread, or the start of its own; answers whether it landed. */
+async function sendHeld(
+  control: DescriptionCommentsControl,
+  comment: HeldComment,
+  review: { readonly held: true } | { readonly along?: readonly string[] },
+): Promise<boolean> {
+  if (comment.reply === undefined) {
+    const answer = await control.start({ ...startOf(comment), ...review });
+    return !("note" in answer);
+  }
+  return control.act(comment.reply.threadId, {
+    action: DESCRIPTION_COMMENT_ACTION.REPLY,
+    clientKey: comment.clientKey,
+    words: comment.words,
+    ...(comment.attachments.length === 0 ? undefined : { attachments: comment.attachments }),
+    ...review,
+  });
+}
+
 /**
- * Sends a review: each comment but the last started held, in the order
- * held, but those a send before posted already, each told to `onLanded` as
- * it lands, then the last naming them all along. Answers whether every
- * start landed, stopping at the first that did not.
+ * Sends a review: each comment but the last held, in the order held, but
+ * those a send before posted already, each told to `onLanded` as it lands,
+ * then the last naming the threads of the others along, each once. Answers
+ * whether every comment landed, stopping at the first that did not.
  */
 async function sendReview(
   control: DescriptionCommentsControl,
@@ -176,16 +212,12 @@ async function sendReview(
   for (const comment of earlier) {
     if (comment.landed === true) continue;
     // Note that each waits on the one before, so the threads stand in the order they were held.
-    const answer = await control.start({ ...startOf(comment), held: true });
-    if ("note" in answer) return false;
+    if (!(await sendHeld(control, comment, { held: true }))) return false;
     onLanded(comment.clientKey);
   }
-  const along = earlier.map((comment) => comment.clientKey);
-  const answer = await control.start({
-    ...startOf(last),
-    ...(along.length === 0 ? undefined : { along }),
-  });
-  return !("note" in answer);
+  // Note that a thread holding several of the review's replies, or the last comment's own, is named once or not at all.
+  const along = [...new Set(earlier.map(threadOfHeld))].filter((id) => id !== threadOfHeld(last));
+  return sendHeld(control, last, along.length === 0 ? {} : { along });
 }
 
 /** A page's review as its pane draws and presses it. */

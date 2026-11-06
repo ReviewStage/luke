@@ -855,3 +855,98 @@ test("Discard after a send that stopped part way deletes the threads it posted a
     "and lets it go once it is deleted",
   );
 });
+
+test("a reply held in a review stands Pending as its thread's last comment, and Send review replies held, then sends the summary naming its thread along", async () => {
+  const path = "body > p:nth-of-type(1)";
+  const thread: DescriptionCommentThread = {
+    id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e71",
+    scope: DESCRIPTION_COMMENT_SCOPE.ELEMENT,
+    quote: "Invites sent",
+    page: { id: FUNNEL.id, version: 3, element: path },
+    section: "",
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
+    entries: [
+      {
+        id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e72",
+        kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+        writer: { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, by: { userId: "u-theo", name: "Theo" } },
+        words: "Per week?",
+        at: 1,
+      },
+    ],
+    createdAt: 1,
+    updatedAt: 1,
+    revision: 1,
+  };
+  const sent: Record<string, unknown>[] = [];
+  const control: DescriptionCommentsControl = {
+    planId: TASK,
+    threads: [thread],
+    read: true,
+    failed: false,
+    onRetry: () => undefined,
+    notes: new Map(),
+    start: async (start) => {
+      sent.push({ start: start.words, along: "along" in start ? start.along : undefined });
+      return { thread: { ...thread, id: start.clientKey, entries: [] } };
+    },
+    act: async (threadId, action) => {
+      sent.push({ threadId, ...action });
+      return true;
+    },
+  };
+  const { container, press } = mount(
+    FUNNEL,
+    readSource,
+    true,
+    { taskId: TASK },
+    { control, doors: { agents: undefined, me: "u-dean" } },
+  );
+  await press("Show comments");
+  const column = container.querySelector<HTMLElement>(".page-comments-column");
+  assert.ok(column, "the comments column stands");
+  const field = column.querySelector<HTMLTextAreaElement>('textarea[aria-label="Reply"]');
+  assert.ok(field, "the thread offers its reply");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      field,
+      "Weekly, yes.",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => buttonNamed(column, "Start a review").click());
+
+  const pending = column.querySelector("[data-pending]");
+  assert.ok(pending, "the reply stands in its thread, held");
+  assert.match(pending.textContent ?? "", /Pending.*Weekly, yes\./u);
+  assert.equal(sent.length, 0, "nothing is sent while the review is held");
+
+  await press("Review, 1 pending comment");
+  const panel = document.querySelector<HTMLElement>('[role="dialog"]');
+  assert.ok(panel, "Review opens its panel");
+  assert.match(panel.querySelector("ol")?.textContent ?? "", /Invites sent.*Weekly, yes\./u);
+  const summary = await vi.waitFor(
+    () =>
+      panel.querySelector<TiptapEditorHTMLElement>(
+        `${EDITOR_ROOT_SELECTOR}[aria-label="Review comment"]`,
+      )?.editor ?? assert.fail("the panel takes a summary"),
+  );
+  act(() => {
+    summary.commands.setContent("That's all.", { contentType: "markdown" });
+  });
+  await act(async () => buttonNamed(panel, "Send review").click());
+  await vi.waitFor(() => assert.equal(sent.length, 2));
+
+  // The reply goes under the key it was held under, which the test reads back rather than chooses.
+  const heldKey = sent[0]?.clientKey;
+  assert.deepEqual(sent, [
+    {
+      threadId: thread.id,
+      action: DESCRIPTION_COMMENT_ACTION.REPLY,
+      clientKey: heldKey,
+      words: "Weekly, yes.",
+      held: true,
+    },
+    { start: "That's all.", along: [thread.id] },
+  ]);
+});
