@@ -29,6 +29,7 @@ export const accountPreferencesRead = bindLiveRead(ACCOUNT_PREFERENCES_READ, {
     preferences: liveRowsStatement(
       ACCOUNT_PREFERENCES_READ.parts.preferences,
       {
+        ordered: false,
         columns: {
           agentModel: accountPreference.agentModel,
           agentEffort: accountPreference.agentEffort,

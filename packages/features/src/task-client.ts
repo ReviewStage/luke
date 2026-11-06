@@ -37,7 +37,7 @@ import type {
   GitHubRepositoryIssueAnswer,
   GitHubRepositoryPullRequestAnswer,
 } from "./github-repositories-wire.js";
-import { hostedCall } from "./hosted-call.js";
+import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
 import {
   askHosted,
   askLive,
@@ -49,6 +49,7 @@ import {
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import { WRITE_UNTAKEN, type WriteUntaken, writeUntakenOf } from "./keyed-write.js";
+import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
 import {
   LIVE_POLL,
   LIVE_SIGNED_OUT,
@@ -70,7 +71,6 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
-import type { SidebarLiveAnswer } from "./sidebar-live.js";
 import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
   type TaskSectionsWritten,
@@ -1128,24 +1128,9 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * The account's sidebar sealed for following over Neon Realtime, for the
-   * account named, or with each part's rows inline where `poll` asks for
-   * them; signed out where the session is another account's.
-   */
-  sidebarLive(
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<SidebarLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(this.#hosted.live.sidebar, { [LIVE_USER_QUERY]: userId }, poll, after),
-      LIVE_REFUSALS,
-    );
+  /** A declared live read sealed for following, or polled where `poll` asks (`askLiveRead`). */
+  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadAsked<Read>, poll?: HostedPoll) {
+    return askLiveRead(this.#hosted.live, read, params, poll);
   }
 
   /**

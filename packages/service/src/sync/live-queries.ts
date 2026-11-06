@@ -11,20 +11,9 @@
  */
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
-import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { messageStandingNow } from "@repo/database/models/message-reads";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
-import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
-import {
-  slackChannelRepositoriesLiveStatement,
-  slackInstallationLiveStatement,
-} from "@repo/database/models/slack-installation-store";
-import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
-import {
-  memberWorkspaceIds,
-  workspacesLiveStatements,
-} from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { inboxItem } from "@repo/database/schemas/inbox";
 import { task } from "@repo/database/schemas/task";
@@ -35,7 +24,6 @@ import {
   agentPinSync,
   agentQueueSync,
   agentReadSync,
-  agentSectionEntrySync,
   agentSync,
   attachmentSync,
   automationRunSync,
@@ -46,42 +34,29 @@ import {
   descriptionRevisionSync,
   deviceAgentLineSync,
   deviceSync,
-  githubInstallationSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,
   inboxItemReadSync,
   inboxItemSync,
   inboxMessageSync,
   integrationConnectionSync,
-  integrationInstallationSync,
-  invitationSync,
   macCommandSync,
   memberSync,
   messagesSync,
-  organizationSync,
-  personalWorkspaceSync,
   pullRequestChaptersSync,
-  repositoryPinSync,
-  slackChannelRepositorySync,
-  slackInstallationSync,
   taskBlockSync,
   taskPageVersionSync,
   taskPinSync,
   taskReadSync,
-  taskSectionEntrySync,
-  taskSectionSync,
   taskSync,
   turnsSync,
   userSync,
-  workspaceFormerSlugSync,
 } from "@repo/database/sync/tables";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { LIVE_MODE } from "@repo/features/live-read";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { macCommandKindsRead } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
-import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
-import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { cursorOfWire, cursorToWire } from "../agents/coder-host/transcript.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
@@ -102,68 +77,19 @@ import type { AnyBoundRead } from "../live/live-read-binding.js";
 import { accountPreferencesRead } from "../live/reads/account-preferences.js";
 import { hostsRead } from "../live/reads/hosts.js";
 import { installedSkillsRead } from "../live/reads/installed-skills.js";
+import { sidebarRead } from "../live/reads/sidebar.js";
+import { workspaceIntegrationsRead } from "../live/reads/workspace-integrations.js";
+import { workspaceInvitationsRead } from "../live/reads/workspace-invitations.js";
+import { workspaceMembersRead } from "../live/reads/workspace-members.js";
 import { workspaceMemoriesRead } from "../live/reads/workspace-memories.js";
+import { workspacesRead } from "../live/reads/workspaces.js";
 import { taskCommentsLiveStatements } from "../tasks/description-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { defineLiveQuery, liveQueryRegistry } from "./live-query.js";
-
-/**
- * The reader's topic for each workspace it is a member of, looked up as a
- * read is asked for. Note that a membership made or ended moves the rows of
- * a read that takes these and notifies the reader's own topic, which such a
- * read takes too, so the read it wakes answers, and the next request looks
- * the memberships up again.
- */
-function readerWorkspaceTopics(userId: string) {
-  return Effect.map(memberWorkspaceIds(userId), (workspaceIds) =>
-    workspaceIds.map((workspaceId): SyncTopic => [TOPIC.WORKSPACE, workspaceId]),
-  );
-}
-
-/** The reader's own topic and its workspaces', which a read of what the account reaches across its workspaces is woken on. */
-function readerAndWorkspaceTopics(userId: string) {
-  return Effect.map(readerWorkspaceTopics(userId), (workspaces): readonly SyncTopic[] => [
-    [TOPIC.ACCOUNT, userId],
-    ...workspaces,
-  ]);
-}
-
-/**
- * The account's sidebar: its sections, the tasks and agents it keeps in
- * them, and its pinned repositories, woken by a write to any of them or to
- * what admits the account to a workspace or a repository, all of which name
- * the account. Note that a task or an agent written itself wakes no
- * sidebar, because a description's save rewrites its task every few seconds and
- * every member keeping it would read again for nothing: a task moved or
- * deleted leaves its sections by its entries' own delete, and the rare
- * change that hides an entry without one shows at the hold's end.
- */
-export const sidebarLive = defineLiveQuery({
-  name: "sidebar",
-  params: ["userId"],
-  reads: [
-    taskSectionSync,
-    taskSectionEntrySync,
-    agentSectionEntrySync,
-    repositoryPinSync,
-    taskSync,
-    agentSync,
-    memberSync,
-    githubPersonalTokenSync,
-    githubRepositoryReadSync,
-  ],
-  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId }) =>
-    Option.zipWith(
-      taskSectionsLiveStatements(userId),
-      repositoryPinsLiveStatement(userId),
-      (sections, pins) => ({ ...sections, pins }),
-    ),
-  mode: LIVE_MODE.SNAPSHOT,
-});
+import { readerAndWorkspaceTopics } from "./reader-topics.js";
 
 /**
  * The account's task list: the tasks it reaches and every agent of them and
@@ -219,29 +145,6 @@ export const tasksLive = defineLiveQuery({
     },
     statements: ({ userId }, moved) => taskListDeltaStatements(userId, moved),
   },
-});
-
-/**
- * The account's workspaces and the GitHub installations connected to them,
- * woken on the account's topic and on each of its workspaces'. A
- * workspace's name and photo, the slugs it stood under before, its members, its installations, and the name
- * of the account it was made for name the workspace; the account's
- * memberships, its first workspace, and its own picture name the account.
- */
-export const workspacesLive = defineLiveQuery({
-  name: "workspaces",
-  params: ["userId"],
-  reads: [
-    memberSync,
-    organizationSync,
-    personalWorkspaceSync,
-    userSync,
-    githubInstallationSync,
-    workspaceFormerSlugSync,
-  ],
-  topics: ({ userId }) => readerAndWorkspaceTopics(userId),
-  statements: ({ userId }) => workspacesLiveStatements(userId),
-  mode: LIVE_MODE.SNAPSHOT,
 });
 
 /**
@@ -411,76 +314,6 @@ export const agentInboxLive = defineLiveQuery({
   reads: SCOPE_INBOX_READS,
   topics: ({ agentId }) => [[TOPIC.AGENT, agentId]],
   statements: ({ userId, agentId }) => memberAgentInboxLiveStatements(userId, agentId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * A workspace's people, its members and who its work names but left, woken
- * on the workspace's topic by a membership, a member's account, and the work
- * that names a former member. Note that a description revision wakes nothing here,
- * since it only decides who counts as a former member and the change that
- * moves that, its task deleted, wakes the workspace through the task; nor
- * does a former member renaming themselves, who is in no membership the
- * account's write looks up: both show at the hold's end.
- */
-export const workspaceMembersLive = defineLiveQuery({
-  name: "workspaceMembers",
-  params: ["userId", "workspaceId"],
-  reads: [
-    memberSync,
-    userSync,
-    taskSync,
-    agentSync,
-    automationSync,
-    descriptionRevisionSync,
-    inboxItemSync,
-  ],
-  topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
-  statements: ({ userId, workspaceId }) => workspaceMembersLiveStatements(userId, workspaceId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * A workspace's own integrations, its active Sentry installations, its Slack
- * bot, and each Slack channel's repository, woken on the workspace's
- * integrations topic by an install finished in the browser, a disconnect,
- * Sentry's own uninstall, and a repository named, and on the reader's own by
- * their membership made or ended, which decides whether they read it at all.
- * Whether this deployment holds each integration is its configuration, which
- * no statement reads, so the endpoint answers it beside them.
- */
-export const workspaceIntegrationsLive = defineLiveQuery({
-  name: LIVE_READ.WORKSPACE_INTEGRATIONS,
-  params: ["userId", "workspaceId"],
-  reads: [
-    integrationInstallationSync,
-    slackInstallationSync,
-    slackChannelRepositorySync,
-    memberSync,
-  ],
-  topics: ({ userId, workspaceId }) => [
-    [TOPIC.WORKSPACE_INTEGRATIONS, workspaceId],
-    [TOPIC.ACCOUNT, userId],
-  ],
-  statements: ({ userId, workspaceId }) =>
-    Option.all({
-      sentryInstallations: sentryInstallationsLiveStatement(userId, workspaceId),
-      slackInstallation: slackInstallationLiveStatement(userId, workspaceId),
-      slackChannelRepositories: slackChannelRepositoriesLiveStatement(userId, workspaceId),
-    }),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/** A workspace's pending invitations, to an owner or an admin of it, woken on the workspace's topic by an invitation or a membership. */
-export const workspaceInvitationsLive = defineLiveQuery({
-  name: "workspaceInvitations",
-  params: ["userId", "workspaceId"],
-  reads: [invitationSync, memberSync],
-  topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
-  statements: ({ userId, workspaceId }) =>
-    Option.map(workspaceInvitationsLiveStatement(userId, workspaceId), (invitations) => ({
-      invitations,
-    })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -873,6 +706,16 @@ export const agentTranscriptLive = defineLiveQuery({
 
 /** Every read declared once and bound (`../live/live-read-binding.ts`), each a live read Sync wakes beside the definitions. */
 export const BOUND_READS: readonly AnyBoundRead[] = [
+  sidebarRead,
+
+  workspaceIntegrationsRead,
+
+  workspaceInvitationsRead,
+
+  workspaceMembersRead,
+
+  workspacesRead,
+
   installedSkillsRead,
 
   hostsRead,
@@ -881,18 +724,13 @@ export const BOUND_READS: readonly AnyBoundRead[] = [
 ];
 
 export const LIVE_QUERIES = liveQueryRegistry([
-  sidebarLive,
   tasksLive,
-  workspacesLive,
   macCommandsLive,
   integrationStatusesLive,
   inboxLive,
   inboxItemsLive,
   taskInboxLive,
   agentInboxLive,
-  workspaceMembersLive,
-  workspaceInvitationsLive,
-  workspaceIntegrationsLive,
   automationsLive,
   automationWorkspaceRunsLive,
   automationRunsLive,

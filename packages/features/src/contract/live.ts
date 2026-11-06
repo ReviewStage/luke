@@ -74,13 +74,13 @@ import {
 import { WORKSPACE_MEMORIES_READ } from "../memory-live.js";
 import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
+import { SIDEBAR_READ } from "../sidebar-live.js";
 import { taskListLiveAnswerSchema } from "../task-list-live.js";
-import { workspaceIntegrationsLiveAnswerSchema } from "../workspace-integrations-live.js";
+import { WORKSPACE_INTEGRATIONS_READ } from "../workspace-integrations-live.js";
 import {
-  workspaceInvitationsLiveAnswerSchema,
-  workspaceMembersLiveAnswerSchema,
-  workspacesLiveAnswerSchema,
+  WORKSPACE_INVITATIONS_READ,
+  WORKSPACE_MEMBERS_READ,
+  WORKSPACES_READ,
 } from "../workspace-live.js";
 import { hostedProcedure } from "./base.js";
 
@@ -286,33 +286,14 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX }))
     .input(liveScopeSchema)
     .output(EffectSchema.flip(scopeInboxLiveAnswerSchema)),
-  sidebar: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_SIDEBAR }))
-    .input(liveReadSchema)
-    .output(EffectSchema.flip(sidebarLiveAnswerSchema)),
-  workspaces: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACES }))
-    .input(liveReadSchema)
-    .output(EffectSchema.flip(workspacesLiveAnswerSchema)),
-  workspaceMembers: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_MEMBERS }))
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(workspaceMembersLiveAnswerSchema)),
-  workspaceInvitations: hostedProcedure
-    .meta(
-      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_INVITATIONS }),
-    )
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(workspaceInvitationsLiveAnswerSchema)),
+  [SIDEBAR_READ.name]: liveProcedure(SIDEBAR_READ),
+  [WORKSPACES_READ.name]: liveProcedure(WORKSPACES_READ),
+  [WORKSPACE_MEMBERS_READ.name]: liveProcedure(WORKSPACE_MEMBERS_READ),
+  [WORKSPACE_INVITATIONS_READ.name]: liveProcedure(WORKSPACE_INVITATIONS_READ),
   [HOSTS_READ.name]: liveProcedure(HOSTS_READ),
   [WORKSPACE_MEMORIES_READ.name]: liveProcedure(WORKSPACE_MEMORIES_READ),
   [INSTALLED_SKILLS_READ.name]: liveProcedure(INSTALLED_SKILLS_READ),
-  workspaceIntegrations: hostedProcedure
-    .meta(
-      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_INTEGRATIONS }),
-    )
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(workspaceIntegrationsLiveAnswerSchema)),
+  [WORKSPACE_INTEGRATIONS_READ.name]: liveProcedure(WORKSPACE_INTEGRATIONS_READ),
   pullRequestChapters: hostedProcedure
     .meta(
       openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_PULL_REQUEST_CHAPTERS }),

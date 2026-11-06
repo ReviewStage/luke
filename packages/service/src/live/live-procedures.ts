@@ -49,11 +49,11 @@
  *
  * `GET /api/live/sidebar` answers the account's sidebar sections, the tasks
  * and agents in them, and its pinned repositories as four, woken by a write
- * to any of them (`sidebarLive`).
+ * to any of them (`sidebarRead`).
  *
  * `GET /api/live/workspaces` answers the account's workspaces the same way,
  * as two statements: the workspaces, and the GitHub installations connected
- * to them, woken as the task list is (`workspacesLive`). `GET /api/live/workspace-members?workspaceId=` answers one
+ * to them, woken as the task list is (`workspacesRead`). `GET /api/live/workspace-members?workspaceId=` answers one
  * workspace's people as two, its members and who its work names but left,
  * after the account is read as a member of it, so a workspace it is not in
  * is not found, as its held read answers.
@@ -82,7 +82,7 @@
  * with whether this deployment holds each integration beside them, which no
  * statement reads; woken by an install, a disconnect, Sentry's uninstall, a
  * repository named, and the reader's own membership moving
- * (`workspaceIntegrationsLive`).
+ * (`workspaceIntegrationsRead`).
  *
  * `GET /api/live/automations?workspaceId=` answers a workspace's automations
  * the account reads, each with its newest run, and
@@ -162,11 +162,7 @@ import { childConversationId } from "@repo/database/models/ids";
 import { readSyncWindow, SYNC_LOG, syncStanding } from "@repo/database/models/sync-log";
 import { readTaskHeader } from "@repo/database/models/task-store";
 import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
-import {
-  ensurePersonalWorkspace,
-  isWorkspaceMember,
-  workspaceOf as workspaceOfAccount,
-} from "@repo/database/models/workspace-store";
+import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { agentCallIdSchema, agentCursorSchema } from "@repo/features/agent-wire";
@@ -186,7 +182,6 @@ import {
   liveDigestOn,
   type SealedLiveQueryWire,
 } from "@repo/features/live-wire";
-import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { readEither } from "@repo/wire/effect";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -206,7 +201,6 @@ import {
 import { accountIntegrationConnect } from "../integrations/integration-connect.js";
 import { signInIssuedSince } from "../integrations/integrations-app.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { SlackBot } from "../slack/slack-bot.js";
 import {
   agentBrowserTabsLive,
   agentInboxLive,
@@ -222,7 +216,6 @@ import {
   integrationStatusesLive,
   macCommandsLive,
   pullRequestChaptersLive,
-  sidebarLive,
   taskBrowserTabsLive,
   taskCommentsLive,
   taskHistoryLive,
@@ -230,10 +223,6 @@ import {
   taskPagesLive,
   taskRecordLive,
   tasksLive,
-  workspaceIntegrationsLive,
-  workspaceInvitationsLive,
-  workspaceMembersLive,
-  workspacesLive,
 } from "../sync/live-queries.js";
 import {
   type LiveParams,
@@ -243,13 +232,17 @@ import {
   syncMovedOf,
 } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
-import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { type BoundLiveRead, WATCHED_LOOK } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 import { accountPreferencesRead } from "./reads/account-preferences.js";
 import { hostsRead } from "./reads/hosts.js";
 import { installedSkillsRead } from "./reads/installed-skills.js";
+import { sidebarRead } from "./reads/sidebar.js";
+import { workspaceIntegrationsRead } from "./reads/workspace-integrations.js";
+import { workspaceInvitationsRead } from "./reads/workspace-invitations.js";
+import { workspaceMembersRead } from "./reads/workspace-members.js";
 import { workspaceMemoriesRead } from "./reads/workspace-memories.js";
+import { workspacesRead } from "./reads/workspaces.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
 export interface LiveProcedureSeams {
@@ -883,11 +876,10 @@ function answerBoundRead<Read extends AnyLiveRead>(read: BoundLiveRead<Read>) {
 }
 
 /** The live reads, each to a signed-in caller who is the account it names. */
-/** The roles that read and manage a workspace's invitations, as its held read admits them. */
-const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
 
 export function liveProcedures(seams: LiveProcedureSeams) {
   const signedIn = hosted.live.use(accountMiddleware(seams.resolveUserId));
+  const answerWorkspaces = answerBoundRead(workspacesRead);
   return {
     inbox: signedIn.inbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -1092,67 +1084,31 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         input,
       );
     }),
-    sidebar: signedIn.sidebar.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(sidebarLive, { userId: context.userId }, input);
-    }),
-    workspaces: signedIn.workspaces.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
+    sidebar: signedIn.sidebar.effect(answerBoundRead(sidebarRead)),
+
+    workspaces: signedIn.workspaces.effect(function* (asked) {
+      yield* sameUser(asked.input, asked.context.userId);
       // Note that this read is the only one a client makes of the account's workspaces, so it makes the first.
-      yield* pluginWriteOrUnavailable(ensurePersonalWorkspace(context.userId, seams.workspaces));
-      return yield* liveQueryParts(workspacesLive, { userId: context.userId }, input);
+      yield* pluginWriteOrUnavailable(
+        ensurePersonalWorkspace(asked.context.userId, seams.workspaces),
+      );
+      return yield* answerWorkspaces(asked);
     }),
-    workspaceMembers: signedIn.workspaceMembers.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const member = yield* hostedStoreOrUnavailable(
-        isWorkspaceMember(context.userId, input.workspaceId),
-      );
-      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        workspaceMembersLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-    }),
-    workspaceInvitations: signedIn.workspaceInvitations.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const workspace = yield* hostedStoreOrUnavailable(
-        workspaceOfAccount(context.userId, input.workspaceId),
-      );
-      if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      if (!MANAGING_ROLES.has(workspace.value.role)) {
-        return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-      }
-      const sealed = yield* liveQueryParts(
-        workspaceInvitationsLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-      return { ...sealed, origin: new URL(context.request.url).origin };
-    }),
+
+    workspaceMembers: signedIn.workspaceMembers.effect(answerBoundRead(workspaceMembersRead)),
+
+    workspaceInvitations: signedIn.workspaceInvitations.effect(
+      answerBoundRead(workspaceInvitationsRead),
+    ),
+
     hosts: signedIn.hosts.effect(answerBoundRead(hostsRead)),
     workspaceMemories: signedIn.workspaceMemories.effect(answerBoundRead(workspaceMemoriesRead)),
     installedSkills: signedIn.installedSkills.effect(answerBoundRead(installedSkillsRead)),
 
-    workspaceIntegrations: signedIn.workspaceIntegrations.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const member = yield* hostedStoreOrUnavailable(
-        isWorkspaceMember(context.userId, input.workspaceId),
-      );
-      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const sealed = yield* liveQueryParts(
-        workspaceIntegrationsLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-      const sentry = yield* SentryApp;
-      const { configured: slackConfigured } = yield* SlackBot;
-      return {
-        ...sealed,
-        sentryConfigured: Result.isSuccess(yield* Effect.result(sentry.settings)),
-        slackConfigured,
-      };
-    }),
+    workspaceIntegrations: signedIn.workspaceIntegrations.effect(
+      answerBoundRead(workspaceIntegrationsRead),
+    ),
+
     pullRequestChapters: signedIn.pullRequestChapters.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const number = yield* pullRequestNumberOf([input.number]);

@@ -56,6 +56,7 @@ export const workspaceMemoriesRead = bindLiveRead(WORKSPACE_MEMORIES_READ, {
     memories: liveRowsStatement(
       WORKSPACE_MEMORIES_READ.parts.memories,
       {
+        ordered: false,
         columns: {
           id: memory.id,
           text: memory.text,

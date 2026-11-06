@@ -30,8 +30,8 @@ import type { TasksWorkspaceInvitationCancelParams } from "@repo/features/tasks-
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import {
   nextInvitationExpiry,
+  WORKSPACE_INVITATIONS_READ,
   type WorkspaceInvitationsLiveAnswer,
-  workspaceInvitationsLiveRowsSchema,
   workspaceInvitationsOfLiveRows,
 } from "@repo/features/workspace-live";
 import {
@@ -58,7 +58,7 @@ import {
 import { followTakingRows, restarting } from "./live-follow.js";
 
 /** An invitation's row as the read's statement answers it: the plugin's role text, and when it expires in epoch milliseconds. */
-type InvitationRow = (typeof workspaceInvitationsLiveRowsSchema.Type)["invitations"][number];
+type InvitationRow = (typeof WORKSPACE_INVITATIONS_READ.rows.Type)["invitations"][number];
 
 /** An invitation as the pool holds it, by its id, with the workspace it invites to. */
 interface PooledInvitation extends InvitationRow {
@@ -189,7 +189,7 @@ function followInvitations(
         yield* followTakingRows(
           { poll: (after) => seal(true, after) },
           first,
-          workspaceInvitationsLiveRowsSchema,
+          WORKSPACE_INVITATIONS_READ.rows,
           (rows) =>
             Effect.gen(function* () {
               yield* invitations.answer(rows.invitations.map((row) => ({ workspaceId, ...row })));

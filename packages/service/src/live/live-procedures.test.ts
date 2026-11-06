@@ -93,19 +93,17 @@ import {
   pullRequestChaptersLiveAnswerSchema,
   pullRequestChaptersOfLive,
 } from "@repo/features/pull-request-chapters-live";
-import { sidebarLiveAnswerSchema } from "@repo/features/sidebar-live";
+import { SIDEBAR_READ } from "@repo/features/sidebar-live";
 import { taskListLiveAnswerSchema, taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
 import {
-  workspaceIntegrationsLiveAnswerSchema,
-  workspaceIntegrationsLiveRowsSchema,
+  WORKSPACE_INTEGRATIONS_READ,
   workspaceIntegrationsOfLive,
 } from "@repo/features/workspace-integrations-live";
 import {
-  workspaceInvitationsLiveAnswerSchema,
-  workspaceMembersLiveAnswerSchema,
-  workspacesLiveAnswerSchema,
-  workspacesLiveRowsSchema,
+  WORKSPACE_INVITATIONS_READ,
+  WORKSPACE_MEMBERS_READ,
+  WORKSPACES_READ,
 } from "@repo/features/workspace-live";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type WireBoundaryInput } from "@repo/wire";
@@ -1300,11 +1298,11 @@ it.layer(getTestDB())("the account's workspaces' live read", (it) => {
         const path = "/api/live/workspaces";
         const polled = yield* ask({ bearer: dana, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(workspacesLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(WORKSPACES_READ.answer)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(Object.keys(answer.queries).toSorted(), ["installations", "workspaces"]);
         assert.deepEqual(
-          Schema.decodeUnknownSync(workspacesLiveRowsSchema)({
+          Schema.decodeUnknownSync(WORKSPACES_READ.rows)({
             workspaces: answer.queries.workspaces.rows,
             installations: answer.queries.installations.rows,
           }).workspaces.map(({ id }) => id),
@@ -1326,8 +1324,8 @@ it.layer(getTestDB())("the account's workspaces' live read", (it) => {
       const fay = yield* openUser;
       const path = "/api/live/workspaces";
       const workspaceIds = Effect.map(ask({ bearer: fay, path }), (polled) => {
-        const answer = Schema.decodeUnknownSync(workspacesLiveAnswerSchema)(polled.body);
-        return Schema.decodeUnknownSync(workspacesLiveRowsSchema)({
+        const answer = Schema.decodeUnknownSync(WORKSPACES_READ.answer)(polled.body);
+        return Schema.decodeUnknownSync(WORKSPACES_READ.rows)({
           workspaces: answer.queries.workspaces.rows,
           installations: answer.queries.installations.rows,
         }).workspaces.map(({ id }) => id);
@@ -1354,7 +1352,7 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
 
         const polled = yield* ask({ bearer: owner, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(workspaceMembersLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(WORKSPACE_MEMBERS_READ.answer)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(Object.keys(answer.queries).toSorted(), ["former", "members"]);
         assert.deepEqual(
@@ -1392,7 +1390,7 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
 
         const polled = yield* ask({ bearer: owner, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(workspaceInvitationsLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(WORKSPACE_INVITATIONS_READ.answer)(polled.body);
         assert.equal(answer.origin, ORIGIN);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(answer.queries.invitations.rows, [], "nobody is invited yet");
@@ -1462,11 +1460,11 @@ it.layer(getTestDB())("a workspace's integrations live read", (it) => {
           Effect.gen(function* () {
             const polled = yield* ask({ bearer, path });
             assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-            const answer = Schema.decodeUnknownSync(workspaceIntegrationsLiveAnswerSchema)(
+            const answer = Schema.decodeUnknownSync(WORKSPACE_INTEGRATIONS_READ.answer)(
               polled.body,
             );
             assert.equal(answer.url, LIVE_POLL_URL);
-            const rows = Schema.decodeUnknownSync(workspaceIntegrationsLiveRowsSchema)({
+            const rows = Schema.decodeUnknownSync(WORKSPACE_INTEGRATIONS_READ.rows)({
               sentryInstallations: answer.queries.sentryInstallations.rows,
               slackInstallation: answer.queries.slackInstallation.rows,
               slackChannelRepositories: answer.queries.slackChannelRepositories.rows,
@@ -1698,7 +1696,7 @@ it.layer(getTestDB())("the account's sidebar's live read", (it) => {
         const path = "/api/live/sidebar";
         const polled = yield* ask({ bearer: dana, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(sidebarLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(SIDEBAR_READ.answer)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(Object.keys(answer.queries).toSorted(), [
           "agentEntries",

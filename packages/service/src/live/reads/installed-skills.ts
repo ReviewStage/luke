@@ -35,6 +35,7 @@ export const installedSkillsRead = bindLiveRead(INSTALLED_SKILLS_READ, {
     skills: liveRowsStatement(
       INSTALLED_SKILLS_READ.parts.skills,
       {
+        ordered: false,
         columns: {
           id: installedSkill.id,
           scope: installedSkill.scope,
