@@ -3,23 +3,31 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { type Agent, type AgentBriefText, createAgent } from "@repo/database/models/agent-store";
-import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
 import {
-  readPlanCommentThreads,
-  startPlanCommentThread,
-} from "@repo/database/models/plan-comments";
-import { createTask, readTask, savePlanText, updateTask } from "@repo/database/models/task-store";
+  keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
+} from "@repo/database/models/description-attachments";
+import {
+  readDescriptionCommentThreads,
+  startDescriptionCommentThread,
+} from "@repo/database/models/description-comments";
+import {
+  createTask,
+  readTask,
+  saveDescriptionText,
+  updateTask,
+} from "@repo/database/models/task-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { PICTURE_TYPE } from "@repo/features/picture-wire";
-import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
+import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-} from "@repo/features/plan-comment-wire";
-import { planSections } from "@repo/features/plan-document";
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+} from "@repo/features/description-comment-wire";
+import { descriptionSections } from "@repo/features/description-document";
 import { EXPERIMENT } from "@repo/settings";
 import { Clock, Effect, Option } from "effect";
 import { ACTION_RESULT_STATUS, unparsedWire } from "../../core.js";
@@ -33,23 +41,23 @@ import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
   runAgentComment,
-  runAgentEditPlan,
+  runAgentEditDescription,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
 } from "./agent-doors.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
-import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
+import { DESCRIPTION_EDIT_REFUSAL } from "./description-edit.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /**
- * agent-doors.test.ts -- the doors a coding agent's plan, picture, comment, and pull request tools run through, as its harness's MCP server calls them.
+ * agent-doors.test.ts -- the doors a coding agent's description, picture, comment, and pull request tools run through, as its harness's MCP server calls them.
  *
  * Each call runs as the agent's conversation, admitted as the MCP door
  * admits a runner's bearer, over the real migrations on PGlite: notes are
- * taken into the plan of a task of the agent's workspace together or not at
+ * taken into the description of a task of the agent's workspace together or not at
  * all, named by its id, and refused for no task or one of another
- * workspace; a picture of another workspace's plan is not looked at; a
+ * workspace; a picture of another workspace's description is not looked at; a
  * comment is written under the agent on a task of its workspace, and
  * refused elsewhere; and an agent in no repository opens no pull request.
  * Synthetic accounts, tasks, and words throughout.
@@ -58,7 +66,7 @@ import { CODER_TOOL } from "./tool-set.js";
 /** A sandbox door no call of notes alone opens: one that fails if it is. */
 const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
-const PLAN_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
+const DESCRIPTION_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
 /** The agent's conversation as the MCP door admits it: the agent's starter, on its own conversation. */
 function admittedOf(agent: Agent): AdmittedConversation {
@@ -78,19 +86,19 @@ const ON_CLAUDE_CODE = {
   payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
 } as const;
 
-/** The member's Plans turned on or off, which their agents' plan tools stand on. */
-const plansFor = (userId: string, on: boolean) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: on } });
+/** The member's Descriptions turned on or off, which their agents' description tools stand on. */
+const descriptionsFor = (userId: string, on: boolean) =>
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
-/** An agent of the member's on the task named, with the brief given, its member's Plans on. */
+/** An agent of the member's on the task named, with the brief given, its member's Descriptions on. */
 const agentOn = (
   userId: string,
   taskId: string,
-  brief: AgentBriefText = { planSnapshot: PLAN_TEXT, prompt: null },
+  brief: AgentBriefText = { descriptionSnapshot: DESCRIPTION_TEXT, prompt: null },
 ) =>
   Effect.map(
     Effect.andThen(
-      plansFor(userId, true),
+      descriptionsFor(userId, true),
       createAgent(userId, {
         ...ON_CLAUDE_CODE,
         ...brief,
@@ -102,16 +110,16 @@ const agentOn = (
     (started) => Option.getOrThrow(started).agent,
   );
 
-/** An agent of the member's in the workspace on no task and no repository, handed the prompt given, its member's Plans on. */
+/** An agent of the member's in the workspace on no task and no repository, handed the prompt given, its member's Descriptions on. */
 const tasklessAgentOn = (userId: string, workspaceId: string) =>
   Effect.map(
     Effect.andThen(
-      plansFor(userId, true),
+      descriptionsFor(userId, true),
       createAgent(userId, {
         ...ON_CLAUDE_CODE,
         taskId: null,
         organizationId: workspaceId,
-        planSnapshot: null,
+        descriptionSnapshot: null,
         prompt: "Answer the open comments.",
         repository: null,
         idempotencyKey: randomUUID(),
@@ -132,21 +140,21 @@ const openAgent = (brief?: AgentBriefText) =>
     return { userId, agent, admitted: admittedOf(agent) };
   });
 
-/** A thread the member started on the task's plan, over words of its own. */
+/** A thread the member started on the task's description, over words of its own. */
 const openThread = (userId: string, taskId: string) =>
   Effect.gen(function* () {
-    yield* savePlanText(userId, taskId, PLAN_TEXT);
+    yield* saveDescriptionText(userId, taskId, DESCRIPTION_TEXT);
     const quote = "Invite a teammate";
-    const from = PLAN_TEXT.indexOf(quote);
-    const started = yield* startPlanCommentThread(
-      { actor: PLAN_COMMENT_ACTOR.MEMBER, userId },
+    const from = DESCRIPTION_TEXT.indexOf(quote);
+    const started = yield* startDescriptionCommentThread(
+      { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId },
       taskId,
       {
         clientKey: randomUUID(),
-        scope: PLAN_COMMENT_SCOPE.WORDS,
+        scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
         quote,
         anchor: { from, to: from + quote.length },
-        text: PLAN_TEXT,
+        text: DESCRIPTION_TEXT,
         words: "By link too?",
       },
     );
@@ -156,15 +164,15 @@ const openThread = (userId: string, taskId: string) =>
 
 it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   it.effect(
-    "an agent handed a prompt on a task takes notes on its plan, as New task starts every agent",
+    "an agent handed a prompt on a task takes notes on its description, as New task starts every agent",
     () =>
       Effect.gen(function* () {
-        const brief = { planSnapshot: null, prompt: "Let invites expire." } as const;
+        const brief = { descriptionSnapshot: null, prompt: "Let invites expire." } as const;
         const { userId, agent, admitted } = yield* openAgent(brief);
         assert.ok(agent.taskId !== null);
         const note = { kind: "add", section: "Approach", text: "- Invites expire after 7 days." };
 
-        const answer = yield* runAgentEditPlan(
+        const answer = yield* runAgentEditDescription(
           admitted,
           unparsedWire({ taskId: agent.taskId, notes: [note] }),
           0,
@@ -182,7 +190,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent's notes are taken into its plan together or not at all, a miss answering the plan as it stands to retry from, and read back in the plan",
+    "an agent's notes are taken into its description together or not at all, a miss answering the description as it stands to retry from, and read back in the description",
     () =>
       Effect.gen(function* () {
         const { userId, agent, admitted } = yield* openAgent();
@@ -197,11 +205,14 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
           { kind: "add", section: "Approach", text: "- Invites expire after 7 days." },
         ];
 
-        const missed = yield* runAgentEditPlan(
+        const missed = yield* runAgentEditDescription(
           admitted,
           unparsedWire({
             taskId: agent.taskId,
-            notes: [...notes, { kind: "replace", find: "a phrase the plan never held", text: "x" }],
+            notes: [
+              ...notes,
+              { kind: "replace", find: "a phrase the description never held", text: "x" },
+            ],
           }),
           0,
           noSandbox,
@@ -209,15 +220,15 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
 
         assert.deepEqual(missed, {
           status: ACTION_RESULT_STATUS.REJECTED,
-          reason: PLAN_EDIT_REFUSAL.CONFLICT,
-          missed: "replace a phrase the plan never held",
+          reason: DESCRIPTION_EDIT_REFUSAL.CONFLICT,
+          missed: "replace a phrase the description never held",
           current: before.text,
         });
         const untouched = Option.getOrThrow(yield* readTask(userId, agent.taskId));
         assert.equal(untouched.text, before.text);
         assert.deepEqual(untouched.agentEdits, []);
 
-        const answer = yield* runAgentEditPlan(
+        const answer = yield* runAgentEditDescription(
           admitted,
           unparsedWire({ taskId: agent.taskId, notes }),
           0,
@@ -227,7 +238,8 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2 });
         const stored = Option.getOrThrow(yield* readTask(userId, agent.taskId));
         const sectionText = (heading: string) =>
-          planSections(stored.text).find((section) => section.heading === heading)?.text ?? "";
+          descriptionSections(stored.text).find((section) => section.heading === heading)?.text ??
+          "";
         assert.ok(
           sectionText("Open questions").endsWith(
             "\n\n- Who may withdraw an invite? Going on as: the member who sent it.",
@@ -248,14 +260,14 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent takes notes on another task of its workspace by its id, the plan naming the agent as its tab names it even once the task moves to another workspace",
+    "an agent takes notes on another task of its workspace by its id, the description naming the agent as its tab names it even once the task moves to another workspace",
     () =>
       Effect.gen(function* () {
         const { userId, agent, admitted } = yield* openAgent();
         const sibling = yield* startTask(userId, { name: "Seat billing" });
         const note = { kind: "add", section: "Approach", text: "- Bill by seat." };
 
-        const answer = yield* runAgentEditPlan(
+        const answer = yield* runAgentEditDescription(
           admitted,
           unparsedWire({ taskId: sibling.id, notes: [note] }),
           0,
@@ -274,7 +286,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent's notes naming no task, or a task of another workspace its member is also in, or made once its member turned Plans off, are refused and save nothing, as is its look at a plan's picture",
+    "an agent's notes naming no task, or a task of another workspace its member is also in, or made once its member turned Descriptions off, are refused and save nothing, as is its look at a description's picture",
     () =>
       Effect.gen(function* () {
         const { userId, admitted } = yield* openAgent();
@@ -286,8 +298,13 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         const before = Option.getOrThrow(yield* readTask(userId, other.id));
         const notes = [{ kind: "add", section: "Approach", text: "- Ship it." }];
 
-        const unnamed = yield* runAgentEditPlan(admitted, unparsedWire({ notes }), 0, noSandbox);
-        const outside = yield* runAgentEditPlan(
+        const unnamed = yield* runAgentEditDescription(
+          admitted,
+          unparsedWire({ notes }),
+          0,
+          noSandbox,
+        );
+        const outside = yield* runAgentEditDescription(
           admitted,
           unparsedWire({ taskId: other.id, notes }),
           0,
@@ -296,18 +313,18 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
 
         assert.deepEqual(unnamed, {
           status: ACTION_RESULT_STATUS.REJECTED,
-          reason: PLAN_EDIT_REFUSAL.NO_TASK_NAMED,
+          reason: DESCRIPTION_EDIT_REFUSAL.NO_TASK_NAMED,
         });
         assert.deepEqual(outside, {
           status: ACTION_RESULT_STATUS.REJECTED,
-          reason: PLAN_EDIT_REFUSAL.NO_TASK,
+          reason: DESCRIPTION_EDIT_REFUSAL.NO_TASK,
         });
         const after = Option.getOrThrow(yield* readTask(userId, other.id));
         assert.equal(after.text, before.text);
 
         // Note that a harness may call a tool it was not listed, so the door refuses it on its own.
-        yield* plansFor(userId, false);
-        const off = yield* runAgentEditPlan(
+        yield* descriptionsFor(userId, false);
+        const off = yield* runAgentEditDescription(
           admitted,
           unparsedWire({ taskId: other.id, notes }),
           0,
@@ -319,14 +336,14 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         );
         assert.deepEqual(off, {
           status: ACTION_RESULT_STATUS.REJECTED,
-          reason: PLAN_EDIT_REFUSAL.OFF,
+          reason: DESCRIPTION_EDIT_REFUSAL.OFF,
         });
         assert.deepEqual(looked, pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF));
       }),
   );
 
   it.effect(
-    "an agent looks at a picture of another task's plan of its workspace, and one of a task of another workspace its member is also in is refused",
+    "an agent looks at a picture of another task's description of its workspace, and one of a task of another workspace its member is also in is refused",
     () =>
       Effect.gen(function* () {
         const { userId, admitted } = yield* openAgent();
@@ -341,10 +358,10 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         };
         const look = (taskId: string) =>
           Effect.gen(function* () {
-            const kept = yield* keepPlanAttachment(userId, taskId, picture);
-            assert.equal(kept.status, PLAN_ATTACHMENT_KEEP.KEPT);
-            if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("no picture");
-            const address = planAttachmentAddress({ taskId, attachmentId: kept.id }, "acme");
+            const kept = yield* keepDescriptionAttachment(userId, taskId, picture);
+            assert.equal(kept.status, DESCRIPTION_ATTACHMENT_KEEP.KEPT);
+            if (kept.status !== DESCRIPTION_ATTACHMENT_KEEP.KEPT) return assert.fail("no picture");
+            const address = descriptionAttachmentAddress({ taskId, attachmentId: kept.id }, "acme");
             return yield* runAgentLookAtPicture(admitted, unparsedWire({ address }));
           });
 
@@ -377,13 +394,15 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
           [read, replied, resolved, reopened].map((answer) => answer.status),
           Array(4).fill(ACTION_RESULT_STATUS.ACCEPTED),
         );
-        const [stored] = Option.getOrThrow(yield* readPlanCommentThreads(userId, sibling.id));
-        assert.equal(stored?.status, PLAN_COMMENT_STATUS.OPEN);
+        const [stored] = Option.getOrThrow(
+          yield* readDescriptionCommentThreads(userId, sibling.id),
+        );
+        assert.equal(stored?.status, DESCRIPTION_COMMENT_STATUS.OPEN);
         assert.deepEqual(
           stored?.entries
             .filter((entry) => entry.words === "Link too.")
             .map((entry) => entry.writer),
-          [{ actor: PLAN_COMMENT_ACTOR.AGENT, agentId: agent.id }],
+          [{ actor: DESCRIPTION_COMMENT_ACTOR.AGENT, agentId: agent.id }],
         );
       }),
   );
@@ -432,7 +451,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
           [teammate, theirs.id],
           [userId, elsewhere.id],
         ] as const) {
-          const [stored] = Option.getOrThrow(yield* readPlanCommentThreads(owner, taskId));
+          const [stored] = Option.getOrThrow(yield* readDescriptionCommentThreads(owner, taskId));
           assert.equal(stored?.entries.length, 1, taskId);
         }
       }),

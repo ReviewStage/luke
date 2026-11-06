@@ -30,17 +30,20 @@ import {
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { isAgentTab, isChangesTab, isFileTab, pullRequestLabelOf } from "@repo/ui/tab-strip-model";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { useCallback, useRef } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { agentName, RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
+import { useChangesPeople } from "../tasks/changes-people.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
 import { pullRequestOfTab } from "../tasks/pull-request-number.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
 import { useListedPullRequest } from "../tasks/use-agent-pull-request.js";
+import type { HeldPeople } from "../tasks/use-agents.js";
 import { isAgentPin, type SidebarPin } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
@@ -275,6 +278,7 @@ function pinChangesCard(
   pin: SidebarPin,
   tasks: TasksControl,
   gone: boolean,
+  people: HeldPeople | undefined,
   onOpenAgent: (agentId: string) => void,
 ): React.JSX.Element | null {
   const { tab } = pin;
@@ -286,7 +290,7 @@ function pinChangesCard(
     subject: agentSubject(agents, tab.changes, NOTHING_HELD, false),
     models: agents.models,
     pullRequest,
-    people: peopleOf(agents.changesPeople.get(tab.changes), pullRequest),
+    people: peopleOf(people, pullRequest),
     onOpenAgent: () => onOpenAgent(tab.changes),
   });
 }
@@ -352,6 +356,8 @@ interface PinnedRowDrawn {
   pin: SidebarPin;
   /** Where the row stands among the pins, where Pinned nests child tasks under its plans. */
   nest: ListRowNest | undefined;
+  /** Where it stands in a run drawing only the rows near the view (`VirtualRows`); none where its list draws every row. */
+  place: VirtualRowPlace | undefined;
   card: React.ReactNode;
   glyph: React.JSX.Element;
   /** Whether the open task no longer holds what the pin opens, which dims the row and opens nothing. */
@@ -386,8 +392,8 @@ function PinnedTabRow({
   description?: React.ReactNode;
   rowRef?: ((press: HTMLElement | null) => void) | undefined;
 }): React.JSX.Element {
-  const { pin, nest, card, glyph, gone, current, inSight, tasks, onOpen, onUnpin } = drawn;
-  const place = useRowPlace();
+  const { pin, nest, place, card, glyph, gone, current, inSight, tasks, onOpen, onUnpin } = drawn;
+  const rowPlace = useRowPlace();
   const coarse = useCoarsePointer();
   const editing = editor !== undefined;
   return (
@@ -395,6 +401,7 @@ function PinnedTabRow({
       <ListRow
         ref={rowRef}
         nest={nest}
+        place={place}
         density={LIST_DENSITY.DENSE}
         ink={LIST_ROW_INK.SIDEBAR}
         leading={
@@ -427,7 +434,7 @@ function PinnedTabRow({
         menu={
           editing
             ? undefined
-            : rowMenu("Pinned tab", withRowMoves(groups, place), tasks.shown && inSight, true)
+            : rowMenu("Pinned tab", withRowMoves(groups, rowPlace), tasks.shown && inSight, true)
         }
         more={!coarse}
         actionsAt={LIST_ROW_ACTIONS.HOVER}
@@ -513,6 +520,7 @@ export function SidebarPinnedTab({
   pin: kept,
   on,
   nest,
+  place,
   current,
   inSight,
   onOpen,
@@ -527,6 +535,8 @@ export function SidebarPinnedTab({
   on: PinnedOn;
   /** Where the pin's row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
   nest?: ListRowNest | undefined;
+  /** Where it stands in a run drawing only the rows near the view (`VirtualRows`); none where its list draws every row. */
+  place?: VirtualRowPlace | undefined;
   /** Whether the sidebar is in sight: folded away, its menu stands over nothing. */
   inSight: boolean;
   onOpen: () => void;
@@ -540,13 +550,16 @@ export function SidebarPinnedTab({
   const pin = namedPin(kept, agent, livePullRequest, tasks.agents.models);
   const gone = pinGone(pin, tasks);
   const taskId = pinTaskId(pin);
-  const changesCard = pinChangesCard(pin, tasks, gone, (agentId) => {
+  // Note that a pin's agent may be another task's, whose people its own Changes tab read.
+  const changesPeople = useChangesPeople(isChangesTab(pin.tab) ? pin.tab.changes : undefined);
+  const changesCard = pinChangesCard(pin, tasks, gone, changesPeople, (agentId) => {
     if (taskId !== undefined) tasks.onShowAgent(taskId, agentId);
   });
   const copyLink = useCopyLinkItem();
   const drawn: PinnedRowDrawn = {
     pin,
     nest,
+    place,
     card:
       changesCard !== null ? (
         changesCard

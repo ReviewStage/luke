@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
-  PLAN_ACTOR,
-  type PlanSectionEdit,
+  DESCRIPTION_ACTOR,
+  type DescriptionSectionEdit,
   type Task,
   type TaskAgentsSummary,
   type TaskSummary,
@@ -13,7 +13,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { type AnyAct, FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -91,7 +91,7 @@ function windowOn(): {
 /** The sections `readerId` is shown as changed on a task whose row reads it through before every save here. */
 function changedFor(
   readerId: string | undefined,
-  edits: readonly Omit<PlanSectionEdit, "at" | "duringCall">[],
+  edits: readonly Omit<DescriptionSectionEdit, "at" | "duringCall">[],
 ): string[] {
   const task: Task = {
     ...DOCUMENT_TASK,
@@ -103,9 +103,9 @@ function changedFor(
 }
 
 const EDITS = [
-  { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, by: DEAN },
-  { section: "Approach", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES },
-  { section: "Context", actor: PLAN_ACTOR.NOTETAKER },
+  { section: "Goal", actor: DESCRIPTION_ACTOR.DEVELOPER, by: DEAN },
+  { section: "Approach", actor: DESCRIPTION_ACTOR.DEVELOPER, by: CHARLES },
+  { section: "Context", actor: DESCRIPTION_ACTOR.NOTETAKER },
 ];
 
 test("a teammate's saves are shown as changed, and the reader's own are not", () => {
@@ -114,7 +114,7 @@ test("a teammate's saves are shown as changed, and the reader's own are not", ()
 });
 
 test("a developer's save the window cannot place counts as the reader's, as before saves named a member", () => {
-  const unnamed = [{ section: "Goal", actor: PLAN_ACTOR.DEVELOPER }];
+  const unnamed = [{ section: "Goal", actor: DESCRIPTION_ACTOR.DEVELOPER }];
 
   assert.deepEqual(changedFor(DEAN.userId, unnamed), []);
   assert.deepEqual(changedFor(undefined, EDITS), ["Context"]);
@@ -134,7 +134,7 @@ test("a reader's id arriving while the plan stays open lights a teammate's saves
 });
 
 test("a reader's id arriving mid-stay lights neither a save that landed during the stay nor a section dismissed", () => {
-  const charles = { section: "Approach", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES };
+  const charles = { section: "Approach", actor: DESCRIPTION_ACTOR.DEVELOPER, by: CHARLES };
   const task: Task = {
     ...DOCUMENT_TASK,
     updatedAt: LOOKED_AT + 1,
@@ -145,7 +145,12 @@ test("a reader's id arriving mid-stay lights neither a save that landed during t
     updatedAt: LOOKED_AT + 2,
     sectionEdits: [
       { ...charles, at: LOOKED_AT + 1, duringCall: false },
-      { section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: LOOKED_AT + 2, duringCall: false },
+      {
+        section: "Context",
+        actor: DESCRIPTION_ACTOR.NOTETAKER,
+        at: LOOKED_AT + 2,
+        duringCall: false,
+      },
     ],
   };
   const stay = (dismissing: boolean) => {
@@ -185,7 +190,7 @@ function agentsAt(
   };
 }
 
-test("a plan's look is sent as it opens, as its agents move while it stays open, and as it is left, and never on a save", () => {
+test("a plan's look is sent as it opens, as its agents move while it stays open, and as it is left, and never on a save", async () => {
   const task: Task = { ...DOCUMENT_TASK, updatedAt: LOOKED_AT };
   const saved: Task = { ...task, updatedAt: LOOKED_AT + 1 };
   const window = windowOn();
@@ -195,10 +200,13 @@ test("a plan's look is sent as it opens, as its agents move while it stays open,
   window.draw(saved, DEAN.userId, { readThrough: LOOKED_AT, agents: agentsAt(LOOKED_AT + 2) });
   window.draw(undefined, DEAN.userId);
 
-  assert.deepEqual(readMarks, [`read:${task.id}`, `seen:${task.id}`, `seen:${task.id}`]);
+  // Note that each look reaches the act port a few steps after it is sent, as its mutation sends it.
+  await vi.waitFor(() =>
+    assert.deepEqual(readMarks, [`read:${task.id}`, `seen:${task.id}`, `seen:${task.id}`]),
+  );
 });
 
-test("an agent with no task is looked at as its page opens, again as its row's time moves while it stays open, and as it is left", () => {
+test("an agent with no task is looked at as its page opens, again as its row's time moves while it stays open, and as it is left", async () => {
   const agent = { id: "agent-looked", activityAt: LOOKED_AT };
   function Page({ open }: { open: typeof agent | undefined }) {
     useAgentLook(open);
@@ -214,7 +222,9 @@ test("an agent with no task is looked at as its page opens, again as its row's t
   draw({ ...agent, activityAt: LOOKED_AT + 5 });
   draw(undefined);
 
-  assert.deepEqual(readMarks, [`read:${agent.id}`, `seen:${agent.id}`, `seen:${agent.id}`]);
+  await vi.waitFor(() =>
+    assert.deepEqual(readMarks, [`read:${agent.id}`, `seen:${agent.id}`, `seen:${agent.id}`]),
+  );
 });
 
 test("a task reads unread while it changed after the reader's mark or stands marked so, never for a pull request merging alone, and never while it is the one open but by hand", () => {

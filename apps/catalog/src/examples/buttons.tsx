@@ -143,7 +143,7 @@ function Buttons(): React.JSX.Element {
               {variant}
             </ButtonLink>
           ))}
-          <IconButtonLink href="#buttons-link" icon={<PlusIcon />} label="New plan" />
+          <IconButtonLink href="#buttons-link" icon={<PlusIcon />} label="New task" />
         </Inline>
       </CatalogSection>
       <CatalogSection id="buttons-compact" title="Compact, a row's marks">

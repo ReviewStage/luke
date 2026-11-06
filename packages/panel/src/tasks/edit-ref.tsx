@@ -1,5 +1,9 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
-import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@repo/features/task-wire";
+import {
+  DESCRIPTION_ACTOR,
+  type DescriptionLastEdit,
+  type DescriptionSectionEdit,
+} from "@repo/features/task-wire";
 import { agoText } from "@repo/features/time-format";
 import { useMinute } from "@repo/ui";
 import {
@@ -25,12 +29,12 @@ import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import type { AgentsControl } from "./use-agents.js";
 
 /**
- * edit-ref.tsx -- who wrote a plan's edit, named on their own face wherever the window says it: the "Edited by" line over the plan, each section's byline, and the task's ⋯ menu.
+ * edit-ref.tsx -- who wrote a description's edit, named on their own face wherever the window says it: the "Edited by" line over the description, each section's byline, and the task's ⋯ menu.
  *
  * The writer is read through `@repo/ui/actor-model`'s `editActor`, against
  * the workspace's members the task's directory holds (`member-directory.tsx`),
  * and named as one target that hangs its card. A person's card says what
- * they last did in the plan, and the app's when and what it wrote, both read
+ * they last did in the description, and the app's when and what it wrote, both read
  * off who last changed each section, which the window already holds. A
  * coding agent found among the task's agents wears its harness and where
  * its work stands, hangs its tab's card, and opens its tab on a press where
@@ -55,23 +59,26 @@ export interface EditAgents {
   readonly onOpen: ((agentId: string) => void) | undefined;
 }
 
-/** Who reads a plan's edits, as a place hands them over: the members are the directory's. */
+/** Who reads a description's edits, as a place hands them over: the members are the directory's. */
 export type TaskReader = Pick<EditReader, "readerId">;
 
 /**
- * What a place knows to name a plan's edits: who reads them, who last
+ * What a place knows to name a description's edits: who reads them, who last
  * changed each section, and its agents. Note that it holds no clock: a line
  * that says how long ago reads the minute itself, so the minute draws that
  * line again and not every section that names an edit.
  */
 export interface EditPlace {
   readonly reader: EditReader;
-  readonly sections: readonly PlanSectionEdit[];
+  readonly sections: readonly DescriptionSectionEdit[];
   readonly agents: EditAgents | undefined;
 }
 
 /** The agent an edit names, among the task's agents, archived or not; none where the edit names none or the list holds no such agent. */
-function agentOf(edit: PlanLastEdit, agents: EditAgents | undefined): AgentSummary | undefined {
+function agentOf(
+  edit: DescriptionLastEdit,
+  agents: EditAgents | undefined,
+): AgentSummary | undefined {
   const { agentId } = edit;
   if (agentId === undefined || agents === undefined) return undefined;
   const { control } = agents;
@@ -81,8 +88,8 @@ function agentOf(edit: PlanLastEdit, agents: EditAgents | undefined): AgentSumma
   );
 }
 
-/** Who wrote an edit, an agent wearing the harness and state the task's list finds it in; nobody for the plan before history. */
-function writerOf(edit: PlanLastEdit, place: EditPlace): Actor | undefined {
+/** Who wrote an edit, an agent wearing the harness and state the task's list finds it in; nobody for the description before history. */
+function writerOf(edit: DescriptionLastEdit, place: EditPlace): Actor | undefined {
   const agent = agentOf(edit, place.agents);
   const found: EditAgent | undefined =
     agent === undefined
@@ -115,7 +122,10 @@ const OWN_CONFLICT: ConflictWords = {
  * editing." and "Use Charles Pan’s"; the app; a coding agent as the task's list
  * names it, or its row where the list holds no such agent.
  */
-export function conflictWords(edit: PlanLastEdit | undefined, place: EditPlace): ConflictWords {
+export function conflictWords(
+  edit: DescriptionLastEdit | undefined,
+  place: EditPlace,
+): ConflictWords {
   const writer = edit === undefined ? undefined : writerOf(edit, place);
   if (writer === undefined || edit === undefined) return UNNAMED_CONFLICT;
   if (writer.kind === ACTOR_KIND.PERSON && writer.you) return OWN_CONFLICT;
@@ -130,7 +140,7 @@ export function conflictWords(edit: PlanLastEdit | undefined, place: EditPlace):
   };
 }
 
-/** What an actor last did in the plan, in a card's line; none where no section's last change is theirs. */
+/** What an actor last did in the description, in a card's line; none where no section's last change is theirs. */
 function latestLine(actor: Actor, place: EditPlace, now: number, ago: boolean): string | undefined {
   const activity = latestActivity(place.sections, actor);
   if (activity === undefined) return undefined;
@@ -138,7 +148,7 @@ function latestLine(actor: Actor, place: EditPlace, now: number, ago: boolean): 
   return ago ? `${words} · ${agoText(activity.at, now)}` : words;
 }
 
-/** A person named in a line: their card says what they last did in the plan; someone the window cannot name hangs their own. */
+/** A person named in a line: their card says what they last did in the description; someone the window cannot name hangs their own. */
 function PersonRef({
   actor,
   place,
@@ -158,14 +168,14 @@ function PersonRef({
   return <ActorRef actor={actor} card={card} sentence={sentence} faceOnly={faceOnly} />;
 }
 
-/** The writer of an edit as one target in a line, or their face alone; nothing for the plan before history, which nobody wrote. */
+/** The writer of an edit as one target in a line, or their face alone; nothing for the description before history, which nobody wrote. */
 function WriterRef({
   edit,
   place,
   sentence,
   faceOnly,
 }: {
-  edit: PlanLastEdit;
+  edit: DescriptionLastEdit;
   place: EditPlace;
   sentence: boolean;
   faceOnly: boolean;
@@ -211,7 +221,10 @@ export function useEditReader(reader: TaskReader): EditReader {
 }
 
 /** Who last wrote each of `edits`, each once, in the order they stand, as a facepile draws them. */
-export function editorsOf(edits: readonly PlanLastEdit[], place: EditPlace): readonly Actor[] {
+export function editorsOf(
+  edits: readonly DescriptionLastEdit[],
+  place: EditPlace,
+): readonly Actor[] {
   return distinctActors(edits.flatMap((edit) => writerOf(edit, place) ?? []));
 }
 
@@ -221,7 +234,7 @@ export function editorsOf(edits: readonly PlanLastEdit[], place: EditPlace): rea
  * `faceOnly` it is the writer's face alone, their name said in the card it
  * hangs, for a section's byline, which keeps to a heading's end. Drawn
  * inside an `.actor-line`, whose words carry their own spaces. Nothing for
- * the plan before history.
+ * the description before history.
  */
 export function EditedBy({
   edit,
@@ -229,11 +242,11 @@ export function EditedBy({
   sentence = false,
   faceOnly = false,
 }: {
-  edit: PlanLastEdit;
+  edit: DescriptionLastEdit;
   place: EditPlace;
   sentence?: boolean;
   faceOnly?: boolean;
 }): React.JSX.Element | null {
-  if (edit.actor === PLAN_ACTOR.EARLIER) return null;
+  if (edit.actor === DESCRIPTION_ACTOR.EARLIER) return null;
   return <WriterRef edit={edit} place={place} sentence={sentence} faceOnly={faceOnly} />;
 }

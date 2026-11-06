@@ -42,13 +42,13 @@ import {
 import { inputProblem } from "@repo/ui/reported-failure";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { MentionNode } from "../plan-editor/contract.js";
+import type { MentionNode } from "../description-editor/contract.js";
 import { SwitchRow } from "../settings/switch-row.js";
 
 /**
  * date-picker.tsx -- a date mention picked or changed in place, as Notion's date picker does: the date as written, a month to pick from, an end date, a time, and Clear, hung from the chip or the `@` word.
  *
- * A date chip in words that take a change (the plan's editor, an agent's
+ * A date chip in words that take a change (the description's editor, an agent's
  * box, a comment's) opens this picker when pressed, and the `@` list
  * narrowed to dates opens it from its "Pick a date" row to write a new
  * one. It is drawn as the window's other popovers with settings in them

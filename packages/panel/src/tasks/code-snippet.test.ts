@@ -1,17 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { getSharedHighlighter } from "@pierre/diffs";
 import type { InboxCodeBlock } from "@repo/features/inbox-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
-import { getSharedHighlighter } from "@pierre/diffs";
+import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { preferredHighlighter } from "../diff-view/highlight-pool.js";
 import { diffView } from "../diff-view/index.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -56,11 +58,12 @@ const ANSWER: TasksFileAnswer = {
 
 /** The item's code card, reading the file's lines through `ANSWER`. */
 function inboxCode(): ReactElement {
+  fakeActPort({ [ACT_KIND.TASKS_FILE]: () => Promise.resolve(ANSWER) });
   return createElement(InboxCodeCard, {
     block: BLOCK,
     code: {
       repository: "acme/relay",
-      readFile: () => Promise.resolve(ANSWER),
+      place: { taskId: "task-1" },
       onOpenFile: () => {},
     },
   });
@@ -127,7 +130,8 @@ function litLines(container: HTMLElement): number[] {
 
 test("an inbox item's code draws the lines it read numbered from where they sit in the file, those it named lit", async () => {
   const container = await draw(inboxCode());
-  assert.deepEqual(drawnLines(container), [2, 3, 4, 5, 6, 7, 8]);
+  // Note that the code card's colors land through a query, so its lines are read once drawn.
+  await vi.waitFor(() => assert.deepEqual(drawnLines(container), [2, 3, 4, 5, 6, 7, 8]));
   assert.equal(drawnRoot(container).querySelector('[data-line="5"]')?.textContent, "line 5");
   assert.deepEqual(litLines(container), [5]);
 });
@@ -140,11 +144,14 @@ test("an inbox item's code is a code card: its header names the file and the lin
   assert.match(head.textContent ?? "", /seats\.ts/u);
   assert.match(head.textContent ?? "", /Line 5/u);
   assert.ok(head.querySelector('button[aria-label="Open file"]'), "the file opens from the header");
-  const copies = [...head.querySelectorAll<HTMLButtonElement>('button[aria-label^="Copy"]')];
-  assert.deepEqual(
-    copies.map((button) => button.getAttribute("aria-label")),
-    ["Copy code"],
+  const copies = () => [...head.querySelectorAll<HTMLButtonElement>('button[aria-label^="Copy"]')];
+  // Note that the lines' Copy stands once the file's read has landed through its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      copies().map((button) => button.getAttribute("aria-label")),
+      ["Copy code"],
+    ),
   );
-  await act(async () => copies[0]?.click());
+  await act(async () => copies()[0]?.click());
   assert.deepEqual(copied, ["line 5"]);
 });

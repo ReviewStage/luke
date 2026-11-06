@@ -12,8 +12,8 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { runAppCommand } from "../app-commands.js";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { DesktopTasks } from "../desktop/desktop-tasks.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -101,6 +101,8 @@ async function mount(input: {
   lastTerminal?: string;
   /** A Start pressed, answering why it was refused, where it was. */
   started?: () => Failure | undefined;
+  /** Whether the platform runs terminals, so ⌘J stands, or no longer does, once the document reaches the window's queries. */
+  terminals?: boolean;
 }) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -151,8 +153,10 @@ async function mount(input: {
       ),
     ),
   );
-  // The document arrives a few microtasks after the window first draws.
+  // The document arrives a few microtasks after the window first draws, and its capabilities reach the task's page one notify tick later.
   await settle();
+  const terminals = input.terminals ?? true;
+  await vi.waitFor(() => assert.equal(appCommandOffered(APP_COMMAND.SHOW_TERMINAL), terminals));
   return {
     /** Every tab the side panel was asked to show, in order. */
     shown,
@@ -349,7 +353,7 @@ async function mountOn(
   input: Parameters<typeof mount>[0],
 ): ReturnType<typeof mount> {
   handCapabilities(capabilities);
-  return mount(input);
+  return mount({ ...input, terminals: capabilities.includes(HOST_CAPABILITY.TERMINALS) });
 }
 
 test("on a platform that runs no terminals, neither ⌘J nor New terminal stands, the panel's + offers no Terminal, and an agent's tab offers no Show terminal", async () => {

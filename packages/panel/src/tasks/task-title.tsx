@@ -1,19 +1,19 @@
 /**
  * task-title.tsx -- the task's name, drawn as the title over its text.
  *
- * A plan's text holds no title line, since its name is its own and is
+ * A description's text holds no title line, since its name is its own and is
  * renamed apart from the text (`docs/TASKS.md`). So the window draws the
  * name over the text: as a document's own header (`PageHeader`), where it is
  * the page's one `h1`, with the title's ⋯ at its end, as an element of its own
  * ahead of the text's first section, where the title can be edited in the
- * same flow as the text (`plan-document-editor.tsx`). Nothing here reads or
+ * same flow as the text (`description-document-editor.tsx`). Nothing here reads or
  * writes the name but the task it is handed.
  */
 
 import { PageHeader, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@repo/ui";
-import { UNIT_ATTRIBUTED_CLASS } from "./plan-unit-look.js";
+import { UNIT_ATTRIBUTED_CLASS } from "./description-unit-look.js";
 
-/** The title over a plan's text: the page's `h1`, and `actions` (the title's ⋯) at its end. */
+/** The title over a description's text: the page's `h1`, and `actions` (the title's ⋯) at its end. */
 export function TaskTitle({
   name,
   actions,
@@ -31,7 +31,7 @@ export function TaskTitle({
 
 /**
  * The name in the page title's role, for a page whose bar already names it by
- * its `h1`: a version of the plan, which the bar names by when it was saved.
+ * its `h1`: a version of the description, which the bar names by when it was saved.
  * Note that it is no heading, so such a page keeps the one `h1` it has.
  */
 export function TextTitle({ name }: { name: string }): React.JSX.Element {

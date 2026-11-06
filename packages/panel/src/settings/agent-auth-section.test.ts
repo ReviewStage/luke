@@ -197,6 +197,7 @@ async function mount(
     root.render(onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true }))),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(harnessRowsStand(container), true));
   return container;
 }
 
@@ -221,7 +222,15 @@ async function mountSetup(): Promise<{ page: HTMLElement; connected: boolean[] }
     ),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(harnessRowsStand(container), true));
   return { page: container, connected };
+}
+
+/** Whether the harnesses' rows stand, which they do once the signed-in account's keys are read. */
+function harnessRowsStand(page: HTMLElement): boolean {
+  return [...page.querySelectorAll(".ui-settings-row")].some((row) =>
+    row.textContent?.startsWith("Claude"),
+  );
 }
 
 /** A harness's row button, or the link it draws in a button's place, the check it may end in having none. */
@@ -353,7 +362,11 @@ test("each harness's row names the credential in use, then what is wrong with it
     keys: [{ ...ANTHROPIC_KEY, provider: PROVIDER_KEY_PROVIDER.OPENAI, hint: "sk-proj-…7Qx2" }],
     subscriptions: [CLAUDE_PLAN],
   };
+  // Note that one client holds the test's worlds, so each later world waits for its own keys to replace the last one's.
   const connected = await mount();
+  await vi.waitFor(() =>
+    assert.deepEqual(rowState(connected, "Claude"), connectedWith("Claude plan")),
+  );
   assert.equal(rowButton(connected, "Claude").textContent, "Manage");
   assert.equal(rowButton(connected, "Codex").textContent, "Manage");
   assert.equal(rowButton(connected, "Claude").getAttribute("aria-label"), "Manage Claude");
@@ -377,7 +390,12 @@ test("each harness's row names the credential in use, then what is wrong with it
     ],
   };
   const attention = await mount();
-  assert.deepEqual(rowState(attention, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      rowState(attention, "Claude"),
+      connectedWith("Anthropic API key sk-ant-…wxyz"),
+    ),
+  );
   assert.deepEqual(rowState(attention, "Codex"), needsHand("ChatGPT plan · Signed out"));
   assert.equal(rowButton(attention, "Codex").textContent, "Sign in again");
   assert.equal(rowButton(attention, "Codex").getAttribute("aria-label"), "Sign in to Codex again");
@@ -392,7 +410,9 @@ test("each harness's row names the credential in use, then what is wrong with it
     ],
   };
   const limited = await mount();
-  assert.deepEqual(rowState(limited, "Claude"), needsHand("Claude plan · Usage limit reached"));
+  await vi.waitFor(() =>
+    assert.deepEqual(rowState(limited, "Claude"), needsHand("Claude plan · Usage limit reached")),
+  );
   assert.equal(rowButton(limited, "Claude").textContent, "Manage");
   assert.deepEqual(rowState(limited, "Codex"), needsHand("ChatGPT plan · Usage limit reached"));
   assert.equal(rowButton(limited, "Codex").textContent, "Manage usage");
@@ -403,7 +423,11 @@ test("each harness's row names the credential in use, then what is wrong with it
     sent.filter((each) => each.kind === ACT_KIND.WEB_OPEN).map((each) => each.payload),
     [{ url: "https://chatgpt.com/settings/usage" }],
   );
-  assert.equal(document.querySelector('[role="dialog"]'), null, "Manage usage opens no dialog");
+  assert.equal(
+    document.querySelector('[role="dialog"]') === null,
+    true,
+    "Manage usage opens no dialog",
+  );
 });
 
 test("each harness's row stands where a link to its section lands", async () => {
@@ -419,7 +443,11 @@ test("while both credentials are saved, the dialog's own default control picks t
   held = { keys: [], subscriptions: [CLAUDE_PLAN] };
   const page = await mount();
   let dialog = await open(page, "Claude");
-  assert.equal(dialog.querySelector('[role="radio"]'), null, "one credential is the one used");
+  assert.equal(
+    dialog.querySelector('[role="radio"]') === null,
+    true,
+    "one credential is the one used",
+  );
   await press(dialog, "Done");
 
   held = { keys: [ANTHROPIC_KEY], subscriptions: [CLAUDE_PLAN] };
@@ -442,14 +470,19 @@ test("while both credentials are saved, the dialog's own default control picks t
       forAgents: false,
     },
   ]);
-  assert.equal(choice(dialog, "API key").getAttribute("aria-checked"), "true");
+  // Note that what the host lays after each act reaches the keys' query a notify later, so the choice is waited on.
+  await vi.waitFor(() =>
+    assert.equal(choice(dialog, "API key").getAttribute("aria-checked"), "true"),
+  );
   assert.equal(choice(dialog, "Claude plan").getAttribute("aria-checked"), "false");
   assert.deepEqual(rowState(both, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
 
   act(() => choice(dialog, "Claude plan").click());
   await settle();
   assert.equal(forAgentsSent().at(-1)?.forAgents, true);
-  assert.equal(choice(dialog, "Claude plan").getAttribute("aria-checked"), "true");
+  await vi.waitFor(() =>
+    assert.equal(choice(dialog, "Claude plan").getAttribute("aria-checked"), "true"),
+  );
   assert.deepEqual(rowState(both, "Claude"), connectedWith("Claude plan"));
 });
 
@@ -478,8 +511,14 @@ test("an API key is pasted into a masked field with an eye under its row, sent o
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_SAVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key: KEY }],
   );
-  assert.deepEqual(lineOf(row(dialog, "Anthropic API key")), connectedWith("Saved sk-ant-…wxyz"));
-  assert.equal(row(dialog, "Anthropic API key").querySelector("input"), null, "the field closes");
+  await vi.waitFor(() =>
+    assert.deepEqual(lineOf(row(dialog, "Anthropic API key")), connectedWith("Saved sk-ant-…wxyz")),
+  );
+  assert.equal(
+    row(dialog, "Anthropic API key").querySelector("input") === null,
+    true,
+    "the field closes",
+  );
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
   assert.ok(!document.body.innerHTML.includes(KEY), "the key stands nowhere once kept");
   for (const spy of logged) {
@@ -498,7 +537,7 @@ test("an API key is pasted into a masked field with an eye under its row, sent o
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }],
   );
-  assert.equal(rowButton(page, "Claude").textContent, "Connect");
+  await vi.waitFor(() => assert.equal(rowButton(page, "Claude").textContent, "Connect"));
 });
 
 test("a saved key's row draws its hint from the keys the host holds, the window asking for none of its own", async () => {
@@ -529,7 +568,7 @@ test("replacing a saved API key opens a New key field showing Saved where the ke
   paste(field, KEY);
   assert.equal(button(keyCard, "Show").disabled, false);
   await press(keyCard, "Cancel");
-  assert.equal(keyCard.querySelector("input"), null, "Cancel closes the field");
+  assert.equal(keyCard.querySelector("input") === null, true, "Cancel closes the field");
   assert.ok(!document.body.innerHTML.includes(KEY), "and drops what was pasted");
 });
 
@@ -559,8 +598,10 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
       key: TOKEN,
     },
   );
+  await vi.waitFor(() =>
+    assert.deepEqual(lineOf(row(dialog, "Claude plan")), connectedWith("Connected")),
+  );
   const plan = row(dialog, "Claude plan");
-  assert.deepEqual(lineOf(plan), connectedWith("Connected"));
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Claude plan"));
   assert.ok(!document.body.innerHTML.includes(TOKEN));
 
@@ -572,7 +613,7 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN }],
   );
-  assert.equal(rowButton(page, "Claude").textContent, "Connect");
+  await vi.waitFor(() => assert.equal(rowButton(page, "Claude").textContent, "Connect"));
 });
 
 test("a harness's dialog opens on the first field it draws, the setup-token's, else the API key's", async () => {
@@ -597,9 +638,13 @@ test("with both credentials kept, Disconnect's question giving way to the setup-
   });
   await settle();
   await press(question(), "Disconnect Claude plan");
-  assert.ok(
-    document.activeElement === labeled(dialog, "Claude setup-token"),
-    "the field has focus",
+  // Note that the form stands once the keys the host lays after the disconnect reach the query.
+  await vi.waitFor(() =>
+    assert.equal(
+      document.activeElement === labeled(dialog, "Claude setup-token"),
+      true,
+      "the field has focus",
+    ),
   );
 });
 
@@ -653,7 +698,7 @@ test("Codex's ChatGPT plan connects through Connect Codex's code, closes it once
   assert.match(row(dialog, "ChatGPT plan").textContent ?? "", /You're using your ChatGPT plan/u);
   await press(row(dialog, "ChatGPT plan"), "Got it");
   assert.doesNotMatch(dialog.textContent ?? "", /You're using your ChatGPT plan/u);
-  assert.deepEqual(rowState(page, "Codex"), connectedWith("ChatGPT plan"));
+  await vi.waitFor(() => assert.deepEqual(rowState(page, "Codex"), connectedWith("ChatGPT plan")));
   assert.deepEqual(lineOf(row(dialog, "ChatGPT plan")), connectedWith("Connected"));
 
   await press(row(dialog, "ChatGPT plan"), "Disconnect");
@@ -663,7 +708,7 @@ test("Codex's ChatGPT plan connects through Connect Codex's code, closes it once
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.OPENAI, kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH }],
   );
-  assert.equal(rowButton(page, "Codex").textContent, "Connect");
+  await vi.waitFor(() => assert.equal(rowButton(page, "Codex").textContent, "Connect"));
 });
 
 test("closing Connect Codex withdraws the login still waiting", async () => {
@@ -700,7 +745,7 @@ test("setup connects Claude in place, with no dialog: Connect opens one row at a
   assert.match(row(page, "Codex").textContent ?? "", /ChatGPT plan or OpenAI API key/u);
 
   await press(row(page, "Claude"), "Connect Claude");
-  assert.equal(document.querySelector('[role="dialog"]'), null, "the row opens in place");
+  assert.equal(document.querySelector('[role="dialog"]') === null, true, "the row opens in place");
   assert.equal(choice(page, "Claude plan").getAttribute("aria-checked"), "true");
   const field = labeled(row(page, "Claude"), "Claude setup-token");
   assert.ok(document.activeElement === field, "the setup-token's field has focus");
@@ -714,14 +759,25 @@ test("setup connects Claude in place, with no dialog: Connect opens one row at a
   assert.ok(labeled(row(page, "Claude"), "Anthropic API key"));
 
   await press(row(page, "Codex"), "Connect Codex");
-  assert.equal(row(page, "Claude").querySelector("input"), null, "one row stands open");
+  assert.equal(row(page, "Claude").querySelector("input") === null, true, "one row stands open");
   await press(row(page, "Codex"), "Cancel");
-  assert.equal(row(page, "Codex").querySelector("input, [role='radio']"), null, "Cancel closes it");
+  assert.equal(
+    row(page, "Codex").querySelector("input, [role='radio']") === null,
+    true,
+    "Cancel closes it",
+  );
   assert.ok(document.activeElement === button(page, "Connect Codex"), "and hands focus back");
 
   await press(row(page, "Claude"), "Connect Claude");
   await pasteAndSave(labeled(row(page, "Claude"), "Claude setup-token"), TOKEN);
-  assert.equal(row(page, "Claude").querySelector("input"), null, "connecting closes the row");
+  // Note that the row closes once the keys the host lays after the save reach their query.
+  await vi.waitFor(() =>
+    assert.equal(
+      row(page, "Claude").querySelector("input") === null,
+      true,
+      "connecting closes the row",
+    ),
+  );
   assert.deepEqual(lineOf(row(page, "Claude")), connectedWith("Claude plan"));
   assert.equal(button(row(page, "Claude"), "Manage Claude").textContent, "Manage");
   assert.equal(connected.at(-1), true, "setup hears an agent connected");
@@ -733,8 +789,14 @@ test("setup's Codex row connects through Connect Codex, which closes with the ro
   await press(row(page, "Codex"), "Connect Codex");
   assert.ok(document.activeElement === button(page, "Connect ChatGPT plan"));
   await press(row(page, "Codex"), "Connect ChatGPT plan");
-  assert.deepEqual(lineOf(row(page, "Codex")), connectedWith("ChatGPT plan"));
-  assert.equal(row(page, "Codex").querySelector("[role='radio']"), null, "connecting closes it");
+  await vi.waitFor(() =>
+    assert.deepEqual(lineOf(row(page, "Codex")), connectedWith("ChatGPT plan")),
+  );
+  assert.equal(
+    row(page, "Codex").querySelector("[role='radio']") === null,
+    true,
+    "connecting closes it",
+  );
   assert.match(row(page, "Codex").textContent ?? "", /You're using your ChatGPT plan/u);
   await press(row(page, "Codex"), "Got it");
   assert.doesNotMatch(page.textContent ?? "", /You're using your ChatGPT plan/u);
@@ -757,5 +819,7 @@ test("setup's row in place asks before removing a held key, over the window sinc
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }],
   );
-  assert.match(row(page, "Claude").textContent ?? "", /Claude plan or Anthropic API key/u);
+  await vi.waitFor(() =>
+    assert.match(row(page, "Claude").textContent ?? "", /Claude plan or Anthropic API key/u),
+  );
 });

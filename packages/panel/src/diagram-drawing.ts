@@ -15,12 +15,12 @@ import { useSideBundles } from "./bundle-loader.js";
 /**
  * diagram-drawing.ts -- a Mermaid code drawn as its picture in the window's appearance: the diagram bundle loaded the first time one is drawn, each picture kept by its appearance and code, and what the picture is named for.
  *
- * A plan's fence (`plan-diagram.tsx`) and a Mermaid file opened in the file
+ * A description's fence (`description-diagram.tsx`) and a Mermaid file opened in the file
  * viewer (`tasks/attachment-viewer.tsx`) draw through this one cache, so a
  * diagram shown in both is drawn once.
  */
 
-/** How many pictures the window keeps in each appearance, the oldest let go first; enough for every diagram in a plan, and the drafts the editor's preview drew. */
+/** How many pictures the window keeps in each appearance, the oldest let go first; enough for every diagram in a description, and the drafts the editor's preview drew. */
 const HELD_PICTURES = 64;
 
 /** What a diagram's picture is called where its code names nothing: the kind of thing it is. */

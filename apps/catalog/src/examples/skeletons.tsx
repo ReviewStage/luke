@@ -39,10 +39,10 @@ function ShapesSkeleton(): React.JSX.Element {
   );
 }
 
-/** A plan's heading over its lines, each block in the type its words will stand in. */
-function PlanSkeleton(): React.JSX.Element {
+/** A description's heading over its lines, each block in the type its words will stand in. */
+function DescriptionSkeleton(): React.JSX.Element {
   return (
-    <SkeletonRegion label="Reading the plan">
+    <SkeletonRegion label="Reading the description">
       <Stack gap={GAP.TIGHT}>
         <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.DIV}>
           <Skeleton width="55%" />
@@ -86,7 +86,7 @@ function Skeletons(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="skeleton-type" title="Lines in their type">
         <div className="catalog-column">
-          <PlanSkeleton />
+          <DescriptionSkeleton />
         </div>
       </CatalogSection>
       <CatalogSection id="skeleton-rows" title="A list's rows">

@@ -37,11 +37,13 @@ import {
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
+import { useMutation } from "@tanstack/react-query";
 import type { ReactNode, RefObject } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { rowMenu } from "../desktop/action-menu.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import { renameWrite } from "../rename-write.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
 import type { PaneOver } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
@@ -214,16 +216,18 @@ function ShellRow({
   shown: boolean;
   /** Whether the tab the list stands in is on screen, which the end's question goes with. */
   surfaceOpen: boolean;
-  session: Pick<TerminalSession, "onChoose" | "onRename" | "onKill">;
+  session: Pick<TerminalSession, "onChoose" | "rename" | "kill">;
 }): React.JSX.Element {
-  const rename = useInlineRename(shell.id, session.onRename);
+  const renameMutation = useMutation(session.rename.options);
+  const killing = useMutation(session.kill);
+  const rename = useInlineRename(shell.id, renameWrite(renameMutation, session.rename));
   const renaming = rename.editing;
   const coarse = useCoarsePointer();
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
   const ending = useConfirmDialog(
     { subject: true, surfaceOpen },
-    () => session.onKill(shell.id),
+    () => killing.mutateAsync(shell.id),
     confirmFailure(FAILURE_SURFACE.TERMINAL_STOP),
   );
   return (

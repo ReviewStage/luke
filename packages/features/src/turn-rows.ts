@@ -42,7 +42,7 @@ export const CALL_KIND = {
   WEB_PAGE: "web-page",
   LOAD_SKILL: "load-skill",
   LOOK_AT_PICTURE: "look-at-picture",
-  EDIT_PLAN: "edit-plan",
+  EDIT_DESCRIPTION: "edit-description",
   TODOS: "todos",
   INBOX_POST: "inbox-post",
   INBOX_CLOSE: "inbox-close",
@@ -68,7 +68,7 @@ export const CALL_KIND = {
   STOP_AGENT: "stop-agent",
   /** A coding agent renamed, moved to another model, pinned, or given other servers (`update_agent`), its row naming it by its chip. */
   UPDATE_AGENT: "update-agent",
-  /** One task of the workspace read with its plan (`read_task`), its row naming the task once answered. */
+  /** One task of the workspace read with its description (`read_task`), its row naming the task once answered. */
   READ_TASK: "read-task",
   /** A section made in the member's sidebar (`create_section`), its row naming its title. */
   CREATE_SECTION: "create-section",
@@ -110,13 +110,13 @@ export const CALL_KIND = {
   REMEMBER: "remember",
   /** The workspace's shared memory searched (`search_memory`, or `recall` in an older transcript), its row naming the query where there was one. */
   RECALL: "recall",
-  /** The plan's comment threads read (`read_comments`). */
+  /** The description's comment threads read (`read_comments`). */
   READ_COMMENTS: "read-comments",
-  /** An answer written in one of the plan's comment threads (`reply_to_comment`), its row saying it. */
+  /** An answer written in one of the description's comment threads (`reply_to_comment`), its row saying it. */
   REPLY_TO_COMMENT: "reply-to-comment",
-  /** A comment thread of the plan resolved (`update_comment`, or `resolve_thread` in an older transcript). */
+  /** A comment thread of the description resolved (`update_comment`, or `resolve_thread` in an older transcript). */
   RESOLVE_THREAD: "resolve-thread",
-  /** A resolved comment thread of the plan brought back (`update_comment`, or `reopen_thread` in an older transcript). */
+  /** A resolved comment thread of the description brought back (`update_comment`, or `reopen_thread` in an older transcript). */
   REOPEN_THREAD: "reopen-thread",
   /** A connection's tools searched (`connection_search`), its row naming the server it searched. */
   SEARCH_TOOLS: "search-tools",
@@ -139,8 +139,8 @@ export const CALL_WORDS = {
   [CALL_KIND.WEB_SEARCH]: { verb: "Searched the web for", code: false },
   [CALL_KIND.WEB_PAGE]: { verb: "Fetched", code: true },
   [CALL_KIND.LOAD_SKILL]: { verb: "Loaded skill", code: true },
-  [CALL_KIND.LOOK_AT_PICTURE]: { verb: "Looked at a picture in the plan", code: false },
-  [CALL_KIND.EDIT_PLAN]: { verb: "Updated the plan:", code: false },
+  [CALL_KIND.LOOK_AT_PICTURE]: { verb: "Looked at a picture in the description", code: false },
+  [CALL_KIND.EDIT_DESCRIPTION]: { verb: "Updated the description:", code: false },
   [CALL_KIND.TODOS]: { verb: "Updated the to-dos:", code: false },
   [CALL_KIND.INBOX_POST]: { verb: "Posted a thread:", code: false },
   [CALL_KIND.INBOX_CLOSE]: { verb: "Closed a thread:", code: false },
@@ -271,15 +271,15 @@ export function agentCallLine(kind: AgentCallKind, subject: string | undefined):
 /**
  * How a call says what it did where its row names what it made or is about
  * by that thing's chip: the verb alone, the chip standing in the place of
- * "a page", "the plan", "a thread", "the task", or "pull request", so the
- * row reads "Showed" then the page's chip. Note that an edit of the plan
- * says no count, because the chip is its plan's, and the body under the row
+ * "a page", "the description", "a thread", "the task", or "pull request", so the
+ * row reads "Showed" then the page's chip. Note that an edit of the description
+ * says no count, because the chip is its description's, and the body under the row
  * says what changed.
  */
 const MADE_CALL_WORDS = {
   [CALL_KIND.SHOW_PAGE]: "Showed",
   [CALL_KIND.READ_PAGE]: "Read",
-  [CALL_KIND.EDIT_PLAN]: "Updated",
+  [CALL_KIND.EDIT_DESCRIPTION]: "Updated",
   [CALL_KIND.LOOK_AT_PICTURE]: "Looked at a picture in",
   [CALL_KIND.READ_COMMENTS]: "Read the comments on",
   [CALL_KIND.REPLY_TO_COMMENT]: "Replied to a comment on",

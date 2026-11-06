@@ -1,7 +1,7 @@
 /**
  * browser-acts.ts -- how a Browser tab's bar reads what is typed into it, which addresses a Browser tab loads, and which chords pressed over its page stay the window's.
  *
- * A Browser tab draws a page of an agent's cloud browser beside the plan
+ * A Browser tab draws a page of an agent's cloud browser beside the description
  * (`cloud-browser-pane.tsx`): its bar opens a typed line as a browser's
  * address bar would, the service and the live-view relay load no address
  * but an http or https one, and a Command chord pressed while the member

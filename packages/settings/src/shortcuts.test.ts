@@ -188,7 +188,11 @@ test("where Command is Ctrl, AltGr, which Windows reports as Ctrl and Alt held, 
     shiftKey: false,
   };
 
-  assert.equal(shortcutMatches(copyContent, press), true, "Ctrl+Alt+C is Copy plan or transcript");
+  assert.equal(
+    shortcutMatches(copyContent, press),
+    true,
+    "Ctrl+Alt+C is Copy description or transcript",
+  );
   assert.equal(
     shortcutMatches(copyContent, { ...press, getModifierState: (key) => key === "AltGraph" }),
     false,

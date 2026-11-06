@@ -5,7 +5,6 @@ import {
   type AgentSummary,
 } from "@repo/features/agent-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { EXPERIMENT } from "@repo/settings";
 import {
   DIALOG_SIZE,
   DIALOG_TONE,
@@ -24,15 +23,15 @@ import { CONFIRM_STAGE, confirmAsked } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { confirmFailure } from "../failure-report.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
 import { addRepositoryFailureWords } from "./agent-model.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
-import type { AgentsControl } from "./use-agents.js";
+import { type AgentsControl, agentAddRepositoryMutation } from "./use-agents.js";
 
 /**
  * add-repository.tsx -- Add repository… on an agent's ⋯: a repository the GitHub App reaches, added beside the ones the agent works in.
@@ -45,7 +44,7 @@ import type { AgentsControl } from "./use-agents.js";
  * (`agent-repository-add.ts`). A toast then says whether it was checked out
  * beside the agent now or will be at its next turn, where no place of the
  * agent's ran, which tells the agent nothing so an idle one is not woken. A
- * refusal keeps the dialog up saying why under the chooser. It stands only while Several repositories is on, on
+ * refusal keeps the dialog up saying why under the chooser. It stands only on
  * an agent the reader started that runs in the cloud and is not archived,
  * under nothing archived, where the control can add one; the service still
  * refuses an agent in no repository and a repository already among its
@@ -56,7 +55,12 @@ import type { AgentsControl } from "./use-agents.js";
 type AddedTo = Pick<AgentSummary, "id" | "archivedAt" | "machine" | "startedBy">;
 
 /** What the item reads of the control: the reader, where the agents' workspace is known, and the door the add goes through. */
-type AddDoors = Pick<AgentsControl, "me" | "workspaceId" | "onUnarchive" | "onAddRepository">;
+type AddDoors = Pick<AgentsControl, "me" | "workspaceId" | "onUnarchive" | "addRepository">;
+
+/** The add of a surface that offers none, which no dialog ever sends. */
+const NO_ADD = agentAddRepositoryMutation(() =>
+  Promise.reject(new Error("This surface adds no repository.")),
+);
 
 /** The item's words, the dialog's, and what it says while no repository is picked. */
 const ADD_WORDS = {
@@ -79,8 +83,7 @@ function addedWords(repository: string, checkout: AddedRepositoryCheckout | unde
 function useAddOffered(agent: AddedTo, agents: AddDoors): boolean {
   const own = agent.startedBy === undefined || agent.startedBy.userId === agents.me;
   return (
-    useExperiment(EXPERIMENT.SEVERAL_REPOSITORIES) &&
-    agents.onAddRepository !== undefined &&
+    agents.addRepository !== undefined &&
     agents.onUnarchive === undefined &&
     agent.archivedAt === undefined &&
     agent.machine !== AGENT_MACHINE.DEVICE &&
@@ -171,12 +174,12 @@ export function useAddRepository(
   const offered = useAddOffered(agent, agents);
   const toast = useToast();
   const [picked, setPicked] = useState<string | null>(null);
+  const adding = useMutation(agents.addRepository ?? NO_ADD);
   const add = async (): Promise<ActionResult> => {
-    const { onAddRepository } = agents;
-    if (onAddRepository === undefined || picked === null) {
+    if (agents.addRepository === undefined || picked === null) {
       return { status: ACTION_RESULT_STATUS.REJECTED, reason: ADD_WORDS.PICK };
     }
-    const answer = await onAddRepository(agent.id, picked);
+    const answer = await adding.mutateAsync({ agentId: agent.id, repository: picked });
     if ("failure" in answer) {
       return { status: ACTION_RESULT_STATUS.REJECTED, reason: addRepositoryFailureWords(answer) };
     }

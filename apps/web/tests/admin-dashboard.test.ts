@@ -70,7 +70,7 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
         {
           day: "2026-10-17",
           [ACTIVITY_FEATURE.AGENTS_STARTED]: 4,
-          [ACTIVITY_FEATURE.PLAN_REVISIONS]: 3,
+          [ACTIVITY_FEATURE.DESCRIPTION_REVISIONS]: 3,
           [ACTIVITY_FEATURE.INBOX_ANSWERED]: 1,
           [ACTIVITY_FEATURE.AUTOMATION_RUNS]: 1,
         },
@@ -305,7 +305,7 @@ test("the funnel and reach read each row's count and its share of the base", asy
     "Merged a PR | 8 | 16%",
   ]);
   expect(listRows(page, "Feature reach")).toEqual([
-    "Tasks & plans | 12 | 100%",
+    "Tasks & descriptions | 12 | 100%",
     "Agents | 9 | 75%",
     "Inbox | 6 | 50%",
     "Integration connected | 4 | 33%",
@@ -333,7 +333,7 @@ test("retention counts meaningful actions, and the retired hosted basis stands i
   const named = (name: string) => regions(page).find((region) => region.name === name)?.words;
 
   expect(named("Retention · weekly cohorts")).toContain("70%");
-  expect(named("Retention · weekly cohorts")).toContain("created a task, wrote a plan revision");
+  expect(named("Retention · weekly cohorts")).toContain("created a task, revised a description");
   expect(named("Retention · weekly cohorts")).not.toContain("20%");
   expect(named("Retention by any hosted call · retired")).toContain("20%");
   expect(named("Retention by any hosted call · retired")).toContain("made a hosted-tier call");

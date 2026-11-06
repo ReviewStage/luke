@@ -3,10 +3,11 @@ import type { MacOffer } from "@repo/features/models-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { useSecond } from "@repo/ui";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useAgentDefault } from "../account-choices.js";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS } from "./agent-composer.js";
 import { agentName, unrunnableChoice } from "./agent-model.js";
 import type { TranscriptCards } from "./agent-tab.js";
@@ -29,7 +30,7 @@ import { WorkingLine } from "./working-time.js";
  * composer, focused as the tab opens, with the model
  * chip on the account's default once that is read. Nothing reaches the
  * service until the first send, which starts the agent with those words, the
- * files attached, or both as its prompt, never the plan, on the model
+ * files attached, or both as its prompt, never the description, on the model
  * the chip names where the developer
  * changed it and else on the account's default, in the task's repository;
  * the tab then gives way to the agent's own. The words and the choice are
@@ -144,7 +145,9 @@ export function DraftAgentTab({
       ? undefined
       : unrunnableChoice(control.models, choice);
   // Runs on stands only while Bring your own host is on, and reads the member's devices where no read has listed them.
-  const placesOn = useExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST);
+  const placesOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST) })
+      .data === true;
   useEffect(() => {
     if (placesOn && latest.current.macs === undefined) latest.current.readModels();
   }, [placesOn]);

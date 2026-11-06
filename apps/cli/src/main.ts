@@ -19,7 +19,7 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { CLI_EXIT, type CliExit } from "@repo/features/cli-exit";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { Console, Effect, Exit, Layer } from "effect";
+import { Console, Effect, Exit, Layer, Stdio } from "effect";
 import { CliConfig, CliError, Command, GlobalFlag } from "effect/cli";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { COMMANDS } from "./commands/index.js";
@@ -40,7 +40,7 @@ const EXIT_CODES_HELP = [
 
 const vespin = Command.make("vespin").pipe(
   Command.withDescription(
-    `${PRODUCT_NAME} from your terminal: sign in, work tasks, plans, and agents, call the hosted API, and print JSON for scripts and coding agents. Exit codes: ${EXIT_CODES_HELP}.`,
+    `${PRODUCT_NAME} from your terminal: sign in, work tasks, their descriptions, and agents, call the hosted API, and print JSON for scripts and coding agents. Exit codes: ${EXIT_CODES_HELP}.`,
   ),
   Command.withSubcommands(COMMANDS),
   Command.withGlobalFlags(GLOBAL_FLAGS),
@@ -75,7 +75,8 @@ function ended(failure: unknown): Effect.Effect<CliExit> {
 }
 
 NodeRuntime.runMain(
-  Command.run(vespin, { version: VERSION }).pipe(
+  Effect.flatMap(Stdio.Stdio, ({ args }) => args).pipe(
+    Effect.flatMap(Command.runWith(vespin, { version: VERSION })),
     Effect.as<CliExit>(CLI_EXIT.OK),
     Effect.catch(ended),
     Effect.provide(services),

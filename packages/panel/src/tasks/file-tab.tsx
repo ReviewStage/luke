@@ -1,6 +1,5 @@
 import { encodeMention, MENTION_KIND } from "@repo/features/mention-link";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import type { TaskFileRequest } from "@repo/features/task-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import { readingWords } from "@repo/features/words";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -12,7 +11,8 @@ import {
   Fill,
   SpinnerRegion,
 } from "@repo/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { unreadShown } from "../failure-report.js";
 import { fileName } from "./file-ref-model.js";
@@ -24,8 +24,9 @@ import {
   refusalLine,
   refusalPasses,
 } from "./file-tab-model.js";
+import { ReadRefused, taskFileQueryOptions } from "./repository-reads.js";
 import { useMentionDrop, useTaskMentions } from "./task-mentions.js";
-import type { OpenFile } from "./use-side-panel.js";
+import type { FileReadPlace, OpenFile } from "./use-side-panel.js";
 import { WholeFile, type WholeFileHandle, type WholeFileNote } from "./whole-file.js";
 
 /**
@@ -56,8 +57,10 @@ import { WholeFile, type WholeFileHandle, type WholeFileNote } from "./whole-fil
 /** The first line of a file, the one read to learn the commit the head stands at. */
 const FIRST_LINE = { firstLine: 1, lastLine: 1 } as const;
 
-/** Reads a file of the tab's: one window of its lines, or, raw, its whole text; the answer, or a rejection where main refused the act. */
-export type ReadFileWindow = (window: TaskFileRequest) => Promise<TasksFileAnswer>;
+/** The read a failed query stands for: the refusal the service answered, or a read that never arrived. */
+function failedRead(error: unknown): FileRead {
+  return error instanceof ReadRefused ? notRead(error.answer) : { kind: FILE_READ.FAILED };
+}
 
 /** The read a refusal or a failure stands for, from an answer that carried no file. */
 function notRead(answer: TasksFileAnswer): FileRead {
@@ -67,30 +70,46 @@ function notRead(answer: TasksFileAnswer): FileRead {
   return { kind: FILE_READ.FAILED };
 }
 
+/** Where TanStack Query says a read stands, as its `status` names it. */
+const QUERY_STATUS = {
+  PENDING: "pending",
+  ERROR: "error",
+  SUCCESS: "success",
+} as const;
+
+/** One of the tab's reads as its result stands: its status, whether it is out, and what it answered. */
+interface ReadStanding {
+  readonly status: (typeof QUERY_STATUS)[keyof typeof QUERY_STATUS];
+  readonly fetching: boolean;
+  readonly data: TasksFileAnswer | undefined;
+  /** Why the read failed, a refusal the service answered among them. */
+  readonly error: unknown;
+}
+
 /**
- * The whole text of `path` through `read`: at `commit` where the tab is
- * pinned to one, and otherwise at the commit its first line names as the
- * head's, so the text and the commit a mention names are one.
+ * The whole text of the file once both reads answered: the head's first line,
+ * where the tab is pinned to no commit, naming the commit the text is then
+ * read at, so the text and the commit a mention names are one. A read still
+ * out, a Retry's among them, stands as reading.
  */
-async function readWholeText(
-  read: ReadFileWindow,
-  path: string,
+function wholeTextRead(
   pinned: string | undefined,
-): Promise<FileRead> {
-  let commit = pinned;
-  if (commit === undefined) {
-    const head = await read({ path, ...FIRST_LINE });
-    if (!("file" in head)) return notRead(head);
-    commit = head.file.commit;
+  head: ReadStanding,
+  whole: ReadStanding,
+): FileRead {
+  if (pinned === undefined) {
+    if (head.status === QUERY_STATUS.PENDING || head.fetching) return { kind: FILE_READ.READING };
+    if (head.status === QUERY_STATUS.ERROR) return failedRead(head.error);
+    if (head.data === undefined) return { kind: FILE_READ.FAILED };
+    if (!("file" in head.data)) return notRead(head.data);
   }
-  const whole = await read({
-    path,
-    ...FIRST_LINE,
-    raw: true,
-    ...(commit === undefined || pinned !== undefined ? {} : { ref: commit }),
-  });
-  if (!("text" in whole)) return notRead(whole);
-  const { repository, branch, text } = whole.text;
+  if (whole.status === QUERY_STATUS.PENDING || whole.fetching) return { kind: FILE_READ.READING };
+  if (whole.status === QUERY_STATUS.ERROR) return failedRead(whole.error);
+  if (whole.data === undefined) return { kind: FILE_READ.FAILED };
+  if (!("text" in whole.data)) return notRead(whole.data);
+  const { repository, branch, text } = whole.data.text;
+  const commit =
+    pinned ?? (head.data !== undefined && "file" in head.data ? head.data.file.commit : undefined);
   const file: FileText = { repository, branch, commit, text, lineCount: lineCountOf(text) };
   return { kind: FILE_READ.READY, ...file };
 }
@@ -171,50 +190,74 @@ function linesName(path: string, lines: { readonly startLine: number; readonly e
  * scrolls to them.
  */
 export function FileTab({
+  place,
   file,
-  readFile,
   onRead,
 }: {
+  /** Where the file is read: through the task, or the workspace's repository. */
+  place: FileReadPlace;
   file: OpenFile;
-  readFile: ReadFileWindow;
   /** Hears how the read of the file stands each time it moves, the bar over the tab offering what it allows. */
   onRead: (read: FileRead) => void;
 }): React.JSX.Element {
-  const [read, setRead] = useState<FileRead>({ kind: FILE_READ.READING });
   const page = useTaskMentions();
   const drop = useMentionDrop();
   const handle = useRef<WholeFileHandle | null>(null);
+  const pinned = file.commit;
+  const head = useQuery({
+    ...taskFileQueryOptions(place, { path: file.path, ...FIRST_LINE }),
+    enabled: pinned === undefined,
+  });
+  const headRead = head.data !== undefined && "file" in head.data;
+  const headCommit =
+    head.data !== undefined && "file" in head.data ? head.data.file.commit : undefined;
+  const commitAsked = pinned ?? headCommit;
+  const whole = useQuery({
+    ...taskFileQueryOptions(place, {
+      path: file.path,
+      ...FIRST_LINE,
+      raw: true,
+      ...(commitAsked === undefined ? undefined : { ref: commitAsked }),
+    }),
+    // Note that a head that answered no file, a refusal, ends the read there, as the tab draws it.
+    enabled: pinned !== undefined || headRead,
+  });
+  // Note that the read is drawn from what each result says rather than the result itself, which is a new object every render.
+  const { status: headStatus, isFetching: headFetching, data: headData, error: headError } = head;
+  const {
+    status: wholeStatus,
+    isFetching: wholeFetching,
+    data: wholeData,
+    error: wholeError,
+  } = whole;
+  const read = useMemo(
+    () =>
+      wholeTextRead(
+        pinned,
+        { status: headStatus, fetching: headFetching, data: headData, error: headError },
+        { status: wholeStatus, fetching: wholeFetching, data: wholeData, error: wholeError },
+      ),
+    [
+      pinned,
+      headStatus,
+      headFetching,
+      headData,
+      headError,
+      wholeStatus,
+      wholeFetching,
+      wholeData,
+      wholeError,
+    ],
+  );
+  // Retry reads again the read that stopped the tab: the head's where it failed or named no file, else the whole text.
+  // Note that a head read again that failed keeps the file it named before, so its status is weighed beside its answer.
+  const headStopped = head.status === QUERY_STATUS.ERROR || !headRead;
+  const readAgain = () => void (pinned === undefined && headStopped ? head : whole).refetch();
   const told = useRef(onRead);
   told.current = onRead;
   useEffect(() => {
     told.current(read);
   }, [read]);
-
-  // Note that the read goes through a ref to the latest file and door, so it
-  // asks again only on a Retry, never because a parent drew a fresh door.
-  const latest = useRef({ file, readFile });
-  latest.current = { file, readFile };
-  // Each read counted, so only the latest one asked lands.
-  const asks = useRef(0);
-  const readWhole = useCallback(() => {
-    asks.current += 1;
-    const asked = asks.current;
-    setRead({ kind: FILE_READ.READING });
-    const { file: open, readFile: reader } = latest.current;
-    const land = (next: FileRead) => {
-      if (asks.current === asked) setRead(next);
-    };
-    readWholeText(reader, open.path, open.commit).then(land, () =>
-      land({ kind: FILE_READ.FAILED }),
-    );
-  }, []);
-  useEffect(() => {
-    readWhole();
-    // Note that a read still out when the tab is taken down lands nowhere.
-    return () => {
-      asks.current += 1;
-    };
-  }, [readWhole]);
 
   // ⌥⌘K hands the agent's message box the lines picked here, pinned to the commit they were read at.
   const commit = read.kind === FILE_READ.READY ? (read.commit ?? file.commit) : undefined;
@@ -243,7 +286,7 @@ export function FileTab({
       ) : read.kind === FILE_READ.READING ? (
         <SpinnerRegion delay label={readingWords("the file")} />
       ) : (
-        <ReadNotice read={read} commit={file.commit} onRetry={readWhole} />
+        <ReadNotice read={read} commit={file.commit} onRetry={readAgain} />
       )}
     </Fill>
   );

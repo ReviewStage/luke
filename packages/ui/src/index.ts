@@ -100,6 +100,7 @@ export * from "./components/one-line/one-line.js";
 export * from "./components/over-pane/over-pane.js";
 export * from "./components/page-embed/page-embed.js";
 export * from "./components/page-frame/page-frame.js";
+export * from "./components/page-frame/page-scroll.js";
 export * from "./components/page-header/heading-away.js";
 export * from "./components/page-header/page-header.js";
 export * from "./components/page-swipe/use-page-swipe.js";

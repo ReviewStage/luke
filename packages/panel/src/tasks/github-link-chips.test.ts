@@ -16,7 +16,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { PublishedRow } from "./agent-published.js";
@@ -27,7 +27,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
  * github-link-chips.test.ts -- a pull request's or an issue's link in a
- * plan's words says what the workspace's GitHub App answers for it: once it
+ * description's words says what the workspace's GitHub App answers for it: once it
  * answers, every link to it is called by its number and live title, whatever
  * its label and never its repository, so a pasted address and an agent's
  * `[@#42](…)` draw one chip, on a page with a repository and one with none; each wears GitHub's mark for where it
@@ -246,6 +246,8 @@ async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAG
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
     },
   });
+  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  writeAppState(state);
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
@@ -307,9 +309,8 @@ test("a pull request's link says its number, live title, and state, wearing its 
     ["#5", "Open", PULL_REQUEST_STATE.OPEN],
     ["secret#7", null, undefined],
   ]);
+  // Note that the three chips of one pull request hold its one read.
   assert.deepEqual(standingsHeld(asked), [
-    { workspaceId: "workspace-acme", address: MERGED },
-    { workspaceId: "workspace-acme", address: MERGED },
     { workspaceId: "workspace-acme", address: MERGED },
     { workspaceId: "workspace-acme", address: ELSEWHERE },
     { workspaceId: "workspace-acme", address: UNREACHED },

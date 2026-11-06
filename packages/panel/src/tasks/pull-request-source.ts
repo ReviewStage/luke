@@ -1,13 +1,11 @@
-import type {
-  AgentChangesAnswerView,
-  AgentPullRequestWriteAnswerView,
-} from "@repo/features/agent-view";
+import type { AgentPullRequestWriteAnswerView } from "@repo/features/agent-view";
 import { AGENT_STATUS, type AgentPullRequest } from "@repo/features/agent-wire";
 import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
 import type { PullRequestActionRequest } from "@repo/features/pull-request-write-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { createContext, useContext, useMemo } from "react";
-import { type ActHandle, useAct } from "../act.js";
+import { useMutation } from "@tanstack/react-query";
+import { createContext, useCallback, useContext, useMemo } from "react";
+import { actMutation } from "../act-mutations.js";
 import { agentStillWriting } from "./agent-model.js";
 import { pullRequestAsked, pullRequestOfTab } from "./pull-request-number.js";
 import type { WritePlace } from "./pull-request-writes.js";
@@ -31,7 +29,7 @@ import type { AgentsControl } from "./use-agents.js";
 
 /** Every read and change a Pull request tab makes of the pull request it shows. */
 export interface PullRequestSource {
-  /** Whether what the pull request shows has settled, its agent no longer writing, which its reads are asked again on (`useAgentRead`). */
+  /** Whether what the pull request shows has settled, its agent no longer writing, which its reads are asked again on (`useChangesReads`). */
   readonly ended: boolean;
   /** Where a repository out of reach is mended, and the task its files' texts are read through. */
   readonly place: WritePlace;
@@ -39,8 +37,6 @@ export interface PullRequestSource {
   readonly published: AgentPullRequest | undefined;
   /** The pull request's number where the tab names one; none for the agent's own, which its reads, held by the host, stand under (`OWN_PULL_REQUEST`). */
   readonly number: number | undefined;
-  /** Its changed files, as Files changed draws them. */
-  readonly readChanges: () => Promise<AgentChangesAnswerView>;
   /** Its chapters generated for its head now, answering once they land. */
   readonly generateChapters: () => Promise<PullRequestChaptersAnswerView>;
   /** One change to it, a viewed mark and a review among them. */
@@ -57,14 +53,16 @@ export function usePullRequestSource(): PullRequestSource | undefined {
   return useContext(PullRequestSourceContext);
 }
 
-/** One change to the agent's pull request, or to the one of its repository by the number given. */
-export function agentPullRequestWrite(
-  act: ActHandle["act"],
+/** One change to the agent's pull request, or to the one of its repository by the number given, sent on its mutation. */
+export function useAgentPullRequestWrite(
   agentId: string,
   number: number | undefined,
 ): PullRequestSource["write"] {
-  return (request) =>
-    act(ACT_KIND.AGENTS_PULL_REQUEST_ACTION, { ...pullRequestAsked(agentId, number), request });
+  const { mutateAsync: sendWrite } = useMutation(actMutation(ACT_KIND.AGENTS_PULL_REQUEST_ACTION));
+  return useCallback(
+    (request) => sendWrite({ ...pullRequestAsked(agentId, number), request }),
+    [sendWrite, agentId, number],
+  );
 }
 
 /**
@@ -78,7 +76,7 @@ export function useAgentPullRequestSource(
   agentId: string,
   number: number | undefined,
 ): PullRequestSource {
-  const { act } = useAct();
+  const write = useAgentPullRequestWrite(agentId, number);
   const agent =
     control.agents?.find((each) => each.id === agentId) ??
     control.archived?.find((each) => each.id === agentId);
@@ -86,15 +84,14 @@ export function useAgentPullRequestSource(
   const taskId = agent?.planId ?? null;
   const { workspaceId } = control;
   const published = pullRequestOfTab(control, { changes: agentId, number });
-  const { readChanges, generateChapters } = control;
+  const { generateChapters } = control;
   // Note that the doors are kept while what they name stands, because every part under the tab that hears the source draws anew on a new one.
   const doors = useMemo(
     () => ({
-      readChanges: () => readChanges(agentId, number),
       generateChapters: () => generateChapters(agentId, number),
-      write: agentPullRequestWrite(act, agentId, number),
+      write,
     }),
-    [act, agentId, number, readChanges, generateChapters],
+    [write, agentId, number, generateChapters],
   );
   // Note that a repository out of reach is mended in the agent's own workspace, by its task or, on none, its page's.
   const place = useMemo(() => ({ taskId, workspaceId }), [taskId, workspaceId]);

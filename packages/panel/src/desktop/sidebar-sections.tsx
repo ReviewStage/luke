@@ -67,21 +67,23 @@ import {
   unplaceAllWrites,
   workspaceSections,
 } from "@repo/ui/task-sections-model";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
-import { movedBeside, nestsOf, siblingsAt, useNestedRows } from "./nested-rows.js";
+import { listedSlot, movedBeside, nestsOf, siblingsAt, useNestedRows } from "./nested-rows.js";
 import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
 import { SectionIconWell, sectionGlyph } from "./section-icon-picker.js";
 import { foldedCount, SIDEBAR_SECTION_SLOT, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
+import { SidebarRun, type SidebarRunsPlace } from "./sidebar-run.js";
 import { HiddenStatusesLine, NONE_MATCH } from "./sidebar-task-view.js";
 import { useFormDialog } from "./use-form-dialog.js";
-import { useRowDrag } from "./use-row-drag.js";
+import { useRowDrag, useRunRowDrag } from "./use-row-drag.js";
 
 /**
  * sidebar-sections.tsx -- the account's own sections in the sidebar, between Pinned and Tasks: each a title, and an icon where one was chosen, over the tasks and agents kept in it, named and renamed in place, the dialog that makes one where no head is in sight, and the Move to section of a task's menu and an agent's.
@@ -580,7 +582,13 @@ interface SectionContext {
   /** Whether a task's child tasks stand open under its row, folded until first opened. */
   readonly opened: (taskId: string) => boolean;
   /** A task's row or an agent's, as it stands in any list of the sidebar, at the depth it stands nested at and in its place among its siblings (`nestsOf`). */
-  readonly row: (row: DrawnTaskRow, nest: ListRowNest | undefined) => React.JSX.Element;
+  readonly row: (
+    row: DrawnTaskRow,
+    nest: ListRowNest | undefined,
+    place: VirtualRowPlace,
+  ) => React.JSX.Element;
+  /** Where the column's runs of rows stand (`SidebarRun`). */
+  readonly runs: SidebarRunsPlace;
   /** Hears a row let go over another zone: a section by its id, Tasks, or Pinned. */
   readonly onDropRow: (row: TaskRow, zone: string, at: number) => void;
   /** Hears a row lifted into a drag and that drag ended, while which an empty Pinned stands to take it. */
@@ -648,6 +656,15 @@ function SectionRows({
   folded: boolean;
 }): React.JSX.Element {
   const nested = useNestedRows(rows, context.opened, context.current);
+  // Note that a row on its way out has no place among the rows a drag or a menu moves.
+  const shown = useLeaving(nested, ({ row }) => taskRowKey(row));
+  const keys = useMemo(() => shown.map(({ key }) => key), [shown]);
+  const listedAt = new Map(nested.map(({ row }, at) => [taskRowKey(row), at]));
+  // Note that a row is heard by its place among the rows drawn, rows on their way out among them, and found among those listed by its key, as the slot it is carried to is (`listedSlot`).
+  const fromListed = (from: number) => {
+    const key = shown[from]?.key;
+    return key === undefined ? undefined : listedAt.get(key);
+  };
   const storedAt = (at: number) => {
     const held = nested[at];
     return held === undefined ? -1 : drawn.rows.indexOf(held.row);
@@ -659,19 +676,20 @@ function SectionRows({
   };
   const move = folded
     ? undefined
-    : (from: number, to: number) => besideSibling(from, movedBeside(nested, from, to));
-  const drag = useRowDrag(move, {
+    : (from: number, to: number) => {
+        const at = fromListed(from);
+        if (at !== undefined)
+          besideSibling(at, movedBeside(nested, at, listedSlot(shown, from, to)));
+      };
+  const drag = useRunRowDrag(move, {
     onDropOut: (from, zone, at) => {
-      const held = nested[from];
+      const held = shown[from]?.value;
       if (held !== undefined) context.onDropRow(held.row, zone, at);
     },
     onCarried: context.onCarried,
   });
-  const keys = useRowMoveKeys(move);
-  // Note that a row on its way out has no place among the rows a drag or a menu moves.
-  const shown = useLeaving(nested, ({ row }) => taskRowKey(row));
+  const moveKeys = useRowMoveKeys(move);
   const nests = nestsOf(shown.map(({ value }) => value));
-  const listedAt = new Map(nested.map(({ row }, at) => [taskRowKey(row), at]));
   const placeOf = (key: string) => {
     const at = listedAt.get(key);
     if (move === undefined || at === undefined) return undefined;
@@ -686,21 +704,22 @@ function SectionRows({
     };
   };
   return (
-    <Stack
-      as={LAYOUT_ELEMENT.UL}
-      gap={GAP.ROW}
-      className="sidebar-tasks"
-      data-row-drop-rows={folded ? undefined : ""}
-      moves
+    <SidebarRun
+      place={context.runs}
+      keys={keys}
+      drops={!folded}
       onPointerDown={drag}
-      {...keys}
+      block={moveKeys}
     >
-      {shown.map(({ key, value: held }, at) => (
-        <RowPlaced key={key} place={placeOf(key)}>
-          {context.row(held, nests[at])}
-        </RowPlaced>
-      ))}
-    </Stack>
+      {(index, place) => {
+        const entry = shown[index];
+        return entry === undefined ? null : (
+          <RowPlaced key={entry.key} place={placeOf(entry.key)}>
+            {context.row(entry.value, nests[index], place)}
+          </RowPlaced>
+        );
+      }}
+    </SidebarRun>
   );
 }
 

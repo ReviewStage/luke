@@ -19,7 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { focusRestOn } from "../testing/hint-rest.js";
 import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
@@ -82,8 +82,8 @@ function tool(tool: string, callId: string, input: WireRecord, output: WireRecor
   return { type: `tool-${tool}`, toolCallId: callId, state: "output-available", input, output };
 }
 
-/** The plan the agent was handed, which its transcript opens on as the task's card. */
-const PLAN: AgentTranscriptMessage = {
+/** The description the agent was handed, which its transcript opens on as the task's card. */
+const DESCRIPTION: AgentTranscriptMessage = {
   id: "plan",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "Wire the retry audit." }],
@@ -177,7 +177,10 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
 function runningTab() {
   fakeAppBridge({});
   const telling = tellingTranscripts();
-  telling.tell(TRANSCRIPT, page([PLAN, EARLIER, newest("Reading.")], AGENT_STATUS.RUNNING, "1:1"));
+  telling.tell(
+    TRANSCRIPT,
+    page([DESCRIPTION, EARLIER, newest("Reading.")], AGENT_STATUS.RUNNING, "1:1"),
+  );
   const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -219,12 +222,14 @@ function runningTab() {
       await act(async () => {
         for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
       });
+      await settleQueries();
     },
     async answer(next: AgentMessagesAnswerView) {
       await act(async () => {
         telling.tell(TRANSCRIPT, next);
         for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
       });
+      await settleQueries();
     },
     openEarlierFold() {
       const fold = container.querySelector<HTMLElement>(
@@ -274,7 +279,7 @@ test("a message a page did not touch hangs the card the window hands now, and it
   );
 });
 
-test("a task renamed while its agent's tab stands names the plan's sender anew, hanging the task's new card", async () => {
+test("a task renamed while its agent's tab stands names the description's sender anew, hanging the task's new card", async () => {
   const tab = runningTab();
   const control = tab.controlOf("Invoice export");
   const task = (name: string): BriefTask => ({
@@ -286,7 +291,7 @@ test("a task renamed while its agent's tab stands names the plan's sender anew, 
   await tab.settle();
   const sender = () => {
     const ref = tab.container.querySelector<HTMLElement>(".agent-origin [data-task-ref]");
-    assert.ok(ref, "the plan's card names its task");
+    assert.ok(ref, "the description's card names its task");
     return ref;
   };
   const cardOf = (ref: HTMLElement) => {
@@ -320,7 +325,7 @@ test("a page that adds a call to a running turn draws that call alone, the calls
     startedAt: 3_000,
   });
   const telling = tellingTranscripts();
-  telling.tell(TRANSCRIPT, page([PLAN, messaged(5)], AGENT_STATUS.RUNNING, "1:1"));
+  telling.tell(TRANSCRIPT, page([DESCRIPTION, messaged(5)], AGENT_STATUS.RUNNING, "1:1"));
   // Each call about an agent asks for that agent's card as its row is drawn, so the cards asked for are the rows drawn.
   const asked: string[] = [];
   const cards: TranscriptCards = {
@@ -351,6 +356,7 @@ test("a page that adds a call to a running turn draws that call alone, the calls
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   assert.ok(asked.includes("agent-0"), "the turn's open run of calls is drawn");
 
   asked.length = 0;
@@ -358,5 +364,6 @@ test("a page that adds a call to a running turn draws that call alone, the calls
     telling.tell(TRANSCRIPT, page([messaged(6)], AGENT_STATUS.RUNNING, "1:2"));
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   assert.deepEqual(asked, ["agent-5"]);
 });

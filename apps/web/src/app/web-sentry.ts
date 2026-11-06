@@ -24,6 +24,7 @@ import { type EarlyReports, reportsOnceStarted } from "@repo/features/sentry-ear
 import { type SentryCapture, sentryReporterLayer } from "@repo/features/sentry-reporting";
 import type { ShownFailureSent } from "@repo/features/shown-failure";
 import type { ShownFailureReporter } from "@repo/panel/failure-report";
+import { queryClient } from "@repo/panel/query-client";
 import type { Layer } from "effect";
 
 /** What the build says about where the tab reports. */
@@ -129,7 +130,7 @@ export function webSentryBuild(): WebSentryBuild {
 async function loadedSentry(build: WebSentryBuild): Promise<WebSentry | undefined> {
   try {
     const { initWebSentry } = await import("./web-sentry-sdk");
-    return initWebSentry(build);
+    return initWebSentry(build, queryClient);
   } catch (error) {
     console.warn("Sentry's SDK could not load; this tab reports nothing.", error);
     return undefined;

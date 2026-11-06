@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_MACHINE,
   AGENT_SOURCE,
@@ -15,9 +16,15 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import type { AgentActAnswer } from "../act.js";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
-import type { AgentsControl } from "../tasks/use-agents.js";
+import {
+  AGENT_RENAME_SHAPE,
+  type AgentsControl,
+  agentDeleteMutation,
+  agentRenameMutation,
+} from "../tasks/use-agents.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -27,7 +34,8 @@ import {
   fakeAppBridgeCalls,
 } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { AGENT } from "../testing/desktop-inbox.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { type AgentActions, agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
@@ -128,14 +136,20 @@ function mount(
       archives.push({ agentId, archived });
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
-    onRename: (agentId, title) => {
-      renames.push({ agentId, title });
-      return Promise.resolve(renameTaken);
+    rename: {
+      ...AGENT_RENAME_SHAPE,
+      options: agentRenameMutation(({ agentId, title }) => {
+        renames.push({ agentId, title });
+        const answer: AgentActAnswer = renameTaken
+          ? { agent: AGENT }
+          : { failure: AGENT_CALL_FAILURE.UNANSWERED, cause: undefined };
+        return Promise.resolve(answer);
+      }),
     },
-    onDelete: (agentId) => {
+    deleteAgent: agentDeleteMutation((agentId) => {
       deletes.push(agentId);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+      return Promise.resolve({ deleted: true } as const);
+    }),
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -199,7 +213,7 @@ test("an agent at rest is archived from its row's right-click at once, once its 
   await settle();
 
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
-  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.equal(document.querySelector('[role="alertdialog"]') === null, true, "nothing was asked");
 });
 
 test("the reader's own working agent is archived at once from its row, asking nothing, since its toast's Undo brings it back", async () => {
@@ -209,7 +223,7 @@ test("the reader's own working agent is archived at once from its row, asking no
   await act(async () => archive.click());
   await settle();
 
-  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.equal(document.querySelector('[role="alertdialog"]') === null, true, "nothing was asked");
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
 });
 
@@ -273,8 +287,13 @@ test("a refused rename reopens the row's field holding the name typed, and says 
   });
   await settle();
 
-  const reopened = row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]');
-  assert.equal(reopened?.value, "Remove the stale banners");
+  // Note that the refusal reaches the row through the rename's mutation, a moment after the write is refused.
+  await vi.waitFor(() =>
+    assert.equal(
+      row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]')?.value,
+      "Remove the stale banners",
+    ),
+  );
   assert.ok(row.textContent?.includes("The agent could not be renamed. Try again."));
 });
 
@@ -577,19 +596,21 @@ test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop
 test("a local agent offers Terminal only where it runs on This Mac", async () => {
   const thisMac = "5c3d2e1f-0a9b-4c8d-9e7f-6a5b4c3d2e1f";
   const signedIn = signedInAs({ id: ME, email: "dev@example.com", name: "Dev" });
+  const signedInOnThisMac = {
+    ...signedIn,
+    [LIVE_READ.THIS_MAC_HOST]: { [ME]: { rows: { deviceId: thisMac } } },
+  };
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     onAppState: () => () => undefined,
-    requestAppState: () =>
-      Promise.resolve({
-        ...signedIn,
-        [LIVE_READ.THIS_MAC_HOST]: { [ME]: { rows: { deviceId: thisMac } } },
-      }),
+    requestAppState: () => Promise.resolve(signedInOnThisMac),
   });
   /** Whether the local agent on the device given offers Terminal, once the window holds This Mac. */
   const offersTerminal = async (deviceId: string) => {
     let offered: AgentActions | undefined;
     const agent = { ...RUN, machine: AGENT_MACHINE.DEVICE, mac: { name: "Studio", deviceId } };
+    // Note that the actions are read once, so the document is in the client from their first frame.
+    writeAppState(signedInOnThisMac);
     const held = createRoot(document.createElement("div"));
     act(() =>
       held.render(

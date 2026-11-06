@@ -490,7 +490,7 @@ it.effect(
 );
 
 it.effect(
-  "reads an inbox item's attachment as base64 under the type it was kept as, an answer's PDF or text file as much as a picture, and any other type as unanswered",
+  "reads an inbox item's attachment as base64 under the type it was kept as, an answer's PDF or text file as much as a picture, any other type as unanswered, and a call that never reached the service as unanswered with its fault",
   () =>
     Effect.gen(function* () {
       const itemId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
@@ -512,6 +512,19 @@ it.effect(
       });
       assert.deepEqual(yield* read("text/html"), {
         failure: AGENT_CALL_FAILURE.UNANSWERED,
+      });
+      const dropped = recordingHttpClient(() => Promise.reject(new TypeError("Load failed")));
+      const unreached = yield* Effect.provide(
+        client().inboxAttachment(itemId, attachmentId),
+        dropped.layer,
+      );
+      assert.deepEqual(unreached, {
+        failure: AGENT_CALL_FAILURE.UNANSWERED,
+        cause: {
+          _tag: FAILURE_FACT.HOSTED_UNANSWERED,
+          fault: CALL_FAULT.NETWORK,
+          errorName: "TypeError",
+        },
       });
     }),
 );

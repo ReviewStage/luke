@@ -140,7 +140,7 @@ test("a right-click on a row naming an agent's page offers Open in browser, whic
   assert.deepEqual(opened, [`${page}?stay=web`]);
 });
 
-/** Words being edited, as a plan's body holds them, with a link in them. */
+/** Words being edited, as a description's body holds them, with a link in them. */
 function EditedWords(): React.JSX.Element {
   const host = useEditedLinksHost();
   return createElement(

@@ -1,11 +1,10 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AgentSummary } from "@repo/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { sectionAnchors } from "@repo/features/mention-link";
-import { planSections } from "@repo/features/plan-document";
+import { descriptionSections } from "@repo/features/description-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import type { PlanRevisionLine } from "@repo/features/task-wire";
+import type { DescriptionRevisionLine } from "@repo/features/task-wire";
 import { readFailedWords, readingWords } from "@repo/features/words";
 import type { FormerMember, Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -27,6 +26,7 @@ import {
   ResizeEdge,
   RowHint,
   RowHintOptions,
+  reachedKey,
   SCROLL_FADE,
   ScrollArea,
   ShowMoreRow,
@@ -41,11 +41,20 @@ import {
   Toolbar,
   Tooltip,
   useMinute,
+  useRovingKeys,
 } from "@repo/ui";
 import { type Actor, actorName } from "@repo/ui/actor-model";
 import { ArrowUpRightIcon, GLYPH, RotateCcwIcon } from "@repo/ui/icons";
 import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
-import { useEffect, useRef, useState } from "react";
+import {
+  VIRTUAL_ROW_KEY_ATTRIBUTE,
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+} from "@repo/ui/virtual-rows";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { type RefObject, useEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -54,6 +63,7 @@ import { useCopyToast } from "../copy-feedback.js";
 import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
+import { workspaceMembersQuery } from "../live-reads.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { centerWithin } from "../scroll-within.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -70,15 +80,15 @@ import {
   sourceLabel,
   VERSION_CHANGE,
   versionDiff,
-} from "../tasks/plan-history-model.js";
+} from "../tasks/description-history-model.js";
 import type { MentionedTask } from "../tasks/task-mentions.js";
 import { useNumberedPlace } from "../tasks/use-link-standing.js";
 import {
   HISTORY_READ,
   type OpenedSections,
-  type PlanHistoryControl,
+  type DescriptionHistoryControl,
   type ViewedVersion,
-} from "../tasks/use-plan-history.js";
+} from "../tasks/use-description-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   useVersionRestore,
@@ -86,7 +96,6 @@ import {
   type VersionRestore,
   VersionView,
 } from "../tasks/version-view.js";
-import { useHostRead } from "../use-host-read.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
@@ -96,7 +105,7 @@ import { PLACE_LIST, PLACE_LIST_TITLE, PLACE_PAGE, PLACE_SPLIT } from "./place-c
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
- * desktop-version-history.tsx -- a plan's version history, taking the whole window the way Settings does: every version listed where the sidebar stands, the one chosen beside them.
+ * desktop-version-history.tsx -- a description's version history, taking the whole window the way Settings does: every version listed where the sidebar stands, the one chosen beside them.
  *
  * The left column is as wide as the tasks' sidebar and resizes it from its
  * own edge, never folding, as Settings' page list does. At its head stand
@@ -106,7 +115,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * it, the reader's account picture as You, a teammate's sign-in picture
  * where the workspace's members read lists one, a coding agent's harness and
  * title), what it did, and how long ago, in the sidebar's few letters with
- * the moment itself on hover. The newest is the plan as it stands and the
+ * the moment itself on hover. The newest is the description as it stands and the
  * one drawn when the view opens, wearing no tag of its own: its Restore says
  * it is already current. Opened from a section's "Edited by", the view draws
  * the version that made the section's last change instead, its row brought
@@ -130,7 +139,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * chosen in it, so Back returns to wherever it was opened from, the task as
  * it was left, side panel and all; a restore that lands leaves for the task
  * it restored, where the window's toast offers its Undo. Every row and the version beside them name what
- * the plan held, so both are left out of the screen recording
+ * the description held, so both are left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  *
  * What the history is of is handed in as its subject: the open task's
@@ -154,12 +163,12 @@ const VERSION_PANE = "version-log-pane flex min-h-0 min-w-0 flex-col px-ring-rea
  * to its versions.
  */
 export interface VersionSubject {
-  readonly versions: PlanHistoryControl;
+  readonly versions: DescriptionHistoryControl;
   readonly title: string | undefined;
   /** The coding agents whose harness a revision of theirs wears. */
   readonly agents: readonly Pick<AgentSummary, "id" | "model">[];
   /** What a revision did, in a few words. */
-  readonly summary: (line: PlanRevisionLine) => string;
+  readonly summary: (line: DescriptionRevisionLine) => string;
   /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */
   readonly onShowSource: ((source: RevisionSource) => void) | undefined;
   /** The workspace whose members wrote the revisions, whose pictures their rows wear; none where the task's is not listed. */
@@ -233,6 +242,7 @@ function RevisionRow({
   author,
   selected,
   now,
+  place,
   rowRef,
   onSelect,
   onOpenSections,
@@ -241,17 +251,19 @@ function RevisionRow({
   copyLink,
   summary,
 }: {
-  line: PlanRevisionLine;
+  line: DescriptionRevisionLine;
   author: Actor;
   selected: boolean;
   now: number;
+  /** Where it stands in the run of versions (`VirtualRows`). */
+  place: VirtualRowPlace;
   rowRef: (row: HTMLElement | null) => void;
   onSelect: () => void;
   /** Opens the sections the revision changed; none for a revision that opens none. */
   onOpenSections: (() => void) | undefined;
   /** The way to the place that wrote the revision; none where nothing else in the window did. */
   source: SourceDoor | undefined;
-  /** Restores the version, asking nothing; none for the plan as it stands. */
+  /** Restores the version, asking nothing; none for the description as it stands. */
   onRestore: (() => void) | undefined;
   /** Copy link, the version's; none for a history with no link of its own. */
   copyLink: MenuAction | undefined;
@@ -278,6 +290,7 @@ function RevisionRow({
     <RowHintOptions card={card}>
       <ListRow
         ref={rowRef}
+        place={place}
         leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
         title={
           <span className={VERSION_AUTHOR} data-author={author.kind}>
@@ -440,11 +453,19 @@ function SectionsSkeleton(): React.JSX.Element {
   );
 }
 
+/** An older page of versions the read did not lay. */
+class OlderVersionsUnread extends Error {
+  constructor() {
+    super("The older versions could not be read.");
+    this.name = "OlderVersionsUnread";
+  }
+}
+
 /**
  * The foot of the list while an older page stands: how many older versions
  * wait, read a page of them on its press, and a failed read said above it
  * with Retry. Note that the count is the versions numbered below `before`,
- * the oldest one the list holds, since a plan's versions are numbered from
+ * the oldest one the list holds, since a description's versions are numbered from
  * one without gaps.
  */
 function EarlierRow({
@@ -454,27 +475,24 @@ function EarlierRow({
   before: number;
   onRead: () => Promise<boolean>;
 }): React.JSX.Element {
-  const [reading, setReading] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // The read of the older page as a mutation, whose pending and failed states the row draws; one that did not land is its failure.
+  const older = useMutation({
+    mutationFn: async () => {
+      if (!(await onRead())) throw new OlderVersionsUnread();
+    },
+  });
+  const reading = older.isPending;
+  const failed = older.isError;
   const read = () => {
-    if (reading) return;
-    setReading(true);
-    setFailed(false);
-    onRead().then(
-      (landed) => {
-        setReading(false);
-        setFailed(!landed);
-      },
-      () => {
-        setReading(false);
-        setFailed(true);
-      },
-    );
+    if (!reading) older.mutate();
   };
   return (
     <div className="version-earlier mx-0 mt-control-gap mb-0 px-row-inset py-row-inset text-caption text-muted-foreground">
       {failed ? (
-        <FailureNote failure={unreadShown(FAILURE_SURFACE.PLAN_HISTORY_OLDER_READ)} onRetry={read}>
+        <FailureNote
+          failure={unreadShown(FAILURE_SURFACE.DESCRIPTION_HISTORY_OLDER_READ)}
+          onRetry={read}
+        >
           Could not read older versions.
         </FailureNote>
       ) : (
@@ -560,24 +578,39 @@ function useSectionsFocused(
 
 /**
  * The row of the version the view opened on, brought into the list's view
- * once it is chosen, so a version opened deep in the list is seen lit. Only
- * the list scrolls, since the window around it must not.
+ * once it is chosen, so a version opened deep in the list is seen lit, and
+ * drawn there where its run had not drawn it (`bringIn`). Only the list
+ * scrolls, since the window around it must not.
  */
 function useOpenedRowShown(
   selected: number | undefined,
   rows: Map<number, HTMLElement>,
-  log: React.RefObject<HTMLDivElement | null>,
+  log: RefObject<HTMLDivElement | null>,
+  run: RefObject<VirtualRowsHandle | null>,
 ): void {
   const shown = useRef(false);
   useEffect(() => {
-    const row = selected === undefined ? undefined : rows.get(selected);
-    if (shown.current || row === undefined || log.current === null) return;
+    if (shown.current || selected === undefined || log.current === null) return;
+    const row = rows.get(selected);
+    if (row === undefined) {
+      shown.current = run.current?.bringIn(String(selected)) === true;
+      return;
+    }
     shown.current = true;
     const box = log.current.getBoundingClientRect();
     const line = row.getBoundingClientRect();
     if (line.top < box.top || line.bottom > box.bottom) centerWithin(log.current, row);
-  }, [selected, rows, log]);
+  }, [selected, rows, log, run]);
 }
+
+/** How tall a version's row is taken to be before it is drawn, in pixels: its name over two lines of what it did, and its insets. */
+const REVISION_ESTIMATE_PX = 64;
+
+/** The room between two versions' rows, in pixels: a list's (`--ui-list-gap`). */
+const REVISION_GAP_PX = 2;
+
+/** A row's press, which takes the focus in the list's walk. */
+const ROW_PRESS = ".ui-list-row-main";
 
 /** The sections the open revision changed, once its version is read; nothing while it is read, or while no revision is open. */
 function openedSections(
@@ -649,7 +682,7 @@ function VersionPage({
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState
-            failure={unreadShown(FAILURE_SURFACE.PLAN_HISTORY_READ)}
+            failure={unreadShown(FAILURE_SURFACE.DESCRIPTION_HISTORY_READ)}
             onRetry={versions.onRetry}
             placement={ERROR_STATE_PLACEMENT.CENTERED}
           >
@@ -684,7 +717,9 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
             taskId: task.id,
             place: { workspace: workspace?.slug ?? task.workspaceId, repository: task.repository },
             anchors: new Set(
-              sectionAnchors(planSections(task.document.body).map((section) => section.heading)),
+              sectionAnchors(
+                descriptionSections(task.document.body).map((section) => section.heading),
+              ),
             ),
           },
     versions: tasks.history,
@@ -738,10 +773,33 @@ export function DesktopVersionHistory({
   const rows = useRef(new Map<number, HTMLElement>()).current;
   const sectionRows = useRef(new Map<number, HTMLElement>()).current;
   const log = useRef<HTMLDivElement>(null);
+  const run = useRef<VirtualRowsHandle>(null);
+  const keys = useMemo(() => revisions.map((line) => String(line.seq)), [revisions]);
+  // The rows are one Tab stop that ↑↓ walk; a key reaching past the rows drawn goes on to the row it reaches, brought in where it is not drawn.
+  const roving = useRovingKeys<HTMLDivElement>({
+    reach: (from, to) => {
+      const inHand = from?.closest(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}]`);
+      const key = reachedKey(
+        keys,
+        inHand?.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE) ?? undefined,
+        to,
+      );
+      if (key === undefined) return false;
+      const press = run.current?.rowElement(key)?.querySelector<HTMLElement>(ROW_PRESS);
+      if (press !== undefined && press !== null) {
+        press.focus();
+        return true;
+      }
+      return (
+        run.current?.bringIn(key, (row) => row.querySelector<HTMLElement>(ROW_PRESS)?.focus()) ===
+        true
+      );
+    },
+  });
   const { opened } = versions.spot ?? {};
   const edge = useListEdge(sidebar);
-  const people = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, subject.workspace?.id).rows;
-  // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
+  const people = useQuery(workspaceMembersQuery(subject.workspace?.id)).data;
+  // A version of a description has a link of its own, its description's under its revision; another history's has none.
   const copy = useCopyToast();
   const chord = useChordLinks();
   const numbered = useNumberedPlace();
@@ -765,7 +823,7 @@ export function DesktopVersionHistory({
   const restore = useVersionRestore(versions, onRestored);
   const sections = openedSections(versions.viewing, opened);
   const failed = sectionsFailed(versions.viewing, opened);
-  const sourceOf = (line: PlanRevisionLine, author: Actor): SourceDoor | undefined => {
+  const sourceOf = (line: DescriptionRevisionLine, author: Actor): SourceDoor | undefined => {
     const source = revisionSource(line);
     const { onShowSource } = subject;
     if (source === undefined || onShowSource === undefined) return undefined;
@@ -782,7 +840,7 @@ export function DesktopVersionHistory({
       ? undefined
       : sourceOf(openedLine, openedAuthor);
   const openSections = versions.onOpenSections;
-  const restoreOf = (line: PlanRevisionLine): (() => void) | undefined => {
+  const restoreOf = (line: DescriptionRevisionLine): (() => void) | undefined => {
     const newest = revisions[0]?.seq;
     if (line.seq === newest) return undefined;
     return () => restore.onRestore(line.seq);
@@ -790,7 +848,12 @@ export function DesktopVersionHistory({
   const closeSections = () => {
     if (opened === undefined) return;
     versions.onCloseSections();
-    rows.get(opened.seq)?.focus();
+    const row = rows.get(opened.seq);
+    if (row !== undefined) row.focus();
+    else
+      run.current?.bringIn(String(opened.seq), (drawn) =>
+        drawn.querySelector<HTMLElement>(ROW_PRESS)?.focus(),
+      );
   };
   useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, opened === undefined ? onExit : closeSections);
   const chooseUnit = (at: number) => {
@@ -806,12 +869,12 @@ export function DesktopVersionHistory({
   });
   const sectionKeys = goThroughRow(sectionRows, { back: closeSections });
   useSectionsFocused(opened?.seq, unit, sectionRows);
-  useOpenedRowShown(versions.selected, rows, log);
+  useOpenedRowShown(versions.selected, rows, log, run);
   const split = useScreenSplit(room);
   const hidden = hiddenColumns(split.columns, versions.listed);
   const screen = useScreenRef(useNarrowFocus(split.columns, versions.listed), split.ref);
   const narrow = room === SHELL_ROOM.NARROW;
-  const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? "plan");
+  const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? "description");
 
   return (
     <div
@@ -880,18 +943,37 @@ export function DesktopVersionHistory({
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
                 {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
                 <div
+                  {...roving}
                   className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach"
-                  onFocus={chooseSteppedRow(rows, versions.onSelect)}
-                  onKeyDown={versionKeys}
+                  onFocus={(event) => {
+                    roving.onFocus(event);
+                    chooseSteppedRow(rows, versions.onSelect)(event);
+                  }}
+                  onKeyDown={(event) => {
+                    versionKeys(event);
+                    if (!event.defaultPrevented) roving.onKeyDown(event);
+                  }}
                 >
                   {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
-                  <List label={LIST_LABEL.VERSIONS}>
-                    {revisions.map((line) => {
+                  <VirtualRows
+                    scroller={log}
+                    keys={keys}
+                    estimate={REVISION_ESTIMATE_PX}
+                    gap={REVISION_GAP_PX}
+                    anchor={VIRTUAL_ROWS_ANCHOR.START}
+                    listItems
+                    holdsFocus
+                    aria-label={LIST_LABEL.VERSIONS}
+                    handle={run}
+                  >
+                    {(index, place) => {
+                      const line = revisions[index];
+                      if (line === undefined) return null;
                       const author = revisionAuthorOf(line, reader, agents);
                       return (
                         <RevisionRow
-                          key={line.seq}
                           line={line}
+                          place={place}
                           author={author}
                           source={sourceOf(line, author)}
                           selected={line.seq === versions.selected}
@@ -909,8 +991,8 @@ export function DesktopVersionHistory({
                           summary={subject.summary(line)}
                         />
                       );
-                    })}
-                  </List>
+                    }}
+                  </VirtualRows>
                   {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
                     <EarlierRow before={list.earlier} onRead={versions.onLoadEarlier} />
                   ) : null}
@@ -940,7 +1022,7 @@ export function DesktopVersionHistory({
                     />
                     {failed ? (
                       <ErrorState
-                        failure={unreadShown(FAILURE_SURFACE.PLAN_VERSION_READ)}
+                        failure={unreadShown(FAILURE_SURFACE.DESCRIPTION_VERSION_READ)}
                         onRetry={versions.onRetryVersion}
                         placement={ERROR_STATE_PLACEMENT.ROWS}
                       >
@@ -1000,7 +1082,7 @@ export function DesktopVersionHistory({
   );
 }
 
-/** The open plan's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
+/** The open description's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
 export function TaskVersionHistory({
   tasks,
   ...view

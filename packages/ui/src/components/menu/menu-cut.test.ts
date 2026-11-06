@@ -19,7 +19,7 @@ function rule(top: number): MenuLine {
   return { top, bottom: top + 1, kind: MENU_LINE.RULE };
 }
 
-// Copy plan … Permanently delete, then the "Created by / Last edited" footer.
+// Copy description … Permanently delete, then the "Created by / Last edited" footer.
 const TASK_MENU: readonly MenuLine[] = [
   row(0),
   row(32),

@@ -1,6 +1,6 @@
 # vespin
 
-[Vespin](https://vespin.dev) from your terminal: work with your tasks, plans,
+[Vespin](https://vespin.dev) from your terminal: work with your tasks, their descriptions,
 and coding agents from a shell, as a person or as a coding agent calling it.
 
 ## Install

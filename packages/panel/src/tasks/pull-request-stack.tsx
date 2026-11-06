@@ -8,8 +8,9 @@ import { ACT_KIND } from "@repo/host/acts";
 import { BUTTON_VARIANT, Button, dropBelowStart, Tooltip, useMenu } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
+import { useMutation } from "@tanstack/react-query";
 import { LayersIcon } from "lucide-react";
-import { useAct } from "../act.js";
+import { pressMutation } from "../act-mutations.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark.js";
 import { useOpenPlace } from "./use-open-link.js";
@@ -57,13 +58,13 @@ function placeOf(agent: NonNullable<PullRequestStackEntry["agent"]>): LinkPlace 
 
 /** How a pull request of the stack opens: its agent's Pull request tab where an agent owns it and the window can open one, else its page on GitHub. */
 function useOpenEntry(): (entry: PullRequestStackEntry) => void {
-  const { press } = useAct();
+  const { mutate: openOnGitHub } = useMutation(pressMutation(ACT_KIND.GITHUB_OPEN));
   const openPlace = useOpenPlace();
   return (entry) => {
     if (entry.agent !== undefined && openPlace !== undefined) {
       openPlace(placeOf(entry.agent));
     } else {
-      press(ACT_KIND.GITHUB_OPEN, { url: entry.url });
+      openOnGitHub({ url: entry.url });
     }
   };
 }

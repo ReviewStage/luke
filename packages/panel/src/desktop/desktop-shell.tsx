@@ -29,6 +29,7 @@ import {
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { useQuery } from "@tanstack/react-query";
 import { Activity, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { AdminCollectionPage, AdminPlaceFrameProvider } from "../admin/chrome/page-header.js";
@@ -55,7 +56,12 @@ import {
   type AutomationsPlace,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import { useAdminAccess, useAdminAccessPending, useCapability } from "../use-app-state.js";
+import {
+  appStateQuery,
+  selectAdminAccess,
+  selectAdminAccessPending,
+  selectCapability,
+} from "../use-app-state.js";
 import { ADMIN_TITLE, adminFrame } from "./admin-frame.js";
 import {
   AutomationListSkeleton,
@@ -170,7 +176,7 @@ function PersonLoading({
 const TASKS_EXIT_PLACE = "tasks";
 
 /** Where a version history's way out leads where no step stands behind it, as a hint names it. */
-const HISTORY_EXIT_PLACE = "plan";
+const HISTORY_EXIT_PLACE = "description";
 
 /** What a phone's row is named for over a workspace's address that names none of the reader's. */
 const UNKNOWN_WORKSPACE_PHONE_PLACE = "unknown-workspace";
@@ -541,7 +547,7 @@ function usePlaceCommands(
       : undefined,
   );
   // The Admin place is an admin's alone, so ⌘K offers it only on the terms its sidebar row stands on.
-  const adminOn = useAdminAccess();
+  const adminOn = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
   useAppCommand(
     APP_COMMAND.ADMIN,
     pastGate && tasks.signedIn && adminOn
@@ -571,7 +577,9 @@ function usePlaceCommands(
       : undefined,
   );
   // The page lists an installed app's chords, and stands nowhere else (`pages.tsx`).
-  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
+  const desktopApp =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.DESKTOP_APP) }).data ===
+    true;
   useAppCommand(
     APP_COMMAND.KEYBOARD_SHORTCUTS,
     pastGate && desktopApp
@@ -683,7 +691,7 @@ function KeptPage({
  * keeps its page list whatever the sidebar's collapse says, and hands the
  * tasks back folded or not as it found them. The side panel's toggle is the
  * mirror of the sidebar's, at the window's top right on a task's page, so
- * neither pane carries the button that moves it. A plan's version history
+ * neither pane carries the button that moves it. A description's version history
  * takes the whole window as Settings does, its versions listed where the
  * sidebar was, and leaves the same way; the Inbox stands in the task's
  * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the task, so
@@ -767,8 +775,9 @@ export function DesktopShell({
   );
   // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
   // while one whose access is still being read, as a reloaded Admin address's is, has the place wait on it.
-  const adminAccess = useAdminAccess();
-  const adminPending = useAdminAccessPending();
+  const adminAccess = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
+  const adminPending =
+    useQuery({ ...appStateQuery, select: selectAdminAccessPending }).data ?? true;
   const { open: adminShown, onClose: closeAdmin } = tasks.adminView;
   useEffect(() => {
     if (adminShown && !adminAccess && !adminPending) closeAdmin();
@@ -845,7 +854,7 @@ export function DesktopShell({
   // Automations page stands in the plan's place, so it draws
   // no panel to toggle; an agent's page draws the agent's own, and the Inbox
   // the chosen item's task's.
-  const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
+  const descriptionToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;
@@ -945,13 +954,13 @@ export function DesktopShell({
       </div>
     );
   }
-  // A plan's version history takes the whole window too, its versions listed
+  // A description's version history takes the whole window too, its versions listed
   // where the sidebar was, and hands the task back as it found it.
   if (tasks.history.open) {
     const exitHistory = history.canGoBack ? history.onBack : tasks.history.onClose;
     return (
       <div className="desktop-shell" data-room={room}>
-        {/* A chip in a version's words hangs the cards the plan's own words do. */}
+        {/* A chip in a version's words hangs the cards the description's own words do. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
             <Suspense
@@ -991,7 +1000,7 @@ export function DesktopShell({
   const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
   // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).
   const panelToggle =
-    (planToggle && room !== SHELL_ROOM.NARROW) ||
+    (descriptionToggle && room !== SHELL_ROOM.NARROW) ||
     pageAgent !== undefined ||
     (inboxOpen && inboxItemShown);
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
@@ -1184,13 +1193,13 @@ export function DesktopShell({
       {panelToggle && room === SHELL_ROOM.NARROW ? (
         <SidePanelChord
           panel={tasks.sidePanel}
-          disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
+          disabled={descriptionToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
         />
       ) : panelToggle ? (
         <div ref={setToggleRoom} className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
             panel={tasks.sidePanel}
-            disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
+            disabled={descriptionToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
           />
         </div>
       ) : null}

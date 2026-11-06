@@ -1,5 +1,4 @@
 import { signedInAccountId } from "@repo/credentials/snapshot";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { MCP_ACCESS_TOKEN_MINUTES, type McpClient } from "@repo/features/mcp-client-wire";
 import {
   cursorInstallUrl,
@@ -46,14 +45,15 @@ import {
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayWords } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
+import { mcpClientsQuery, mcpClientsRetryMutation } from "../live-reads.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -276,7 +276,9 @@ function ClientRow({
   arrived: boolean;
   onRevoked: (client: McpClient) => void;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendMcpClientsRevoke } = useMutation(
+    actMutation(ACT_KIND.MCP_CLIENTS_REVOKE),
+  );
   const name = clientName(client);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
 
@@ -286,7 +288,7 @@ function ClientRow({
       reason: `Revoking ${name} didn't finish. Try again.`,
     };
     setRejection(undefined);
-    return act(ACT_KIND.MCP_CLIENTS_REVOKE, { clientId: client.clientId }).then(
+    return sendMcpClientsRevoke({ clientId: client.clientId }).then(
       (answer): ActionResult => {
         if ("failure" in answer) {
           setRejection(refused.reason);
@@ -459,8 +461,10 @@ function ConnectSection({
 
 /** The agents allowed and Connect an agent, for the account signed in. */
 export function McpClientsSections(): React.JSX.Element {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
-  const { rows, status, retry } = useHostRead(LIVE_READ.MCP_CLIENTS, accountId);
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
+  const read = useQuery(mcpClientsQuery(accountId));
+  const retry = useMutation(mcpClientsRetryMutation());
+  const rows = read.data;
   // The agents revoked while the page shows, which stand saying so after the read no longer lists them.
   const [revoked, setRevoked] = useState<ReadonlyMap<string, McpClient>>(new Map());
   // The agents the first read listed, so one allowed while the page shows is told apart as just connected.
@@ -469,10 +473,13 @@ export function McpClientsSections(): React.JSX.Element {
     setKnown(new Set(rows.clients.map((client) => client.clientId)));
   }
   if (rows === undefined) {
-    return status === HOST_READ_STATUS.FAILED ? (
+    return read.isError ? (
       <SettingsSection title={SECTION_TITLE.CLIENTS} anchor={SETTINGS_SEARCH_ROW.MCP_CLIENTS}>
         <SettingsLine>
-          <ErrorState failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)} onRetry={retry}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)}
+            onRetry={() => retry.mutate()}
+          >
             {PAGE_LINE.READ_FAILED}
           </ErrorState>
         </SettingsLine>

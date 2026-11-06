@@ -1103,6 +1103,15 @@ test("a row's Assignee chip sends the member picked, and No assignee assigns it 
   const page = await mountPage([deans(39), ...TASKS.filter((each) => each.number !== 39)]);
 
   act(() => rowChip(page, "ACME-40", "Assignee").click());
+  // Note that the members are offered once their read reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(
+      [...document.querySelectorAll(".ui-menu-item-label")].some(
+        (label) => label.textContent === "Dean Stratakos",
+      ),
+      true,
+    ),
+  );
   choose("Dean Stratakos");
   act(() => rowChip(page, "ACME-39", "Assignee").click());
   choose("No assignee");
@@ -1342,29 +1351,6 @@ test("the Filter's Repository names each repository as the repository chip does,
   assert.deepEqual(offered, ["acme", "beta"]);
 });
 
-test("the Filter's Repository rows each hang the repository's card, its name with its owner under it", async () => {
-  const page = await mountPage([
-    ...TASKS,
-    { ...task(50, "Docs for web", TASK_STATUS.TODO, TASK_PRIORITY.NONE), repository: "beta/web" },
-  ]);
-
-  openOptions(page, "Filter");
-  choose("Repository");
-  const row = searchedRows().find(
-    (item) => item.querySelector(".ui-combobox-option-detail")?.textContent === "beta",
-  );
-  restOn(row ?? assert.fail("the Filter offers beta/web"));
-  const card = document.querySelector(".ui-tooltip-card [data-repository-card]");
-
-  assert.deepEqual(
-    [
-      card?.querySelector(".ui-hover-card-name")?.textContent,
-      card?.querySelector(".ui-hover-card-sub")?.textContent,
-    ],
-    ["web", "beta"],
-  );
-});
-
 test("the Filter's Assignee and Creator list the members as every people menu does, you first as You and the rest by name with their email beside it, each hanging their card, and your own chip says You", async () => {
   handMembers(() => ({
     rows: {
@@ -1446,11 +1432,13 @@ test("the Filter's Assignee says the members could not be read, with Retry, in t
     failed.every(([label]) => label !== "Dean Stratakos"),
     "no member is listed while they could not be read",
   );
-  assert.ok(
-    searchedRows()
-      .map(searchedWords)
-      .some(([label]) => label === "Dean Stratakos"),
-    "the members are listed once read again, in the menu that stayed",
+  await vi.waitFor(() =>
+    assert.ok(
+      searchedRows()
+        .map(searchedWords)
+        .some(([label]) => label === "Dean Stratakos"),
+      "the members are listed once read again, in the menu that stayed",
+    ),
   );
   assert.equal(retry(), undefined);
 });

@@ -64,7 +64,6 @@
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import { automationTriggerText } from "@repo/features/automation-list-model";
 import type { AutomationSummary } from "@repo/features/automation-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { formatCount } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -90,6 +89,7 @@ import {
   experimentOn,
   HOST_CAPABILITY,
   type HostCapability,
+  NO_EXPERIMENTS,
 } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
 import {
@@ -146,6 +146,7 @@ import {
   taskRow,
 } from "@repo/ui/task-list-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@repo/ui/tasks-model";
+import { type UseQueryResult, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Fragment,
   isValidElement,
@@ -159,7 +160,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act.js";
 import { AssigneeFaceMark, AutomationCard } from "../actor-ref.js";
 import {
   appCommandOffered,
@@ -176,6 +176,7 @@ import {
 } from "../command-items.js";
 import { unreadShown } from "../failure-report.js";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
+import { workspaceMembersQuery, workspaceMembersRetryMutation } from "../live-reads.js";
 import { memberRows } from "../member-rows.js";
 import { PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
@@ -190,17 +191,19 @@ import {
 } from "../settings-search.js";
 import { agentName } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
+import { useChangesPeopleOf } from "../tasks/changes-people.js";
 import { FileCard, fileLook } from "../tasks/file-ref.js";
 import { fileName } from "../tasks/file-ref-model.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
 import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts.js";
 import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";
+import { refusedAnswer, taskTreeQueryOptions } from "../tasks/repository-reads.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem, type OpenTaskRename, useTaskRenameOffer } from "../tasks/task-menu-items.js";
 import { TaskKey } from "../tasks/task-standing.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
-import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
+import { type AgentsControl, type HeldPeople, readAgentById } from "../tasks/use-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
 import { useOpenLocal } from "../tasks/use-local-session.js";
@@ -208,8 +211,7 @@ import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-pa
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability, useExperimentChoices } from "../use-app-state.js";
-import { HOST_READ_STATUS, type HostRead, useHostRead } from "../use-host-read.js";
+import { appStateQuery, selectCapability, selectExperimentChoices } from "../use-app-state.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
@@ -287,13 +289,7 @@ const FILES_READ = {
   FAILED: "failed",
 } as const;
 
-/**
- * The open task's repository as the palette read it, whole, in one listing:
- * which task and repository it is of, and its files by path, or why they
- * were not listed.
- */
-type FilesHeld = { taskId: string; repository: string } & FilesRead;
-
+/** The open task's repository as the palette read it, whole, in one listing: its files by path, or why they were not listed. */
 type FilesRead =
   | { read: typeof FILES_READ.READING }
   | { read: typeof FILES_READ.LISTED; paths: readonly string[]; truncated: boolean }
@@ -616,10 +612,22 @@ function filesOf(answer: TasksTreeAnswer): FilesRead {
   return { read: FILES_READ.MISSED, notice: refusalLine(answer.refusal, answer.branch) };
 }
 
+/** The whole of the open task's repository, listed in one read, which the Files rows are. */
+function paletteFilesQueryOptions(taskId: string | undefined) {
+  return taskTreeQueryOptions(taskId === undefined ? undefined : { taskId }, "", true);
+}
+
+/** The files as the palette holds them: none before they are asked for, and reading while a read is out, a Retry's among them. */
+function filesHeld(files: UseQueryResult<TasksTreeAnswer>): FilesRead | undefined {
+  if (files.isFetching) return { read: FILES_READ.READING };
+  if (files.isError) return filesOf(refusedAnswer(files.error));
+  return files.data === undefined ? undefined : filesOf(files.data);
+}
+
 /** What the Files filter says in place of rows: why there are none to search yet, a failed read with its Retry, or nothing. */
 function filesNotice(
   repositoryOpen: boolean,
-  held: FilesHeld | undefined,
+  held: FilesRead | undefined,
   onRetry: () => void,
 ): PaletteNotice | undefined {
   if (!repositoryOpen) return { kind: PALETTE_NOTICE.SAID, line: NO_REPOSITORY_LINE };
@@ -651,15 +659,16 @@ function tasksNotice(
  */
 function peopleNotice(
   tasks: Pick<TasksControl, "signedIn" | "workspace" | "workspaces" | "listFailed">,
-  read: HostRead<WorkspaceMembersAnswer>,
+  read: UseQueryResult<WorkspaceMembersAnswer>,
+  retry: () => void,
 ): PaletteNotice | undefined {
   if (tasks.workspace === undefined) {
     const coming = tasks.signedIn && tasks.workspaces.length === 0 && !tasks.listFailed;
     return coming ? { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE } : undefined;
   }
-  if (read.rows !== undefined) return undefined;
-  return read.status === HOST_READ_STATUS.FAILED
-    ? { kind: PALETTE_NOTICE.FAILED, line: PEOPLE_FAILED_LINE, onRetry: read.retry }
+  if (read.data !== undefined) return undefined;
+  return read.isError
+    ? { kind: PALETTE_NOTICE.FAILED, line: PEOPLE_FAILED_LINE, onRetry: retry }
     : { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE };
 }
 
@@ -964,6 +973,7 @@ function agentRows(
   tasks: TasksControl,
   doors: PanelOfferDoors,
   show: (pick: () => void) => void,
+  people: ReadonlyMap<string, HeldPeople>,
 ): readonly PaletteRow[] {
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
@@ -998,6 +1008,7 @@ function agentRows(
           pagePlace: { taskId },
           shownAgent: undefined,
           onOpenAgent: (agentId) => show(() => tasks.onShowAgent(taskId, agentId)),
+          people,
         },
       })
         .filter((entry) => entry.row.section !== undefined)
@@ -1276,8 +1287,8 @@ function commandLabel(command: AppCommand, experiments: ExperimentChoices): stri
 /**
  * What a command's row says: a place as "Go to" it, and else the words its
  * shortcut says for the account's experiments, which its menu item says too
- * (`panelCommandOf`) but where an experiment renames it, as Copy plan or
- * transcript is Copy transcript while Plans is off.
+ * (`panelCommandOf`) but where an experiment renames it, as Copy description or
+ * transcript is Copy transcript while Descriptions is off.
  */
 function actionLabel(command: AppCommand, experiments: ExperimentChoices): string {
   const label = commandLabel(command, experiments);
@@ -1505,7 +1516,7 @@ function agentPinRows(
 /**
  * The plan on screen's own commands, as its ⋯ menu offers them
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
- * the door its ⋯ asks, Version history while Plans is on, New sub-task, Add task relation, which
+ * the door its ⋯ asks, Version history while Descriptions is on, New sub-task, Add task relation, which
  * opens the head's add menu as S opens the status menu, Remove parent on a
  * task with a parent, Cancel task on a task not already canceled, and
  * Change repository; each runs what its menu item runs, Version history
@@ -1525,7 +1536,7 @@ function taskCommandRows(
   const renamed = rename?.taskId === task.id ? rename.begin : undefined;
   const commands: readonly { item: PanelCommand; run: () => void }[] = [
     ...(renamed === undefined ? [] : [{ item: PANEL_COMMAND.RENAME_TASK, run: renamed }]),
-    ...(experimentOn(experiments, EXPERIMENT.PLANS)
+    ...(experimentOn(experiments, EXPERIMENT.DESCRIPTIONS)
       ? [{ item: PANEL_COMMAND.VERSION_HISTORY, run: () => tasks.history.onOpen(task.id) }]
       : []),
     {
@@ -1638,9 +1649,12 @@ function OpenAgentArchive({
   /** How many times ⌘K asked for this agent, each new one run once. */
   asked: number;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const queryClient = useQueryClient();
   // Note that the agent is read again by its own id before a teammate's is archived, as its sidebar row reads it.
-  const control = { ...agents, readAgent: (agentId: string) => readAgentById(act, agentId) };
+  const control = {
+    ...agents,
+    readAgent: (agentId: string) => readAgentById(queryClient, agentId),
+  };
   const archive = useAgentArchive(agent, control, shown);
   const unarchive = useAgentUnarchive(agent.id, control);
   const action = agent.archivedAt === undefined ? archive.action : unarchive;
@@ -1945,7 +1959,6 @@ export function CommandPalette({
   tasks,
   links,
   settings,
-  readFiles,
 }: {
   available: boolean;
   tab: PanelTab;
@@ -1960,11 +1973,10 @@ export function CommandPalette({
     capabilities: readonly HostCapability[];
     onViewChange: (view: SettingsView) => void;
   };
-  /** Lists everything in the task's repository in one read, which the Files rows are. */
-  readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const experiments = useExperimentChoices();
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   // How many times ⌘K has opened the palette, each of which chooses its first row.
@@ -1972,9 +1984,7 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   // Each key pressed in the search field is timed to the paint after it, which its ranking of every row is among.
   const keystrokes = useKeystrokeSpans(PANEL_SPAN.KEYSTROKE_COMMAND_PALETTE);
-  const [files, setFiles] = useState<FilesHeld | undefined>(undefined);
-  // The read of the files asked last, by its count: only its answer is kept.
-  const filesAsk = useRef(0);
+  const queryClient = useQueryClient();
   // Whether the keyboard was in the side panel when ⌘K was pressed, which puts its tab's link first, as ⌥⌘C there would.
   const [fromPanel, setFromPanel] = useState(false);
   const chosen = useRef<(() => void) | undefined>(undefined);
@@ -1995,8 +2005,10 @@ export function CommandPalette({
           // The files are read afresh by the first search of each opening,
           // since the branch they are listed on moves, and a read still out
           // from the last opening is not kept.
-          filesAsk.current += 1;
-          setFiles(undefined);
+          void queryClient.resetQueries({
+            queryKey: paletteFilesQueryOptions(tasks.activeTaskId).queryKey,
+            exact: true,
+          });
           setOpen(true);
         }
       : undefined,
@@ -2107,9 +2119,10 @@ export function CommandPalette({
 
   const tokens = searchTokens(sought);
   // The listed workspace's members, read once for it, name a task's assignee by face.
-  const membersRead = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, tasks.workspace?.id);
+  const membersRead = useQuery(workspaceMembersQuery(tasks.workspace?.id));
+  const { mutate: retryMembers } = useMutation(workspaceMembersRetryMutation());
   const originOf = useTaskOrigin();
-  const members = membersRead.rows?.members;
+  const members = membersRead.data?.members;
   // Note that the tasks' rows are built once for what they say rather than on every render, and
   // only while a filter that lists them stands open, because a key, an arrow, or the pointer
   // moving ranks or lights them again but changes none of them, and an account may hold thousands.
@@ -2145,21 +2158,25 @@ export function CommandPalette({
   // The task's terminals and Browser tabs are offered as the panel's "+" offers them, through its own doors.
   const openTerminal = useOpenTerminal(tasks.sidePanel, noFocusMove);
   const openLocal = useOpenLocal(tasks.sidePanel, noFocusMove);
+  // Note that the task's Changes rows hang their pull request's people, as their Changes tabs read them.
+  const offeredChanges = tasks.sidePanel.changes;
+  const changesPeople = useChangesPeopleOf(
+    useMemo(() => offeredChanges.map((tab) => tab.changes), [offeredChanges]),
+  );
   const offerDoors: PanelOfferDoors = {
-    onNewTerminal: useCapability(HOST_CAPABILITY.TERMINALS)
-      ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
-      : undefined,
-    onNewLocal: useCapability(HOST_CAPABILITY.LOCAL_TERMINALS)
-      ? (agentId) => openLocal(agentId, true)
-      : undefined,
+    onNewTerminal:
+      useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
+      true
+        ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
+        : undefined,
+    onNewLocal:
+      useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.LOCAL_TERMINALS) })
+        .data === true
+        ? (agentId) => openLocal(agentId, true)
+        : undefined,
   };
   const taskId = tasks.activeTaskId;
   const repository = tasks.tasks.find((task) => task.id === taskId)?.repository ?? null;
-  // The files held are the open task's repository's, or none of its.
-  const held =
-    files !== undefined && files.taskId === taskId && files.repository === repository
-      ? files
-      : undefined;
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
   const filesOpen = opensTaskItems(tasks) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
@@ -2181,27 +2198,10 @@ export function CommandPalette({
 
   // Note that the repository is read the first time its files are searched
   // rather than as the palette opens, because most of its uses never ask
-  // for a file, and kept for the opening while the task and its repository
-  // stay the same. A read that answers after a later one was asked is not
-  // kept, since it may list an older branch than the later one does.
-  useEffect(() => {
-    if (!filesAsked || taskId === undefined || repository === null || held !== undefined) return;
-    filesAsk.current += 1;
-    const ask = filesAsk.current;
-    setFiles({ taskId, repository, read: FILES_READ.READING });
-    const keep = (read: FilesRead) => {
-      if (filesAsk.current === ask) setFiles({ taskId, repository, ...read });
-    };
-    readFiles(taskId).then(
-      (answer) => keep(filesOf(answer)),
-      () => keep({ read: FILES_READ.FAILED }),
-    );
-  }, [filesAsked, taskId, repository, held, readFiles]);
-  // Note that a Retry drops the failed read, so the effect above reads the files again.
-  const retryFiles = () => {
-    filesAsk.current += 1;
-    setFiles(undefined);
-  };
+  // for a file, and kept for the opening while the task stays the same.
+  const filesQuery = useQuery({ ...paletteFilesQueryOptions(taskId), enabled: filesAsked });
+  const held = filesOpen ? filesHeld(filesQuery) : undefined;
+  const retryFiles = () => void filesQuery.refetch();
 
   const paths = held?.read === FILES_READ.LISTED ? held.paths : undefined;
   const fileQuery = filter === PALETTE_FILTER.FILES || tokens.length > 0 ? sought : undefined;
@@ -2246,7 +2246,7 @@ export function CommandPalette({
   // Every other kind's rows in tiers, built only for the filter shown and only
   // while open: every row a tier matches ranks above the next tier's.
   const tiersOf = {
-    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
+    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks, changesPeople)],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
@@ -2315,7 +2315,11 @@ export function CommandPalette({
     [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
     [PALETTE_FILTER.THIS_TASK]: () => undefined,
     [PALETTE_FILTER.INBOX]: () => (inboxAsked ? inboxNotice(inboxSearch) : undefined),
-    [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
+    [PALETTE_FILTER.PEOPLE]: () =>
+      peopleNotice(tasks, membersRead, () => {
+        const workspaceId = tasks.workspace?.id;
+        if (workspaceId !== undefined) retryMembers({ workspaceId });
+      }),
     [PALETTE_FILTER.AUTOMATIONS]: () =>
       automationsAsked ? automationsNotice(tasks, automations) : undefined,
     [PALETTE_FILTER.FILES]: () =>

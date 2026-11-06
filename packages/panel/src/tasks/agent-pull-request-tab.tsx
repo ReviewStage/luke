@@ -1,5 +1,11 @@
 import { githubAvatarAt, githubAvatarUrl } from "@repo/features/account-picture";
-import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@repo/features/agent-view";
+import {
+  AGENT_CALL_FAILURE,
+  type AgentCallFailure,
+  type AgentPullRequestReadParams,
+  PULL_REQUEST_PART,
+  type PullRequestPart,
+} from "@repo/features/agent-view";
 import {
   type AgentOverviewChecks,
   type AgentOverviewConversation,
@@ -31,7 +37,6 @@ import {
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
 } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { formatCount } from "@repo/features/number-format";
 import type { FailureSurface } from "@repo/features/shown-failure";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -121,11 +126,19 @@ import {
   XIcon,
 } from "@repo/ui/icons";
 import { landedMark } from "@repo/ui/landed";
-import { PICTURE_STATE, usePicture } from "@repo/ui/picture-cache";
+import { PICTURE_STATE, usePicture } from "@repo/ui/picture-read";
+import {
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+} from "@repo/ui/virtual-rows";
+import { type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
 import {
   type ComponentProps,
   createContext,
   type ReactNode,
+  type RefObject,
   Suspense,
   useCallback,
   useContext,
@@ -150,12 +163,21 @@ import {
   useHandedTabActions,
 } from "../desktop/strip-tabs.js";
 import { failureShown, pictureUnread } from "../failure-report.js";
+import { useFindOpen } from "../find-in-tab.js";
 import { lazyRoute } from "../lazy-route.js";
+import {
+  pullRequestChecksQuery,
+  pullRequestConversationQuery,
+  pullRequestPartRetryMutation,
+  pullRequestPublishedQuery,
+  pullRequestQuery,
+} from "../live-reads.js";
+import { pictureQuery } from "../picture-query.js";
 import { scrollerOf } from "../scroll-within.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext, usePhoneRoom } from "../stage-room.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { HOST_READ_STATUS, type HostRead, useHostRead } from "../use-host-read.js";
+import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import {
   AgentChangesTab,
   type ChangesReads,
@@ -261,7 +283,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, its chapters, and its files.
  *
  * The overview is three parts the host holds while the tab shows
- * (`LIVE_READ.PULL_REQUEST` and its siblings), each read from GitHub by the
+ * (`pullRequestQuery` and its siblings in `live-reads.ts`), each read from GitHub by the
  * service on the App's token for the agent's repository rather than anyone's
  * own, so nothing here reads on a clock: the host asks each as the tab is
  * shown, as a window comes forward, and on Retry or Refresh, and all of them
@@ -453,15 +475,28 @@ interface PartRead<A> {
  * and out while the host's first ask is, or a Try again or Refresh the tab
  * made, until it lands.
  */
-function usePartRead<Answer>(held: HostRead<Answer>) {
+function usePartRead<Answer>(
+  held: UseQueryResult<Answer>,
+  part: PullRequestPart,
+  asked: AgentPullRequestReadParams | undefined,
+) {
   const [asking, setAsking] = useState(0);
-  const { retry } = held;
+  const { mutateAsync: retry } = useMutation(pullRequestPartRetryMutation());
+  const agentId = asked?.agentId;
+  const number = asked?.number;
   const ask = useCallback(() => {
+    if (agentId === undefined) return Promise.resolve();
     setAsking((count) => count + 1);
-    return retry().finally(() => setAsking((count) => count - 1));
-  }, [retry]);
-  const answer = held.rows ?? (held.status === HOST_READ_STATUS.FAILED ? UNANSWERED : undefined);
-  return { answer, out: asking > 0 || held.status === HOST_READ_STATUS.LOADING, ask };
+    // Note that a Try again the port refuses settles as one that landed, since the read's own failure is what the tab draws.
+    return retry(number === undefined ? { part, agentId } : { part, agentId, number })
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .finally(() => setAsking((count) => count - 1));
+  }, [retry, part, agentId, number]);
+  const answer = held.data ?? (held.isError ? UNANSWERED : undefined);
+  return { answer, out: asking > 0 || held.isPending, ask };
 }
 
 /** Where one read stands. Note that a failure gives way to the wait as soon as it is asked again, while a part drawn stands until its answer lands. */
@@ -747,7 +782,7 @@ function ProxiedCheckAvatar({
   name: string;
   src: string;
 }): React.JSX.Element {
-  const state = usePicture(agentId, src, useGitHubImageRead(), pictureUnread);
+  const state = usePicture(pictureQuery(agentId, src, useGitHubImageRead()), pictureUnread);
   return (
     <CheckSquare name={name} src={state.kind === PICTURE_STATE.READY ? state.url : undefined} />
   );
@@ -1514,7 +1549,97 @@ function InlineThread({
   );
 }
 
-/** The conversation's list of entries, which its entries and their placeholders both stand in. */
+/** How tall an entry is taken to be before it is drawn, in pixels: its head and a few lines of words. */
+const ENTRY_ESTIMATE_PX = 120;
+
+/** The room between two entries, in pixels: a control's gap (`--ui-control-gap`), as their placeholders stand apart (`EntryList`). */
+const ENTRY_GAP_PX = 8;
+
+/** Each entry's words as a find counts them before its card is drawn, kept by the entry. */
+const entryWordsFound = new WeakMap<ConversationEntry, string>();
+
+/** The text of words GitHub rendered, or the words as written where it rendered none. */
+function plainWords(words: Pick<ConversationEntry, "html" | "body">): string {
+  if (words.html === null) return words.body;
+  return new DOMParser().parseFromString(words.html, "text/html").body.textContent ?? "";
+}
+
+/** The words an entry's card draws that a find counts before it is drawn: who wrote it, its words, and each thread's file and comments with who wrote them. */
+function entryWordsOf(entry: ConversationEntry, name: (person: GitHubPerson) => string): string {
+  const kept = entryWordsFound.get(entry);
+  if (kept !== undefined) return kept;
+  const threads = (entry.threads ?? []).flatMap((thread) => [
+    thread.path,
+    ...thread.comments.flatMap((comment) => [name(comment.by), plainWords(comment)]),
+  ]);
+  const words = [name(entry.by), plainWords(entry), ...threads].join("\n");
+  entryWordsFound.set(entry, words);
+  return words;
+}
+
+/** The entry a landing's target stands in: the entry by its page, or the review holding the thread by its id. */
+function entryLandedOn(
+  entries: readonly ConversationEntry[],
+  target: string,
+): ConversationEntry | undefined {
+  return entries.find(
+    (entry) => entry.url === target || (entry.threads ?? []).some((thread) => thread.id === target),
+  );
+}
+
+/**
+ * The conversation's entries, drawn only near the view of the scroller
+ * they stand in (`VirtualRows`), read from the top as a page is; a landing
+ * on an entry, or on a thread a review holds, brings its card in first, so
+ * it is drawn to land on.
+ */
+function EntryRun({
+  entries,
+  scroller,
+  handle,
+  landing,
+  now,
+  picture,
+}: {
+  entries: readonly ConversationEntry[];
+  scroller: RefObject<HTMLElement | null>;
+  handle: RefObject<VirtualRowsHandle | null>;
+  landing: ThreadLanding | undefined;
+  now: number;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element {
+  const keys = useMemo(() => entries.map((entry) => entry.url), [entries]);
+  const latest = useRef(entries);
+  latest.current = entries;
+  const target = landing?.target;
+  const ask = landing?.ask;
+  useLayoutEffect(() => {
+    if (target === undefined || ask === undefined) return;
+    const entry = entryLandedOn(latest.current, target);
+    if (entry !== undefined) handle.current?.bringIn(entry.url);
+  }, [target, ask, handle]);
+  return (
+    <VirtualRows
+      scroller={scroller}
+      keys={keys}
+      estimate={ENTRY_ESTIMATE_PX}
+      gap={ENTRY_GAP_PX}
+      anchor={VIRTUAL_ROWS_ANCHOR.START}
+      listItems
+      className="pull-request-conversation"
+      handle={handle}
+    >
+      {(index, place) => {
+        const entry = entries[index];
+        return entry === undefined ? null : (
+          <EntryCard entry={entry} now={now} picture={picture} place={place} />
+        );
+      }}
+    </VirtualRows>
+  );
+}
+
+/** The conversation's list of entries' placeholders. */
 function EntryList({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.CONTROL} className="pull-request-conversation">
@@ -1545,22 +1670,35 @@ function EntryHead({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** One comment or review: who, where a review left them, when, and its ⋯; then their words, and the review threads a review started. */
+/** One comment or review: who, where a review left them, when, and its ⋯; then their words, and the review threads a review started; standing where its run places it. */
 function EntryCard({
   entry,
   now,
   picture,
+  place,
 }: {
   entry: ConversationEntry;
   now: number;
   picture: GitHubPictureDrawer;
+  place: VirtualRowPlace;
 }): React.JSX.Element {
   const threads = entry.threads ?? [];
   const writer = useNamer()(entry.by);
   const landed = useLandedEntry(entry.url);
+  const { ref: measure, ...placed } = place;
+  const { ref: land } = landed;
+  // Note that the card is both measured by its run and landed on, so its element is handed to each.
+  const ref = useCallback(
+    (element: HTMLElement | null) => {
+      measure(element);
+      land(element);
+    },
+    [measure, land],
+  );
   return (
     <EntryFrame
-      ref={landed.ref}
+      ref={ref}
+      {...placed}
       // Note that the entry takes the focus a link to it on GitHub brings, though no key reaches it.
       tabIndex={-1}
       {...landedMark(landed.ringed)}
@@ -2038,23 +2176,29 @@ function DescriptionPart({
 /** The conversation as its read stands, under its heading and its filters: its entries once landed, as the filters leave them, the earlier ones counted first; a skeleton while out, its failure with Retry. */
 function ConversationPart({
   parts,
-  filters,
+  shown,
   filterControls,
   fold,
-  kept,
   url,
+  scroller,
+  handle,
+  landing,
   now,
   picture,
 }: {
   parts: OverviewParts;
-  filters: ConversationFilters;
+  /** The entries the filters leave, what was last brought into view among them. */
+  shown: readonly ConversationEntry[];
   /** Hide resolved and Hide bots, at the end of the section's heading. */
   filterControls: ReactNode;
   fold: SectionFold;
-  /** What was last brought into view here, a thread by its id and an entry by its page, which stands whatever the filters say. */
-  kept: ReadonlySet<string>;
   /** The pull request's page, which the earlier entries left on GitHub open. */
   url: string | undefined;
+  /** The scroller the entries stand in. */
+  scroller: RefObject<HTMLElement | null>;
+  handle: RefObject<VirtualRowsHandle | null>;
+  /** The thread or entry to land on, once. */
+  landing: ThreadLanding | undefined;
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
@@ -2076,7 +2220,6 @@ function ConversationPart({
     );
   }
   const { conversation, earlier } = part.value;
-  const shown = filteredConversation(conversation, filters, kept);
   return (
     <Section
       title="Conversation"
@@ -2101,11 +2244,14 @@ function ConversationPart({
           {PULL_REQUEST_WORDS.NO_MATCHING}
         </p>
       ) : (
-        <EntryList>
-          {shown.map((entry) => (
-            <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
-          ))}
-        </EntryList>
+        <EntryRun
+          entries={shown}
+          scroller={scroller}
+          handle={handle}
+          landing={landing}
+          now={now}
+          picture={picture}
+        />
       )}
     </Section>
   );
@@ -2576,6 +2722,7 @@ function ConversationView({
   comment,
   kept,
   landing,
+  shown: viewShown,
 }: {
   agentId: string;
   parts: OverviewParts;
@@ -2586,12 +2733,34 @@ function ConversationView({
   kept: ReadonlySet<string>;
   /** The thread or entry to land on, once; none lands on none. */
   landing: ThreadLanding | undefined;
+  /** Whether the view is the one the tab shows, which alone a find over the tab searches. */
+  shown: boolean;
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
   const choices = useConversationFilters();
   const { filters, change } = choices;
   const conversation = landed(parts.conversation)?.conversation;
+  const shown = useMemo(
+    () => (conversation === undefined ? [] : filteredConversation(conversation, filters, kept)),
+    [conversation, filters, kept],
+  );
+  const scroller = useRef<HTMLDivElement>(null);
+  const entries = useRef<VirtualRowsHandle>(null);
+  const name = useNamer();
+  // Note that the entries' words are read only while a find bar stands open over the tab.
+  const finding = useFindOpen();
+  const findRows = useMemo(
+    (): readonly FindRow[] =>
+      finding
+        ? shown.map((entry) => ({
+            key: entry.url,
+            words: entryWordsOf(entry, (person) => actorName(name(person))),
+          }))
+        : [],
+    [finding, shown, name],
+  );
+  useVirtualFind({ root: scroller, rows: findRows, handle: entries, findable: viewShown });
   const asked = landing?.ask;
   const conversationOpen = filters.conversationOpen;
   useEffect(() => {
@@ -2600,6 +2769,7 @@ function ConversationView({
   return (
     // Note that it is in the tab order, because it scrolls on its own, and a column of words holds nothing else a keyboard could reach to scroll it by.
     <ScrollArea
+      ref={scroller}
       role="region"
       aria-label="Pull request conversation"
       tabIndex={0}
@@ -2625,7 +2795,7 @@ function ConversationView({
         <ThreadLandingProvider value={landing}>
           <ConversationPart
             parts={parts}
-            filters={filters}
+            shown={shown}
             filterControls={
               <ConversationFilterChips
                 control={choices}
@@ -2636,8 +2806,10 @@ function ConversationView({
               open: conversationOpen,
               onOpenChange: (open) => change({ conversationOpen: open }),
             }}
-            kept={kept}
             url={url}
+            scroller={scroller}
+            handle={entries}
+            landing={landing}
             now={now}
             picture={picture}
           />
@@ -2648,7 +2820,7 @@ function ConversationView({
   );
 }
 
-/** One of the overview's reads, as `useAgentRead` holds it, and whether it has been asked yet. */
+/** One of the overview's reads, as `useChangesReads` holds the changes, and whether it has been asked yet. */
 function askedYet(read: { readonly answer: unknown; readonly out: boolean }): boolean {
   return read.answer !== undefined || read.out;
 }
@@ -3132,10 +3304,26 @@ function PullRequestTabBody({
   });
   // The header's parts are held while the tab is shown, the conversation among them for where its reviewers stand, the checks for the deployments its Preview opens, and what the agent published, which names a tab and its pin by the pull request's title.
   const asked = shown ? pullRequestAsked(agentId, number) : undefined;
-  const pullRequestRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST, asked));
-  const conversationRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST_CONVERSATION, asked));
-  const checksRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST_CHECKS, asked));
-  const publishedRead = usePartRead(useHostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, asked));
+  const pullRequestRead = usePartRead(
+    useQuery(pullRequestQuery(asked)),
+    PULL_REQUEST_PART.PULL_REQUEST,
+    asked,
+  );
+  const conversationRead = usePartRead(
+    useQuery(pullRequestConversationQuery(asked)),
+    PULL_REQUEST_PART.CONVERSATION,
+    asked,
+  );
+  const checksRead = usePartRead(
+    useQuery(pullRequestChecksQuery(asked)),
+    PULL_REQUEST_PART.CHECKS,
+    asked,
+  );
+  const publishedRead = usePartRead(
+    useQuery(pullRequestPublishedQuery(asked)),
+    PULL_REQUEST_PART.PUBLISHED,
+    asked,
+  );
   const ask = {
     pullRequest: pullRequestRead.ask,
     checks: checksRead.ask,
@@ -3403,6 +3591,7 @@ function PullRequestTabBody({
                     comment={comment}
                     kept={kept}
                     landing={threadJumps.conversationLanding ?? anchors.landing}
+                    shown={view === PULL_REQUEST_VIEW.CONVERSATION}
                   />
                 </Fill>
                 <Fill

@@ -13,7 +13,7 @@ import {
 } from "@repo/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { formatBytes } from "@repo/features/number-format";
-import { planAttachmentOf } from "@repo/features/plan-attachment-link";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import {
   agentCallLine,
   CALL_KIND,
@@ -169,7 +169,7 @@ import { useInboxPictureDrawer } from "./inbox-pictures.js";
 import { LoneLinkCard } from "./lone-link-card.js";
 import { linkChip, type MentionDoors } from "./mention-chip.js";
 import { ModelLabel } from "./model-label.js";
-import { usePlanPictureDrawer } from "./plan-pictures.js";
+import { useDescriptionPictureDrawer } from "./description-pictures.js";
 import { SubagentMark } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { cardTitle, type SentWords, todosCount } from "./tool-call-model.js";
@@ -211,7 +211,7 @@ export const INERT_LINK_CLASS =
  * A link in a transcript's words. A web page, such as the pull request an
  * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
  * that opens in the browser over the act channel (`use-open-link.ts`), as
- * it is in a plan, bare or labeled; any other address is drawn as words
+ * it is in a description, bare or labeled; any other address is drawn as words
  * that go nowhere, with the address as its hint. `words` are its label's,
  * which say whether it is its own address.
  * Note that the press is ours rather than Streamdown's, because Streamdown's
@@ -375,9 +375,9 @@ function definitionsIn(
  * names it as a link to where it points and never fetches it, because a
  * picture an agent writes is a request to wherever its address points the
  * moment the tab opens, and a model's words must make none; the pictures an
- * agent shows are its `show_image` calls'. The pictures drawn are a plan's
- * own, inside the plan's card, and an Inbox item's own, inside its pane,
- * each read through the host (`plan-pictures.tsx`, `inbox-pictures.tsx`)
+ * agent shows are its `show_image` calls'. The pictures drawn are a description's
+ * own, inside the description's card, and an Inbox item's own, inside its pane,
+ * each read through the host (`description-pictures.tsx`, `inbox-pictures.tsx`)
  * rather than from its address. Note that the mark is
  * made on the markdown, before the drawing's hardening reads a picture at
  * all, which draws a relative one as a placeholder of its own and an
@@ -575,20 +575,20 @@ function markDocument(tree: MarkdownNode): void {
 const UNNAMED_PICTURE = "Picture";
 
 /**
- * A picture in a transcript's words: a plan's own picture drawn as the plan
- * draws it where its words stand inside `PlanPictures`, as the plan's card
+ * A picture in a transcript's words: a description's own picture drawn as the description
+ * draws it where its words stand inside `DescriptionPictures`, as the description's card
  * does, and an Inbox item's own where they stand inside `InboxPictures`
  * (`inbox-pictures.tsx`); any other a link to where it points, with the
  * picture's glyph, never drawn.
  */
 function PictureElement({ node }: MarkdownNodeProps): ReactNode {
-  const planPicture = usePlanPictureDrawer();
+  const descriptionPicture = useDescriptionPictureDrawer();
   const inboxPicture = useInboxPictureDrawer();
   const address = String(node?.properties[PICTURE_ELEMENT.ADDRESS] ?? "");
   const said = String(node?.properties[PICTURE_ELEMENT.WORDS] ?? "");
   const caption = String(node?.properties[PICTURE_ELEMENT.CAPTION] ?? "");
-  if (planPicture !== undefined && planAttachmentOf(address) !== undefined) {
-    return planPicture(address, said, caption === "" ? undefined : caption);
+  if (descriptionPicture !== undefined && descriptionAttachmentOf(address) !== undefined) {
+    return descriptionPicture(address, said, caption === "" ? undefined : caption);
   }
   // An Inbox item's own picture, where its words stand inside `InboxPictures`.
   const itemPicture = inboxPicture?.(address, said, caption === "" ? undefined : caption);
@@ -1001,7 +1001,7 @@ const CALL_ICON = {
   [CALL_KIND.WEB_PAGE]: GlobeIcon,
   [CALL_KIND.LOAD_SKILL]: BookOpenIcon,
   [CALL_KIND.LOOK_AT_PICTURE]: ImageIcon,
-  [CALL_KIND.EDIT_PLAN]: FilePenIcon,
+  [CALL_KIND.EDIT_DESCRIPTION]: FilePenIcon,
   [CALL_KIND.TODOS]: () => <GLYPH.TODOS />,
   [CALL_KIND.INBOX_POST]: InboxIcon,
   [CALL_KIND.INBOX_CLOSE]: InboxIcon,
@@ -1197,7 +1197,7 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     agent?: Actor | undefined;
     /** For a call about one coding agent, the agent's card, which its chip hangs; none where the place hangs none. */
     agentCard?: ReactNode;
-    /** For a call that made or is about a page, the plan, a thread, a task, or a pull request, that thing's chip, which the row names it by after its verb alone, its press alone opening it; none where the place cannot link it. */
+    /** For a call that made or is about a page, the description, a thread, a task, or a pull request, that thing's chip, which the row names it by after its verb alone, its press alone opening it; none where the place cannot link it. */
     made?: { readonly kind: MadeCallKind; readonly chip: ReactNode } | undefined;
     /** For a call that read, wrote, or edited files, their paths, which the row names by the first one's chip and how many more. */
     files?: readonly string[] | undefined;
@@ -1768,7 +1768,7 @@ export function TranscriptSubagent({
  * turn's lead. Note that it stays in the muted ink, summary and all,
  * unlike a call's line, because it counts rows rather than saying what one
  * did, and the rows it opens onto are what a reader scans. It wears the
- * fold's chevron in a row's icon column, as the plan's card does at its
+ * fold's chevron in a row's icon column, as the description's card does at its
  * head, because its count already says what it holds, so what is left to
  * say is whether it is open, and an icon of its own would read as one more
  * of the calls it opens onto. Note that it says nothing of a call that

@@ -88,7 +88,7 @@ it.layer(getTestDB())("GitHub's repositories by their id", (it) => {
         const agent = Option.getOrThrow(
           yield* createAgent(owner, {
             taskId: relayTask.id,
-            planSnapshot: "# Relay",
+            descriptionSnapshot: "# Relay",
             prompt: null,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -100,7 +100,7 @@ it.layer(getTestDB())("GitHub's repositories by their id", (it) => {
         const alsoInRelay = Option.getOrThrow(
           yield* createAgent(owner, {
             taskId: otherTask.id,
-            planSnapshot: "# Other",
+            descriptionSnapshot: "# Other",
             prompt: null,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",

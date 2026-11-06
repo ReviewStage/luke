@@ -4,7 +4,7 @@ import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { Workspace } from "@repo/features/workspace-wire";
-import { type HostCapability, SETTINGS_VIEW_COUNTED_AS } from "@repo/settings";
+import { type HostCapability, NO_EXPERIMENTS, SETTINGS_VIEW_COUNTED_AS } from "@repo/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_VIEW,
@@ -36,6 +36,7 @@ import {
 } from "@repo/ui";
 import { integrationNamed } from "@repo/ui/integration-search";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -65,7 +66,7 @@ import {
   settingsSearchStops,
 } from "../settings-search.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { useExperimentChoices } from "../use-app-state.js";
+import { appStateQuery, selectExperimentChoices } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
@@ -236,7 +237,7 @@ function ListHead({
   );
 }
 
-/** A group of pages under its head, which folds them: the listed workspace's tile and name over its own group, the group's words otherwise. */
+/** A group of pages under its head, which stands still rather than folding, since the list is short enough to show whole: the listed workspace's tile and name over its own group, the group's words otherwise. */
 function PageGroup({
   group,
   listed,
@@ -266,7 +267,6 @@ function PageGroup({
             </ReplayMask>
           )
         }
-        fold={{ defaultOpen: true }}
       >
         {children}
       </GroupHeader>
@@ -344,7 +344,8 @@ export function DesktopSettings({
   const [active, setActive] = useState(-1);
   const listId = useId();
   const page = useRef<HTMLElement>(null);
-  const experiments = useExperimentChoices();
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   // The pages, or the results of a search, are one Tab stop that ↑↓ walk.
   const roving = useRovingKeys<HTMLDivElement>();
   // The Integrations page's search is the page's, so turning to another page leaves it.

@@ -97,6 +97,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
+  titleAnthropicApiKey: undefined,
 };
 
 /** The repository an agent works in where a test gives it one, and the installation reaching it. */

@@ -147,8 +147,8 @@ function Disclosures(): React.JSX.Element {
             </DisclosureSummary>
             <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
               <Text>
-                {PRODUCT_NAME} read the plan, split it into three tasks, and started an agent on
-                each.
+                {PRODUCT_NAME} read the description, split it into three tasks, and started an agent
+                on each.
               </Text>
             </DisclosureBody>
           </Disclosure>
@@ -180,7 +180,7 @@ function Disclosures(): React.JSX.Element {
             <Disclosure look={DISCLOSURE_LOOK.CARD} defaultOpen>
               <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
                 <DisclosureChevron />
-                <span>Plan · Fix token refresh on wake</span>
+                <span>Description · Fix token refresh on wake</span>
               </DisclosureSummary>
               <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
                 <Text>Refresh the token before the first request after the Mac wakes.</Text>

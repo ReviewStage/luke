@@ -57,7 +57,6 @@ export function CommitsSection({
         page={SCHEMA_SETTINGS_PAGE.ACCOUNT}
         section={SETTING_SECTION.COMMITS}
         view={view}
-        writes={writes}
         faces={faces}
       />
     </SettingsSection>

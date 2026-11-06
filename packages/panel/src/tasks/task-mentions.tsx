@@ -1,12 +1,17 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { type MentionPlace, sectionAnchors } from "@repo/features/mention-link";
 import type { CatalogModel } from "@repo/features/models-wire";
-import { planSections } from "@repo/features/plan-document";
+import { descriptionSections } from "@repo/features/description-document";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { TASKS_READ } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
-import { queryOptions, skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  queryOptions,
+  skipToken,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   createContext,
   type ReactNode,
@@ -17,11 +22,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { askAct, useAct } from "../act.js";
+import { askAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
+import { descriptionDocumentQuery } from "../live-reads.js";
 import type { LinkDrawer } from "../markdown-message.js";
-import type { MentionNode } from "../plan-editor/contract.js";
+import type { MentionNode } from "../description-editor/contract.js";
 import { QUERY_ROOT } from "../query-keys.js";
-import { useHeldRows } from "../use-host-read.js";
 import { agentActor, agentName } from "./agent-model.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import type { MentionHolder } from "./mention-holder.js";
@@ -39,8 +45,8 @@ import { workspaceAgentSearchQueryOptions } from "./workspace-agent-search.js";
 /**
  * task-mentions.tsx -- what a task's page hands every place on it that picks or draws a mention: the task, its saved text, and what opening a mention does.
  *
- * The plan's own words draw their mentions through the document
- * (`plan-body.tsx`); an agent's message box on the same page picks them with
+ * The description's own words draw their mentions through the document
+ * (`description-body.tsx`); an agent's message box on the same page picks them with
  * `@` (`agent-composer.tsx`), the task's pages and agents among them, and its transcript draws the ones a message
  * holds as chips (`transcript-blocks.tsx`). Those stand far from the task's
  * page in the tree, so the page hands them this, as it hands them its skills
@@ -49,7 +55,7 @@ import { workspaceAgentSearchQueryOptions } from "./workspace-agent-search.js";
  *
  * The page of an agent no task holds, as an automation's run starts one,
  * hands the same through `tasklessMentions`: its repository's files, its
- * skills, and the servers, with no plan's sections, since there is no task.
+ * skills, and the servers, with no description's sections, since there is no task.
  * New task's composer hands the same for its workspace, its repository's
  * once one is chosen on its chip (`new-task-composer.tsx`). Each
  * hands the workspace's coding agents too, the newest as the task list
@@ -57,8 +63,8 @@ import { workspaceAgentSearchQueryOptions } from "./workspace-agent-search.js";
  * `useMentionAgentsReader`, each named by its task.
  *
  * The Inbox's box on a thread of a task hands what the task's page does
- * (`heldTaskMentions`), off that page: the plan's sections as last saved
- * (`useSavedPlanText`), and the pages, agents, and pull requests the
+ * (`heldTaskMentions`), off that page: the description's sections as last saved
+ * (`useSavedDescriptionText`), and the pages, agents, and pull requests the
  * Inbox holds of the task.
  *
  * The page also carries a mention made elsewhere on it into the agent's
@@ -106,8 +112,8 @@ const MentionBoxContext = createContext<MentionBoxes | undefined>(undefined);
 
 /**
  * Hands every place under it the task's page's mentions. Note that the text
- * is the plan's saved words, never an open editor's, because the agent is
- * handed the sections of the plan as saved, and a section the box offered
+ * is the description's saved words, never an open editor's, because the agent is
+ * handed the sections of the description as saved, and a section the box offered
  * that the send cannot find would reach the agent as gone. None hands
  * nothing, as no page does, so an owner whose mentions come and go keeps
  * what it draws under them mounted.
@@ -156,7 +162,7 @@ export interface TasklessPlace {
 /**
  * The mentions of a page no task holds, as the page of an agent an
  * automation started is: its repository's files and folders, its skills,
- * and the servers, and no plan's sections; on an agent's own page, the
+ * and the servers, and no description's sections; on an agent's own page, the
  * pages it showed and the pull request it opened, which `holds` hands; a task or a section a message
  * names opens through `onOpenTask`, and a file through `onOpenFile`, in
  * the panel beside the page, which reads it by the place's workspace and
@@ -201,7 +207,7 @@ const NO_AGENTS: readonly MentionableAgent[] = [];
 /** The agents of a task not read yet. */
 const NO_AGENTS_HELD: readonly AgentSummary[] = [];
 
-/** What a place holds of a task beside its plan's words: the pages agents showed on it, its agents as read, and the reader of the workspace's. */
+/** What a place holds of a task beside its description's words: the pages agents showed on it, its agents as read, and the reader of the workspace's. */
 interface TaskHolding {
   readonly pages: readonly MentionablePage[] | undefined;
   readonly agents: Pick<AgentsControl, "agents" | "archived" | "models" | "pullRequests">;
@@ -210,11 +216,11 @@ interface TaskHolding {
 
 /**
  * The mentions of a task, as its page hands them and the Inbox's box on a
- * thread of the task does: the plan and its sections, read off `text`, its
+ * thread of the task does: the description and its sections, read off `text`, its
  * saved words; the pages agents showed on it; its standing agents, offered
  * first; the workspace's, through `readAgents`; and the pull requests its
  * agents published. Note that while `text` is unread no chip of the
- * thread is judged against the plan's sections, since none would be found
+ * thread is judged against the description's sections, since none would be found
  * and each would be drawn gone.
  */
 export function heldTaskMentions(
@@ -246,7 +252,7 @@ export function heldTaskMentions(
       anchors:
         text === undefined
           ? NO_ANCHORS
-          : new Set(sectionAnchors(planSections(text).map((section) => section.heading))),
+          : new Set(sectionAnchors(descriptionSections(text).map((section) => section.heading))),
     },
   };
 }
@@ -256,7 +262,7 @@ export function heldTaskMentions(
  * save moves, so a revision read under one stamp never goes stale: read
  * through the version history's acts, the page then the revision. A read
  * refused answers none, so no chip is judged against sections never read,
- * and a plan with no revision yet answers no words.
+ * and a description with no revision yet answers no words.
  */
 function newestRevisionQueryOptions(taskId: string | undefined, savedAt: number | undefined) {
   return queryOptions({
@@ -279,17 +285,17 @@ async function newestRevisionText(taskId: string): Promise<string | null> {
 }
 
 /**
- * The saved words of a task's plan for a place off its page, as the
- * Inbox's box on a thread of the task offers its sections: a plan's the host
+ * The saved words of a task's description for a place off its page, as the
+ * Inbox's box on a thread of the task offers its sections: a description's the host
  * holds for a window that opened it, else its newest revision's, read through the
  * version history's acts and again once a save moves the task's stamp,
  * the words last read standing meanwhile; none until first read, or where
- * the read failed. A plan with no revision yet has no words to offer.
+ * the read failed. A description with no revision yet has no words to offer.
  */
-export function useSavedPlanText(
+export function useSavedDescriptionText(
   task: Pick<TaskSummary, "id" | "updatedAt"> | undefined,
 ): string | undefined {
-  const held = useHeldRows(LIVE_READ.PLAN_DOCUMENT, task?.id);
+  const held = useQuery({ ...descriptionDocumentQuery(task?.id), enabled: false }).data;
   const openText = held !== undefined && "task" in held ? held.task.document.body : undefined;
   const reading = openText === undefined ? task?.id : undefined;
   const savedAt = task?.updatedAt;
@@ -361,8 +367,8 @@ export function useMentionAgentsReader(
   tasks: readonly { readonly id: string; readonly name: string }[],
   models: readonly CatalogModel[] | undefined,
 ): MentionAgentsReader | undefined {
-  const { tell } = useAct();
   const queryClient = useQueryClient();
+  const { mutate: refreshTasks } = useMutation(actMutation(ACT_KIND.TASKS_REFRESH));
   const newest = useWorkspaceAgents(workspaceId, null);
   const listFailed = newest !== undefined && "failed" in newest;
   const carried = newest !== undefined && !listFailed;
@@ -382,7 +388,8 @@ export function useMentionAgentsReader(
       };
       if (words === undefined) {
         if (listFailed) {
-          tell(ACT_KIND.TASKS_REFRESH);
+          // Note that the refresh is quiet whatever comes back, since no person pressed for it, and needs no invalidation: the lists it reads again land through app state.
+          refreshTasks();
           return Promise.reject(new Error(TASKS_READ.FAILED));
         }
         return Promise.resolve(carried ? offered(naming.current.newest) : NO_AGENTS);
@@ -394,12 +401,12 @@ export function useMentionAgentsReader(
           return offered(answer.agents);
         });
     },
-    [queryClient, tell, workspaceId, listFailed, carried],
+    [queryClient, refreshTasks, workspaceId, listFailed, carried],
   );
   return workspaceId === undefined ? undefined : read;
 }
 
-/** A task a place off its page draws the words of, as the plan's version history does: its id, where its mentions are written, and its sections' anchors as they stand. */
+/** A task a place off its page draws the words of, as the description's version history does: its id, where its mentions are written, and its sections' anchors as they stand. */
 export interface MentionedTask {
   readonly taskId: string;
   readonly place: MentionPlace;
@@ -410,9 +417,9 @@ export interface MentionedTask {
  * The doors a mention's chip opens through where it is drawn: the task's
  * page's, or, off one, the window's own: a task or a section opened by the
  * window's opener, and no file, since no File tab stands there. A place
- * off the page drawing one plan's words, as its version history does,
+ * off the page drawing one description's words, as its version history does,
  * names the task, so a file of its repository is still the file and a
- * section the plan no longer holds is drawn gone; with none, as in the
+ * section the description no longer holds is drawn gone; with none, as in the
  * workspace's Inbox, no repository is at hand, so a GitHub page is drawn as
  * GitHub's, but for a file's or a folder's, drawn as that file or folder of
  * the repository its address names (`mention-chip.tsx`'s `linkChip`).

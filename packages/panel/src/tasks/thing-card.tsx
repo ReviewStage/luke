@@ -53,7 +53,7 @@ export interface ThingCardAt {
   readonly wordsWorkspaceId: string | undefined;
   /** The repository the place names, `owner/name`, which a file is read in. */
   readonly repository: string | undefined;
-  /** What a section's card says of it where the plan no longer holds it; none while it does. */
+  /** What a section's card says of it where the description no longer holds it; none while it does. */
   readonly gone: string | undefined;
 }
 

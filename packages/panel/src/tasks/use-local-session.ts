@@ -149,8 +149,8 @@ export interface LocalSession {
   readonly onChoose: (shell: string) => void;
   /** Opens another shell in the same agent's mirror and shows it. */
   readonly onCreate: () => void;
-  /** Names a shell; answers whether the name took. */
-  readonly onRename: (shell: string, title: string) => Promise<boolean>;
+  /** Names a shell, which takes at once. */
+  readonly onRename: (shell: string, title: string) => void;
   /** Ends a shell, answering whether it ended; the one shown gives way to the oldest left, or a new one. */
   readonly onKill: (shell: string) => Promise<ActionResult>;
 }
@@ -329,12 +329,10 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
 
   // A shell's name is the window's own, so it takes at once.
   const onRename = useCallback(
-    async (target: string, title: string): Promise<boolean> => {
+    (target: string, title: string) =>
       writeHeld((shells) =>
         shells.map((each) => (each.terminalId === target ? { ...each, title } : each)),
-      );
-      return true;
-    },
+      ),
     [writeHeld],
   );
 

@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@repo/database/core/query";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { PAGE_THEME_VARIABLE, PAGE_WIDE_CLASS } from "@repo/features/page-theme";
 import {
   PAGE_BOUNDS,

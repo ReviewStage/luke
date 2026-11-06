@@ -10,7 +10,7 @@ import {
 import { cssCustomProperties } from "../../css.js";
 import { ImageOffIcon } from "../../icons/icons.js";
 import { RetryIcon } from "../../icons/lucide-glyphs.js";
-import { PICTURE_STATE, type PictureState } from "../../picture-cache.js";
+import { PICTURE_STATE, type PictureState } from "../../picture-read.js";
 import type { ReportedFailure } from "../../reported-failure.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card } from "../card/card.js";

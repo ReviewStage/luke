@@ -1,5 +1,6 @@
 import {
   MIRROR_FILE_MODE,
+  type MIRROR_FRAME,
   type MirrorFileMode,
   type MirrorFrame,
 } from "@repo/features/sandbox-mirror-wire";
@@ -34,9 +35,15 @@ const TEMPORARY_PREFIX = ".mirroring-";
 /** How many of the mirror's files are read at once while a manifest is matched. */
 const READ_CONCURRENCY = 8;
 
-type ManifestFile = Extract<MirrorFrame, { readonly type: "manifest" }>["files"][number];
+type ManifestFile = Extract<
+  MirrorFrame,
+  { readonly type: typeof MIRROR_FRAME.MANIFEST }
+>["files"][number];
 
-type FileFrame = Pick<Extract<MirrorFrame, { readonly type: "file" }>, "path" | "mode" | "bytes">;
+type FileFrame = Pick<
+  Extract<MirrorFrame, { readonly type: typeof MIRROR_FRAME.FILE }>,
+  "path" | "mode" | "bytes"
+>;
 
 /** A file's bytes as `MIRROR_HASH` names them: SHA-256, in lowercase hex. */
 const hashOf = (bytes: Uint8Array) =>

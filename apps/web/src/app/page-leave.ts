@@ -1,5 +1,5 @@
 /**
- * page-leave.ts -- the tab's own ways out of the panel, closed, reloaded, or sent elsewhere, asking first while a page or a plan holds unsaved work.
+ * page-leave.ts -- the tab's own ways out of the panel, closed, reloaded, or sent elsewhere, asking first while a page or a description holds unsaved work.
  *
  * The panel's leave guard asks before any of its own doors moves it off a
  * page whose work would be lost, and tells the platform the ask standing
@@ -12,7 +12,7 @@
  * the back-forward cache. A send the developer said to take goes past the
  * browser's question too, since they were just asked, and past it once
  * only: a send that never unloads (stopped, or never committed) leaves the
- * next close or reload asked about again. A plan's words not saved, which
+ * next close or reload asked about again. A description's words not saved, which
  * the panel asks nothing about before its own doors, hold the browser's
  * close and reload back too, and send this tab's ways out to the browser's
  * question rather than past it, a Leave answered for a page's work among them.
@@ -32,16 +32,16 @@ export interface LeavingPage {
 export interface PageLeave {
   /** What the platform answers the panel with: the ask standing while a page holds unsaved work, or nothing once none does. */
   readonly unsavedWork: (ask: LeaveAsk) => void;
-  /** What the platform answers the panel with: whether a plan holds words not saved, which no page's ask covers. */
-  readonly unsavedPlanWords: (unsaved: boolean) => void;
+  /** What the platform answers the panel with: whether a description holds words not saved, which no page's ask covers. */
+  readonly unsavedDescriptionWords: (unsaved: boolean) => void;
   /** Takes `go`, a way out of this tab, once the standing ask says to, or at once where none stands. */
   readonly leave: (go: () => void) => void;
 }
 
 export function pageLeave(page: LeavingPage): PageLeave {
   let standing: LeaveAsk;
-  // Whether a plan holds words not saved, which the panel asks nothing about before its own doors.
-  let planWords = false;
+  // Whether a description holds words not saved, which the panel asks nothing about before its own doors.
+  let descriptionWords = false;
   // Whether the browser is told to hold its close and reload back.
   let listening = false;
   // Whether a way out the developer said to take is under way, whose one `beforeunload` the browser asks nothing about.
@@ -59,7 +59,7 @@ export function pageLeave(page: LeavingPage): PageLeave {
 
   /** The browser's close and reload held back while an ask stands or work is held, and let go once neither is. */
   const listen = (): void => {
-    const hold = standing !== undefined || planWords;
+    const hold = standing !== undefined || descriptionWords;
     if (hold && !listening) page.addEventListener("beforeunload", holdBack);
     if (!hold && listening) page.removeEventListener("beforeunload", holdBack);
     listening = hold;
@@ -74,16 +74,16 @@ export function pageLeave(page: LeavingPage): PageLeave {
 
   // Note that words held with no ask standing let this tab's own sends go at
   // once, so the browser's own question is the one that asks before them.
-  const unsavedPlanWords = (next: boolean): void => {
-    if (next && !planWords) leaving = false;
-    planWords = next;
+  const unsavedDescriptionWords = (next: boolean): void => {
+    if (next && !descriptionWords) leaving = false;
+    descriptionWords = next;
     listen();
   };
 
-  // Note that a Leave answers for the page's work alone, so while a plan's
+  // Note that a Leave answers for the page's work alone, so while a description's
   // words stand too the browser still asks before the send goes.
   const take = (go: () => void): void => {
-    leaving = !planWords;
+    leaving = !descriptionWords;
     go();
   };
 
@@ -96,7 +96,7 @@ export function pageLeave(page: LeavingPage): PageLeave {
     ask(() => take(go));
   };
 
-  return { unsavedWork, unsavedPlanWords, leave };
+  return { unsavedWork, unsavedDescriptionWords, leave };
 }
 
 /** This tab's ways out, over its own window. */

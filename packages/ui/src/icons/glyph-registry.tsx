@@ -132,8 +132,8 @@ export const GLYPH = {
   PAGE: lucideGlyph(AppWindow),
   // A page of the web, outside the app, as a website chip names it.
   WEBSITE: lucideGlyph(Globe),
-  PLAN: DocumentIcon,
-  // What one version of a plan changed: its changed sections.
+  DESCRIPTION: DocumentIcon,
+  // What one version of a description changed: its changed sections.
   VERSION_CHANGES: lucideGlyph(FilePenLine),
   INBOX: InboxIcon,
   AUTOMATION: lucideGlyph(Zap),
@@ -159,7 +159,7 @@ export const GLYPH = {
   HOST: lucideGlyph(Server),
   // A task's or an item's status as a field: what a filter or a grouping is by.
   STATUS: lucideGlyph(CircleDotDashed),
-  // An agent's to-do list, the same ticked list a plan's to-do block wears.
+  // An agent's to-do list, the same ticked list a description's to-do block wears.
   TODOS: lucideGlyph(ListChecks),
   // An ask that wants a choice among options, the Inbox's "decide".
   DECIDE: lucideGlyph(Split),

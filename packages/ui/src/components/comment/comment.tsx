@@ -7,7 +7,7 @@ import { TIME_LOOK, Time } from "../time/time.js";
 /**
  * comment.tsx -- one comment: its writer's face, their name, when they wrote it, what stands at the line's end, and what they wrote under it.
  *
- * Every thread draws its comments this way, an Inbox item's, a plan's, and
+ * Every thread draws its comments this way, an Inbox item's, a description's, and
  * a review's, so a face stands the same size, a name in the
  * same weight, and a time in the same words wherever a comment is read. The
  * face is the writer's picture, or their letter on their hue until it loads

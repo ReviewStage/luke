@@ -23,13 +23,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 64000,
-      "description": "What the agent should do, typed to it as its first message; the developer's words where they named the job. Leave it out to start the agent on the task's plan itself."
+      "description": "What the agent should do, typed to it as its first message; the developer's words where they named the job. Leave it out to start the agent on the task's description itself."
     },
     "note": {
       "type": "string",
       "minLength": 1,
       "maxLength": 64000,
-      "description": "Everything else the agent should hear as it starts (what to start with, what to watch out for, what to leave alone), handed to it after the plan or the prompt in the same first message; leave it out where there is nothing beyond the plan."
+      "description": "Everything else the agent should hear as it starts (what to start with, what to watch out for, what to leave alone), handed to it after the description or the prompt in the same first message; leave it out where there is nothing beyond the description."
     },
     "images": {
       "type": "array",
@@ -77,7 +77,7 @@
       },
       "minItems": 1,
       "maxItems": 9,
-      "description": "Other repositories the agent works in beside its own, each checked out in a folder of its own beside its checkout, which its instructions name: each reached through the GitHub App installation its own repository is on, the agent in the cloud, and the member with the Several repositories experiment on. Leave it out for one repository."
+      "description": "Other repositories the agent works in beside its own, each checked out in a folder of its own beside its checkout, which its instructions name: each reached through the GitHub App installation its own repository is on, and the agent in the cloud. Leave it out for one repository."
     },
     "model": {
       "type": "string",

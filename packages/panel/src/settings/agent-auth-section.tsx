@@ -1,7 +1,6 @@
 import { signedInAccountId } from "@repo/credentials/snapshot";
 import { INTEGRATION_STATUS_WORDS } from "@repo/features/integration-status-words";
 import { INTEGRATION_STATUS } from "@repo/features/integration-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PROVIDER_KEY_KIND,
@@ -74,15 +73,16 @@ import {
 } from "@repo/ui";
 import { InfoIcon } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
+import { providerKeysQuery, providerKeysRetryMutation } from "../live-reads.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { useHeldThroughExit } from "../use-held-through-exit.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { ConnectCodexDialog } from "./connect-codex-dialog.js";
 
 /**
@@ -614,7 +614,9 @@ function usePastedSecret({
   failed: string;
   refused: (rejection: ProviderKeyRejection) => string;
 }): PastedSecret {
-  const { act } = useAct();
+  const { mutateAsync: sendProviderKeysSave } = useMutation(
+    actMutation(ACT_KIND.PROVIDER_KEYS_SAVE),
+  );
   const [editing, setEditing] = useState(false);
   const [pasted, setPasted] = useState("");
   const [saving, setSaving] = useState(false);
@@ -635,7 +637,7 @@ function usePastedSecret({
     if (key === "" || saving) return;
     setSaving(true);
     setRejection(undefined);
-    void act(ACT_KIND.PROVIDER_KEYS_SAVE, payload(key))
+    void sendProviderKeysSave(payload(key))
       .catch(() => undefined)
       .then((answer) => {
         setSaving(false);
@@ -764,7 +766,9 @@ function useClaudePlan(
   plan: SubscriptionKeySummary | undefined,
   field: React.RefObject<HTMLInputElement | null>,
 ): { secret: PastedSecret; removal: DialogConfirm } {
-  const { act } = useAct();
+  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+    actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
+  );
   const secret = usePastedSecret({
     held: plan !== undefined,
     field,
@@ -779,7 +783,7 @@ function useClaudePlan(
   const { cancel } = secret;
   const disconnect = useCallback(
     (): Promise<ActionResult> =>
-      act(ACT_KIND.PROVIDER_KEYS_REMOVE, {
+      sendProviderKeysRemove({
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
         kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
       })
@@ -794,7 +798,7 @@ function useClaudePlan(
           cancel();
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
-    [act, cancel],
+    [sendProviderKeysRemove, cancel],
   );
   const removal = useConfirmDialog(
     { subject: plan !== undefined, surfaceOpen: true },
@@ -815,6 +819,13 @@ function ClaudePlanRow({
 }): React.JSX.Element {
   const { secret, removal } = useClaudePlan(plan, field);
   const ok = plan !== undefined && standing(plan);
+  // Note that a plan leaving while the dialog stands puts focus in the form it brings back, since its read can land after Disconnect's question handed focus back.
+  const held = plan !== undefined;
+  const wasHeld = useRef(held);
+  useEffect(() => {
+    if (wasHeld.current && !held) field.current?.focus();
+    wasHeld.current = held;
+  }, [held, field]);
   return (
     <>
       <SettingsRow
@@ -952,7 +963,9 @@ interface ChatGptPlan {
  * says so.
  */
 function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
-  const { act } = useAct();
+  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+    actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
+  );
   const [connecting, setConnecting] = useState(false);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const [notice, setNotice] = useState(false);
@@ -969,7 +982,7 @@ function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
 
   const disconnect = useCallback(
     (): Promise<ActionResult> =>
-      act(ACT_KIND.PROVIDER_KEYS_REMOVE, {
+      sendProviderKeysRemove({
         provider: PROVIDER_KEY_PROVIDER.OPENAI,
         kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
       })
@@ -984,7 +997,7 @@ function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
           setUnconfirmed(removed.revocationUnconfirmed === true);
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
-    [act],
+    [sendProviderKeysRemove],
   );
   const removal = useConfirmDialog(
     { subject: plan !== undefined, surfaceOpen: true },
@@ -1182,7 +1195,9 @@ function useApiKey(
   stored: ProviderKeySummary | undefined,
   field: React.RefObject<HTMLInputElement | null>,
 ): { secret: PastedSecret; removal: DialogConfirm } {
-  const { act } = useAct();
+  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+    actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
+  );
   const secret = usePastedSecret({
     held: stored !== undefined,
     field,
@@ -1192,7 +1207,7 @@ function useApiKey(
   });
   const remove = useCallback(
     (): Promise<ActionResult> =>
-      act(ACT_KIND.PROVIDER_KEYS_REMOVE, { provider })
+      sendProviderKeysRemove({ provider })
         .catch(() => undefined)
         .then((answer): ActionResult => {
           if (answer === undefined || "failure" in answer) {
@@ -1200,7 +1215,7 @@ function useApiKey(
           }
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
-    [act, provider],
+    [sendProviderKeysRemove, provider],
   );
   const removal = useConfirmDialog(
     { subject: stored !== undefined, surfaceOpen: true },
@@ -1355,7 +1370,9 @@ function DefaultRow({
   provider: ProviderKeyProvider;
   chosen: Credential;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendProviderKeysForAgents } = useMutation(
+    actMutation(ACT_KIND.PROVIDER_KEYS_FOR_AGENTS),
+  );
   const harness = HARNESS[provider];
   const label = `New ${harness.name} agents use`;
   const [turning, setTurning] = useState(false);
@@ -1365,7 +1382,7 @@ function DefaultRow({
     if (next === chosen || turning) return;
     setTurning(true);
     setRefused(undefined);
-    void act(ACT_KIND.PROVIDER_KEYS_FOR_AGENTS, {
+    void sendProviderKeysForAgents({
       provider,
       kind: harness.plan,
       forAgents: next === CREDENTIAL.SUBSCRIPTION,
@@ -1523,10 +1540,11 @@ function useCredentials({
   onKeys?: ((keys: readonly ProviderKeySummary[]) => void) | undefined;
   onConnected?: ((connected: boolean) => void) | undefined;
 }): Credentials {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
-  const keys = useHostRead(LIVE_READ.PROVIDER_KEYS, signedIn ? accountId : undefined);
-  const answer = keys.rows;
-  const readFailed = keys.status === HOST_READ_STATUS.FAILED;
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
+  const keys = useQuery(providerKeysQuery(signedIn ? accountId : undefined));
+  const retryKeys = useMutation(providerKeysRetryMutation());
+  const answer = keys.data;
+  const readFailed = keys.isError;
 
   // The Default model row hears every answer, so nothing there says what a key used to be.
   useEffect(() => {
@@ -1545,7 +1563,7 @@ function useCredentials({
     );
   }, [answer, onConnected]);
 
-  return { answer, readFailed, retry: keys.retry };
+  return { answer, readFailed, retry: () => retryKeys.mutate() };
 }
 
 /** The harnesses' section: signed out, a row each over the answer, a read that failed, or the rows' skeleton while it is out. */

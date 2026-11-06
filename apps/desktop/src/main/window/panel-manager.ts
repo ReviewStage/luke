@@ -73,7 +73,7 @@ interface PanelManagerOptions {
 /**
  * Checklist: scripts/evidence.sh validates every capture at WIDTH by HEIGHT.
  *
- * The window the app first opens in: large enough to read a plan beside its
+ * The window the app first opens in: large enough to read a description beside its
  * questions, and never past the display's work area less a margin, so a
  * small display still shows the whole window with the Dock and the menu bar
  * clear of it.

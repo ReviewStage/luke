@@ -3,7 +3,6 @@ import { DEVICE_STANDING } from "@repo/features/agent-wire";
 import { DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
 import type { HostLine } from "@repo/features/host-live";
 import { HOST_UNINSTALL_COMMAND, hostInstallCommand } from "@repo/features/host-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readFailedWords, readingWords, SIGNED_OUT_WORDS } from "@repo/features/words";
@@ -40,12 +39,14 @@ import {
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import { hostsQuery, hostsRetryMutation } from "../live-reads.js";
 import {
   isThisMac,
   type ListedMachine,
@@ -55,8 +56,7 @@ import {
 } from "../machine-name.js";
 import { DeviceGlyph } from "../tasks/runs-on.js";
 import { showToast, TOAST_HOLD } from "../toast.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
 
@@ -427,13 +427,14 @@ function AddHostSection({
 
 /** The Hosts page: the member's machines as the host holds them, or why they cannot be drawn, and Add a host, first while there is none. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
-  const { act } = useAct();
+  const { mutateAsync: sendHostsRemove } = useMutation(actMutation(ACT_KIND.HOSTS_REMOVE));
   // Note that the clock only redraws the rows as a beat ages, since each standing is read off the book's own monotonic clock.
   useSecond();
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
-  const read = useHostRead(LIVE_READ.HOSTS, signedIn ? accountId : undefined);
-  const hosts = read.rows?.hosts;
-  const installScriptUrl = read.rows?.installScriptUrl;
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
+  const read = useQuery(hostsQuery(signedIn ? accountId : undefined));
+  const retry = useMutation(hostsRetryMutation());
+  const hosts = read.data?.hosts;
+  const installScriptUrl = read.data?.installScriptUrl;
   // Note that each host's beat is the window's shared presence, read often enough that a host that keeps beating never reads offline.
   const book = useDevicePresence(signedIn);
   // The ids of the hosts the first read for the account listed, so one that joins while the page stands is told apart as just connected.
@@ -457,7 +458,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
     () =>
       asked === undefined
         ? Promise.resolve(REFUSED)
-        : act(ACT_KIND.HOSTS_REMOVE, { id: asked.host.id })
+        : sendHostsRemove({ id: asked.host.id })
             .catch(() => undefined)
             .then((answer) => (answer === undefined || "failure" in answer ? REFUSED : ACCEPTED)),
     confirmFailure(FAILURE_SURFACE.HOST_REMOVE),
@@ -469,14 +470,14 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   };
 
   // Note that This Mac reads as turned on while its enroll is out, and as its host stands once it answers.
-  const [turningOn, setTurningOn] = useState(false);
-  const thisMacOn = turningOn || thisMac?.enrolled === true;
+  const turningOn = useMutation(actMutation(ACT_KIND.HOSTS_THIS_MAC_SET));
+  const { mutateAsync: turnThisMacOff } = useMutation(actMutation(ACT_KIND.HOSTS_THIS_MAC_SET));
+  const thisMacOn = turningOn.isPending || thisMac?.enrolled === true;
   const turnThisMacOn = () => {
-    setTurningOn(true);
-    act(ACT_KIND.HOSTS_THIS_MAC_SET, { on: true })
+    turningOn
+      .mutateAsync({ on: true })
       .catch(() => undefined)
       .then((answer) => {
-        setTurningOn(false);
         if (answer !== undefined && !("failure" in answer)) return;
         showToast({
           words: THIS_MAC_WORDS.TURN_ON_FAILED,
@@ -493,7 +494,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const turningOff = useConfirmDialog(
     { subject: thisMac?.enrolled === true, surfaceOpen: true },
     () =>
-      act(ACT_KIND.HOSTS_THIS_MAC_SET, {
+      turnThisMacOff({
         on: false,
         deleteFolders: deleteFolders || agentFolders === 0,
       })
@@ -552,9 +553,12 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
             );
           })}
         </>
-      ) : read.status === HOST_READ_STATUS.FAILED ? (
+      ) : read.isError ? (
         <SettingsLine>
-          <ErrorState failure={unreadShown(FAILURE_SURFACE.HOSTS_READ)} onRetry={read.retry}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.HOSTS_READ)}
+            onRetry={() => retry.mutate()}
+          >
             {readFailedWords("your hosts")}
           </ErrorState>
         </SettingsLine>

@@ -15,9 +15,10 @@ import {
   useMenu,
 } from "@repo/ui";
 import { PlugIcon } from "@repo/ui/icons";
+import { useQuery } from "@tanstack/react-query";
 import { pressAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
-import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
+import { appStateQuery, selectCapability, selectPortForwarding } from "../use-app-state.js";
 
 /**
  * agent-forward.tsx -- the Forward chip an agent's message box wears beside its Cloud chip: whether the agent's cloud ports are forwarded to this Mac's localhost, and the menu that turns it on and opens them.
@@ -88,7 +89,7 @@ function portRows(answer: PortForwardingAnswer, onOpen: (localPort: number) => v
 
 /** The agent's forwarding as the host keeps it: off for any agent but the one forwarded. */
 function useForwarding(agentId: string): PortForwardingAnswer {
-  const forwarding = useAppSlice(APP_SLICE.PORT_FORWARDING);
+  const forwarding = useQuery({ ...appStateQuery, select: selectPortForwarding }).data;
   return forwarding?.agentId === agentId ? forwarding : OFF;
 }
 
@@ -153,7 +154,9 @@ export function AgentForward({
   /** Whether the box is too narrow for the chip's words, so it draws its glyph alone. */
   narrow?: boolean;
 }): React.JSX.Element | null {
-  const offered = useCapability(HOST_CAPABILITY.PORT_FORWARDS);
+  const offered =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.PORT_FORWARDS) }).data ===
+    true;
   if (!offered || agent.machine === AGENT_MACHINE.DEVICE) return null;
   return <ForwardControl agentId={agent.id} narrow={narrow} />;
 }

@@ -6,7 +6,7 @@
  * repository from the working folder's `origin` unless `-R` names one, and
  * with `--start` or `--prompt` starts an agent on the new task, the one-shot
  * every peer leads with: in the create's own request where there is no plan
- * to write first, else created, then planned through `plans.edit`, then
+ * to write first, else created, then planned through `plans.editDescription`, then
  * started, so the agent reads the plan it was given.
  */
 
@@ -30,7 +30,7 @@ import { askService, session } from "../session.js";
 import { resolveTaskId, signedInMemberId } from "../tasks.js";
 import { resolveWorkspace } from "../workspace.js";
 import { agentLines, startAgent, startedLines } from "./agent.js";
-import { writePlan } from "./plan.js";
+import { writeDescription } from "./description.js";
 
 /** What `--assignee` takes to assign the task to nobody, and to the signed-in member. */
 const ASSIGNEE_WORD = { NONE: "none", ME: "me" } as const;
@@ -220,16 +220,16 @@ const createCommand = Command.make(
     file: Flag.String("file").pipe(
       Flag.withAlias("F"),
       Flag.optional,
-      Flag.withDescription("The plan, as Markdown, from a file or - for stdin"),
+      Flag.withDescription("The description, as Markdown, from a file or - for stdin"),
     ),
     start: Flag.Boolean("start").pipe(
       Flag.withDefault(false),
-      Flag.withDescription("Start an agent on the new task, handed its plan"),
+      Flag.withDescription("Start an agent on the new task, handed its description"),
     ),
     prompt: Flag.String("prompt").pipe(
       Flag.optional,
       Flag.withDescription(
-        "Start an agent with this prompt in the plan's place, from a file or - for stdin",
+        "Start an agent with this prompt in the description's place, from a file or - for stdin",
       ),
     ),
   },
@@ -243,21 +243,21 @@ const createCommand = Command.make(
           message: "Only one of -F and --prompt may read stdin.",
         });
       }
-      const planText = fileSource === undefined ? undefined : yield* readInput(fileSource);
+      const descriptionText = fileSource === undefined ? undefined : yield* readInput(fileSource);
       const promptText = promptSource === undefined ? undefined : yield* readInput(promptSource);
       const starting = start || promptText !== undefined;
-      if (starting && planText === undefined && promptText === undefined) {
+      if (starting && descriptionText === undefined && promptText === undefined) {
         return yield* new CommandFailed({
           exit: CLI_EXIT.USAGE,
           message:
-            "An agent needs something to work from: give the task a plan with -F, or the agent a prompt with --prompt.",
+            "An agent needs something to work from: give the task a description with -F, or the agent a prompt with --prompt.",
         });
       }
       const repository = Option.isSome(repo) ? repo.value : yield* originRepository;
       const { workspace } = yield* resolveWorkspace;
       const { hosted } = yield* session;
       // Note that an agent goes in the create's own request only where no plan is written first, since it would read the plan empty.
-      const together = starting && planText === undefined;
+      const together = starting && descriptionText === undefined;
       const created = yield* askService(
         hosted.plans.create,
         {
@@ -276,8 +276,8 @@ const createCommand = Command.make(
         together ? HOSTED_DEADLINE.START : HOSTED_DEADLINE.USUAL,
       );
       const task = taskJson(created.body.plan, workspace.name);
-      if (planText !== undefined) {
-        yield* writePlan(task.id, created.body.plan.document.body, planText);
+      if (descriptionText !== undefined) {
+        yield* writeDescription(task.id, created.body.plan.document.body, descriptionText);
       }
       const agent =
         starting && !together
@@ -308,8 +308,8 @@ const createCommand = Command.make(
   Command.withExamples([
     { command: 'vespin task create "Fix the login redirect"', description: "A new task, no agent" },
     {
-      command: 'vespin task create "Fix the login redirect" -F plan.md --start',
-      description: "A task with a plan, and an agent working it",
+      command: 'vespin task create "Fix the login redirect" -F description.md --start',
+      description: "A task with a description, and an agent working it",
     },
     {
       command:

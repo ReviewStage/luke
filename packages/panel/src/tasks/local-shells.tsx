@@ -114,7 +114,13 @@ function ShellRow({
   surfaceOpen: boolean;
   session: Pick<LocalSession, "onChoose" | "onRename" | "onKill">;
 }): React.JSX.Element {
-  const rename = useInlineRename(shell.terminalId, session.onRename);
+  // Note that a shell's name is the window's own, so a rename takes at once and is never refused.
+  const rename = useInlineRename(shell.terminalId, {
+    run: session.onRename,
+    asked: undefined,
+    refused: false,
+    reset: () => undefined,
+  });
   const renaming = rename.editing;
   const coarse = useCoarsePointer();
   const kill = `End ${shell.title}`;
@@ -135,7 +141,7 @@ function ShellRow({
               label="Shell name"
               editing
               maxLength={TITLE_MAX}
-              onEnd={({ value }) => void rename.end(value)}
+              onEnd={({ value }) => rename.end(value)}
             />
           ) : (
             shell.title

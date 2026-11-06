@@ -61,7 +61,7 @@ import {
  *   window.
  * - The Tasks tab previews a page, an agent's Changes, a worker, or a review
  *   thread of the task it shows with nothing standing over its plan, chooses
- *   that task's Overview for the task itself, one of its plan's sections, or
+ *   that task's Overview for the task itself, one of its description's sections, or
  *   one of its comments, at the section or the comment, and goes to any
  *   other.
  */
@@ -252,7 +252,7 @@ export type Route =
   | { readonly kind: typeof ROUTE.EXTERNAL; readonly href: string }
   | { readonly kind: typeof ROUTE.NOTHING };
 
-/** A place the task's Overview shows: the task itself, one of its plan's sections, or one of its comments. */
+/** A place the task's Overview shows: the task itself, one of its description's sections, or one of its comments. */
 export type OverviewPlace = Extract<
   LinkPlace,
   { readonly kind: typeof LINK_PLACE.TASK | typeof LINK_PLACE.SECTION | typeof LINK_PLACE.COMMENT }

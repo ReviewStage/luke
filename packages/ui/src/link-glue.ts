@@ -4,7 +4,7 @@
  * A chip is one box the line cannot break inside, so the browser breaks
  * beside it instead, and a comma or full stop written straight after it
  * starts the next line alone (", after"), or an opening bracket ends the
- * line before it. Both drawings of words, the plan's (`markdown-message.tsx`)
+ * line before it. Both drawings of words, the description's (`markdown-message.tsx`)
  * and a transcript's (`packages/panel/src/tasks/transcript-blocks.tsx`), hold each chip with
  * the opening punctuation that ends the text before it and the closing
  * punctuation that starts the text after it, in a box of the

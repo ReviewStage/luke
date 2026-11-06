@@ -11,11 +11,13 @@ import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { GLYPH } from "@repo/ui/icons";
 import { type InlineRename, useInlineRename } from "@repo/ui/use-inline-rename";
-import { pressAct } from "../act.js";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { pressMutation } from "../act-mutations.js";
 import { appPlatform } from "../app-platform.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { useThisMac } from "../machine-name.js";
+import { renameWrite } from "../rename-write.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { useAddRepository } from "../tasks/add-repository.js";
 import type { AgentFork } from "../tasks/fork-model.js";
@@ -31,7 +33,7 @@ import {
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { useOpenLocal } from "../tasks/use-local-session.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
-import { useCapability } from "../use-app-state.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import type { MenuAction, MenuEntry } from "./action-menu.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { useAgentDelete } from "./agent-delete.js";
@@ -305,8 +307,12 @@ export function useAgentTerminalDoors(
   sidePanel: Pick<SidePanelControl, "onChoose">,
   onShown: () => void,
 ): AgentTerminalDoors {
-  const terminals = useCapability(HOST_CAPABILITY.TERMINALS);
-  const locals = useCapability(HOST_CAPABILITY.LOCAL_TERMINALS);
+  const terminals =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
+    true;
+  const locals =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.LOCAL_TERMINALS) })
+      .data === true;
   const openTerminal = useOpenTerminal(sidePanel, onShown);
   const openLocal = useOpenLocal(sidePanel, onShown);
   return {
@@ -382,7 +388,8 @@ export function useAgentActions(
   const { label, shown, terminals, onOpenBrowser, onDeleted } = input;
   const copied = useTranscriptCopier();
   const copyLink = useCopyLinkItem()(agentPlace(agent.id));
-  const rename = useInlineRename(agent.id, agents.onRename);
+  const renaming = useMutation(agents.rename.options);
+  const rename = useInlineRename(agent.id, renameWrite(renaming, agents.rename));
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
@@ -392,7 +399,10 @@ export function useAgentActions(
   // an archived agent is renamed then.
   const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal, onOpenLocal } = terminals;
-  const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
+  const macTerminal =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.MAC_TERMINAL) }).data ===
+    true;
+  const { mutate: openMacTerminal } = useMutation(pressMutation(ACT_KIND.MAC_TERMINAL_LOCAL_AGENT));
   const thisMac = useThisMac();
   const local = agent.machine === AGENT_MACHINE.DEVICE;
   // Note that a local agent runs in a worktree on its device, which no relayed tab reaches, so its
@@ -400,7 +410,7 @@ export function useAgentActions(
   const onThisMac = thisMac?.deviceId !== undefined && agent.mac?.deviceId === thisMac.deviceId;
   const terminal = local
     ? macTerminal && onThisMac
-      ? () => void pressAct(ACT_KIND.MAC_TERMINAL_LOCAL_AGENT, { agentId: agent.id })
+      ? () => openMacTerminal({ agentId: agent.id })
       : undefined
     : onOpenTerminal === undefined
       ? undefined

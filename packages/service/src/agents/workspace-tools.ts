@@ -6,7 +6,7 @@
  * `offeredCoderTools`), and for one on Claude Code or Codex the tools of
  * our MCP server, whose harness keeps its own shell and files
  * (`workspace-mcp/tools.ts`'s `offeredWorkspaceMcpTool`), each narrowed by its
- * repository, its kind, where it runs, and its starter's Memory and Plans. Nothing is
+ * repository, its kind, where it runs, and its starter's Memory and Descriptions. Nothing is
  * kept beside those rules, so the popover cannot name a tool the agent is
  * not handed. `run_on_mac` is answered off where a call would be refused
  * now (`mac-command.ts`): no Mac of its task's assignee's listening.
@@ -29,8 +29,8 @@ export interface WorkspaceToolsOfferedTo {
   readonly native: boolean;
   /** Whether the agent's starter has Memory on. */
   readonly memoryOn: boolean;
-  /** Whether the agent's starter has Plans on, or Pilot for a pilot (`plansOnFor`). */
-  readonly plansOn: boolean;
+  /** Whether the agent's starter has Descriptions on, or Pilot for a pilot (`descriptionsOnFor`). */
+  readonly descriptionsOn: boolean;
 }
 
 /** Our tools the agent is offered, by name, in the order its runtime offers them. */

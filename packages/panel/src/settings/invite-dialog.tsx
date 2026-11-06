@@ -20,8 +20,9 @@ import {
 } from "@repo/ui";
 import { ROLE_WORDS } from "@repo/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { confirmFailure } from "../failure-report.js";
 import { replayMaskedError } from "./marks.js";
@@ -82,7 +83,7 @@ export function useInviteDialog({
   workspaceName: string;
   owner: boolean;
 }): InviteAsk {
-  const { act } = useAct();
+  const { mutateAsync: sendWorkspaceInvite } = useMutation(actMutation(ACT_KIND.WORKSPACE_INVITE));
   const [typed, setTyped] = useState("");
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const field = useRef<HTMLInputElement | null>(null);
@@ -107,7 +108,7 @@ export function useInviteDialog({
         before.then((result) =>
           result.status !== ACTION_RESULT_STATUS.ACCEPTED
             ? result
-            : act(ACT_KIND.WORKSPACE_INVITE, {
+            : sendWorkspaceInvite({
                 workspaceId,
                 email,
                 // Note that a reader no longer the owner invites a member, whatever the bar last held.

@@ -3,13 +3,13 @@ import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { type Agent, createAgent } from "@repo/database/models/agent-store";
 import { enrollOwnDevice } from "@repo/database/models/host-store";
 import {
-  actOnPlanCommentThread,
-  PLAN_COMMENT_OUTCOME,
-  type PlanCommentOutcome,
-  type PlanCommentWriterRef,
-  startPlanCommentThread,
-} from "@repo/database/models/plan-comments";
-import { writePage } from "@repo/database/models/plan-pages";
+  actOnDescriptionCommentThread,
+  DESCRIPTION_COMMENT_OUTCOME,
+  type DescriptionCommentOutcome,
+  type DescriptionCommentWriterRef,
+  startDescriptionCommentThread,
+} from "@repo/database/models/description-comments";
+import { writePage } from "@repo/database/models/task-pages";
 import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
 import { saveProviderKey, setProviderKeyForAgents } from "@repo/database/models/provider-key-store";
 import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
@@ -21,7 +21,7 @@ import {
 } from "@repo/database/models/task-block-store";
 import {
   createTaskOnce,
-  savePlanText,
+  saveDescriptionText,
   type TaskAssigneeNotMember,
   type TaskTreeRepositoryLocked,
   updateTask,
@@ -41,12 +41,12 @@ import { HOST_WIRE } from "@repo/features/host-wire";
 import { INBOX_REPLY, openAskOf } from "@repo/features/inbox-wire";
 import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
 import {
-  PLAN_COMMENT_ACTION,
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_SCOPE,
-} from "@repo/features/plan-comment-wire";
+  DESCRIPTION_COMMENT_ACTION,
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_SCOPE,
+} from "@repo/features/description-comment-wire";
 import { type PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
-import { PLAN_ACTOR, TASK_STATUS, type TaskOrigin } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, TASK_STATUS, type TaskOrigin } from "@repo/features/task-wire";
 import { ACTION_RESULT_STATUS, MESSAGE_CHANNEL, START_LINE_BRIEF } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { betterAuth } from "better-auth";
@@ -112,7 +112,7 @@ import {
  * `run.sh --demo` signs in as `DEMO_DEAN` and opens on what this writes:
  * Dean's own workspace and acme beside it, with seven teammates as
  * members; twenty-one tasks across every status and priority, one broken
- * into sub-tasks and some waiting on others, each with a plan and comments
+ * into sub-tasks and some waiting on others, each with a description and comments
  * on it, open, answered, and resolved; eight finished coding agents of
  * Dean's with their transcripts, a pilot and the agents it started among
  * them, on his host where the run starts one, and the pages they showed;
@@ -382,46 +382,46 @@ function seedPeople(auth: DemoAuth, clock: SeedClock) {
 /* ----- The tasks ----- */
 
 /** The thread a comment started, answered as it stands, or the comment refused. */
-function threadOf(step: string, outcome: PlanCommentOutcome) {
-  if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) {
+function threadOf(step: string, outcome: DescriptionCommentOutcome) {
+  if (outcome.status !== DESCRIPTION_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) {
     return Effect.fail(new DemoSeedRefused({ step }));
   }
   return Effect.succeed(outcome.answer.thread);
 }
 
 /**
- * One comment thread on the task's plan, started by its writer on the words
+ * One comment thread on the task's description, started by its writer on the words
  * it quotes, the replies under it a minute apart, and resolved where it
  * stands resolved.
  */
 function seedComment(
   task: DemoTask,
-  writer: PlanCommentWriterRef,
+  writer: DescriptionCommentWriterRef,
   comment: DemoCommentWords,
   clock: SeedClock,
   key: () => string,
 ) {
   return Effect.gen(function* () {
-    const from = task.plan.indexOf(comment.quote);
+    const from = task.description.indexOf(comment.quote);
     const started = yield* clock.ago(
       comment.ago,
-      startPlanCommentThread(writer, task.id, {
+      startDescriptionCommentThread(writer, task.id, {
         clientKey: key(),
-        scope: PLAN_COMMENT_SCOPE.WORDS,
+        scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
         quote: comment.quote,
         anchor: { from, to: from + comment.quote.length },
-        text: task.plan,
+        text: task.description,
         words: comment.words,
       }),
     );
     const thread = yield* threadOf(`a comment on ${task.name}`, started);
     const member = (person: DemoPerson) =>
-      ({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId: person.id }) as const;
+      ({ actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: person.id }) as const;
     for (const [index, reply] of comment.replies.entries()) {
       const replied = yield* clock.ago(
         comment.ago - (index + 1) * DEMO_MINUTE,
-        actOnPlanCommentThread(member(reply.by), task.id, thread.id, {
-          action: PLAN_COMMENT_ACTION.REPLY,
+        actOnDescriptionCommentThread(member(reply.by), task.id, thread.id, {
+          action: DESCRIPTION_COMMENT_ACTION.REPLY,
           clientKey: key(),
           words: reply.words,
         }),
@@ -431,8 +431,8 @@ function seedComment(
     if (comment.resolved === undefined) return;
     const resolved = yield* clock.ago(
       comment.resolved.ago,
-      actOnPlanCommentThread(member(comment.resolved.by), task.id, thread.id, {
-        action: PLAN_COMMENT_ACTION.RESOLVE,
+      actOnDescriptionCommentThread(member(comment.resolved.by), task.id, thread.id, {
+        action: DESCRIPTION_COMMENT_ACTION.RESOLVE,
       }),
     );
     yield* threadOf(`a comment resolved on ${task.name}`, resolved);
@@ -441,7 +441,7 @@ function seedComment(
 
 /**
  * The task under its fixed id, made by its maker, or by the agent named,
- * under its parent and assigned, its plan saved, and the comments on it; one that is done or canceled
+ * under its parent and assigned, its description saved, and the comments on it; one that is done or canceled
  * stands to do until it is moved there.
  */
 function seedTask(
@@ -469,11 +469,11 @@ function seedTask(
     yield* written(task.name, made);
     const saved = yield* clock.ago(
       task.savedAgo,
-      savePlanText(task.creator.id, task.id, task.plan),
+      saveDescriptionText(task.creator.id, task.id, task.description),
     );
-    yield* written(`${task.name}'s plan`, saved);
+    yield* written(`${task.name}'s description`, saved);
     for (const comment of task.comments) {
-      const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: comment.by.id } as const;
+      const writer = { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: comment.by.id } as const;
       yield* seedComment(task, writer, comment, clock, key);
     }
     if (task.settledAgo === undefined) return task.id;
@@ -706,7 +706,7 @@ function seedAgent(
       createAgent(first.from.id, {
         taskId: agent.task.id,
         ...(agent.kind === undefined ? undefined : { kind: agent.kind }),
-        planSnapshot: null,
+        descriptionSnapshot: null,
         prompt: first.line,
         idempotencyKey: agent.key,
         startedByAgentId: starter?.id,
@@ -756,7 +756,7 @@ function seedPages(agent: DemoAgent, row: Agent, clock: SeedClock) {
  * Every agent: its row, then the sub-tasks its steps made, under its id,
  * so the agents started on them find them; then the blocks between the
  * tasks, and each agent's pages and transcript, and the comments it
- * started on its task's plan. Answers each agent's row and the sub-tasks'
+ * started on its task's description. Answers each agent's row and the sub-tasks'
  * ids.
  */
 function seedAgents(
@@ -774,7 +774,7 @@ function seedAgents(
       const starterRow = starter === undefined ? undefined : agents.get(starter);
       const row = yield* seedAgent(agent, starterRow, place, clock);
       agents.set(agent, row);
-      const origin = { actor: PLAN_ACTOR.AGENT, agentId: row.id } as const;
+      const origin = { actor: DESCRIPTION_ACTOR.AGENT, agentId: row.id } as const;
       for (const task of tasksMadeBy(agent)) {
         madeIds.push(yield* seedTask(workspaceId, task, origin, clock, key));
       }
@@ -789,7 +789,11 @@ function seedAgents(
       for (const turn of agent.turns.entries()) {
         yield* seedTurn(agent, turn, writer, row, seeded, clock);
       }
-      const asAgent = { actor: PLAN_COMMENT_ACTOR.AGENT, userId: row.userId, agentId: row.id };
+      const asAgent = {
+        actor: DESCRIPTION_COMMENT_ACTOR.AGENT,
+        userId: row.userId,
+        agentId: row.id,
+      };
       for (const comment of agent.comments ?? []) {
         yield* seedComment(agent.task, asAgent, comment, clock, key);
       }

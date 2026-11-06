@@ -67,6 +67,7 @@ async function mount(asks: readonly MacCommandAsk[]): Promise<MacCommandAnswer[]
   await act(async () =>
     root.render(onRegistry(AtomRegistry.make(), createElement(MacCommandAskDialog))),
   );
+  if (asks.length > 0) await vi.waitFor(() => assert.equal(promptStands(), true));
   return answered;
 }
 
@@ -93,6 +94,12 @@ async function mountRefusing(sentence: string): Promise<void> {
       ),
     ),
   );
+  await vi.waitFor(() => assert.equal(promptStands(), true));
+}
+
+/** Whether the prompt is drawn. */
+function promptStands(): boolean {
+  return document.querySelector('[role="alertdialog"]') !== null;
 }
 
 /** What each toast standing says, oldest first. */
@@ -111,12 +118,12 @@ function button(name: string): HTMLButtonElement {
 
 test("nothing is drawn while no ask waits", async () => {
   await mount([]);
-  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.equal(promptStands(), false);
 });
 
 test("the earliest ask is drawn with its command, and each answer goes back by the ask's id", async () => {
   const answered = await mount([FIRST, SECOND]);
-  assert.ok(document.querySelector('[role="alertdialog"]'), "the prompt stands");
+  assert.equal(promptStands(), true);
   assert.equal(document.querySelector(".ui-file-text-words")?.textContent, FIRST.command);
 
   await act(async () => button("Allow once").click());
@@ -169,6 +176,7 @@ test("an ask main drops fades its card out in place, its words as they were, bef
   await act(async () =>
     root.render(onRegistry(AtomRegistry.make(), createElement(MacCommandAskDialog))),
   );
+  await vi.waitFor(() => assert.equal(promptStands(), true));
   await act(async () => vi.advanceTimersToNextFrame());
   const card = document.querySelector('[role="alertdialog"]') ?? assert.fail("the prompt stands");
 
@@ -178,11 +186,12 @@ test("an ask main drops fades its card out in place, its words as they were, bef
       version: snapshot.version + 1,
     }),
   );
+  await vi.waitFor(() => assert.equal(card.hasAttribute("data-closed"), true));
   await act(async () => vi.advanceTimersToNextFrame());
   assert.ok(card.isConnected, "the card goes the moment the ask does");
   assert.equal(document.querySelector(".ui-file-text-words")?.textContent, FIRST.command);
 
   await act(async () => exits.finish());
   await act(async () => vi.advanceTimersToNextFrame());
-  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.equal(promptStands(), false);
 });

@@ -151,6 +151,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
+  titleAnthropicApiKey: undefined,
 };
 
 /** The agent's machine over the fake Vercel the client given answers as, its checkout run on this test's own runner. */
@@ -195,7 +196,7 @@ const openAgent = Effect.gen(function* () {
     idempotencyKey: "start-1",
     model: "openai/gpt-6.1-sol",
     effort: "xhigh",
-    planSnapshot: "# Teammate invitations\n",
+    descriptionSnapshot: "# Teammate invitations\n",
     prompt: null,
     repository: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -313,7 +314,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
               idempotencyKey: randomUUID(),
               model: "openai/gpt-6.1-sol",
               effort: "xhigh",
-              planSnapshot: "# Teammate invitations\n",
+              descriptionSnapshot: "# Teammate invitations\n",
               prompt: null,
               repository: null,
               runtime: CONVERSATION_RUNTIME.CODEX,
@@ -484,7 +485,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           idempotencyKey: "start-key",
           model: "openai/gpt-6.1-sol-ultrafast",
           effort: "xhigh",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           repository: null,
           runtime: CONVERSATION_RUNTIME.CODEX,
