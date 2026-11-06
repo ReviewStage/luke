@@ -563,7 +563,11 @@ export function TaskTopbar({
         // Note that the status mark stands inside the name's press, as a task's chip wears it, where the name opens the details.
         lead={details === undefined ? look?.icon : undefined}
         title={task?.name}
-        titleMenu={task === undefined || planMenu === undefined ? undefined : menu.contextMenu()}
+        titleMenu={
+          task === undefined || planMenu === undefined
+            ? undefined
+            : { contextMenu: menu.contextMenu(), keyMenu: menu.keyMenu }
+        }
         titlePress={
           details === undefined || task === undefined
             ? undefined

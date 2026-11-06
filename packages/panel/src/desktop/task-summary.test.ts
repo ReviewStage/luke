@@ -472,6 +472,23 @@ test("a press outside the card the rail's chevron hung takes it down, and a pres
   assert.equal(toggle.getAttribute("aria-expanded"), "false", "a press outside takes it down");
 });
 
+test("a card the rail's chevron hung goes once the column narrows past the rail it hangs over", () => {
+  const column = columnAt(600);
+  const toggle =
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Expand summary"]') ??
+    assert.fail("the rail's chevron stands");
+  act(() => toggle.click());
+  assert.ok(document.querySelector('[role="dialog"][aria-label="Summary"]'), "the card hangs");
+
+  column.widen(400);
+  assert.equal(column.rail(), null, "no rail is left");
+  assert.equal(
+    document.querySelector('[role="dialog"][aria-label="Summary"]:not([data-leaving])'),
+    null,
+    "the card goes with it",
+  );
+});
+
 test("a column with room for the rail draws it, and one widened to that room draws it again", () => {
   assert.equal(columnAt(600).rail()?.getAttribute("data-mode"), "rail");
   act(() => root?.unmount());

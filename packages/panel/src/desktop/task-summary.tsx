@@ -235,9 +235,10 @@ export interface SummaryLayout {
  * while it is pinned and the column holds it beside the document's measure,
  * a rail where the column spares the rail's room, and not drawn otherwise,
  * nor while it `holds` nothing to list. A card hangs only where the summary
- * is not pinned, and only while the column is drawn and the summary holds
- * something, so the summary pinned, a side panel `covering` the column, or
- * its last row gone takes it down. A column not laid out, hidden or not yet
+ * stands as its rail, and only while the column is drawn and the summary
+ * holds something, so the summary pinned, the column narrowed past the
+ * rail, a side panel `covering` the column, or its last row gone takes it
+ * down. A column not laid out, hidden or not yet
  * drawn, measures nothing and changes nothing.
  */
 export function useSummaryLayout(
@@ -270,8 +271,9 @@ export function useSummaryLayout(
         ? SUMMARY_MODE.RAIL
         : SUMMARY_MODE.NONE;
   // Note that the card's keys are heard on the window, so a card the
-  // column no longer shows is let go rather than left taking Escape.
-  const gone = mode === SUMMARY_MODE.COLUMN || covering || !holds;
+  // column no longer shows, pinned or with no rail left to hang over, is let
+  // go rather than left taking Escape.
+  const gone = mode !== SUMMARY_MODE.RAIL || covering || !holds;
   if (gone && hung !== undefined) setHung(undefined);
   const card = gone ? undefined : hung;
   const expand = (from: CardFrom) => {

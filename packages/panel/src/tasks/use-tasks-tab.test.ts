@@ -1731,7 +1731,11 @@ test("a Vespin link to a task's version opens its version history on that versio
 
   assert.deepEqual(history, { open: true, spot: { revision: 3, opened: undefined } });
   assert.equal(tab.control().history.open, false);
-  assert.notEqual(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "the task, never its details");
+  assert.equal(
+    tab.control().mainTabs.tab,
+    undefined,
+    "the task waits on its agents, never its details",
+  );
 });
 
 test("a Vespin link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", async () => {

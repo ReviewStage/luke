@@ -367,7 +367,12 @@ function AgentPageBar({
   }
   return (
     <>
-      <Toolbar title={title} trail={trail} titleMenu={menu.contextMenu()} actions={steps} />
+      <Toolbar
+        title={title}
+        trail={trail}
+        titleMenu={{ contextMenu: menu.contextMenu(), keyMenu: menu.keyMenu }}
+        actions={steps}
+      />
       {dialogs}
     </>
   );
