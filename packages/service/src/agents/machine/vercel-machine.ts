@@ -97,7 +97,6 @@ import {
   type FirewallSources,
   sandboxFirewall,
 } from "../sandbox-firewall.js";
-import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
   IMAGE_NOT_READY,
   type ListedSandbox,
@@ -142,11 +141,8 @@ export const RUNNER_TAG = {
   /**
    * The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what
    * the launch was started with that a warm runner cannot take up later
-   * (`launchFingerprint`), then the mark again and `LINES_READ_MARK`, since
-   * every launch reads its lines from the service. Note that the read mark is
-   * written for a deployment from before this one, which reads a launch
-   * without it as one whose stdin it writes, and is read here by no one:
-   * no launch from before the read still ran as this deployment went out.
+   * (`launchFingerprint`). A tag written before ends in the mark and
+   * `lines`, which the read leaves aside.
    */
   LAUNCH: "agentRunnerLaunch",
 } as const;
@@ -174,11 +170,8 @@ export function runnerTag(
   return tags?.[RUNNER_TAG[tag]] ?? tags?.[RUNNER_TAG_BEFORE_RENAME[tag]];
 }
 
-/** What parts a launch tag's first event number from its fingerprint, and its fingerprint from whether it reads its lines. */
+/** What parts a launch tag's first event number from its fingerprint. */
 const LAUNCH_FINGERPRINT_MARK = "-";
-
-/** What a launch tag's last part reads for a launch that reads its lines from the service. */
-const LINES_READ_MARK = "lines";
 
 /**
  * Where a message's files that the harness takes no block of are written
@@ -363,13 +356,10 @@ export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   return { sandboxSessionId, commandId, ...launch };
 }
 
-/** The launch tag's value for the mark given. Note that a launch that reads its lines always has a fingerprint, since both came in after fingerprints, so its read mark never stands in a fingerprint's place. */
+/** The launch tag's value for the mark given. */
 function launchTagOf(mark: RunnerMark): string {
   if (mark.fingerprint === undefined) return String(mark.firstSequence);
-  const parts = [mark.firstSequence, mark.fingerprint];
-  return (mark.linesRead === true ? [...parts, LINES_READ_MARK] : parts).join(
-    LAUNCH_FINGERPRINT_MARK,
-  );
+  return [mark.firstSequence, mark.fingerprint].join(LAUNCH_FINGERPRINT_MARK);
 }
 
 /** The tags a sandbox carries for the record given, beside its session's and its agent's. */
@@ -419,15 +409,9 @@ function foundOf(session: string, sandbox: ListedSandbox): FoundPlace {
     running,
     runner: runnerInSession(session, sandbox),
     launch: taggedLaunch(tags),
-    // SAFETY: the listing is this machine's own to read back in `resume`; no caller reads it.
+    // SAFETY: the listing is this machine's own; no caller reads it.
     kept: sandbox as unknown as MachineKept,
   };
-}
-
-/** The listing a found place was read from, which `foundOf` kept. */
-function listedOf(found: FoundPlace): ListedSandbox {
-  // SAFETY: a place this machine found keeps the listing it was read from (`foundOf`).
-  return found.kept as unknown as ListedSandbox;
 }
 
 /**
@@ -539,10 +523,8 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
       clear: (place) => firewall.clear(place.running),
     },
 
-    // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
     resume: (found) =>
       Effect.gen(function* () {
-        yield* capSandboxTimeout(api, listedOf(found));
         const resumed = yield* Effect.result(api.resume(found.name));
         if (Result.isFailure(resumed)) {
           if (resumed.failure.status === SNAPSHOT_GONE_STATUS) return PLACE_RESUME.GONE;

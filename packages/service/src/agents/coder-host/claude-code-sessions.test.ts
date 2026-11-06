@@ -1551,36 +1551,17 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
-  it.effect(
-    "a sandbox opens on the short timeout, and one opened before it was shortened has it lowered ahead of the resume a message makes",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = runnerSandboxApi();
-        const { userId, agent } = yield* openAgent;
-        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
-          Effect.provide(services(api)),
-        );
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        const sandbox = api.sandboxes[0];
-        assert.ok(sandbox !== undefined);
-        const openedWith = sandbox.timeout;
-        // As a sandbox opened before the timeout was shortened, which Vercel reopens on its own each resume.
-        sandbox.timeout = CODER.SANDBOX_MAX_LIFETIME_MS;
-        yield* runnerTook(agent.id);
-        yield* runnerEnded({
-          target: { userId, conversationId: agent.conversationId },
-          sessionId: opened.sessionId,
-          sequence: 0,
-        }).pipe(Effect.provide(api.layer));
+  it.effect("a sandbox opens on the short timeout", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = runnerSandboxApi();
+      const { userId, agent } = yield* openAgent;
+      const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
+      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
 
-        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
-
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(openedWith, CODER.SANDBOX_TIMEOUT_MS);
-        assert.deepEqual(sandbox.resumedWith, [CODER.SANDBOX_TIMEOUT_MS]);
-      }),
+      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      assert.equal(api.sandboxes[0]?.timeout, CODER.SANDBOX_TIMEOUT_MS);
+    }),
   );
 
   it.effect(

@@ -1,7 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { causeKind } from "@repo/runtime/effect";
 import { Cause, Clock, Data, Effect, type Redacted } from "effect";
-import type { RepositorySnapshotSweepOutcome } from "../agents/repository-snapshot.js";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
 import { GitHubBackground } from "../github/github-rate-gate.js";
@@ -16,11 +15,8 @@ import {
 import type { CodexPlanSweepOutcome } from "./codex-plan-sweep.js";
 import type { DeviceLeaseSweepOutcome } from "./device-lease-sweep.js";
 import type { DeviceWarmSweepOutcome } from "./device-warm-sweep.js";
-import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
-import type { SandboxRetentionSweepOutcome } from "./sandbox-retention-sweep.js";
-import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 /**
  * The scheduled sweep: once a minute, Vercel's cron ends what no request
@@ -41,14 +37,8 @@ interface MaintenanceSweeps {
   sweepDeviceWarmRunners: (now: number) => SweepRead<DeviceWarmSweepOutcome>;
   /** Deletes the Vercel Sandboxes of the next eve sessions queued for it, a sweep's worth. */
   sweepSandboxes: (now: number) => SweepRead<SessionSandboxSweepOutcome>;
-  /** Stops the coding agents' sandboxes whose terminal lease lapsed past its grace, a sweep's worth. */
-  sweepTerminalLeases: (now: number) => SweepRead<TerminalLeaseSweepOutcome>;
-  /** Stops the running native agents' sandboxes whose run ended and no terminal holds, a sweep's worth. */
+  /** Settles as failed the turns of the running native agents whose runner died mid-turn, their firewall cleared, a sweep's worth. */
   sweepNativeSandboxes: (now: number) => SweepRead<NativeSandboxSweepOutcome>;
-  /** Stops the running eve agents' sandboxes whose turn ended and no terminal holds, a sweep's worth. */
-  sweepEveSandboxes: (now: number) => SweepRead<EveSandboxSweepOutcome>;
-  /** Bounds the snapshot retention of the stopped agents' sandboxes opened before it was bounded, a bucket's worth. */
-  sweepSandboxRetention: (now: number) => SweepRead<SandboxRetentionSweepOutcome>;
   /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from us. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
   /** Deletes the withdrawn lines no turn took within a coding agent's turn bound, a sweep's worth, answering how many went. */
@@ -59,8 +49,6 @@ interface MaintenanceSweeps {
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
   /** Polls the token agents' open pull requests due a poll, a sweep's worth, telling each agent what changed. */
   sweepTokenPullRequests: (now: number) => SweepRead<TokenPullRequestSweepOutcome>;
-  /** Deletes the workspaces' repository snapshots past their age, or left unbuilt past their grace. */
-  sweepRepositorySnapshots: (now: number) => SweepRead<RepositorySnapshotSweepOutcome>;
   /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
   sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Deletes the hosts' pairings whose code lapsed, a sweep's worth, and the hosts approved whose boxes never collected their secret, answering how many pairings went. */
@@ -98,10 +86,7 @@ interface MaintenanceSweepAnswer {
   deviceLeases: Swept<DeviceLeaseSweepOutcome>;
   deviceWarmRunners: Swept<DeviceWarmSweepOutcome>;
   sandboxes: Swept<SessionSandboxSweepOutcome>;
-  terminals: Swept<TerminalLeaseSweepOutcome>;
   nativeSandboxes: Swept<NativeSandboxSweepOutcome>;
-  eveSandboxes: Swept<EveSandboxSweepOutcome>;
-  sandboxRetention: Swept<SandboxRetentionSweepOutcome>;
   nativeWakeups: Swept<NativeWakeupSweepOutcome>;
   /** Withdrawn lines no turn took in time, deleted. */
   withdrawnLines: Swept<number>;
@@ -109,7 +94,6 @@ interface MaintenanceSweepAnswer {
   /** Pictures pasted into plans that no save named, deleted. */
   purgedPictures: Swept<number>;
   tokenPullRequests: Swept<TokenPullRequestSweepOutcome>;
-  repositorySnapshots: Swept<RepositorySnapshotSweepOutcome>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
   agentQueues: Swept<number>;
   /** Hosts' pairings whose code lapsed, deleted. */
@@ -161,10 +145,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
       sweeps.sweepDeviceWarmRunners(now),
     ),
     sandboxes: yield* isolated("sweepSandboxes", sweeps.sweepSandboxes(now)),
-    terminals: yield* isolated("sweepTerminalLeases", sweeps.sweepTerminalLeases(now)),
     nativeSandboxes: yield* isolated("sweepNativeSandboxes", sweeps.sweepNativeSandboxes(now)),
-    eveSandboxes: yield* isolated("sweepEveSandboxes", sweeps.sweepEveSandboxes(now)),
-    sandboxRetention: yield* isolated("sweepSandboxRetention", sweeps.sweepSandboxRetention(now)),
     nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
     withdrawnLines: yield* isolated("purgeWithdrawnLines", sweeps.purgeWithdrawnLines(now)),
     automations: yield* isolated("sweepAutomations", sweeps.sweepAutomations(now)),
@@ -172,10 +153,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     tokenPullRequests: yield* isolated(
       "sweepTokenPullRequests",
       sweeps.sweepTokenPullRequests(now),
-    ),
-    repositorySnapshots: yield* isolated(
-      "sweepRepositorySnapshots",
-      sweeps.sweepRepositorySnapshots(now),
     ),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     hostPairings: yield* isolated("sweepHostPairings", sweeps.sweepHostPairings(now)),

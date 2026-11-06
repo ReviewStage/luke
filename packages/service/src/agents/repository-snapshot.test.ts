@@ -1,5 +1,5 @@
 /**
- * repository-snapshot.test.ts -- a workspace's repository snapshot, against a fake of Vercel Sandbox's REST API: built from the image with the repository cloned whole and no credential left behind, built once by launches at once, built again past its age or after a build that failed or was left behind, and swept.
+ * repository-snapshot.test.ts -- a workspace's repository snapshot, against a fake of Vercel Sandbox's REST API: built from the image with the repository cloned whole and no credential left behind, built once by launches at once, and built again past its age or after a build that failed or was left behind.
  */
 
 import assert from "node:assert/strict";
@@ -18,7 +18,6 @@ import {
   type RepositorySnapshotOf,
   readRepositorySnapshot,
   repositorySnapshotName,
-  sweepRepositorySnapshots,
 } from "./repository-snapshot.js";
 import { composePolicy } from "./sandbox-firewall.js";
 import { type VercelSandboxApi, vercelSandboxApi } from "./vercel-sandbox-api.js";
@@ -97,8 +96,7 @@ it.effect(
         state: REPOSITORY_SNAPSHOT_STATE.READY,
         snapshotId: fake.snapshots[0],
       });
-      // It lapses on its own three days and fifteen minutes after its last use, rather than never,
-      // so one the sweep's delete keeps for a sandbox still on it does not stand for good.
+      // It lapses on its own three days and fifteen minutes after its last use, so one no launch opens goes.
       assert.equal(fake.snapshotExpirations.get(fake.snapshots[0] ?? ""), 260_100_000);
     }),
 );
@@ -250,53 +248,6 @@ it.effect(
         state: REPOSITORY_SNAPSHOT_STATE.READY,
         snapshotId: fake.snapshots[0],
       });
-    }),
-);
-
-it.effect(
-  "the sweep reads one shard of the snapshots a minute, every one within its shards' minutes, and deletes those past their age and builds left behind past their grace",
-  () =>
-    Effect.gen(function* () {
-      const { fake, api } = yield* fixture;
-      const old = { ...RELAY, workspaceId: "workspace-old" };
-      const fresh = { ...RELAY, workspaceId: "workspace-fresh" };
-      yield* built(api, old);
-      yield* TestClock.adjust(REPOSITORY_SNAPSHOT.MAX_AGE);
-      yield* built(api, fresh);
-      yield* api.create({
-        name: repositorySnapshotName({ ...RELAY, workspaceId: "workspace-left" }),
-        from: { image: IMAGE },
-        tags: {},
-        timeoutMs: 60_000,
-        vcpus: 4,
-        keepLastSnapshots: { count: 1, expiration: 60_000, deleteEvicted: true },
-        env: {},
-      });
-      yield* TestClock.adjust(REPOSITORY_SNAPSHOT.BUILD_GRACE);
-
-      const sweeps = [];
-      for (let shard = 0; shard < REPOSITORY_SNAPSHOT.SWEEP_SHARDS; shard += 1) {
-        sweeps.push(yield* sweepRepositorySnapshots(api));
-        yield* TestClock.adjust(REPOSITORY_SNAPSHOT.SWEEP_PERIOD);
-      }
-
-      // Each snapshot was read by exactly one minute's sweep.
-      assert.equal(
-        sweeps.reduce((sum, swept) => sum + swept.listed, 0),
-        3,
-      );
-      assert.equal(
-        sweeps.reduce((sum, swept) => sum + swept.deleted, 0),
-        2,
-      );
-      assert.deepEqual(
-        fake.sandboxes.filter((each) => !each.deleted).map((each) => each.name),
-        [repositorySnapshotName(fresh)],
-      );
-      assert.equal(
-        (yield* readRepositorySnapshot(api, fresh)).state,
-        REPOSITORY_SNAPSHOT_STATE.READY,
-      );
     }),
 );
 
