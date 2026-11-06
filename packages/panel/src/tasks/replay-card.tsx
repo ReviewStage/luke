@@ -487,6 +487,7 @@ export function ReplayCard({
             );
   const left = leftOutLine(replay);
   const summary = summaryLine(replay);
+  const count = replayCount(replay);
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin">
       <Plan
@@ -505,7 +506,7 @@ export function ReplayCard({
           {/* Note that the head names the source in words, its chip standing beside the head, because the head is the card's summary, which holds no control. */}
           <OneLine
             className="flex min-w-0 flex-1 items-center gap-tight-gap overflow-hidden whitespace-nowrap"
-            words={`${replayVerb(replay)} ${name} · ${replayCount(replay)}`}
+            words={`${replayVerb(replay)} ${name}${count === undefined ? "" : ` · ${count}`}`}
           >
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {replayVerb(replay)}{" "}
@@ -513,10 +514,12 @@ export function ReplayCard({
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION}>
               {name}
             </Text>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {" "}
-              · {replayCount(replay)}
-            </Text>
+            {count === undefined ? null : (
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                {" "}
+                · {count}
+              </Text>
+            )}
           </OneLine>
         </PlanHeader>
         <PlanContent layout={PLAN_BODY_LAYOUT.STACK}>

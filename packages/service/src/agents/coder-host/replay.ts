@@ -934,6 +934,7 @@ export function replayOf(
     replay: {
       agentId: source.id,
       ...message,
+      ...(told.transcript === undefined ? undefined : { carried: true }),
       preamble,
       ...(summary === undefined ? undefined : { summary }),
       steps: kept,
