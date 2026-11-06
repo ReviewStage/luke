@@ -928,38 +928,6 @@ function scroller(page: HTMLElement): HTMLElement {
   return found;
 }
 
-/** Scrolls the page's scroller as a reader's wheel does. */
-function scrollTo(page: HTMLElement, position: { scrollTop?: number; scrollLeft?: number }): void {
-  const at = scroller(page);
-  act(() => {
-    Object.assign(at, position);
-    at.dispatchEvent(new Event("scroll"));
-  });
-}
-
-test("leaving the Tasks page scrolled and coming back stands each view where it was left, the Board's its own, and a refresh moves nothing", async () => {
-  const page = await mountPage();
-  scrollTo(page, { scrollTop: 320 });
-  act(() => buttonNamed(page, "Columns").click());
-  assert.equal(scroller(page).scrollTop, 0, "the Board starts at its own place, not the List's");
-  scrollTo(page, { scrollLeft: 150 });
-  act(() => buttonNamed(page, "List").click());
-  assert.equal(scroller(page).scrollTop, 320, "the List is put back where it was left");
-
-  act(() => {
-    for (const root of roots.splice(0)) root.unmount();
-  });
-  const again = await mountPage();
-  assert.equal(scroller(again).scrollTop, 320, "the page opened again stands where it was left");
-
-  scrollTo(again, { scrollTop: 40 });
-  listWorkspace(ACME);
-  assert.equal(scroller(again).scrollTop, 40, "a refresh leaves the reader where they are");
-
-  act(() => buttonNamed(again, "Columns").click());
-  assert.equal(scroller(again).scrollLeft, 150, "the Board is put back where it was left");
-});
-
 /**
  * The List laid out for a drag: each group 200px tall, one under another
  * from the window's top, 1000px wide, each row 30px tall, 36px apart, from

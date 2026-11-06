@@ -447,6 +447,8 @@ export function createPanelRouter(history: RouterHistory, queryClient: QueryClie
     context: { queryClient, access: routeAccessNow() },
     parseSearch: readSearch,
     stringifySearch: writeSearch,
+    // Every scroller stands where it stood as the window comes back to a step, as TanStack Router's docs set it up.
+    scrollRestoration: true,
   });
 }
 

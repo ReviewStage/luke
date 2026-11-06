@@ -80,7 +80,7 @@ import {
   valueCounts,
 } from "@repo/ui/tasks-page-model";
 import type { Store } from "@tanstack/react-store";
-import { Fragment, type ReactNode, type RefCallback, type RefObject, useMemo, useRef } from "react";
+import { Fragment, type ReactNode, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -130,8 +130,6 @@ export interface TasksViewFrame {
   readonly display: TasksDisplay;
   /** Changes the view's display, as the line under a settled group does. */
   readonly onDisplay: (display: TasksDisplay) => void;
-  /** The page's scroller, whose position the page keeps for the view. */
-  readonly scroll: RefCallback<HTMLDivElement>;
   /** Where the view's chosen tasks are held across the page's visits; the view's own while nothing outlives it. */
   readonly chosen?: ChosenTasksStore | undefined;
   /** Where the column a narrow room's Columns view shows is held across the page's visits; the view's own otherwise. */

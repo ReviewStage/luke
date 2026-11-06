@@ -1052,7 +1052,6 @@ export function TasksList({
   const drops = listDrops(tasks, () => latest.current, groups, setStanding);
   const list = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
-  const scrollRef = useMemo(() => joinRefs(scroller, frame.scroll), [frame.scroll]);
   // Every open group's tasks, in the order drawn down the page, those its run leaves undrawn among them; a folded group's are not drawn.
   const order = groups.flatMap((group) =>
     folds.folded(group.head) ? [] : group.tasks.map(taskIdOf),
@@ -1099,7 +1098,7 @@ export function TasksList({
       width={PAGE_WIDTH.FULL}
       label={TASKS}
       toolbar={frame.toolbar}
-      scrollRef={scrollRef}
+      scrollRef={scroller}
       filters={frame.chips}
       state={listState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}

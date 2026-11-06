@@ -217,7 +217,6 @@ async function mountBoard(
                 filter: NO_TASKS_FILTER,
                 display: shown,
                 onDisplay: (next) => displayed.push(next),
-                scroll: () => undefined,
               },
             }),
           }),

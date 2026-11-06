@@ -34,7 +34,6 @@ import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { storedScrolls, useKeptScroll } from "../use-kept-scroll.js";
 import { PhoneHead, PlaceMore, phoneFindGroups, useMenuAsk } from "./phone-head.js";
 import { TasksBoard } from "./tasks-board.js";
 import { TasksList } from "./tasks-list.js";
@@ -59,8 +58,8 @@ import {
  * The filter is the page's, one for both views and one for each workspace,
  * since a creator and a repository are a workspace's own; each view keeps a
  * display of its own (`tasks-page-model.ts`). Which view it shows, the
- * filter, both displays, and where each view stood scrolled when the reader
- * left it are kept on this Mac.
+ * filter, and both displays are kept on this Mac; where it stood scrolled is
+ * the router's to put back with the step it stood in (`panel-router.tsx`).
  *
  * The List is `tasks-list.tsx`, and the Board `tasks-board.tsx`. A display
  * is kept with the properties its view offered then, so a property a view
@@ -145,7 +144,7 @@ function storedDisplayOf(view: TasksView) {
   );
 }
 
-/** Where the view shown last, the filters (each workspace's by its id), each view's display, and where each view stood scrolled when the reader left it, by the view's name, are kept on this Mac. */
+/** Where the view shown last, the filters (each workspace's by its id), and each view's display are kept on this Mac. */
 const KEPT = {
   VIEW: keptKey("app.tasksPageView", storedView),
   FILTERS: keptKey("app.tasksFilter", storedFilters),
@@ -153,7 +152,6 @@ const KEPT = {
     [TASKS_VIEW.LIST]: keptKey("app.tasksListDisplay", storedDisplayOf(TASKS_VIEW.LIST)),
     [TASKS_VIEW.BOARD]: keptKey("app.tasksBoardDisplay", storedDisplayOf(TASKS_VIEW.BOARD)),
   },
-  SCROLLS: keptKey("app.tasksScroll", storedScrolls),
 } as const;
 
 /** The List | Columns switch beside the page's title. */
@@ -213,12 +211,7 @@ export function TasksPage({
   };
   const display = view === TASKS_VIEW.LIST ? listDisplay : boardDisplay;
   const onDisplay = view === TASKS_VIEW.LIST ? onListDisplay : onBoardDisplay;
-  // Note that each view stands where its reader left it, put back once as the page has its tasks and never as they refresh.
-  const scroll = useKeptScroll(KEPT.SCROLLS, view, tasks.listRead);
-  const choose = (next: TasksView) => {
-    scroll.keep();
-    keepView(next);
-  };
+  const choose = (next: TasksView) => keepView(next);
   const shared = (tasks.workspace?.memberCount ?? 1) > 1;
   const listed = tasks.listed.tasks;
   const filterAsk = useMenuAsk();
@@ -335,7 +328,6 @@ export function TasksPage({
     filter,
     display,
     onDisplay,
-    scroll: scroll.ref,
     chosen: held?.chosenIn(view),
     column: held?.column,
   };
