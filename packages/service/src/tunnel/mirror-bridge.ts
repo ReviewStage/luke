@@ -16,12 +16,18 @@
  * as `node_modules` included, which costs seconds and hundreds of megabytes.
  * A missed watch event costs nothing, since the next listing catches it,
  * and whatever the bridge cannot do, such as a listing git refuses or a
- * base it cannot find, ends it, which the Mac answers by connecting again. A request is answered only for a path the last listing
- * holds, so the Mac can never read outside it. The bridge writes nothing but
+ * base it cannot find, ends it, which the Mac answers by connecting again.
+ * A request is answered only for a path the last listing holds, so the Mac
+ * can never read outside it. The bridge writes nothing but
  * frames, and git's own words go nowhere.
  */
 
-import { MIRROR_BOUNDS, MIRROR_FILE_MODE } from "@repo/features/sandbox-mirror-wire";
+import {
+  MIRROR_BOUNDS,
+  MIRROR_FILE_MODE,
+  MIRROR_FRAME,
+  MIRROR_HASH,
+} from "@repo/features/sandbox-mirror-wire";
 
 /** How long the checkout must be quiet before it is listed again, and the longest a stir waits for that. */
 const SETTLE = { QUIET_MS: 200, LONGEST_MS: 1000 } as const;
@@ -60,20 +66,20 @@ const base = () => {
   const cloned = git(["config", "--get", "remote.origin.fetch"]).trim().split(":")[1];
   return git(["merge-base", "HEAD", cloned]).trim();
 };
-const hashOf = (name) => createHash("sha256").update(fs.readFileSync(path.join(root, name))).digest("hex");
+const hashOf = (name) => createHash("${MIRROR_HASH.ALGORITHM}").update(fs.readFileSync(path.join(root, name))).digest("${MIRROR_HASH.ENCODING}");
 const manifest = () => {
   const files = [];
   for (const [name, stat] of listing) {
     try { files.push({ path: name, size: stat.size, hash: hashOf(name) }); } catch {}
   }
-  return { type: "manifest", files };
+  return { type: "${MIRROR_FRAME.MANIFEST}", files };
 };
 const fileOf = (name, stat) => {
-  if (stat.size > ${MIRROR_BOUNDS.FILE_BYTES}) return { type: "skipped", path: name, size: stat.size };
+  if (stat.size > ${MIRROR_BOUNDS.FILE_BYTES}) return { type: "${MIRROR_FRAME.SKIPPED}", path: name, size: stat.size };
   let bytes;
   try { bytes = fs.readFileSync(path.join(root, name)); } catch { return undefined; }
   const mode = (stat.mode & 0o111) === 0 ? "${MIRROR_FILE_MODE.REGULAR}" : "${MIRROR_FILE_MODE.EXECUTABLE}";
-  return { type: "file", path: name, mode, bytes: bytes.toString("base64") };
+  return { type: "${MIRROR_FRAME.FILE}", path: name, mode, bytes: bytes.toString("base64") };
 };
 const send = (name, stat) => {
   const message = fileOf(name, stat);
@@ -98,7 +104,7 @@ const open = (opened) => {
   channel = opened;
   listing = list();
   watchFolders();
-  tell({ type: "header", base: base() });
+  tell({ type: "${MIRROR_FRAME.HEADER}", base: base() });
   tell(manifest());
 };
 const settle = () => {
@@ -113,7 +119,7 @@ const settle = () => {
     if (was === undefined || was.size !== stat.size || was.mtimeMs !== stat.mtimeMs) send(name, stat);
   }
   for (const name of listing.keys()) {
-    if (!now.has(name)) tell({ type: "delete", path: name });
+    if (!now.has(name)) tell({ type: "${MIRROR_FRAME.DELETE}", path: name });
   }
   listing = now;
   watchFolders();
@@ -127,7 +133,7 @@ const answer = (paths) => {
   for (const name of paths) {
     const stat = listing.get(name);
     if (stat !== undefined) send(name, stat);
-    else tell({ type: "delete", path: name });
+    else tell({ type: "${MIRROR_FRAME.DELETE}", path: name });
   }
 };
 const asked = (data) => {
