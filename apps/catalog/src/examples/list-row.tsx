@@ -1,6 +1,5 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
-  AttentionMark,
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
@@ -25,6 +24,8 @@ import {
   MoreButton,
   PencilIcon,
   ProgressCount,
+  RowCount,
+  STATUS_TONE,
   Switch,
   TrashIcon,
   UserIcon,
@@ -39,7 +40,7 @@ import { CatalogSection } from "../section";
  * one open now, unread rows, what a row belongs to on a line of its own,
  * rows that open nothing, rows in a card,
  * a row a finger's height on a coarse pointer, compact and dense, compact
- * and dense rows with their metadata, a mark, and a chip on the title's
+ * and dense rows with their metadata, a count, and a chip on the title's
  * line, rows whose acts show on hover, rows that go deeper, rows nested under a row that
  * folds them, rows whose menu their ⋯, a right-click, and the menu key
  * open, a rail's rows counting what each holds on their last line, and
@@ -419,7 +420,7 @@ function ListRows(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection
         id="list-row-dense-meta-title"
-        title="Dense and compact rows with their metadata on the title's line, a mark, and a chip beside them"
+        title="Dense and compact rows with their metadata on the title's line, a count, and a chip beside them"
       >
         {[LIST_DENSITY.DENSE, LIST_DENSITY.COMPACT].map((density) => (
           <div key={density} className="catalog-column">
@@ -444,7 +445,7 @@ function ListRows(): React.JSX.Element {
                 metaAt={LIST_ROW_META.TITLE}
                 meta={
                   <Inline gap={GAP.ITEM} wrap={false}>
-                    <AttentionMark />
+                    <RowCount value={2} noun="need you" tone={STATUS_TONE.ATTENTION} />
                     Cloud
                   </Inline>
                 }

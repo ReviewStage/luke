@@ -111,7 +111,6 @@ export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
   "docs",
   "download",
   "downloads",
-  "eve",
   "feed",
   "github-installed",
   "help",

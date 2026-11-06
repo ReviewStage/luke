@@ -315,7 +315,7 @@ interface JournalTurn {
 
 /**
  * Each turn whose journal is among the rows, by the turn: when it began,
- * its start or its queueing before eve started it, which is what the
+ * its start or its queueing before its harness started it, which is what the
  * working line counted from while it ran (`agentRunStartedAt`), and
  * what it ran on and spent as its row recorded them (`turn-record.ts`).
  */

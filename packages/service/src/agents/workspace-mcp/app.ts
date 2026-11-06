@@ -21,7 +21,7 @@
  * Beside it stands one server per integration the agent is handed, at
  * `WORKSPACE_INTEGRATION_MCP_PATH/<connection>` (`notion-2` for a member's second
  * Notion account), on the same bearer and the same JSON-RPC: its
- * `initialize` tells the client what eve tells the model of the connection,
+ * `initialize` tells the client what the model is told of the connection,
  * which account it is among them, as its `instructions`; its
  * `tools/list` is the provider's own tools, and its `tools/call` forwards to
  * the provider on the member's own grant and answers the provider's result
@@ -32,13 +32,12 @@
  *
  * A protocol fault, a body that is no JSON-RPC, an unknown method, or a
  * tool the registry does not hold, is a JSON-RPC error. A tool's own
- * refusal, or a door that failed, is the tool's result marked `isError`,
- * which the agent reads as it reads any tool's answer.
+ * refusal, a call refused at its gate (`../tool-catalog/catalog.ts`'s
+ * `callTool`), or a door that failed, is the tool's result marked
+ * `isError`, which the agent reads as it reads any tool's answer.
  */
 
-import { readAgentOfConversation } from "@repo/database/models/agent-store";
 import { RENAMED_TOOL, WORKSPACE_MCP_SERVER } from "@repo/features/agent-tools";
-import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { integrationConnectionOf } from "@repo/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@repo/features/mac-command-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -72,24 +71,19 @@ import {
 import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
-import { CODER_TOOL, type OfferedBeside } from "../coder-host/tool-set.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { memoryOnFor } from "../memory-tools.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
+import {
+  callTool,
+  isServedTool,
+  type McpContent,
+  offeredTools,
+  type WorkspaceMcpServices,
+} from "../tool-catalog/catalog.js";
+import { standingOf } from "../tool-catalog/gates.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { workspaceMcpCallKey } from "./call-key.js";
 import { workspaceMcpDoorSeams } from "./door-seams.js";
 import type { AgentSandboxDoors } from "./sandbox-door.js";
-import {
-  type McpContent,
-  offeredWorkspaceMcpTool,
-  refusedByDoor,
-  WORKSPACE_MCP_TOOLS,
-  type WorkspaceMcpOfferedTo,
-  type WorkspaceMcpServices,
-  type WorkspaceMcpTool,
-  type WorkspaceMcpToolResult,
-} from "./tools.js";
 
 /** The path a runner's MCP client posts to. */
 export const WORKSPACE_MCP_PATH = "/api/agents/mcp";
@@ -225,14 +219,6 @@ interface McpToolCallResult {
   readonly isError: boolean;
 }
 
-/** A door's result as MCP's tool result: as the tool shows it (a picture as an image), else its JSON as one text block, marked an error where the door refused. */
-function toolResult(tool: WorkspaceMcpTool, result: WorkspaceMcpToolResult): McpToolCallResult {
-  return {
-    content: tool.content?.(result) ?? [{ type: "text", text: JSON.stringify(result) }],
-    isError: refusedByDoor(result),
-  };
-}
-
 /**
  * A call to a tool since renamed, answered as the tool's own refusal that
  * names the tool in its place rather than as an unknown tool, because an
@@ -255,44 +241,18 @@ function renamedToolResult(name: string, renamed: string): McpToolCallResult {
  * What each listed tool declares to Claude Code: the most of its result it
  * takes whole, the pinned CLI's (2.1.304) own ceiling, where past 50,000
  * characters it would save the result to a file and hand the model a path
- * (code.claude.com/docs/en/mcp, "Raise the limit for a specific tool"). Eve
- * hands its model the whole result of a tool of ours, which each door bounds.
+ * (code.claude.com/docs/en/mcp, "Raise the limit for a specific tool"). So
+ * the model is handed the whole result of a tool of ours, which each door bounds.
  */
 const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 
 /**
- * The tools an agent calls on almost every run, which Claude Code lists in
- * its prompt from the first turn rather than deferring behind its tool
- * search, where the first call of each costs a `ToolSearch` step first:
+ * What a listed tool declares: `TOOL_META`, and, where the catalog loads it
+ * from the first turn (`CatalogTool`'s `alwaysLoad`),
  * `_meta['anthropic/alwaysLoad']`, the pinned Agent SDK's per-tool form of
- * `defer_loading: false` (its `McpHttpServerConfig.alwaysLoad`). Note that
- * every tool loaded so costs its definition on every turn, so the rarely
- * called ones (`look_at_picture`, the automations, the sections) stay
- * deferred.
+ * `defer_loading: false` (its `McpHttpServerConfig.alwaysLoad`).
  */
-const ALWAYS_LOADED_TOOLS: ReadonlySet<string> = new Set([
-  CODER_TOOL.POST_THREAD,
-  CODER_TOOL.READ_THREADS,
-  CODER_TOOL.WITHDRAW_ASK,
-  CODER_TOOL.OPEN_PULL_REQUEST,
-  CODER_TOOL.EDIT_DESCRIPTION,
-  CODER_TOOL.UPDATE_TASK,
-  CODER_TOOL.READ_TASK,
-  CODER_TOOL.SHOW_IMAGE,
-  CODER_TOOL.SHOW_PAGE,
-  CODER_TOOL.MESSAGE_AGENT,
-  CODER_TOOL.LIST_AGENTS,
-  CODER_TOOL.START_AGENT,
-]);
-
-/** What a listed tool declares: `TOOL_META`, and loaded from the first turn where it is one of `ALWAYS_LOADED_TOOLS`. */
 const ALWAYS_LOADED_META = { ...TOOL_META, "anthropic/alwaysLoad": true } as const;
-
-/** What an agent whose row is gone is offered by: no repository, on our own machine. */
-const NO_AGENT_OFFERED: WorkspaceMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
-
-/** What beside its row an agent whose row is gone is offered by: no Memory, and no Task descriptions. */
-const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, descriptionsOn: false };
 
 /** The tool result where the door failed rather than refused. */
 const DOOR_FAILED_RESULT: McpToolCallResult = {
@@ -332,7 +292,7 @@ interface McpServer {
   ) => Effect.Effect<RpcAnswer, never, WorkspaceMcpServices>;
 }
 
-/** One `tools/call` run through the tool's door as the admitted conversation, under the key its input is held (`call-key.ts`). */
+/** One `tools/call` run through the catalog as the admitted conversation (`callTool`), under the key its input is held (`call-key.ts`). */
 function callWorkspaceTool(
   doors: WorkspaceMcpDoors,
   admitted: AdmittedConversation,
@@ -346,8 +306,7 @@ function callWorkspaceTool(
   const renamed = RENAMED_TOOL.get(name);
   if (renamed !== undefined)
     return Effect.succeed(Result.succeed(renamedToolResult(name, renamed)));
-  const tool = WORKSPACE_MCP_TOOLS.get(name);
-  if (tool === undefined) {
+  if (!isServedTool(name)) {
     return Effect.succeed(rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, `Unknown tool: ${name}`));
   }
   const input = fieldOf(params, "arguments") ?? {};
@@ -358,10 +317,10 @@ function callWorkspaceTool(
       callKey: workspaceMcpCallKey(admitted, name, input),
       seams,
     };
-    return tool.run(admitted, input, context);
+    return callTool(admitted, name, input, context);
   }).pipe(
     Effect.provide(doors.browser),
-    Effect.map((result) => Result.succeed(toolResult(tool, result))),
+    Effect.map(({ content, isError }) => Result.succeed({ content, isError })),
     Effect.catchCause((cause) =>
       Effect.as(
         Effect.logWarning(`${PRODUCT_NAME} MCP tool ${name} failed: ${failureKind(cause)}`),
@@ -372,40 +331,21 @@ function callWorkspaceTool(
 }
 
 /**
- * The tools listed to the admitted agent: those eve offers it, by its
- * repository, where it runs, and its starter's Memory and Task descriptions (`offeredWorkspaceMcpTool`); those eve offers
- * every agent where its row is gone, since no narrowed tool's door would
- * carry out a call for an agent that no longer stands.
+ * The tools listed to the admitted agent: those the catalog offers it by
+ * where it stands against the gates (`../tool-catalog/gates.ts`), every
+ * gate shut where its row is gone.
  */
 function listWorkspaceTools(
   admitted: AdmittedConversation,
 ): Effect.Effect<RpcAnswer, never, WorkspaceMcpServices> {
-  const { userId, conversationId } = admitted.target;
-  return readAgentOfConversation(userId, conversationId).pipe(
-    Effect.flatMap((found) =>
-      Effect.map(
-        Option.isSome(found)
-          ? Effect.all({
-              memoryOn: memoryOnFor(found.value.userId),
-              descriptionsOn: descriptionsOnFor(found.value.userId, found.value.kind),
-            })
-          : Effect.succeed(NO_AGENT_BESIDE),
-        (beside) =>
-          offeredWorkspaceMcpTool(
-            Option.getOrElse(found, () => NO_AGENT_OFFERED),
-            beside,
-          ),
-      ),
-    ),
-    Effect.map((offered) => {
-      const tools = [...WORKSPACE_MCP_TOOLS]
-        .filter(([name]) => offered(name))
-        .map(([name, tool]) => ({
-          name,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-          _meta: ALWAYS_LOADED_TOOLS.has(name) ? ALWAYS_LOADED_META : TOOL_META,
-        }));
+  return standingOf(admitted).pipe(
+    Effect.map((standing) => {
+      const tools = offeredTools(standing).map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        _meta: tool.alwaysLoad ? ALWAYS_LOADED_META : TOOL_META,
+      }));
       return Result.succeed({ tools });
     }),
     Effect.catchCause((cause) =>

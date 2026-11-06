@@ -1,8 +1,8 @@
 import { hostMintedId } from "@repo/wire/host-ids";
 
 /**
- * The ids the host mints for what eve's stream names only relatively. A turn
- * of eve's is `turn_<n>` inside its session, and a received message or a
+ * The ids the host mints for what a runtime's stream names only relatively. A turn
+ * of the retired runtime's is `turn_<n>` inside its session, and a received message or a
  * reasoning item has no id of its own; the store keys a turn by uuid and a
  * message by a client id unique in its conversation. Each id here is the
  * same function of the same coordinates, so a retried step that re-emits an
@@ -29,14 +29,14 @@ export function childConversationId(parentConversationId: string, callId: string
   return hostMintedId([ID_KIND.CHILD, parentConversationId, callId]);
 }
 
-/** The store's id for one turn of one eve session. */
-export function hostTurnId(sessionId: string, eveTurnId: string): string {
-  return hostMintedId([ID_KIND.TURN, sessionId, eveTurnId]);
+/** The store's id for one turn of one of the retired runtime's sessions. */
+export function hostTurnId(sessionId: string, runtimeTurnId: string): string {
+  return hostMintedId([ID_KIND.TURN, sessionId, runtimeTurnId]);
 }
 
 /** The developer's line a turn opened with and, under its ordinal from one, each line that joined the turn under way; the first keeps the coordinate it always had. */
-export function receivedMessageId(sessionId: string, eveTurnId: string, ordinal = 0): string {
-  const parts = [ID_KIND.RECEIVED, sessionId, eveTurnId];
+export function receivedMessageId(sessionId: string, runtimeTurnId: string, ordinal = 0): string {
+  const parts = [ID_KIND.RECEIVED, sessionId, runtimeTurnId];
   if (ordinal > 0) parts.push(String(ordinal));
   return hostMintedId(parts);
 }
@@ -51,21 +51,21 @@ export function nativeTurnId(conversationId: string, openingSequence: number): s
 }
 
 /** The client id of the assistant message a turn completes; the turn's id is its journal's client id already, so this is another. */
-export function answerMessageId(sessionId: string, eveTurnId: string): string {
-  return hostMintedId([ID_KIND.ANSWER, sessionId, eveTurnId]);
+export function answerMessageId(sessionId: string, runtimeTurnId: string): string {
+  return hostMintedId([ID_KIND.ANSWER, sessionId, runtimeTurnId]);
 }
 
-/** The id a reasoning item stands under, since eve's stream carries none of the provider's. */
+/** The id a reasoning item stands under, since the runtime's stream carries none of the provider's. */
 export function reasoningItemId(
   sessionId: string,
-  eveTurnId: string,
+  runtimeTurnId: string,
   stepIndex: number,
   ordinal: number,
 ): string {
   return hostMintedId([
     ID_KIND.REASONING,
     sessionId,
-    eveTurnId,
+    runtimeTurnId,
     String(stepIndex),
     String(ordinal),
   ]);

@@ -3,7 +3,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 /**
  * host-ids.ts -- the name-based uuids the host mints, as one function every side can run: the service writing a row, and a window that sent the line and must know the row before it lands.
  *
- * The store keys what eve's stream names only relatively (a turn, a received
+ * The store keys what a runtime's stream names only relatively (a turn, a received
  * message, a reasoning item) and the lines a client sends by ids that are the
  * same function of the same coordinates, so a retried write lands on the row
  * the first attempt opened. The ids are name-based uuids in RFC 9562's custom

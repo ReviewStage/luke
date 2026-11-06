@@ -274,7 +274,7 @@ export function composePortForwards(
           HttpClient.HttpClient,
           http,
         );
-        if (answer === undefined) return;
+        if ("failure" in answer) return;
         // Note that a sandbox seen running and now stopped ends the forward, so the next agent may take the ports, and the release is forked because it closes the scope this read runs in.
         if (current.running && !answer.running) {
           yield* Effect.forkIn(released(current), lifetimeScope);

@@ -38,15 +38,13 @@ const PANEL_PLACES = {
 
 /**
  * The names the panel work column's block of the theme adds (its layout's
- * spacing roles, a transcript's opening line, a tool's page, the find bar,
+ * spacing roles, a transcript's opening line, the find bar,
  * the version history), by the group tailwind-merge reads each in.
  */
 const PANEL_WORK_COLUMN = {
   "font-weight": ["ui-medium", "ui-regular", "ui-semibold"],
-  leading: ["tool-description"],
   spacing: ["attention-mark", "column-inset", "find-field", "ring-reach"],
   radius: ["disc"],
-  shadow: ["tool-default"],
   animate: ["edit-composer-in", "edit-composer-out"],
 } as const;
 
@@ -273,7 +271,6 @@ const PANEL_SIDE = {
  */
 const PANEL_INBOX = {
   spacing: [
-    "attention-glyph-small",
     "inbox-earlier",
     "inbox-face-half",
     "inbox-field-short",
@@ -464,7 +461,6 @@ const merge = extendTailwindMerge({
         ...FEEDBACK_DISPLAY.leading,
         ...CONTENT_TEXT.leading,
         ...ROWS_NAVIGATION.leading,
-        ...PANEL_WORK_COLUMN.leading,
         ...PAGE_PATTERNS.leading,
       ],
       spacing: [
@@ -575,7 +571,6 @@ const merge = extendTailwindMerge({
         "menu",
         "tooltip",
         "switch-thumb",
-        ...PANEL_WORK_COLUMN.shadow,
         ...FEEDBACK_DISPLAY.shadow,
         ...CONTENT_TEXT.shadow,
         ...PANEL_WINDOW.shadow,

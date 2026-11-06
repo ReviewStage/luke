@@ -20,11 +20,13 @@ import {
 } from "@repo/features/inbox-wire";
 import type { ReadLink } from "@repo/features/link-grammar";
 import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_PICK_TYPE } from "@repo/features/page-pick";
 import type { PageLine } from "@repo/features/page-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { NO_EXPERIMENTS } from "@repo/settings";
+import { changesTab, pageTab } from "@repo/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -196,6 +198,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -382,7 +385,7 @@ test("a pull request, a page, and a file the item names open one after another i
   const chip = notice?.querySelector<HTMLElement>("p [data-inline-ref], p button, p a");
   assert.ok(chip, "the task named by its chip");
   act(() => chip.click());
-  const went = `${OTHER_TASK} ${JSON.stringify({ page: FUNNEL.id })}`;
+  const went = `${OTHER_TASK} ${JSON.stringify(pageTab(FUNNEL.id))}`;
   assert.deepEqual(left.went, [went, went]);
 });
 
@@ -423,7 +426,7 @@ test("a page the item names before its plan's pages are read is still the panel'
 test("an archived agent's Pull request tab stands beside the Inbox as any other, and closing the last tab drawn shuts the panel, as on a task's page", async () => {
   const { container, panel } = await inbox();
   // The archived agent's tab, as one opened on the task's page before the agent was archived, which still draws its pull request.
-  act(() => panel().onChoose({ changes: ARCHIVED.id }));
+  act(() => panel().onChoose(changesTab(ARCHIVED.id)));
   await settle();
   await pressChip(container, "relay#42");
   assert.equal(panelTabs(container)?.[0], "▸ #42 Send invitations in batches");
@@ -541,4 +544,49 @@ test("a link to a page of the item's task, pressed in a transcript beside the In
   assert.deepEqual(panelTabs(container), ["▸ Invite funnel"], "the page took the preview's place");
   assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
+});
+
+test("an element of a page beside the Inbox opens its comment in the item's box's editor under the element's words, which stand as its quote line rather than in its words", async () => {
+  const { container } = await inbox();
+  await pressChip(container, "Invite funnel");
+  const panel = container.querySelector('aside[aria-label="Panel"]') ?? assert.fail();
+  const frame = panel.querySelector("iframe") ?? assert.fail("the page is drawn");
+  act(() => {
+    frame.dispatchEvent(new Event("load"));
+  });
+  const comment = await vi.waitFor(
+    () =>
+      panel.querySelector<HTMLButtonElement>('button[aria-label="Comment on the page"]') ??
+      assert.fail("the page offers Comment"),
+  );
+  await act(async () => comment.click());
+  // The press in the frame is the developer's, which the window holds as the pick lands; the editor still reads the platform.
+  const { platform, userAgent } = navigator;
+  vi.stubGlobal("navigator", { platform, userAgent, userActivation: { isActive: true } });
+  const box = { left: 10, top: 20, right: 200, bottom: 40 };
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          type: PAGE_PICK_TYPE,
+          picked: { path: "body > h2:nth-of-type(1)", quote: "Totals", section: "", box },
+        },
+        source: frame.contentWindow,
+      }),
+    );
+  });
+  const started = panel.querySelector(".page-comment-float") ?? assert.fail("the comment starts");
+  assert.equal(
+    started.querySelector("textarea") === null,
+    true,
+    "no plain field stands in the editor's place",
+  );
+  assert.equal(
+    started.querySelector(".comment-quote")?.textContent,
+    "Totals",
+    "the element's words stand over the field as the thread's quote line",
+  );
+  // The editor mounts once its bundle lands, its words the writer's own alone.
+  await vi.waitFor(() => started.querySelector(".ProseMirror") ?? assert.fail("the editor stands"));
+  assert.equal(started.querySelector(".composer-quote"), null, "the words do not repeat the quote");
 });

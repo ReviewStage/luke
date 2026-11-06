@@ -22,6 +22,7 @@ import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
+import { draftTab, fileTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -459,6 +460,31 @@ test("with the sidebar folded, New task stands beside its toggle over Home and t
   assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New task"]);
 });
 
+test("with the sidebar folded away, its toggle tells a reader how many wait on them in the Inbox, and says nothing of it while the sidebar is shown", () => {
+  const waiting: Partial<TasksControl> = {
+    tasks: [DOCUMENT_TASK],
+    inbox: [
+      {
+        taskId: DOCUMENT_TASK.id,
+        items: ["Retry?", "Alert at 80%?", "Ship it?"].map((title, at) => ({
+          id: `item-${at}`,
+          agentId: "agent-1",
+          title,
+          postedAt: at,
+        })),
+      },
+    ],
+  };
+  assert.deepEqual(titleBarButtons(mount(false, waiting)), [
+    "Show sidebar, 3 need you",
+    "New task",
+  ]);
+  act(() => root?.unmount());
+  root = undefined;
+  const shown = mount(false, waiting, PANEL_TAB.TASKS, ignore, { collapsed: false });
+  assert.deepEqual(titleBarButtons(shown), ["Hide sidebar"]);
+});
+
 test("the title bar's buttons, each wrapped in its hint, tell a reader the chord that reaches them on the button itself", () => {
   const controls = mount(false).querySelector(".title-bar-controls:not([data-edge])");
   assert.ok(controls, "the title bar's buttons stand");
@@ -777,6 +803,28 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   assert.deepEqual(tabs, []);
 });
 
+test("New task, by its chord or the sidebar's row, opens its card over the Inbox and leaves nothing, and from Settings brings the Tasks tab forward", async () => {
+  const tabs: PanelTab[] = [];
+  const card = () => document.querySelector('[role="dialog"][aria-modal="true"]');
+  const page = mount(true, {}, PANEL_TAB.TASKS, (tab) => tabs.push(tab), { collapsed: false });
+  await settle();
+  act(() => runAppCommand(APP_COMMAND.NEW_TASK));
+  const byChord = card() !== null;
+  act(() => {
+    card()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  act(() => placeRow(page, "New task")?.click());
+  const byRow = card() !== null;
+
+  // Note that leaving would stand the window's state, a task or Home, behind the card in the Inbox's place.
+  assert.deepEqual([byChord, byRow, tabs], [true, true, []]);
+  act(() => root?.unmount());
+
+  mount(false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  act(() => runAppCommand(APP_COMMAND.NEW_TASK));
+  assert.deepEqual(tabs, [PANEL_TAB.TASKS]);
+});
+
 test("the Tasks row pressed while the Board stands leaves nothing, the Board being the router's place it opens", async () => {
   const tabs: PanelTab[] = [];
   const opened: string[] = [];
@@ -916,7 +964,7 @@ function spokenName(item: HTMLElement): string {
   return heard.textContent ?? "";
 }
 
-test("on a phone the bar's Inbox wears the count of what needs the reader, named in the sidebar's words, and none at zero", async () => {
+test("on a phone the bar's Inbox and the task's sidebar row wear the count of what needs the reader, named in the sidebar's words, and none at zero", async () => {
   // Note that main lists the three questions it counts, as its read of the account does.
   const asks = ["q-1", "q-2", "q-3"].map((id) => ({ id, agentId: "a-1", title: id, postedAt: 0 }));
   const listed = {
@@ -936,6 +984,19 @@ test("on a phone the bar's Inbox wears the count of what needs the reader, named
   const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 need you");
   assert.ok(inbox, "the bar's Inbox is named with its count");
   assert.match(inbox.textContent ?? "", /3/u, "the Inbox's count is drawn");
+  const taskRow = [...page.querySelectorAll<HTMLElement>("aside.desktop-sidebar li")].findLast(
+    (row) => row.textContent?.includes(DOCUMENT_NAME),
+  );
+  // Note that the row's end leaves its press's words while the row holds the keyboard, so the count is heard whether it stands or not.
+  const shown = taskRow ?? assert.fail("the task's sidebar row stands");
+  const keyed = shown.cloneNode(true);
+  assert.ok(keyed instanceof HTMLElement);
+  for (const end of keyed.querySelectorAll(".ui-list-row-meta")) end.remove();
+  assert.deepEqual(
+    [shown, keyed].map((row) => spokenName(row).match(/3 need you/gu)),
+    [["3 need you"], ["3 need you"]],
+    "the task's row is heard with its count once, its end shown or not",
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1097,6 +1158,8 @@ test("while the Automations pages are still loading their frame stands the list 
 test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands, and on a phone its list stands headed as it will be, by the way out and its title", async () => {
   const closed: string[] = [];
   const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
+  // The history's chunk is held on its way for the whole case, so its frame stands by construction rather than by timing.
+  routed().router.routesById["/version-history"].lazy(() => Promise.withResolvers<never>().promise);
   handState({});
   const page = mount(false, { history });
   // The router goes to the history, whose frame stands while its chunk is read.
@@ -1174,7 +1237,7 @@ const PLACE = {
 type Place = (typeof PLACE)[keyof typeof PLACE];
 
 /** A draft agent's tab, which the column shows beside a panel. */
-const DRAFT_TAB = { draft: "draft" };
+const DRAFT_TAB = draftTab("draft");
 
 /** The tab and the tasks' state that stand the window in a place. */
 function placed(place: Place) {
@@ -1199,11 +1262,11 @@ function placed(place: Place) {
         ...control.sidePanel,
         open: true,
         fullScreen: true,
-        strip: [{ file: "docs/notes.md" }],
+        strip: [fileTab("docs/notes.md")],
         files: [
           { path: "docs/notes.md", range: undefined, opened: 0, browsedOn: DOCUMENT_TASK.id },
         ],
-        tab: { file: "docs/notes.md" },
+        tab: fileTab("docs/notes.md"),
       },
     },
     [PLACE.SETTINGS]: { page: TASKS_PAGE.HOME },

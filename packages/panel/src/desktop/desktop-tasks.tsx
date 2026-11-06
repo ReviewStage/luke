@@ -34,9 +34,14 @@ import { GLYPH } from "@repo/ui/icons";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
 import {
   agentOfTab,
+  agentTab,
+  cloudBrowserTab,
+  draftTab,
   followedAgent,
-  isDraftTab,
+  pageTab,
+  STRIP_TAB_KIND,
   sameTab,
+  subagentTab,
   TAB_WORDS,
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
@@ -66,7 +71,7 @@ import {
   type TitleRename,
 } from "../tasks/description-body.js";
 import { CommentFocusScope } from "../tasks/description-comments.js";
-import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
+import { keyedItem, NO_ITEMS, waitingByAgent } from "../tasks/inbox-model.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
@@ -97,6 +102,7 @@ import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
+import { AgentThreads, useAgentThreadViews } from "./agent-threads.js";
 import { DesktopHome } from "./desktop-home.js";
 import {
   AGENTS_SECTION,
@@ -495,7 +501,7 @@ function DescriptionDocument({
     summary,
     column,
     tasks.sidePanel.fullScreen,
-    agentsComing || summaryHolds(tasks, inbox.board),
+    agentsComing || summaryHolds(tasks),
   );
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
@@ -595,7 +601,7 @@ function DescriptionDocument({
   // the keys handed to the page, as a tab of this column opens.
   const openAgentColumn = (agent: string) => {
     if (agents.archived?.some((each) => each.id === agent) !== true) {
-      openColumnTab({ agent });
+      openColumnTab(agentTab(agent));
       return;
     }
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
@@ -667,7 +673,7 @@ function DescriptionDocument({
         );
       }
       case TOOL_TARGET.PAGE:
-        return sidePanel.onPreview({ page: target.page });
+        return sidePanel.onPreview(pageTab(target.page));
       case TOOL_TARGET.TASK:
         // A call that named this very task opens its plan in the column, as one on its own plan does.
         if (target.agent === undefined && target.task === taskId) return openOverview();
@@ -678,7 +684,7 @@ function DescriptionDocument({
   // panel, where every subagent stands; where the worker stands seeds its glyph.
   const openDelegation = (agent: string, callId: string, task: string, status: AgentStatus) => {
     views.onWorkerStatus(callId, status);
-    sidePanel.onPreview({ subagent: callId, delegation: { agent, task } });
+    sidePanel.onPreview(subagentTab(callId, { agent, task }));
   };
   // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
   // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
@@ -733,7 +739,7 @@ function DescriptionDocument({
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
   // A page of another task, a subtask's among them, opens beside this one, read on its own task, so the reader stays here.
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
-    sidePanel.onPreview({ page }, place),
+    sidePanel.onPreview(pageTab(page), place),
   );
   const openAgent = useSteadyDoor(openAgentColumn);
   const openAgentTab = useSteadyDoor(openColumnTab);
@@ -743,7 +749,7 @@ function DescriptionDocument({
   const { onFork: forkDoor, onContinue: continueDoor } = useAgentDraftDoors(
     agents,
     false,
-    (draft) => openColumnTab({ draft }),
+    (draft) => openColumnTab(draftTab(draft)),
   );
   const showHistory = useSteadyDoor((save: number | undefined) => {
     if (opened !== undefined) tasks.history.onOpen(opened.id, save);
@@ -779,16 +785,36 @@ function DescriptionDocument({
   const openedId = opened?.id;
   const openedRepository = opened?.repository ?? null;
   // The threads each agent posted that wait on the developer, which its tab counts and its box's
-  // dock opens in the Inbox narrowed to the task, on the next of them.
+  // dock opens in the agent's card, on the next of them (`agent-threads.tsx`); a phone, with no room
+  // for the list beside the thread, opens them in the Inbox narrowed to the task.
   const waitingOf = useMemo(() => waitingByAgent(inbox.board.waiting), [inbox.board.waiting]);
+  const agentThreads = useAgentThreadViews();
   const openWaitingThread = useSteadyDoor((item: InboxItem) => {
-    if (openedId !== undefined) tasks.onShowInbox({ taskId: openedId, itemId: item.id });
+    if (openedId === undefined) return;
+    if (phone) tasks.onShowInbox({ taskId: openedId, itemId: item.id });
+    else agentThreads.onOpen(item.agentId, item.id);
   });
   const tabAgent = tab === undefined ? undefined : agentOfTab(tab);
+  // The column's agent whose card shows its threads in its transcript's place, which main is told is not on screen.
+  const threadsAgent =
+    phone || tabAgent === undefined || agentThreads.shown(tabAgent) === undefined
+      ? undefined
+      : tabAgent;
+  const { onThreadsShown } = tasks;
+  useEffect(() => {
+    onThreadsShown(threadsAgent);
+    return () => onThreadsShown(undefined);
+  }, [threadsAgent, onThreadsShown]);
+  // Note that the dock stands, quiet, while the agent's threads are all settled, the one way into them from its card.
+  const { open: boardOpen, settled: boardSettled } = inbox.board;
   const threads = useMemo(() => {
-    const waiting = tabAgent === undefined ? undefined : waitingOf.get(tabAgent);
-    return waiting === undefined ? undefined : { waiting, onOpen: openWaitingThread };
-  }, [tabAgent, waitingOf, openWaitingThread]);
+    if (tabAgent === undefined) return undefined;
+    const posted = [...boardOpen, ...boardSettled]
+      .filter((item) => item.agentId === tabAgent)
+      .toSorted((a, b) => b.updatedAt - a.updatedAt);
+    const waiting = waitingOf.get(tabAgent) ?? NO_ITEMS;
+    return posted.length === 0 ? undefined : { waiting, posted, onOpen: openWaitingThread };
+  }, [tabAgent, boardOpen, boardSettled, waitingOf, openWaitingThread]);
   const reader = useMemo(() => ({ readerId: tasks.me }), [tasks.me]);
   const editAgents = useMemo(() => ({ control: agents, onOpen: openAgent }), [agents, openAgent]);
   // The task's own menu, as the task's page holds it keyed by the task
@@ -956,7 +982,7 @@ function DescriptionDocument({
         // Overview's agents stand open, its list the task's own rather than a fold under the description's head.
         folded={false}
         waiting={waitingOf}
-        onOpenAgent={(agentId) => openAgentTab({ agent: agentId })}
+        onOpenAgent={(agentId) => openAgentTab(agentTab(agentId))}
         onOpenPullRequest={openPullRequestDoor}
         // Note that New agent stands at every width, a fresh plan's one next step, as the "+" offers it.
         starts={
@@ -1149,6 +1175,23 @@ function DescriptionDocument({
   // The panel holds the keys while the focus went into it last, or while it
   // fills the window over this column; shut, it hands them back.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
+  // The agent's threads, where its card shows them in its transcript's place.
+  const threadsShown = threadsAgent === undefined ? undefined : agentThreads.shown(threadsAgent);
+  const agentThreadsView =
+    tabAgent === undefined || threadsShown === undefined ? undefined : (
+      <AgentThreads
+        key={tabAgent}
+        agentId={tabAgent}
+        task={listed}
+        tasks={tasks}
+        inbox={inbox}
+        chosen={threadsShown.itemId}
+        shown={tasks.shown && !sidePanel.fullScreen}
+        active={tasks.shown && !sideFocused}
+        onChoose={(itemId) => agentThreads.onOpen(tabAgent, itemId)}
+        onBack={() => agentThreads.onClose(tabAgent)}
+      />
+    );
   // The agent a terminal command means from where the developer is: the one
   // whose own tab, Changes tab, or Terminal tab holds the keys, if any.
   const terminalHere = agentOfTab(
@@ -1212,9 +1255,7 @@ function DescriptionDocument({
     const newest = (agentBrowsers ?? [])
       .filter((each) => each.agentId === agentId)
       .toSorted((one, other) => other.createdAt - one.createdAt)[0];
-    openPanelTab({
-      cloudBrowser: newest?.id ?? startCloudDraft({ taskId: task.id }, agentId).id,
-    });
+    openPanelTab(cloudBrowserTab(newest?.id ?? startCloudDraft({ taskId: task.id }, agentId).id));
   };
   // ⌘T on a phone starts New agent at once, since no "+" stands in sight to drop its menu.
   const newAgentOnPhone = () => {
@@ -1230,7 +1271,12 @@ function DescriptionDocument({
   const columnLabel =
     tab === undefined || isOverviewTab(tab) ? planLabel : mainTabLabel(tab, agents);
   const draftShown =
-    pane === TASK_PANE.AGENT && tab !== undefined && isDraftTab(tab) ? tab : undefined;
+    pane === TASK_PANE.AGENT &&
+    tab !== undefined &&
+    !isOverviewTab(tab) &&
+    tab.kind === STRIP_TAB_KIND.DRAFT
+      ? tab
+      : undefined;
   // Back leaves the task on Overview, and goes back a screen anywhere else: the panel shuts over
   // the column, and the column goes back to Overview, which lets an empty draft go (`use-main-tabs.ts`).
   const back =
@@ -1390,6 +1436,7 @@ function DescriptionDocument({
                             onOpenLocal={terminalDoors.onOpenLocal}
                             onOpenBrowser={phone ? openBrowser : undefined}
                             onShown={phone ? setShownAgentTab : undefined}
+                            onOpenAgent={openAgentColumn}
                             waiting={waitingOf}
                           />
                         </TaskTabsRow>
@@ -1428,15 +1475,16 @@ function DescriptionDocument({
                                 onFork={forkDoor}
                                 onContinue={continueDoor}
                                 threads={threads}
+                                hidden={agentThreadsView !== undefined}
                               />
                             )}
+                            {agentThreadsView}
                           </FindScope>
                           {detailsWide ? null : (
                             <TaskSummary
                               tasks={summaryTasks}
                               layout={summaryLayout}
                               cardId={summaryCard}
-                              inbox={inbox.board}
                               held={views.held}
                               onOpenAgent={openAgentColumn}
                             />

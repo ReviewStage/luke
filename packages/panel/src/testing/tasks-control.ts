@@ -358,8 +358,8 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
 
 /**
  * Each agent the open items of agents with no task name, once, as main lists
- * the agents holding items: how many of them it holds, how many ask, and
- * when the latest changed, named as its latest item names it.
+ * the agents holding items: how many of them it holds, how many of those
+ * are to do, asks and notices alike, and when the latest changed, named as its latest item names it.
  */
 export function agentHoldingsOf(
   taskless: readonly AppInboxTasklessItem[],
@@ -377,7 +377,7 @@ export function agentHoldingsOf(
       repository: latest.repository,
       ...(latest.workspaceId === undefined ? undefined : { workspaceId: latest.workspaceId }),
       items: (was?.items ?? 0) + 1,
-      toDo: (was?.toDo ?? 0) + (entry.asking === false ? 0 : 1),
+      toDo: (was?.toDo ?? 0) + 1,
       updatedAt: latest.updatedAt,
     });
   }
@@ -527,6 +527,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     sidePanel: {
       open: false,
+      stop: undefined,
       fullScreen: false,
       fullScreenOnly: false,
       newTabAsked: false,
@@ -621,6 +622,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onTaskAgents: () => undefined,
     },
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
+    onThreadsShown: ignore,
     personView: {
       userId: undefined,
       name: undefined,

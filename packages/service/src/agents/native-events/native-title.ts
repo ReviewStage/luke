@@ -8,7 +8,7 @@ import { deploymentTitleModel } from "../coder-host/model.js";
 import { titleAgent } from "../coder-host/title.js";
 
 /**
- * native-title.ts -- a native agent's title, asked for as its runner's turns start and end, as eve's relay asks for an eve agent's.
+ * native-title.ts -- a native agent's title, asked for as its runner's turns start and end.
  *
  * The title is generated on our own key
  * (`../coder-host/model.ts`'s `deploymentTitleModel`), whatever key the

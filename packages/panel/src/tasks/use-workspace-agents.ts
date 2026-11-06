@@ -15,7 +15,9 @@ import { appStateQuery, selectTasks } from "../use-app-state.js";
  * many as the service answers (`AGENT_BOUNDS.MAX_WORKSPACE_AGENTS`), a
  * repository matched as GitHub matches one, its case aside. They move as
  * the list does. Words typed are still asked of the service, which finds
- * an agent past the newest.
+ * an agent past the newest. One agent is also found by its id
+ * (`useListedAgent`), among every agent the list carries, so a pick saved
+ * before the newest moved past it is still named.
  */
 
 /** A workspace's newest agents as a surface draws them: carried, failed, or not yet carried. */
@@ -69,5 +71,30 @@ export function useWorkspaceAgents(
   return useMemo(
     () => (workspaceId === undefined ? undefined : newestOf(tasks, workspaceId, repository)),
     [tasks, workspaceId, repository],
+  );
+}
+
+/**
+ * The agent `agentId` names as the task list carries it, on a task or on
+ * none, archived or not; none where the list holds no such agent, which
+ * may yet be one on a task the list has not carried live, so a caller
+ * that must know reads it of the service then.
+ */
+export function listedAgentIn(
+  tasks: Pick<TasksView, "taskAgents" | "tasklessAgents"> | undefined,
+  agentId: string,
+): ListedAgent | undefined {
+  const onTask = tasks?.taskAgents?.find((agent) => agent.id === agentId);
+  if (onTask !== undefined) return onTask;
+  const taskless = tasks?.tasklessAgents?.find((agent) => agent.id === agentId);
+  return taskless === undefined ? undefined : summaryOfTaskless(taskless);
+}
+
+/** The agent `agentId` names as the task list carries it, past the newest and archived alike; none while none is named, or where the list holds no such agent. */
+export function useListedAgent(agentId: string | null): AgentSummary | undefined {
+  const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
+  return useMemo(
+    () => (agentId === null ? undefined : listedAgentIn(tasks, agentId)),
+    [tasks, agentId],
   );
 }

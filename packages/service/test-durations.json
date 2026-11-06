@@ -121,7 +121,6 @@
   "src/github/pull-request-stack.test.ts": 7,
   "src/github/repository-pins-procedures.test.ts": 1689,
   "src/github/repository-reads.test.ts": 1552,
-  "src/github/token-pull-request-sweep.test.ts": 2774,
   "src/http/http-effect.test.ts": 19,
   "src/http/origin-guard.test.ts": 34,
   "src/installed-skills/installed-skills-procedures.test.ts": 3240,

@@ -3,22 +3,16 @@
  *
  * The platform holds each shell (`MacShell`: the desktop's main, over
  * node-pty), and these procedures hold which window it belongs to. A shell
- * belongs to the window that opened it, and no other window can attach to
- * or close it. An attach opens a channel and posts its other end to that
- * window under the ticket a cloud shell's port carries, so the Terminal tab
- * reads it as it reads a cloud shell's: what the shell prints, paced to the
- * tab's acks (`TERMINAL_FLOW`), how it stands, and its exit, out; what the
- * panel types, resizes, and acks, in. The window's page going, a reload
- * among it, closes the port and leaves the shell running, so the page that
- * loads next attaches to it again; the window itself going ends its shells.
- *
- * What a shell prints is never read here, logged, or written to app state:
- * it passes from the shell to its window's one port. The latest
- * `PRINTED_MAX_BYTES` of it is held for the window's next attach and nobody
- * else, whether or not a port stood as it was printed, so a tab drawn again
- * on a fresh screen (shown again, a reload, or another shell chosen) draws
- * the lines its shell printed before as well as those printed while it was
- * away.
+ * belongs to the page of the window that opened it, and no other window can
+ * attach to or close it. An attach opens a channel and posts its other end
+ * to that window under the ticket a cloud shell's port carries, so the
+ * Terminal tab reads it as it reads a cloud shell's: what the shell prints,
+ * paced to the tab's acks (`TERMINAL_FLOW`), how it stands, and its exit,
+ * out; what the panel types, resizes, and acks, in. The panel closing the
+ * port detaches; the page going, a reload or the window's close, ends its
+ * shells, and the tab opens a fresh one. What a shell prints is never read
+ * here, logged, or written to app state: it passes from the shell to its
+ * window's one port.
  */
 
 import {
@@ -55,17 +49,12 @@ export interface MacShell {
 export interface MacShellActsDependencies<Sender> {
   /** The agent's mirror on this Mac, made where none stands, by its folder; none where the host could not make it. */
   mirror: (agentId: string) => Effect.Effect<string | undefined>;
-  /** The developer's login shell started in `folder`; none where that is no folder on this Mac or the shell did not start. */
-  spawn: (folder: string) => MacShell | undefined;
+  /** The developer's login shell started in `folder` at the size given; none where that is no folder on this Mac or the shell did not start. */
+  spawn: (folder: string, cols: number, rows: number) => MacShell | undefined;
   ports: TerminalPortSeam<Sender>;
-  /** Calls `then` once, when the window itself is gone, which a reload is not. */
-  whenClosed: (sender: Sender, then: () => void) => void;
   /** A fresh shell id. */
   createId: () => string;
 }
-
-/** The most of what a shell printed that is held for the next attach. */
-const PRINTED_MAX_BYTES = 256 * 1024;
 
 /** One shell a window opened, and where its port stands. */
 interface Held {
@@ -75,9 +64,6 @@ interface Held {
   /** Bytes posted that the tab has not acked. */
   unacked: number;
   paused: boolean;
-  /** The latest of what the shell printed, oldest first. */
-  printed: Uint8Array[];
-  printedBytes: number;
   /** The shell's exit status, once it exited. */
   exitCode: number | undefined;
 }
@@ -97,16 +83,6 @@ function post(held: Held, bytes: Uint8Array): void {
   if (held.paused || held.unacked <= TERMINAL_FLOW.PAUSE_ABOVE_BYTES) return;
   held.paused = true;
   held.shell.pause();
-}
-
-/** What a shell printed, held for the next attach, its oldest let go past the bound, and posted where a port stands. */
-function output(held: Held, bytes: Uint8Array): void {
-  held.printed.push(bytes);
-  held.printedBytes += bytes.length;
-  while (held.printedBytes > PRINTED_MAX_BYTES && held.printed.length > 1) {
-    held.printedBytes -= held.printed.shift()?.length ?? 0;
-  }
-  post(held, bytes);
 }
 
 /** The shell's port closed and its count let go; the shell reads on, since nothing waits on a port that is gone. */
@@ -131,47 +107,27 @@ function heard(held: Held, message: WireBoundaryInput): void {
     held.shell.resume();
     return;
   }
-  // Note that a shell that exited takes nothing more, because its terminal is closed.
-  if (held.exitCode !== undefined) return;
+  // Note that a shell that exited takes nothing more, because its terminal is closed; one on this Mac holds nothing a shown tab need keep.
+  if (held.exitCode !== undefined || inbound.type === TERMINAL_PORT_MESSAGE.SHOWN) return;
   if (inbound.type === TERMINAL_PORT_MESSAGE.INPUT) held.shell.write(inbound.data);
   else held.shell.resize(inbound.cols, inbound.rows);
-}
-
-/**
- * How the shell stands told on its port: attached, the latest of what it
- * printed, and its exit where it exited. Note that all it holds is drawn,
- * not only what was printed while no port stood, because the tab draws an
- * attach on a cleared screen, the lines it showed before gone with it.
- */
-function attached(held: Held, port: HostTerminalPort): void {
-  held.port = port;
-  port.post({ type: TERMINAL_PORT_MESSAGE.STATE, state: TERMINAL_CONNECTION.ATTACHED });
-  for (const bytes of held.printed) post(held, bytes);
-  if (held.exitCode === undefined) return;
-  port.post({
-    type: TERMINAL_PORT_MESSAGE.STATE,
-    state: TERMINAL_CONNECTION.EXITED,
-    code: held.exitCode,
-  });
 }
 
 export function macShellProcedures<Sender>(
   dependencies: MacShellActsDependencies<Sender>,
 ): Pick<PlatformActProcedures<Sender>, MacShellActKind> {
-  const { mirror, spawn, ports, whenClosed, createId } = dependencies;
+  const { mirror, spawn, ports, createId } = dependencies;
   const macShellPort = actPortFor<Sender>();
   /** Each window's shells, by agent and then by shell. */
   const windows = new Map<Sender, Map<string, Map<string, Held>>>();
-  /** The windows whose page is watched for its end, which a reload starts over. */
-  const pagesWatched = new Set<Sender>();
 
-  /** The window's shells, its own end watched the first time it opens one. */
+  /** The window's shells, its page's end watched the first time it opens one, which ends them. */
   const shellsOf = (sender: Sender) => {
     const held = windows.get(sender);
     if (held !== undefined) return held;
     const fresh = new Map<string, Map<string, Held>>();
     windows.set(sender, fresh);
-    whenClosed(sender, () => {
+    ports.whenGone(sender, () => {
       windows.delete(sender);
       for (const shells of fresh.values()) {
         for (const each of shells.values()) {
@@ -187,18 +143,6 @@ export function macShellProcedures<Sender>(
   const named = (sender: Sender, ticket: TerminalPortTicket) =>
     windows.get(sender)?.get(ticket.agentId)?.get(ticket.terminalId);
 
-  /** The page's end watched, once per page, so it closes every port it held and leaves the shells running. */
-  const watchPage = (sender: Sender) => {
-    if (pagesWatched.has(sender)) return;
-    pagesWatched.add(sender);
-    ports.whenGone(sender, () => {
-      pagesWatched.delete(sender);
-      for (const shells of windows.get(sender)?.values() ?? []) {
-        for (const each of shells.values()) detach(each);
-      }
-    });
-  };
-
   return {
     [MAC_SHELL_ACT_KIND.MAC_SHELL_MIRROR]: macShellPort[MAC_SHELL_ACT_KIND.MAC_SHELL_MIRROR].effect(
       function* ({ input, context, errors }) {
@@ -211,7 +155,7 @@ export function macShellProcedures<Sender>(
     [MAC_SHELL_ACT_KIND.MAC_SHELL_OPEN]: macShellPort[MAC_SHELL_ACT_KIND.MAC_SHELL_OPEN].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const shell = spawn(input.folder);
+        const shell = spawn(input.folder, input.cols, input.rows);
         if (shell === undefined) return yield* Effect.fail(errors.REFUSED());
         const ticket = { agentId: input.agentId, terminalId: createId() };
         const held: Held = {
@@ -220,14 +164,12 @@ export function macShellProcedures<Sender>(
           port: undefined,
           unacked: 0,
           paused: false,
-          printed: [],
-          printedBytes: 0,
           exitCode: undefined,
         };
         const agents = shellsOf(context.actor.sender);
         const shells = agents.get(ticket.agentId) ?? new Map<string, Held>();
         agents.set(ticket.agentId, shells.set(ticket.terminalId, held));
-        shell.onData((bytes) => output(held, bytes));
+        shell.onData((bytes) => post(held, bytes));
         shell.onExit((code) => {
           held.exitCode = code;
           held.port?.post({
@@ -245,14 +187,13 @@ export function macShellProcedures<Sender>(
         const sender = context.actor.sender;
         const held = named(sender, input);
         if (held === undefined) return yield* Effect.fail(errors.REFUSED());
-        watchPage(sender);
-        detach(held);
         if (held.exitCode === undefined) held.shell.resize(input.cols, input.rows);
         const port = ports.open(sender, held.ticket);
-        port.onMessage((message) => {
-          if (held.port === port) heard(held, message);
-        });
-        attached(held, port);
+        port.onMessage((message) => heard(held, message));
+        // The panel closing its port detaches, so a shell no tab draws is never paced to one.
+        port.onClose(() => detach(held));
+        held.port = port;
+        port.post({ type: TERMINAL_PORT_MESSAGE.STATE, state: TERMINAL_CONNECTION.ATTACHED });
       },
     ),
     [MAC_SHELL_ACT_KIND.MAC_SHELL_CLOSE]: macShellPort[MAC_SHELL_ACT_KIND.MAC_SHELL_CLOSE].effect(

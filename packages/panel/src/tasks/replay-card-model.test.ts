@@ -146,6 +146,7 @@ test("a replay is a continue with no message and a fork at one, and says its ste
   assert.equal(replayCount(replay()), "3 steps");
   assert.equal(replayCount(replay({ steps: STEPS.slice(0, 1), totalSteps: 1 })), "1 step");
   assert.equal(replayCount(replay({ totalSteps: 212 })), "3 of 212 steps");
+  assert.equal(replayCount(replay({ carried: true, steps: [], totalSteps: 0 })), undefined);
   assert.equal(leftOutLine(replay()), undefined);
   assert.equal(
     leftOutLine(replay({ totalSteps: 212 })),
@@ -366,7 +367,7 @@ test("a call's step whose marker names its tool is drawn as the live transcript 
   assert.equal(failed.view.output, undefined);
 });
 
-test("a native harness's call in a replay is drawn as the eve call that draws it, as the live transcript draws it", () => {
+test("a native harness's call in a replay is drawn as the call of the same kind, as the live transcript draws it", () => {
   const read = stepView(
     toolStep({
       summary: "Read: src/a.ts",

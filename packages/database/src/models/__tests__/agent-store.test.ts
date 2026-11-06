@@ -82,7 +82,6 @@ import {
   readAgentOfConversation,
   readAgentPublished,
   readAgentRouting,
-  readEveRunStanding,
   readNativeHanded,
   readNativeRunStanding,
   readRunnerTokenConversation,
@@ -178,7 +177,7 @@ it.layer(getTestDB())("the coding-agent store's delegations", (it) => {
           agent,
           new Date("2026-10-13T12:00:01Z"),
         );
-        // Note that only an eve agent's workers recorded delegations, so they stand as such an agent left them.
+        // Note that only the workers of an agent on the retired runtime recorded delegations, so they stand as such an agent left them.
         const db = yield* Database;
         yield* db.insert(agentDelegationTable).values([
           {
@@ -378,7 +377,7 @@ it.layer(getTestDB())("the coding-agent store's line places", (it) => {
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.TYPED,
-          eveTurnId: "turn_0",
+          runtimeTurnId: "turn_0",
         });
         yield* writer.consume(target, {
           ...turn,
@@ -431,7 +430,7 @@ it.layer(getTestDB())("the coding-agent store's lines typed into a call", (it) =
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.TYPED,
-          eveTurnId: "turn_0",
+          runtimeTurnId: "turn_0",
         });
         const text = "Use the fixture branch.";
         yield* Database.use((db) =>
@@ -2075,7 +2074,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
   const startIn = (
     starter: string,
     organizationId: string,
-    routing: Pick<NewAgent, "runtime" | "payer"> = { runtime: CONVERSATION_RUNTIME.EVE },
+    routing: Pick<NewAgent, "runtime" | "payer"> = { runtime: CONVERSATION_RUNTIME.RETIRED },
   ) =>
     Effect.map(
       createAgent(starter, {
@@ -2174,7 +2173,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
   );
 
   it.effect(
-    "an agent started with neither named runs on eve with no payer, and one from before the columns reads as eve too",
+    "an agent started with neither named runs on the retired runtime with no payer, and one from before the columns reads as retired too",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -2183,7 +2182,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         const { agentId: older } = yield* tasklessAgent(starter, workspace);
 
         const expected = {
-          runtime: CONVERSATION_RUNTIME.EVE,
+          runtime: CONVERSATION_RUNTIME.RETIRED,
           nativeSession: null,
           runnerTokenHash: null,
           payer: null,
@@ -2194,7 +2193,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
   );
 
   it.effect(
-    "a native agent's run reads as ended once its newest turn ends, never while one is queued or running, and an eve, deleted, or unknown agent reads as none",
+    "a native agent's run reads as ended once its newest turn ends, never while one is queued or running, and an agent on the retired runtime, a deleted one, or an unknown one reads as none",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
@@ -2208,7 +2207,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           runtime: CONVERSATION_RUNTIME.CODEX,
           payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
-        const eve = yield* startIn(starter, workspace);
+        const retired = yield* startIn(starter, workspace);
         const deleted = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
@@ -2223,7 +2222,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
             queuedAt: at,
             settledAt: status === TURN_STATUS.RUNNING ? null : at,
           });
-        for (const agent of [eve, deleted]) {
+        for (const agent of [retired, deleted]) {
           yield* turnOf(agent.conversationId, TURN_STATUS.SETTLED, settledAt);
         }
         yield* db
@@ -2263,63 +2262,10 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           userId: starter,
           endedAt: null,
         });
-        assert.ok(Option.isNone(yield* readNativeRunStanding(eve.id)));
+        assert.ok(Option.isNone(yield* readNativeRunStanding(retired.id)));
         assert.ok(Option.isNone(yield* readNativeRunStanding(deleted.id)));
         assert.ok(Option.isNone(yield* readNativeRunStanding(randomUUID())));
         assert.ok(Option.isNone(yield* readNativeRunStanding("not-an-agent-id")));
-      }),
-  );
-
-  it.effect(
-    "an eve agent's run is read from its session: ended once its newest turn ends, and none for a native agent's session, a session two agents name, or one no agent names",
-    () =>
-      Effect.gen(function* () {
-        const db = yield* Database;
-        const starter = yield* openAccount;
-        const workspace = yield* openWorkspace(starter);
-        const eve = yield* startIn(starter, workspace);
-        const native = yield* startIn(starter, workspace, {
-          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-        });
-        const twinA = yield* startIn(starter, workspace);
-        const twinB = yield* startIn(starter, workspace);
-        const sessionOf = (conversationId: string, runtimeSessionId: string) =>
-          db
-            .update(conversations)
-            .set({ runtimeSessionId })
-            .where(eq(conversations.id, conversationId));
-        yield* sessionOf(eve.conversationId, "wrun_fixture_eve");
-        yield* sessionOf(native.conversationId, "wrun_fixture_native");
-        yield* sessionOf(twinA.conversationId, "wrun_fixture_twin");
-        yield* sessionOf(twinB.conversationId, "wrun_fixture_twin");
-        const settledAt = new Date(Date.UTC(2026, 9, 14, 12));
-        const turnOf = (conversationId: string, status: TurnStatus, at: Date) =>
-          db.insert(turns).values({
-            userId: starter,
-            conversationId,
-            origin: TURN_ORIGIN.TYPED,
-            status,
-            queuedAt: at,
-            settledAt: status === TURN_STATUS.QUEUED ? null : at,
-          });
-        for (const agent of [native, twinA, twinB]) {
-          yield* turnOf(agent.conversationId, TURN_STATUS.SETTLED, settledAt);
-        }
-
-        const beforeAnyTurn = yield* readEveRunStanding("wrun_fixture_eve");
-        yield* turnOf(eve.conversationId, TURN_STATUS.FAILED, settledAt);
-        const ended = yield* readEveRunStanding("wrun_fixture_eve");
-        yield* turnOf(eve.conversationId, TURN_STATUS.QUEUED, new Date(settledAt.getTime() + 1));
-        const queued = yield* readEveRunStanding("wrun_fixture_eve");
-
-        const standing = { agentId: eve.id, conversationId: eve.conversationId };
-        assert.deepEqual(Option.getOrThrow(beforeAnyTurn), { ...standing, endedAt: null });
-        assert.deepEqual(Option.getOrThrow(ended), { ...standing, endedAt: settledAt });
-        assert.deepEqual(Option.getOrThrow(queued), { ...standing, endedAt: null });
-        assert.ok(Option.isNone(yield* readEveRunStanding("wrun_fixture_native")));
-        assert.ok(Option.isNone(yield* readEveRunStanding("wrun_fixture_twin")));
-        assert.ok(Option.isNone(yield* readEveRunStanding("wrun_fixture_unknown")));
       }),
   );
 
@@ -2329,7 +2275,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
       Effect.gen(function* () {
         const starter = yield* openAccount;
         const workspace = yield* openWorkspace(starter);
-        const eve = yield* startIn(starter, workspace);
+        const retired = yield* startIn(starter, workspace);
         const claude = yield* startIn(starter, workspace, {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
@@ -2340,7 +2286,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         });
 
         const read = yield* nativeRuntimesOfReached([
-          eve.conversationId,
+          retired.conversationId,
           claude.conversationId,
           codex.conversationId,
         ]);
@@ -2357,7 +2303,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           runtime: CONVERSATION_RUNTIME.CODEX,
           payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
         });
-        assert.ok(Option.isNone(yield* nativeRouteOfReached(eve.conversationId)));
+        assert.ok(Option.isNone(yield* nativeRouteOfReached(retired.conversationId)));
       }),
   );
 

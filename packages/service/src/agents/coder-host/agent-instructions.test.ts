@@ -1,6 +1,6 @@
 /**
  * agent-instructions.test.ts -- an agent's instructions read its brief from its row
- * alike on every harness, so a native session is told what an eve one is.
+ * alike on every harness, so a Claude Code session is told what a Codex one is.
  */
 
 import assert from "node:assert/strict";
@@ -8,6 +8,7 @@ import type { Agent } from "@repo/database/models/agent-store";
 import { AGENT_KIND, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { test } from "vitest";
+import { standingFor } from "../../testing/agent-standing.js";
 import { agentCoderInstructions, CODER_HARNESS } from "./instructions.js";
 
 /** An agent on a repository, handed what the test names, started by hand on no task. */
@@ -45,8 +46,7 @@ const CONTEXT = {
   ciReadable: false,
   authorship: undefined,
   workspace: "acme",
-  memoryOn: false,
-  descriptionsOn: true,
+  standing: standingFor("acme/relay"),
 } as const;
 
 const DESCRIPTION_JOB = "implement the task's description given as the first message";

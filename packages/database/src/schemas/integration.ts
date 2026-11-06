@@ -20,8 +20,8 @@ import { user } from "./auth.js";
  * A user account may hold more than one account at a provider (two Notion
  * workspaces), each its own row and its own grant: `connectSubject` is the
  * subject every ask of Connect names for it, so two rows are two grants, and
- * `connectionName` is the one name the account goes by everywhere else (eve's
- * connection, a coding agent's switches and mentions, the routes' query).
+ * `connectionName` is the one name the account goes by everywhere else (a
+ * coding agent's switches and mentions, the routes' query).
  * The account first connected at a provider is named after the provider and
  * asks under our account's own user id, as every row did before a second
  * one was possible.

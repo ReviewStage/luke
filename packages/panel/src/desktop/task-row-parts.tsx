@@ -17,8 +17,7 @@ import {
   ChipName,
   dropBelowStart,
   type MenuSubject,
-  QUIET_MARK,
-  QuietWords,
+  RowCount,
   STATUS_TONE,
   TaskPriorityMark,
   TaskStatusMark,
@@ -31,7 +30,7 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
-import { needsYouWords } from "../tasks/inbox-model.js";
+import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import {
   NO_ASSIGNEE,
   TASK_PRIORITY_WORDS,
@@ -286,13 +285,19 @@ export function StatusChip({
   );
 }
 
-/** How many of a task's questions wait on the reader, its count after the attention mark, named by its whole words; nothing at none. */
+/**
+ * How many threads wait on the reader, as the sidebar's Inbox row counts
+ * them: the figure in the attention tone, heard as "3 need you"; nothing at
+ * none. A task's row and card, an agent's tab, and its Overview row all
+ * draw it.
+ */
 export function WaitingCount({ count }: { count: number }): React.JSX.Element | null {
-  if (count === 0) return null;
   return (
-    <QuietWords mark={QUIET_MARK.ATTENTION} label={needsYouWords(count)}>
-      {count}
-    </QuietWords>
+    <RowCount
+      value={count}
+      noun={count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
+      tone={STATUS_TONE.ATTENTION}
+    />
   );
 }
 

@@ -3,6 +3,7 @@ import {
   type AgentTodoStatus,
   type AgentTodos,
 } from "@repo/features/agent-wire";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import type { IntegrationProvider } from "@repo/features/integration-wire";
 import { readLink } from "@repo/features/link-grammar";
 import {
@@ -13,7 +14,6 @@ import {
 } from "@repo/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { formatBytes } from "@repo/features/number-format";
-import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import {
   agentCallLine,
   CALL_KIND,
@@ -67,7 +67,7 @@ import {
   useDisclosureState,
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@repo/ui/actor-model";
-import { githubShapes, wholeRendering } from "@repo/ui/github-html";
+import { githubShapes, INLINE_PICTURE, inlinePictures, wholeRendering } from "@repo/ui/github-html";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -165,11 +165,11 @@ import {
 import { OUTSIDE_GLYPH_CLASS } from "../picture-block.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
+import { useDescriptionPictureDrawer } from "./description-pictures.js";
 import { useInboxPictureDrawer } from "./inbox-pictures.js";
 import { LoneLinkCard } from "./lone-link-card.js";
 import { linkChip, type MentionDoors } from "./mention-chip.js";
 import { ModelLabel } from "./model-label.js";
-import { useDescriptionPictureDrawer } from "./description-pictures.js";
 import { SubagentMark } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { cardTitle, type SentWords, todosCount } from "./tool-call-model.js";
@@ -718,14 +718,15 @@ const TRANSCRIPT_COMPONENTS: MarkdownComponents = {
 /**
  * How a picture GitHub's rendering names is drawn by the place drawing the
  * words: its own image, read through the service, or nothing where the
- * place draws none, which draws its link instead. `linked` says it stands
- * inside a link the words keep, which a press on it follows, so the place
- * gives it no press of its own.
+ * place draws none, which draws its link instead. `inline` says it stands
+ * in a line of words or inside a link the words keep, a press on which
+ * follows the link, so the place draws it in that line as GitHub does, with
+ * no press of its own.
  */
 export type GitHubPictureDrawer = (
   src: string,
   alt: string,
-  linked: boolean,
+  inline: boolean,
 ) => ReactNode | undefined;
 
 /** Whether what is drawn stands inside a link of GitHub's words. */
@@ -735,14 +736,16 @@ const InsideGitHubLink = createContext(false);
 function GitHubImage({
   src,
   alt,
+  inWords,
   picture,
 }: {
   src: string;
   alt: string;
+  inWords: boolean;
   picture: GitHubPictureDrawer;
 }): ReactNode {
   const linked = useContext(InsideGitHubLink);
-  return picture(src, alt, linked) ?? <GitHubPictureLink src={src} alt={alt} />;
+  return picture(src, alt, inWords || linked) ?? <GitHubPictureLink src={src} alt={alt} />;
 }
 
 /** A picture GitHub's rendering names that its place draws none of: a link to where it points, as a transcript's picture is. */
@@ -760,12 +763,14 @@ export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): R
  * The steps GitHub's rendering is drawn through: the library's own HTML
  * parse, GitHub's dress reshaped into the window's own while its classes
  * still say what each part is (`@repo/ui/github-html`), then the library's
- * own sanitizer, GitHub's own allowlist, and its link hardening.
+ * own sanitizer, GitHub's own allowlist, the pictures that share a line with
+ * words marked as standing in it, and the library's link hardening.
  */
 const GITHUB_REHYPE_PLUGINS: MarkdownSteps = [
   MARKDOWN_HTML_STEP.PARSE,
   githubShapes,
   MARKDOWN_HTML_STEP.SANITIZE,
+  inlinePictures,
   MARKDOWN_HTML_STEP.HARDEN,
 ];
 
@@ -778,7 +783,8 @@ const GITHUB_REMARK_PLUGINS = [wholeRendering];
  * the transcript's: GitHub's own HTML read through the library's parse and
  * sanitizer, never set as HTML. Mentions, references, emoji, task lists,
  * and folded details stand as GitHub rendered them. A picture is the
- * place's to draw (`picture`), and stands as its link where it draws none.
+ * place's to draw (`picture`), in its line where it shares one with words,
+ * and stands as its link where the place draws none.
  */
 export function GitHubWords({
   html,
@@ -797,8 +803,13 @@ export function GitHubWords({
           </TranscriptLink>
         </InsideGitHubLink.Provider>
       ),
-      img: ({ src, alt }) => (
-        <GitHubImage src={String(src ?? "")} alt={String(alt ?? "")} picture={picture} />
+      img: ({ src, alt, node }) => (
+        <GitHubImage
+          src={String(src ?? "")}
+          alt={String(alt ?? "")}
+          inWords={node?.properties[INLINE_PICTURE] === true}
+          picture={picture}
+        />
       ),
     }),
     [picture],
@@ -1047,7 +1058,7 @@ const CALL_ICON = {
   [CALL_KIND.RECALL]: () => <GLYPH.MEMORY />,
   [CALL_KIND.READ_COMMENTS]: () => <GLYPH.COMMENT />,
   [CALL_KIND.REPLY_TO_COMMENT]: () => <GLYPH.COMMENT />,
-  [CALL_KIND.RESOLVE_THREAD]: () => <GLYPH.SETTLED />,
+  [CALL_KIND.RESOLVE_THREAD]: () => <GLYPH.RESOLVED />,
   [CALL_KIND.REOPEN_THREAD]: () => <GLYPH.COMMENT />,
   [CALL_KIND.SEARCH_TOOLS]: () => <GLYPH.MCP_SERVER />,
   [CALL_KIND.MCP_TOOL]: () => <GLYPH.MCP_SERVER />,

@@ -73,8 +73,8 @@
   --spacing-menu-glyph: var(--ui-menu-glyph);
   --spacing-list-gap: var(--ui-list-gap);
 
-  /* The panel's work column (`@repo/panel`: a transcript's opening line, a
-     tool's page, the find bar, the version history):
+  /* The panel's work column (`@repo/panel`: a transcript's opening line,
+     the find bar, the version history):
      the profile's spacing roles it reads beside the ones above, and its own
      glyphs, measures, and motions. */
   --spacing-ring-reach: var(--ui-focus-ring-reach);
@@ -85,8 +85,6 @@
   --font-weight-ui-regular: var(--ui-weight-regular);
   --font-weight-ui-medium: var(--ui-weight-medium);
   --font-weight-ui-semibold: var(--ui-weight-semibold);
-  --leading-tool-description: 1.5; /* off-scale: a tool's description, a step looser than a caption */
-  --shadow-tool-default: inset 0 0 0 1px var(--ui-color-border-strong);
   --grid-template-columns-version-track: 100% 100%;
   --grid-template-rows-version-track: minmax(0, 1fr);
   --animate-edit-composer-in:
@@ -123,7 +121,6 @@
   --spacing-pick-glyph-lift: calc((1lh - var(--ui-icon-12)) / 2);
   --spacing-inbox-field-short: calc(10 * var(--ui-space-16));
   --spacing-inbox-field-words: calc(var(--ui-type-body-leading) + 2 * var(--ui-item-gap));
-  --spacing-attention-glyph-small: 10px; /* off-scale: the attention mark's glyph at a row's time */
   /* A box or a range a choice is drawn in: a field's ground inside a
      chosen row's edge, filled in the accent where it is on. */
   --color-field: var(--ui-color-input);
@@ -1163,7 +1160,7 @@
     var(--ui-stage-height) -
     320px,
     400px
-  ); /* off-scale: a list a server's page tall */
+  ); /* off-scale: the MCP servers popover's list */
   --color-chart-1: var(--ui-color-chart-1);
   --color-chart-2: var(--ui-color-chart-2);
   --color-chart-3: var(--ui-color-chart-3);

@@ -63,7 +63,19 @@
  * declaration's own, which names nothing of how they are kept.
  */
 
-import { Deferred, Effect, Equal, Exit, FiberSet, Result, Schema, Scope, Semaphore } from "effect";
+import {
+  Deferred,
+  Effect,
+  Equal,
+  Exit,
+  FiberSet,
+  PubSub,
+  Result,
+  Schema,
+  Scope,
+  Semaphore,
+  Stream,
+} from "effect";
 import { rowOf, type SyncedCollection, syncedCollection } from "./synced-collection.js";
 
 /** What a change leaves of a row it takes out of every read, as a deleted automation is. */
@@ -297,6 +309,8 @@ export interface EntityPool {
   ) => Row | undefined;
   /** The writes waiting for the service, oldest first, as they are kept. */
   readonly queued: () => readonly QueuedEntry[];
+  /** Each moving of `queued`, a write laid behind those waiting, answered, or let go, from the moment the stream is run. */
+  readonly queueMoves: Stream.Stream<void>;
   /**
    * Lays `entries` over the rows as writes waiting for the service, behind
    * those waiting already, each by the declaration among `writes` its name
@@ -354,7 +368,17 @@ interface Queue {
   readonly options: PoolOptions | undefined;
   readonly confirming: FiberSet.FiberSet<void>;
   readonly lock: Semaphore.Semaphore;
+  /** Told each time `waiting` moves. */
+  readonly moves: PubSub.PubSub<void>;
   waiting: readonly Waiting[];
+}
+
+/** The queue's waiting writes set to `waiting`, and its moving told. */
+function movedTo(queue: Queue, waiting: readonly Waiting[]): Effect.Effect<void> {
+  return Effect.suspend(() => {
+    queue.waiting = waiting;
+    return Effect.asVoid(PubSub.publish(queue.moves, undefined));
+  });
 }
 
 /** One kind's rows, the reads standing on them, and the writes drawn over them. */
@@ -636,7 +660,10 @@ function resent(queue: Queue): Effect.Effect<void> {
         if (next === undefined) return;
         const retried = yield* next.retried;
         if (retried === RETRIED.UNANSWERED) return;
-        queue.waiting = queue.waiting.filter((each) => each !== next);
+        yield* movedTo(
+          queue,
+          queue.waiting.filter((each) => each !== next),
+        );
         if (retried === RETRIED.REFUSED) yield* queue.options?.replayRefused ?? Effect.void;
       }
     }),
@@ -736,7 +763,7 @@ function written<Row extends object, Change, Input, Answer>(
     const heard = yield* Deferred.make<Answer>();
     /** The write laid behind those waiting, still standing, sent again as they are; let go, its caller hears `meanwhile`. */
     const waits = (kept: QueuedEntry, meanwhile: Answer) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         const waiting: Waiting = {
           entry: kept,
           retried: Effect.gen(function* () {
@@ -753,7 +780,7 @@ function written<Row extends object, Change, Input, Answer>(
           }),
           letGo: Effect.andThen(drop, Deferred.succeed(heard, meanwhile)),
         };
-        queue.waiting = [...queue.waiting, waiting];
+        return movedTo(queue, [...queue.waiting, waiting]);
       });
     const room = () => queue.waiting.length < QUEUE_BOUND;
     // Note that a kept write answers before its reads carry it, standing on in a fiber of the pool's; a refused one answers once it is taken back, on the service's word where it gave one; one unanswered that may wait answers at once that it waits, or, holding its caller, once it is sent again.
@@ -837,6 +864,7 @@ export function entityPool(options?: PoolOptions): Effect.Effect<EntityPool, nev
       options,
       confirming: yield* FiberSet.make<void>(),
       lock: yield* Semaphore.make(1),
+      moves: yield* PubSub.unbounded<void>(),
       waiting: [],
     };
     /** Each kind's rows, by the kind's own declaration. */
@@ -877,6 +905,7 @@ export function entityPool(options?: PoolOptions): Effect.Effect<EntityPool, nev
         return rows === undefined ? undefined : drawnRow(rows, key);
       },
       queued: () => queue.waiting.map((each) => each.entry),
+      queueMoves: Stream.fromPubSub(queue.moves),
       requeue: (entries, writes) =>
         requeued(entries, writes, (declaration, input, key) =>
           Effect.asVoid(
@@ -888,8 +917,11 @@ export function entityPool(options?: PoolOptions): Effect.Effect<EntityPool, nev
       resend: Effect.suspend(() => resent(queue)),
       letGoQueued: Effect.suspend(() => {
         const waiting = queue.waiting;
-        queue.waiting = [];
-        return Effect.forEach(waiting, (each) => each.letGo, { discard: true });
+        if (waiting.length === 0) return Effect.void;
+        return Effect.andThen(
+          movedTo(queue, []),
+          Effect.forEach(waiting, (each) => each.letGo, { discard: true }),
+        );
       }),
     };
   });

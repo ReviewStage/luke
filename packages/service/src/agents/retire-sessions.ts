@@ -10,8 +10,8 @@ import { routedSessions } from "./coder-host/runtime-sessions.js";
 import {
   type AgentSessions,
   describeUnreachable,
-  EVE_RESET_OUTCOME,
-} from "./eve-host/eve-sessions.js";
+  SESSION_RESET_OUTCOME,
+} from "./sessions/agent-sessions.js";
 
 /**
  * retire-sessions.ts -- the agents' sessions we let go of, retired for good: a task's or an agent's at its delete, an account's at its deletion.
@@ -29,7 +29,7 @@ import {
  * status, and the delete goes on, since its sandbox is deleted on the queue
  * all the same (`session-sandboxes.ts`). Only a coding agent's session is
  * asked: a task's own session, from before every turn was an agent's, ran
- * under an eve service that stands no more, and its sandbox is left to the
+ * on the retired runtime, which stands no more, and its sandbox is left to the
  * sweep.
  */
 
@@ -65,11 +65,11 @@ const retireOne = (
     Effect.flatMap((answered) => {
       if (Option.isNone(answered)) return Effect.logWarning("A session was not retired in time");
       const reset = answered.value;
-      return reset.outcome === EVE_RESET_OUTCOME.FAILED
+      return reset.outcome === SESSION_RESET_OUTCOME.FAILED
         ? Effect.logWarning(`A session was not retired: ${reset.status}`)
         : Effect.void;
     }),
-    Effect.catchTag("EveUnreachable", (failure) =>
+    Effect.catchTag("SessionUnreachable", (failure) =>
       Effect.logWarning(
         `A session could not be reached to retire it: ${describeUnreachable(failure)}`,
       ),

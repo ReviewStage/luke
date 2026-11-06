@@ -81,9 +81,8 @@
   max-width: var(--ui-inline-ref-pill-stated-width);
 }
 
-/* A narrowed list stands under its kind's crumb, as an MCP server's page
-   stands under its own; a kind typed with its colon has no back arrow, so
-   its glyph keeps the rows' inset. */
+/* A narrowed list stands under its kind's crumb; a kind typed with its
+   colon has no back arrow, so its glyph keeps the rows' inset. */
 .mention-menu-crumb:not(:has(button)) {
   padding-left: calc(var(--row-inset) + var(--ui-menu-inset));
 }
@@ -2247,18 +2246,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
    gives way first past most of the line, so the reason stays in sight. */
 .agent-servers-name:has(~ .agent-servers-problem) {
   max-width: 60%;
-}
-
-/* A tool's page, in the server page's place: its body as tall as the list
-   and the field above it together, at most, so stepping in and back keeps
-   the popover's size where the list is full, and never grows past the
-   room the window leaves. The page is a grid so the body's `ScrollArea`
-   fills that row under the head. */
-.agent-servers-tool-page .integration-tool-detail {
-  display: grid;
-  flex: none;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto clamp(200px, var(--ui-stage-height) - 280px, 440px);
 }
 
 /* A pull request's color for where it stands, in GitHub's colors: open in

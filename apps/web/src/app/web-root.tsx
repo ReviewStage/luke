@@ -142,7 +142,7 @@ export async function mountWebApp(
     installed.push(installActPort(web.actPort, web.actPortClient));
     installed.push(installAppPlatform(web.platform));
     // Every failure the panel shows is reported through the tab's Sentry.
-    installed.push(installShownFailureReporter(sentry.reportShownFailure));
+    installed.push(installShownFailureReporter(sentry.reportShownFailure, queryClient));
     // The document is read into the window's Query client before anything is drawn over it, so
     // no reader draws a first frame without it.
     await queryClient.ensureQueryData(appStateQuery);

@@ -88,7 +88,7 @@ const writtenChanges = (userId: string, agent: Agent, changes: AgentChanges) =>
  * The agent changed for what follows, every change asked or none, answered
  * as it then stands with the transaction it was written in; nothing where
  * the agent left the account's reach. A choice moved is handed to a native
- * runner that runs now, and eve reads the row at its next step.
+ * runner that runs now.
  */
 export const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,

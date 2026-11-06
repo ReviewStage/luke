@@ -11,7 +11,7 @@
  * build ships the agents' image reference in each of those functions' `.func`
  * (`scripts/bundle-functions.ts`), where it is read beside the
  * function's own entry. Every other function provides none, and a native
- * conversation reached from one is refused by name rather than run on eve.
+ * conversation reached from one is refused by name.
  */
 
 import { dirname } from "node:path";
@@ -21,7 +21,10 @@ import { nativeAgentSessionsLayer } from "@repo/service/agents/coder-host/native
 import { Layer } from "effect";
 import { runWeb } from "./runtime.js";
 
-/** The harnesses over the web runtime, the image's reference read beside this function's entry. */
+/** The agents' image's reference, read beside this function's entry, which the harnesses and every other opener of a sandbox in the function are handed. */
+export const agentImage = agentImageFromDirectory(dirname(fileURLToPath(import.meta.url)));
+
+/** The harnesses over the web runtime and the agents' image. */
 export const nativeAgents = nativeAgentSessionsLayer({ run: runWeb }).pipe(
-  Layer.provide(agentImageFromDirectory(dirname(fileURLToPath(import.meta.url)))),
+  Layer.provide(agentImage),
 );

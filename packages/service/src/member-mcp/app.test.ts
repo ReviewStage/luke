@@ -13,13 +13,13 @@ import {
   listAutomationRuns,
   readAutomation,
 } from "@repo/database/models/automation-store";
-import { listMemories, rememberMemory } from "@repo/database/models/memory-store";
 import {
   DESCRIPTION_COMMENT_OUTCOME,
   readDescriptionCommentThreads,
   startDescriptionCommentThread,
 } from "@repo/database/models/description-comments";
 import { listRevisions } from "@repo/database/models/description-revisions";
+import { listMemories, rememberMemory } from "@repo/database/models/memory-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import { createTask, readTask } from "@repo/database/models/task-store";
@@ -40,7 +40,6 @@ import {
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
 } from "@repo/features/automation-wire";
-import { INBOX_ANSWER_LEAD, INBOX_ASK, INBOX_REPLY, INBOX_STATUS } from "@repo/features/inbox-wire";
 import {
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_ENTRY,
@@ -48,6 +47,7 @@ import {
   DESCRIPTION_COMMENT_STATUS,
 } from "@repo/features/description-comment-wire";
 import { NOTE_KIND } from "@repo/features/description-notes";
+import { INBOX_ANSWER_LEAD, INBOX_ASK, INBOX_REPLY, INBOX_STATUS } from "@repo/features/inbox-wire";
 import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import { DESCRIPTION_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
@@ -64,7 +64,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
-  fakeEve,
+  fakeAgentSessions,
   freshInstallation,
   type GraphqlCall,
   graphqlAnswering,
@@ -113,7 +113,7 @@ import { LIST_WORKSPACES_TOOL, MEMBER_MCP_TOOL, MEMBER_MCP_TOOLS } from "./tools
  * recording one that takes every message, and the model catalog offers
  * nothing. An answer's hand-off to the agent that asked is driven apart,
  * over the agents' own test world (`../testing/agents-app-support.ts`): a
- * started agent on a fake eve, its server admitted on the world's bearers.
+ * started agent on a fake harness, its server admitted on the world's bearers.
  * Synthetic accounts and tokens.
  */
 
@@ -931,10 +931,10 @@ it.layer(getTestDB())("the member's inbox over a started agent", (it) => {
     "an outside agent reads the decide ask waiting on the member, answers it, and the agent that asked takes the answer up as the member's",
     () =>
       Effect.gen(function* () {
-        const eve = fakeEve();
-        const { owner, task, ask, mcpFetch } = yield* openTask({ eve });
+        const agentSessions = fakeAgentSessions();
+        const { owner, task, ask, mcpFetch } = yield* openTask({ agentSessions });
         const { agent, target } = yield* startedAgent(owner, task.id, ask);
-        const sessionId = eve.opened[0]?.sessionId ?? "";
+        const sessionId = agentSessions.opened[0]?.sessionId ?? "";
         assert.equal(
           yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate),
           true,
@@ -950,7 +950,7 @@ it.layer(getTestDB())("the member's inbox over a started agent", (it) => {
         );
         assert.ok(Result.isSuccess(posted));
         const askId = openAskOf(posted.success);
-        const before = eve.sent.length;
+        const before = agentSessions.sent.length;
         const { client } = yield* connected(mcpFetch, owner, REVISION.MODERN);
         const call = (name: string, args: Record<string, unknown>) =>
           Effect.promise(async () =>
@@ -984,10 +984,10 @@ it.layer(getTestDB())("the member's inbox over a started agent", (it) => {
         );
         // The answer is handed to the session the agent runs in, as the member's message its next turn opens on.
         assert.deepEqual(
-          eve.sent.slice(before).map((each) => [each.authorization, each.sessionId]),
+          agentSessions.sent.slice(before).map((each) => [each.authorization, each.sessionId]),
           [[harnessFor(owner), sessionId]],
         );
-        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        const handed = JSON.stringify(agentSessions.sent.at(-1)?.message.message);
         assert.ok(handed.includes(INBOX_ANSWER_LEAD) && handed.includes("30 days"), handed);
       }),
   );

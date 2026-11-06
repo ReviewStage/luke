@@ -17,9 +17,9 @@
  * than running for a day. The turn keeps how the runner ended, its exit code
  * and the redacted tail of its stderr, after the fixed sentence, and the
  * settle is logged as an error under the agent's ids and reported as an
- * issue, each with the exit code alone. Every credential then comes off its
- * firewall, as at any turn's end, since the sandbox stops on its timeout with
- * its policy saved. Nothing is relaunched or stopped.
+ * issue, each with the exit code alone. Nothing is relaunched or stopped,
+ * and its firewall keeps its credentials until the sandbox stops on its
+ * timeout.
  *
  * Every call is bounded so the sweep's minute holds: a few pages of the
  * list, and a set number of sandboxes read against the store, taken from a
@@ -48,15 +48,11 @@ import { redactCredentials } from "@repo/features/credential-redaction";
 import { TURN_FAILURE } from "@repo/features/turn-run";
 import { Cause, Data, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
+import { SANDBOX_NAME } from "../agents/agent-sandbox-open.js";
 import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import {
-  agentTag,
-  SANDBOX_NAME,
-  SANDBOX_NAME_BEFORE_RENAME,
-} from "../agents/machine/vercel-machine.js";
+import { agentTag, SANDBOX_NAME_BEFORE_RENAME } from "../agents/machine/vercel-machine.js";
 import { FAILURE_CHARS } from "../agents/native-events/runner-moments.js";
-import { sandboxFirewall } from "../agents/sandbox-firewall.js";
 import {
   COMMAND_GONE,
   type CommandExit,
@@ -322,17 +318,6 @@ const endSandbox = (
           { ...exited, stderr },
           now,
         );
-        // Note that the credentials come off as at any turn's end, because the sandbox then stops on its
-        // timeout with its policy saved, and a later resume would wear them again.
-        yield* sandboxFirewall(api)
-          .clear({ name: sandbox.name, sessionId: sandbox.running })
-          .pipe(
-            Effect.catch((failure) =>
-              Effect.logWarning(
-                `a lost runner's credentials stayed on its sandbox: ${failure.message}`,
-              ),
-            ),
-          );
         return SANDBOX_ENDING.LOST;
       }),
     );

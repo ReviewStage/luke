@@ -20,7 +20,7 @@ import {
   installEditorLayout,
   QUIET_COMPOSER,
 } from "./testing/composer.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "./testing/copy-feedback.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 
 /**
@@ -176,7 +176,7 @@ test("a file this machine cannot read says so in the agent's box and is reported
   const uninstall = installShownFailureReporter((report) => {
     reports.push(report);
     return undefined;
-  });
+  }, testQueryClientNow());
   const unreadable = new DOMException("The file could not be read.", "NotReadableError");
   const file = Object.assign(new File(["notes"], "notes.txt", { type: "text/plain" }), {
     arrayBuffer: () => Promise.reject(unreadable),

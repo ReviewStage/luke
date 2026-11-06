@@ -13,7 +13,7 @@ import { actProcedure, exactInput } from "./base.js";
 import { TERMINAL_ACT_KIND } from "./kinds.js";
 
 /**
- * terminals.ts -- a coding agent's Terminal tab: its shells listed, started, named, ended, attached, and detached, and its sandbox resumed, as procedures.
+ * terminals.ts -- a coding agent's Terminal tab: its shells listed, started, named, ended, and attached, and its sandbox resumed, as procedures.
  *
  * The platform answers them itself, the desktop's main and a browser tab's
  * host alike, through `act-port/terminal-procedures.ts`. They carry ids,
@@ -40,8 +40,5 @@ export const terminalActsContract = {
     .output(EffectSchema.flip(terminalResumedActAnswerSchema)),
   [TERMINAL_ACT_KIND.TERMINAL_ATTACH]: actProcedure("Could not open that shell.")
     .input(exactInput(terminalAttachParamsSchema))
-    .output(EffectSchema.Void),
-  [TERMINAL_ACT_KIND.TERMINAL_DETACH]: actProcedure("Could not close that shell.")
-    .input(exactInput(terminalShellParamsSchema))
     .output(EffectSchema.Void),
 };

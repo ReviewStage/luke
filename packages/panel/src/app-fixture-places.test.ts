@@ -11,7 +11,7 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach } from "vitest";
+import { afterEach, beforeAll, beforeEach, vi } from "vitest";
 // Note that the places are loaded as the window loads them, on first use
 // (the router's lazy routes, and `desktop-shell.tsx`'s Automations), so each module is read here first and its load
 // settles within the test's own ticks rather than on a clock a busy machine outruns.
@@ -25,9 +25,8 @@ import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { stateWith } from "./testing/app-state.js";
-import { onRegistry, writeAppState } from "./testing/copy-feedback.js";
+import { onRegistry, readAppState } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
-import { appStateFirstRead } from "./use-app-state.js";
 
 /**
  * app-fixture-places.test.ts -- a fixture run, which main hands signed out
@@ -112,10 +111,9 @@ async function settle(): Promise<void> {
 function drawWindow(profile: string): Effect.Effect<void> {
   return Effect.gen(function* () {
     handFixtureRun(profile);
-    const state = yield* Effect.orDie(appStateFirstRead);
+    // The document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
+    yield* Effect.promise(readAppState);
     yield* Effect.promise(loadTasksFixture);
-    // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
-    writeAppState(state);
     root = createRoot(document.body.appendChild(document.createElement("div")));
     act(() => root?.render(onRegistry(rendererRegistry, windowRouter().drawn())));
     yield* Effect.promise(settle);
@@ -154,9 +152,14 @@ it.effect(
     Effect.gen(function* () {
       yield* drawWindow(RUN_PROFILE.AUTOMATIONS_RUNS);
 
-      assert.equal(
-        document.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-        "Check each deploy",
+      // Note that we wait on the automation's name itself, because its page and its read land after hops a busy runner stretches past any fixed count of ticks.
+      yield* Effect.promise(() =>
+        vi.waitFor(() =>
+          assert.equal(
+            document.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+            "Check each deploy",
+          ),
+        ),
       );
     }),
 );

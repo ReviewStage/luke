@@ -8,6 +8,7 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
+import { changesTab } from "@repo/ui/tab-strip-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -15,7 +16,11 @@ import { test } from "vitest";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { PullRequestCard } from "../tasks/pull-request-card.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
-import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js";
+import {
+  PULL_REQUEST_VIEW,
+  type SidePanelControl,
+  type SidePanelTab,
+} from "../tasks/use-side-panel.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -24,7 +29,9 @@ import {
   changesOffers,
   changesTabOf,
   type DrawnTab,
+  type SidePanelDrawing,
   showPullRequest,
+  useSidePanelDrawing,
 } from "./side-panel.js";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -78,17 +85,18 @@ function agents(): AgentsControl {
 
 test('an agent\'s pull request chip opens the one tab the "+" offers for its pull request', () => {
   const control = agents();
-  const offered = changesOffers(control).map((offer) => ({ changes: offer.agentId }));
-  assert.deepEqual(offered, [{ changes: FIRST.id }, { changes: THIRD.id }]);
+  const offered = changesOffers(control).map((offer) => changesTab(offer.agentId));
+  assert.deepEqual(offered, [changesTab(FIRST.id), changesTab(THIRD.id)]);
   // The second agent shares the first's pull request, so its chip opens the first's tab.
   assert.deepEqual(
     [FIRST, SECOND, THIRD].map((each) => changesTabOf(control, each.id, [])),
-    [{ changes: FIRST.id }, { changes: FIRST.id }, { changes: THIRD.id }],
+    [changesTab(FIRST.id), changesTab(FIRST.id), changesTab(THIRD.id)],
   );
   // An agent whose pull request is not held yet opens its own.
-  assert.deepEqual(changesTabOf({ ...control, pullRequests: new Map() }, SECOND.id, []), {
-    changes: SECOND.id,
-  });
+  assert.deepEqual(
+    changesTabOf({ ...control, pullRequests: new Map() }, SECOND.id, []),
+    changesTab(SECOND.id),
+  );
 });
 
 test("an agent's pull request opens in the one Pull request tab of its pull request, on the overview or on the files, as the panel's preview, since a chip is a link", () => {
@@ -102,10 +110,10 @@ test("an agent's pull request opens in the one Pull request tab of its pull requ
   showPullRequest(panel, control, SECOND.id, PULL_REQUEST_VIEW.CONVERSATION);
   showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.FILES);
   assert.deepEqual(asked, [
-    ["view", { changes: FIRST.id }, PULL_REQUEST_VIEW.CONVERSATION],
-    ["preview", { changes: FIRST.id }],
-    ["view", { changes: THIRD.id }, PULL_REQUEST_VIEW.FILES],
-    ["preview", { changes: THIRD.id }],
+    ["view", changesTab(FIRST.id), PULL_REQUEST_VIEW.CONVERSATION],
+    ["preview", changesTab(FIRST.id)],
+    ["view", changesTab(THIRD.id), PULL_REQUEST_VIEW.FILES],
+    ["preview", changesTab(THIRD.id)],
   ]);
 });
 
@@ -120,15 +128,16 @@ test("a pull request named by its number opens a Pull request tab of its own for
   showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.CONVERSATION, 40);
   showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.CONVERSATION, 42);
   assert.deepEqual(asked, [
-    ["view", { changes: THIRD.id, number: 40 }, PULL_REQUEST_VIEW.CONVERSATION],
-    ["preview", { changes: THIRD.id, number: 40 }],
-    ["view", { changes: THIRD.id }, PULL_REQUEST_VIEW.CONVERSATION],
-    ["preview", { changes: THIRD.id }],
+    ["view", changesTab(THIRD.id, 40), PULL_REQUEST_VIEW.CONVERSATION],
+    ["preview", changesTab(THIRD.id, 40)],
+    ["view", changesTab(THIRD.id), PULL_REQUEST_VIEW.CONVERSATION],
+    ["preview", changesTab(THIRD.id)],
   ]);
   // A tab naming another pull request is not the agent's own, so the agent's own still opens its own.
-  assert.deepEqual(changesTabOf(control, SECOND.id, [{ changes: SECOND.id, number: 40 }]), {
-    changes: FIRST.id,
-  });
+  assert.deepEqual(
+    changesTabOf(control, SECOND.id, [changesTab(SECOND.id, 40)]),
+    changesTab(FIRST.id),
+  );
 });
 
 test("an archived agent's merged pull request is offered as any other, in the order its agent started", () => {
@@ -151,7 +160,7 @@ test("an archived agent's merged pull request is offered as any other, in the or
       [THIRD.id, PULL_REQUEST_STATE.OPEN],
     ],
   );
-  assert.deepEqual(changesTabOf(control, gone.id, []), { changes: gone.id });
+  assert.deepEqual(changesTabOf(control, gone.id, []), changesTab(gone.id));
 });
 
 test("a shared pull request whose later agent's tab opened before the earlier agent's read landed keeps that one tab", () => {
@@ -159,10 +168,10 @@ test("a shared pull request whose later agent's tab opened before the earlier ag
   const newer = { ...pullRequest(41, "Teammate invitations, with expiry"), changedFiles: 9 };
   const read = agents();
   const control = { ...read, pullRequests: new Map([...read.pullRequests, [SECOND.id, newer]]) };
-  const open = [{ changes: SECOND.id }];
+  const open = [changesTab(SECOND.id)];
   assert.deepEqual(
     [FIRST, SECOND].map((each) => changesTabOf(control, each.id, open)),
-    [{ changes: SECOND.id }, { changes: SECOND.id }],
+    [changesTab(SECOND.id), changesTab(SECOND.id)],
   );
   assert.deepEqual(
     changesOffers(control, open).map((offer) => [
@@ -228,7 +237,7 @@ test("a pull request's card names the coding agent whose it is on a row by its t
 test("the phone's Activity list hangs each tab's card on its row, as the tab hangs it in the strip", () => {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
-  const tab: SidePanelTab = { changes: THIRD.id };
+  const tab: SidePanelTab = changesTab(THIRD.id);
   const strip: DrawnTab[] = [
     {
       tab,
@@ -258,6 +267,23 @@ test("the phone's Activity list hangs each tab's card on its row, as the tab han
     document.querySelector(".ui-tooltip-card [data-pull-request-card]")?.textContent,
     "Expire invitations",
   );
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("a panel shut by going to another stop is drawn there no longer, rather than slid out over it", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  const shut = tasksControl().sidePanel;
+  let drawing: SidePanelDrawing | undefined;
+  const Drawn = ({ panel }: { panel: SidePanelControl }) => {
+    drawing = useSidePanelDrawing(panel);
+    return null;
+  };
+  const draw = (panel: SidePanelControl) => act(() => root.render(createElement(Drawn, { panel })));
+  draw({ ...shut, open: true, stop: TASK, tab: changesTab(FIRST.id) });
+  draw({ ...shut, open: false, stop: "0e9c4b1d-6a2f-4e3b-9c7d-1f2a3b4c5d6e" });
+  assert.equal(drawing?.panel, undefined);
   act(() => root.unmount());
   container.remove();
 });

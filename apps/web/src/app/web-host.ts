@@ -79,7 +79,7 @@ import { effectServiceLayer } from "@repo/host/service-layer";
 import { highlightSnippet } from "@repo/host/task-code";
 import type { AppPlatform } from "@repo/panel/app-platform";
 import { SETTING_SIDE_EFFECT } from "@repo/settings";
-import { Cause, ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
+import { Cause, ConfigProvider, Context, Effect, Layer, Path, Queue, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { version as appVersion } from "../../package.json";
 import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
@@ -207,6 +207,33 @@ function filesChangedElsewhere(storage: Storage): Stream.Stream<void> {
   return Stream.as(changed, undefined);
 }
 
+/**
+ * Whether the tab's machine has a network: the browser's answer as the host
+ * starts, then again each time it says `online` or `offline`. Note that the
+ * listeners are added before the first answer is read, so a change between
+ * the two is still heard; they are taken back as the stream ends.
+ */
+function tabOnline(): Stream.Stream<boolean> {
+  return Stream.callback<boolean>((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const heard = () => {
+          Queue.offerUnsafe(queue, navigator.onLine);
+        };
+        window.addEventListener("online", heard);
+        window.addEventListener("offline", heard);
+        heard();
+        return heard;
+      }),
+      (heard) =>
+        Effect.sync(() => {
+          window.removeEventListener("online", heard);
+          window.removeEventListener("offline", heard);
+        }),
+    ),
+  );
+}
+
 /** Every seam the host's kernel and assembly stand on, as the tab answers it. */
 function seamLayers(storage: Storage, fixture: RunProfile | undefined) {
   return Layer.mergeAll(
@@ -244,6 +271,7 @@ const pageTerminalPorts: TerminalPortSeam<WebSender> = {
     return {
       post: (message) => port1.postMessage(message),
       onMessage: (listener) => port1.addEventListener("message", (event) => listener(event.data)),
+      onClose: (then) => port1.addEventListener("close", then, { once: true }),
       close: () => port1.close(),
     };
   },
@@ -315,10 +343,12 @@ function portDependencies(
   return {
     account: {
       host,
+      acts: operator.acts,
       haltSessionReplay: operator.haltSessionReplay,
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    acts: operator.acts,
     agentInbox: { host },
     agents: { host, notices },
     automations: { host },
@@ -332,6 +362,7 @@ function portDependencies(
     pushes: new WindowPushes(),
     settings: {
       host,
+      acts: operator.acts,
       reporterOf: (actor) => (actor.sender === window ? reporter : undefined),
       lastSettings: () => operator.settings(),
       sideEffects: {
@@ -342,6 +373,7 @@ function portDependencies(
     },
     tasks: {
       host,
+      acts: operator.acts,
       colorCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
@@ -420,13 +452,14 @@ const composedWeb = (
       const operator = yield* createOperatorClient({
         report,
         gateway: assembly.gateway,
+        acts: assembly.acts,
         nodes: assembly.nodes,
         node: { openExternal: async (url) => tabs.open(url) },
         state,
       });
       yield* linkNetworkWatch({
         state,
-        isOnline: () => navigator.onLine,
+        online: tabOnline(),
         regained: operator.host.tasksRegained(),
         report,
       });

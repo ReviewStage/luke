@@ -13,7 +13,7 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * registry, and no cutoff: the stamp is the whole record, and the cron's
  * purge removes the stamped conversations seven days on, their messages,
  * turns, and events going with them by the schema's own cascade. Deleting
- * the account cascades everything at once, stamped or not. The eve session
+ * the account cascades everything at once, stamped or not. The runtime session
  * a purged conversation ran in is queued in the same transaction for the
  * sweep to delete its sandbox (`session-sandbox-cleanup.ts`), since the
  * conversation's row is the last record that names it.

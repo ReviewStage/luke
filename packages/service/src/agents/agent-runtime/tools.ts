@@ -1,94 +1,20 @@
 /**
- * tools.ts -- every tool we offer any of our agents, and the roles each one serves.
+ * tools.ts -- every tool we name to any of our agents, by the name a model calls it by.
  *
- * The one registry of the agent runtime's tools:
- * each tool, named once by the name a model calls it by
- * (`@repo/features/agent-tools`, which the desktop reads its calls by too),
- * is listed here with the roles it serves (`role.ts`), and everything that would otherwise be kept
- * twice is derived from it: what each coding agent's authored tools are
- * (`../coder-host/tool-set.ts`), and every set the store writer holds a
- * role's rows to, the calls of tools only eve's agents were offered among them. A tool
- * a role is not listed for is never offered to it, so adding a tool to a
- * role is one entry here and its implementation where the role's root
- * reaches it. The tools eve injects of its own beside a task or a connection
- * (`task_wait`, `task_cancel`, `connection_search`, `connection_execute`)
- * and a declared subagent's own tool are eve's, not ours, and are not
- * listed.
+ * The one registry of the agent runtime's tools' names: each tool, named
+ * once by the name a model calls it by (`@repo/features/agent-tools`, which
+ * the desktop reads its calls by too). The set the store writer holds a
+ * coding agent's rows to is built from it (`../coder-host/tool-set.ts`), the
+ * calls of tools only the retired runtime's agents were offered among them; which of them an
+ * agent is served is the catalog's (`../tool-catalog/catalog.ts`). The tools
+ * the retired runtime injected of its own beside a task or a connection (`task_wait`,
+ * `task_cancel`, `connection_search`, `connection_execute`) and a declared
+ * subagent's own tool were its, not ours, and are not listed.
  *
  * This module is a leaf: a tool's module takes its name from here, so the
  * registry imports no tool and no host, and every module may import it.
  */
 
-import { AGENT_TOOL, type AgentTool } from "@repo/features/agent-tools";
-import { AGENT_ROLE, type AgentRole } from "./role.js";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 
-export { AGENT_TOOL, type AgentTool };
-
-const { CODER, CODER_WORKER } = AGENT_ROLE;
-
-/**
- * The roles each tool serves. Note that a coding agent's worker is offered
- * only reads, never an edit, so workers run in parallel
- * without colliding and the agent alone edits: not `run_on_mac`, which runs
- * on the developer's own Mac, not `browser`, which drives the agent's own
- * tabs, and not `show_image`, since a worker never speaks to the developer
- * and answers the agent in words.
- */
-const TOOL_ROLES = {
-  [AGENT_TOOL.LOOK_AT_PICTURE]: [CODER],
-  [AGENT_TOOL.LIST_AGENTS]: [CODER],
-  [AGENT_TOOL.READ_AGENT]: [CODER],
-  [AGENT_TOOL.MESSAGE_AGENT]: [CODER],
-  [AGENT_TOOL.START_AGENT]: [CODER],
-  [AGENT_TOOL.STOP_AGENT]: [CODER],
-  [AGENT_TOOL.UPDATE_AGENT]: [CODER],
-  [AGENT_TOOL.LIST_TASKS]: [CODER],
-  [AGENT_TOOL.READ_TASK]: [CODER],
-  [AGENT_TOOL.CREATE_TASK]: [CODER],
-  [AGENT_TOOL.CREATE_SECTION]: [CODER],
-  [AGENT_TOOL.DELETE_SECTION]: [CODER],
-  [AGENT_TOOL.UPDATE_TASK]: [CODER],
-  [AGENT_TOOL.LIST_AUTOMATIONS]: [CODER],
-  [AGENT_TOOL.CREATE_AUTOMATION]: [CODER],
-  [AGENT_TOOL.UPDATE_AUTOMATION]: [CODER],
-  [AGENT_TOOL.DELETE_AUTOMATION]: [CODER],
-  [AGENT_TOOL.RUN_AUTOMATION]: [CODER],
-  [AGENT_TOOL.LIST_MODELS]: [CODER],
-  [AGENT_TOOL.SAVE_MEMORY]: [CODER],
-  [AGENT_TOOL.SEARCH_MEMORY]: [CODER],
-  [AGENT_TOOL.WEB_SEARCH]: [CODER, CODER_WORKER],
-  [AGENT_TOOL.READ_WEB_PAGE]: [CODER, CODER_WORKER],
-  [AGENT_TOOL.RUN_ON_MAC]: [CODER],
-  [AGENT_TOOL.BROWSER]: [CODER],
-  [AGENT_TOOL.BASH]: [CODER, CODER_WORKER],
-  [AGENT_TOOL.READ_FILE]: [CODER, CODER_WORKER],
-  [AGENT_TOOL.WRITE_FILE]: [CODER],
-  [AGENT_TOOL.GLOB]: [CODER, CODER_WORKER],
-  [AGENT_TOOL.GREP]: [CODER, CODER_WORKER],
-  [AGENT_TOOL.APPLY_PATCH]: [CODER],
-  [AGENT_TOOL.DELEGATE]: [CODER],
-  [AGENT_TOOL.EDIT_DESCRIPTION]: [CODER],
-  [AGENT_TOOL.WRITE_TODOS]: [CODER],
-  [AGENT_TOOL.POST_THREAD]: [CODER],
-  [AGENT_TOOL.WITHDRAW_ASK]: [CODER],
-  [AGENT_TOOL.READ_THREADS]: [CODER],
-  [AGENT_TOOL.OPEN_PULL_REQUEST]: [CODER],
-  [AGENT_TOOL.LOAD_SKILL]: [CODER],
-  [AGENT_TOOL.SHOW_PAGE]: [CODER],
-  [AGENT_TOOL.READ_COMMENTS]: [CODER],
-  [AGENT_TOOL.REPLY_TO_COMMENT]: [CODER],
-  [AGENT_TOOL.UPDATE_COMMENT]: [CODER],
-  [AGENT_TOOL.READ_PAGE]: [CODER],
-  [AGENT_TOOL.SHOW_IMAGE]: [CODER],
-  [AGENT_TOOL.SLEEP]: [CODER],
-} as const satisfies { readonly [Tool in AgentTool]: readonly AgentRole[] };
-
-/** The tools a role is offered, in the registry's order. */
-export function toolsOf(role: AgentRole): ReadonlySet<AgentTool> {
-  return new Set(
-    Object.values(AGENT_TOOL).filter((tool) => {
-      const roles: readonly AgentRole[] = TOOL_ROLES[tool];
-      return roles.includes(role);
-    }),
-  );
-}
+export { AGENT_TOOL };

@@ -70,7 +70,7 @@
  * `GET /api/live/hosts` answers the account's hosts as one, with the install
  * script's address on the origin the request reached; woken by a host
  * enrolled, approved, renamed, removed, or moving through an update
- * (`hostsLive`).
+ * (`hostsRead`).
  * `GET /api/live/installed-skills?workspaceId=` answers the skills the
  * account sees there, the workspace's and its own, each with whether it may
  * manage it, on the same membership check; woken by one of them installed,
@@ -172,6 +172,13 @@ import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire"
 import { agentCallIdSchema, agentCursorSchema } from "@repo/features/agent-wire";
 import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import {
+  type AnyLiveRead,
+  LIVE_PARAM,
+  type LiveReadAnswer,
+  type LiveReadInput,
+  type LiveReadParams,
+} from "@repo/features/live-read";
+import {
   ACCOUNT_INBOX_ITEMS,
   LIVE_POLL,
   LIVE_USER_QUERY,
@@ -186,7 +193,6 @@ import { SqlClient } from "effect/sql";
 import { pluginWriteOrUnavailable } from "../accounts/workspaces-procedures.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { pullRequestNumberOf } from "../agents/asked-pull-request.js";
-import { installScriptUrlOf } from "../agents/hosts-procedures.js";
 import { agentChaptersAdmission } from "../chapters/pull-request-chapters-procedures.js";
 import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
@@ -212,7 +218,6 @@ import {
   automationsLive,
   automationWorkspaceRunsLive,
   DESCRIPTION_THREADS,
-  hostsLive,
   inboxItemsLive,
   inboxLive,
   installedSkillsLive,
@@ -242,7 +247,9 @@ import {
 } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
+import type { BoundLiveRead } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
+import { hostsRead } from "./reads/hosts.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
 export interface LiveProcedureSeams {
@@ -825,8 +832,53 @@ const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  * from a page left open under another account's session reads nothing of
  * theirs.
  */
-const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string }, userId: string) =>
+const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string | undefined }, userId: string) =>
   input[LIVE_USER_QUERY] === userId ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+
+/**
+ * Every bound read's handler (`live-read-binding.ts`): each param the
+ * reader's account (`LIVE_PARAM.USER`) refused as signed out unless it is
+ * the caller's, then bound to the caller, and each text the query names
+ * bound as it is; the caller admitted as the binding asks; the parts sealed
+ * (`liveQueryParts`); and the fields beside them read.
+ */
+function answerBoundRead<Read extends AnyLiveRead>(read: BoundLiveRead<Read>) {
+  const answered = Effect.fnUntraced(function* (
+    input: LiveReadInput<Read>,
+    context: { readonly userId: string; readonly request: Request },
+  ) {
+    // SAFETY: a read's query names each of its params under its own key, as text.
+    const asked = input as Readonly<Record<string, string | undefined>>;
+    const params: Record<string, string> = {};
+    for (const [key, param] of Object.entries(read.declaration.params)) {
+      if (param === LIVE_PARAM.USER) {
+        yield* sameUser({ [LIVE_USER_QUERY]: asked[key] }, context.userId);
+        params[key] = context.userId;
+      } else {
+        params[key] = asked[key] ?? "";
+      }
+    }
+    // SAFETY: every param the declaration names is bound above, and no other.
+    const bound = params as LiveReadParams<Read>;
+    if (read.admit !== undefined) yield* read.admit(bound);
+    const sealed = yield* liveQueryParts(read, bound, asked);
+    const beside =
+      read.beside === undefined
+        ? undefined
+        : yield* read.beside({ request: context.request, params: bound });
+    // SAFETY: the sealed parts are the declaration's, and the fields beside them its `beside`, as its answer names them.
+    return { ...sealed, ...beside } as LiveReadAnswer<Read>;
+  });
+  return function* ({
+    input,
+    context,
+  }: {
+    readonly input: LiveReadInput<Read>;
+    readonly context: { readonly userId: string; readonly request: Request };
+  }) {
+    return yield* answered(input, context);
+  };
+}
 
 /** The live reads, each to a signed-in caller who is the account it names. */
 /** The roles that read and manage a workspace's invitations, as its held read admits them. */
@@ -1076,11 +1128,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       );
       return { ...sealed, origin: new URL(context.request.url).origin };
     }),
-    hosts: signedIn.hosts.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const sealed = yield* liveQueryParts(hostsLive, { userId: context.userId }, input);
-      return { ...sealed, installScriptUrl: installScriptUrlOf(context.request) };
-    }),
+    hosts: signedIn.hosts.effect(answerBoundRead(hostsRead)),
     workspaceMemories: signedIn.workspaceMemories.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const member = yield* hostedStoreOrUnavailable(

@@ -25,10 +25,10 @@ import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../wri
 /**
  * The conversation's dispatch claim against a real Postgres, with a second
  * connection beside the test's own: the one thing PGlite, a single connection
- * that runs one transaction at a time, cannot show. A hand-over to eve held
+ * that runs one transaction at a time, cannot show. A hand-over to the runtime held
  * open on a `Deferred` holds no transaction and no lock: the run stream's
  * journal lands, the take of its line into a turn finds the row at once, a
- * second send waits on the claim holding nothing and reaches eve after it,
+ * second send waits on the claim holding nothing and reaches the runtime after it,
  * and a task's finish or an agent's delete reads the line as work under way
  * without waiting. This file runs in CI's Postgres job, where
  * `APP_STORE_TEST_DATABASE_URL` names the database (`vitest.config.ts`).
@@ -69,7 +69,11 @@ const startedTurn = (target: ConversationTarget) =>
     const writer = yield* storeWriter({ tools: {} });
     const turnId = randomUUID();
     const turn = { conversationId: sessionKey(target.conversationId), turnId };
-    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+    yield* writer.enqueueTurn(target, {
+      turnId,
+      origin: TURN_ORIGIN.TYPED,
+      runtimeTurnId: "turn_0",
+    });
     yield* writer.consumeAll(target, [
       {
         ...turn,
@@ -83,7 +87,7 @@ const startedTurn = (target: ConversationTarget) =>
     return { turnId, turn };
   });
 
-/** A hand-over to eve that says it began, then answers only once released. */
+/** A hand-over to the runtime that says it began, then answers only once released. */
 const heldDispatch = <A>(answer: A) =>
   Effect.gen(function* () {
     const began = yield* Deferred.make<void>();
@@ -137,7 +141,7 @@ const NOTHING_HELD = { idleInTransaction: 0, waiting: 0 } as const;
 
 it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
   it.effect(
-    "the journal of a turn under way lands while a line's hand-over to eve is pending, and no transaction or lock is held meanwhile",
+    "the journal of a turn under way lands while a line's hand-over to the runtime is pending, and no transaction or lock is held meanwhile",
     () =>
       Effect.gen(function* () {
         const target = yield* openAgentConversation;
@@ -175,7 +179,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
   );
 
   it.effect(
-    "the take of a line into the turn eve opened on it finds the row while the hand-over is still pending",
+    "the take of a line into the turn the runtime opened on it finds the row while the hand-over is still pending",
     () =>
       Effect.gen(function* () {
         const target = yield* openAgentConversation;
@@ -217,7 +221,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
   );
 
   it.effect(
-    "a second send to the conversation waits out the first's hand-over holding no transaction or lock, and the two reach eve in the order their rows are numbered",
+    "a second send to the conversation waits out the first's hand-over holding no transaction or lock, and the two reach the runtime in the order their rows are numbered",
     () =>
       Effect.gen(function* () {
         const target = yield* openAgentConversation;

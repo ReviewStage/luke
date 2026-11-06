@@ -48,6 +48,7 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import {
+  FAKE_IMAGE,
   type FakeCdpPeer,
   fakeBridgePty,
   fakeCdpPeer,
@@ -234,7 +235,7 @@ const tabsPath = (taskId: string) => `/api/plans/${taskId}/browser-tabs`;
 
 const agentTabsPath = (agentId: string) => `/api/agents/${agentId}/browser-tabs`;
 
-/** The eve session a coding agent's sandbox is tagged with once it first ran. */
+/** The session a coding agent's sandbox is tagged with once it first ran. */
 const SESSION = "wrun_open_tab_fixture";
 
 /** A member's open of a tab at the address in the agent's browser. */
@@ -279,6 +280,7 @@ const runningBrowser = Effect.map(fakeCdpPeer(), (peer) => ({
     agentBrowserOver(
       fakeSandboxApi({ status: "running", sessionId: SESSION }).api,
       fakeBridgePty(peer),
+      FAKE_IMAGE,
     ),
   ),
 }));
@@ -685,6 +687,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           agentBrowserOver(
             fakeSandboxApi({ status: "running", sessionId: SESSION, unavailable: 503 }).api,
             fakeBridgePty(peer),
+            FAKE_IMAGE,
           ),
         );
         assert.deepEqual(

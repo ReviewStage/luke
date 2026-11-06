@@ -299,7 +299,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
   );
 
   it.effect(
-    "the servers a send eve took mentioned are taken once, each once, by the next turn, the task's among them, while a refused send's are put back as they stood, and another account adds or takes none",
+    "the servers a send the agent's session took mentioned are taken once, each once, by the next turn, the task's among them, while a refused send's are put back as they stood, and another account adds or takes none",
     () =>
       Effect.gen(function* () {
         const { userId, taskId } = yield* openTask;

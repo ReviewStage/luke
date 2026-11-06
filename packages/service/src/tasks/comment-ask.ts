@@ -15,8 +15,8 @@ import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { descriptionsOnFor } from "../agents/descriptions-on.js";
+import type { TypedTurn } from "../agents/sessions/agent-sessions.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 
 /**
@@ -213,9 +213,9 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (i
   };
 }) {
   const { userId, to, clientKey, text, threadId, words, line } = input;
-  const eve = yield* routedSessions<EveTypedTurn>(userId);
+  const agentSessions = yield* routedSessions<TypedTurn>(userId);
   const writer = storeWriter({ tools: CODER_TOOL_SET });
-  yield* steerAgent(eve, writer, userId, to, {
+  yield* steerAgent(agentSessions, writer, userId, to, {
     text,
     serverWords: words,
     clientKey,

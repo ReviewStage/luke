@@ -44,7 +44,7 @@ import { agentLineSender, steerAgent } from "./steer.js";
  * starter, whose principal its turn runs under, under the sending agent's
  * name (`MESSAGE_SENDER.AGENT`), marked as an agent message
  * (`MESSAGE_CHANNEL.AGENT_MESSAGE`), so its window draws it as the sender's
- * bubble rather than the developer's, and keyed by eve's id for the call,
+ * bubble rather than the developer's, and keyed by the call's own id,
  * so a call run again sends once. Its words open with who sent it, by the
  * sender's mention link, and close with how to answer, by the sender's id,
  * both written here rather than by the model, so the receiving agent reads
@@ -233,14 +233,14 @@ export function runMessageAgent(
         return agentToolRejected(MESSAGE_AGENT_REFUSAL.STARTER_LEFT);
       }
       // The line is minted for the receiving agent's starter, whose principal its turn runs under.
-      const eve = call.eveAs(target.userId);
+      const agentSessions = call.agentSessionsAs(target.userId);
       const step = yield* workspaceStepOf(userId, workspace.value);
       const mention = writtenMention(
         { kind: MENTION_KIND.AGENT, agentId: sender.id },
         agentName(sender),
         step,
       );
-      const sent = yield* steerAgent(eve, call.writer, userId, target, {
+      const sent = yield* steerAgent(agentSessions, call.writer, userId, target, {
         text: messageLine(sender, mention, text),
         clientKey: call.clientKey,
         sender: agentLineSender(sender),

@@ -46,7 +46,6 @@ function barOver(path = PATH) {
             listFolder: () => new Promise<FolderListing>(() => undefined),
             onOpen: () => undefined,
           }),
-          github: undefined,
           menu: null,
         }),
       ),

@@ -22,7 +22,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { installShownFailureReporter } from "../failure-report.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries, testQueryClientNow } from "../testing/copy-feedback.js";
 import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab, AgentTab } from "./agent-tab.js";
 
@@ -301,7 +301,10 @@ test("a failed turn's end line reports the service's word for why, and the agent
       getPropagationContext: () => ({ traceId: "0af7651916cd43dd8448eb211c80319c" }),
     }),
   };
-  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  const uninstall = installShownFailureReporter(
+    (report) => sendShownFailure(recording, report),
+    testQueryClientNow(),
+  );
   try {
     const failed = { ...AGENT, status: AGENT_STATUS.FAILED };
     const tab = await runningTab(

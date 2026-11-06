@@ -8,13 +8,12 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 /**
  * bounds.ts -- the bounds and names the coding-agent host runs under.
  *
- * A coding agent is one eve session over a `coding_agent` conversation, run
- * by the second eve service beside the brain: the same door, the
- * same conversation admission, the same relay into the store, under a
- * different agent. What differs is named here: how long its sandbox may
+ * A coding agent is one native harness's session over a `coding_agent`
+ * conversation, run by the runner we launch on its machine
+ * (`runner-sessions.ts`). What differs is named here: how long its sandbox may
  * live, how it is kept alive, and how large it is, how often the repository credential at its
  * firewall is renewed, where its checkout stands, how a transcript read
- * waits, how full its context grows before eve compacts it, and how much
+ * waits, how full its context grows before its harness compacts it, and how much
  * a worker it delegates to may spend.
  */
 export const CODER = {
@@ -31,8 +30,8 @@ export const CODER = {
    * idle sandbox ends, and it bills its memory until then: at the default
    * size, 4 GB for twenty minutes. Twenty, because a live turn shows use far
    * more often than that: a native runner posts at least every heartbeat
-   * (`RUNNER_HEARTBEAT`, five minutes), and a terminal or a watched browser
-   * closes after five idle minutes. Each of them keeps it alive at most every
+   * (`RUNNER_HEARTBEAT`, five minutes), a terminal closes after ten idle
+   * minutes, and a watched browser after five. Each of them keeps it alive at most every
    * `SANDBOX_KEEP_ALIVE_EVERY`.
    */
   SANDBOX_TIMEOUT_MS: 20 * 60 * 1_000,
@@ -99,10 +98,10 @@ export const CODER = {
   /** The context window the session is told where the catalog names none for the model. */
   FALLBACK_CONTEXT_WINDOW_TOKENS: 200_000,
   /**
-   * The share of the context window past which eve compacted a session,
-   * read by the agent's tab as the line a Codex or eve agent's context ring
-   * turns red at, and by a replay as the room it fits into. It was eve's
-   * own default; no harness is told it now.
+   * The share of the context window past which the retired runtime compacted
+   * a session, read by the agent's tab as the line a Codex agent's or a
+   * retired runtime agent's context ring turns red at, and by a replay as the
+   * room it fits into. It was the retired runtime's own default; no harness is told it now.
    */
   COMPACTION_THRESHOLD_SHARE: 0.9,
   /**
@@ -158,15 +157,15 @@ export const CODER = {
   PUBLISHED_CLOSED_FRESH: Duration.minutes(10),
   /**
    * How long after its Start an agent with no turn row yet still reads as
-   * starting. eve took the session and its first turn lands in seconds; an
+   * starting. The harness took the session and its first turn is on its way; an
    * agent still without one past this is read as failed, so nothing reads
    * starting forever and no transcript read is held for it.
    */
   STARTING_GRACE: Duration.millis(STARTING_GRACE_MILLIS),
   /**
    * How long a line of the developer's may stand with no turn to take it
-   * while none runs, and still read the agent as running. eve opens the
-   * turn on a line it took in seconds, as it lands the first turn of a
+   * while none runs, and still read the agent as running. The harness opens
+   * the turn on a line it took, as it lands the first turn of a
    * Start (`STARTING_GRACE`, whose length this shares); a line still
    * waiting past this is one whose turn is not coming, as when the session
    * failed with the store's hooks failing beside it, so no failed turn was
@@ -281,7 +280,7 @@ export const CODER_REFUSAL = {
   /** No step fails this way since a refused fast call runs at standard speed; kept for the turns that failed so before, which still read as this. */
   FAST_NOT_ENABLED:
     "Not run: Fast mode isn't enabled for this Anthropic organization. Choose the model with Fast off.",
-  /** No step is refused for its own key this way since eve, whose steps ran on it, was retired; kept with the two below for the turns refused so before, which still read as these. */
+  /** No step is refused for its own key this way since agents left the retired runtime, whose steps ran on it; kept with the two below for the turns refused so before, which still read as these. */
   ACCOUNT_KEY_UNREADABLE:
     "Not run: your own API key for the agent's model provider cannot be read. Replace it in Settings.",
   ACCOUNT_KEY_REFUSED:

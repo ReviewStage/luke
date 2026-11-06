@@ -43,7 +43,7 @@ import { FileTypeIcon } from "./file-type-icon.js";
  * named on its row by the picture's id rather than carried as bytes
  * (`messageFileChips`), and the transcript reads it through the agent's
  * pictures (`agent-pictures.tsx`'s `MessageFileChips`). A file the service
- * kept no bytes of, one eve staged in the sandbox before the row was
+ * kept no bytes of, one the retired runtime staged in the sandbox before the row was
  * written, is drawn by its name alone, with nothing to open and nothing to
  * walk to.
  *

@@ -161,7 +161,11 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
           params,
         );
         yield* wakesTheTranscript(
-          writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" }),
+          writer.enqueueTurn(target, {
+            turnId,
+            origin: TURN_ORIGIN.TYPED,
+            runtimeTurnId: "turn_0",
+          }),
           agentTopics,
           params,
         );
@@ -220,7 +224,7 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
           yield* writer.enqueueTurn(target, {
             turnId,
             origin: TURN_ORIGIN.TYPED,
-            eveTurnId: "turn_0",
+            runtimeTurnId: "turn_0",
           });
           yield* writer.consume(target, {
             ...runEvent(target, turnId),

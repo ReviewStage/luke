@@ -14,7 +14,7 @@ import {
 } from "@repo/features/inbox-wire";
 import type { Task } from "@repo/features/task-wire";
 import type { AppHostRead, AppInboxItems } from "@repo/host/app-state";
-import { sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { agentTab, draftTab, sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Clock, Context, Effect, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -178,7 +178,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
       account,
     }: { onTask?: boolean; send?: MessageSender; account?: Identity } = {},
   ) => {
-    const agentTab = { agent: open.agent.id };
+    const openTab = agentTab(open.agent.id);
     const tasks = tasksControl({
       page: TASKS_PAGE.DOCUMENT,
       tasks: [INVITES.plan, BILLING.plan],
@@ -186,8 +186,8 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
       region: { kind: DOCUMENT_REGION.READY, task: open.plan },
       mainTabs: {
         ...tasksControl().mainTabs,
-        tabs: [agentTab],
-        tab: onTask ? undefined : agentTab,
+        tabs: [openTab],
+        tab: onTask ? undefined : openTab,
         openAgents: [open.agent.id],
       },
       agents: agentsControl({
@@ -683,7 +683,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   fakeAppBridge({});
   const pin = {
     task: open.plan.id,
-    tab: { agent: open.agent.id },
+    tab: agentTab(open.agent.id),
     label: "Agent",
     at: 5,
     model: open.agent.model,
@@ -842,7 +842,7 @@ async function columnOn(
       ...tasksControl().mainTabs,
       tabs,
       tab: chosen,
-      openAgents: tabs.some((tab) => sameTab(tab, { agent: INVITES.agent.id }))
+      openAgents: tabs.some((tab) => sameTab(tab, agentTab(INVITES.agent.id)))
         ? [INVITES.agent.id]
         : [],
     },
@@ -913,10 +913,10 @@ test("a draft agent's first message marks its tab while another is chosen, never
       },
     ]),
   );
-  const tabs = [{ draft: DRAFT_KEY }];
+  const tabs = [draftTab(DRAFT_KEY)];
   for (const [chosen, draftMarked] of [
     [undefined, true],
-    [{ draft: DRAFT_KEY }, false],
+    [draftTab(DRAFT_KEY), false],
   ] as const) {
     const column = await columnOn(tabs, chosen, INVITES.agent, "Write the expiry job");
     assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), draftMarked);
@@ -926,7 +926,7 @@ test("a draft agent's first message marks its tab while another is chosen, never
 });
 
 test("a draft agent's tab holding no words wears no Draft pencil", async () => {
-  const column = await columnOn([{ draft: DRAFT_KEY }], undefined);
+  const column = await columnOn([draftTab(DRAFT_KEY)], undefined);
   assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), false);
 });
 
@@ -942,7 +942,7 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, leav
   closed.unmount();
 
   const failed = { ...INVITES.agent, status: AGENT_STATUS.FAILED };
-  const marked = await columnOn([{ agent: INVITES.agent.id }], undefined, failed);
+  const marked = await columnOn([agentTab(INVITES.agent.id)], undefined, failed);
   assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false);
   assert.equal(marked.rowDrafted(), false);
 });

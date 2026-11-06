@@ -1,14 +1,15 @@
 import { Schema as EffectSchema } from "effect";
+import { installedSkillsContract } from "./contract/installed-skills.js";
+import { failureFactsSchema } from "./failure-facts.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
 import {
-  installedSkillContentSchema,
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
   installedSkillPreviewRequestSchema,
   installedSkillPreviewSchema,
-  installedSkillRemovedAnswerSchema,
 } from "./installed-skill-route-wire.js";
 import { INSTALLED_SKILL_REFUSAL } from "./installed-skill-wire.js";
-import { wireUuidSchema } from "./service-wire.js";
+import { HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
 
 /**
  * installed-skill-view.ts -- the skills a member installs into the app as one window hears them: each call's answer whole, or why there is none.
@@ -16,40 +17,39 @@ import { wireUuidSchema } from "./service-wire.js";
  * The host asks the service on the window's behalf
  * (`installed-skill-client.ts`) and answers the window one of the shapes
  * here: the service's answer, or why there is none, with the skill it
- * names where the service said. Settings › Skills
+ * names where the service said. The failures are derived from the
+ * procedures' declared refusals (`hosted-failure.ts`), but a skill's files
+ * refused, which the window hears by the store's reason for it. Settings › Skills
  * draws the skills the host holds for it (`installed-skill-live.ts`), and
  * its Add skill dialog previews and installs a paste.
  */
 
-/** Why an installed skills call has no answer: a skill refused, for the store's reason, or the call's own failure. */
-export const INSTALLED_SKILL_CALL_FAILURE = {
-  ...INSTALLED_SKILL_REFUSAL,
-  /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
-  UNANSWERED: "unanswered",
-  /** The workspace is none the account is in, or the skill none it sees. */
-  NOT_FOUND: "not-found",
-  /** The account sees the skill or the workspace but may not do this: a workspace skill takes an owner or admin. */
-  NOT_PERMITTED: "not-permitted",
-  /** The request is none the service takes: nothing to install in the paste, or a workspace skill in a personal workspace. */
-  INVALID: "invalid",
-  /** A skill of that name is already installed in the scope asked. */
-  NAME_TAKEN: "name-taken",
-  /** GitHub serves the repository, or its ref, to none of the workspace's GitHub installation, the member's own token, and an anonymous read. */
-  UNREACHABLE: "repository-not-reachable",
-  /** GitHub did not answer, or is rate limiting; the same call later may be answered. */
-  GITHUB_UNANSWERED: "github-unanswered",
+/** The failures installed skills shipped under spellings of their own, by the refusal each stands for. */
+export const INSTALLED_SKILL_RENAMES = {
+  [HOSTED_API_ERROR.INVALID_REQUEST]: "invalid",
+  [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: "name-taken",
 } as const;
+
+// Note that files refused never reach a window under their slug: the client spells them by the store's reason (`INSTALLED_SKILL_REFUSAL`).
+const { SKILL_FILES_REFUSED: _filesRefused, ...called } = failureSetOf(installedSkillsContract, {
+  as: INSTALLED_SKILL_RENAMES,
+});
+
+/** Why an installed skills call has no answer: a skill refused, for the store's reason, or the call's own failure. */
+export const INSTALLED_SKILL_CALL_FAILURE = { ...INSTALLED_SKILL_REFUSAL, ...called } as const;
 
 export type InstalledSkillCallFailure =
   (typeof INSTALLED_SKILL_CALL_FAILURE)[keyof typeof INSTALLED_SKILL_CALL_FAILURE];
 
-const failed = EffectSchema.Struct({
+/** Why a call that reads a paste has no answer: any failure of the domain, a skill's files refused by the store's reason among them. */
+const pasteFailed = EffectSchema.Struct({
   failure: EffectSchema.Literals(Object.values(INSTALLED_SKILL_CALL_FAILURE)),
-  /** The skill refused, by name, where the service read one. */
   skillName: EffectSchema.optionalKey(EffectSchema.String),
+  cause: EffectSchema.optionalKey(failureFactsSchema),
 });
 
-export type InstalledSkillFailedView = typeof failed.Type;
+/** Why a call has no answer, with the skill refused, by name, where the service read one. */
+export type InstalledSkillFailedView = typeof pasteFailed.Type;
 
 /* ----- Params ----- */
 
@@ -78,17 +78,16 @@ export type InstalledSkillIdParams = typeof installedSkillIdParamsSchema.Type;
 /* ----- Views ----- */
 
 /** One skill read whole, or why it was not. */
-export const installedSkillContentViewSchema = EffectSchema.Union([
-  installedSkillContentSchema,
-  failed,
-]);
+export const installedSkillContentViewSchema = answerView(installedSkillsContract.read, {
+  as: INSTALLED_SKILL_RENAMES,
+});
 
 export type InstalledSkillContentView = typeof installedSkillContentViewSchema.Type;
 
 /** What a paste would install, or why the service did not say. */
 export const installedSkillPreviewViewSchema = EffectSchema.Union([
   installedSkillPreviewSchema,
-  failed,
+  pasteFailed,
 ]);
 
 export type InstalledSkillPreviewView = typeof installedSkillPreviewViewSchema.Type;
@@ -96,15 +95,14 @@ export type InstalledSkillPreviewView = typeof installedSkillPreviewViewSchema.T
 /** The skills an install made, or why it made none. */
 export const installedSkillInstallViewSchema = EffectSchema.Union([
   installedSkillInstallAnswerSchema,
-  failed,
+  pasteFailed,
 ]);
 
 export type InstalledSkillInstallView = typeof installedSkillInstallViewSchema.Type;
 
 /** A skill removed, or why it stands. */
-export const installedSkillRemovedViewSchema = EffectSchema.Union([
-  installedSkillRemovedAnswerSchema,
-  failed,
-]);
+export const installedSkillRemovedViewSchema = answerView(installedSkillsContract.remove, {
+  as: INSTALLED_SKILL_RENAMES,
+});
 
 export type InstalledSkillRemovedView = typeof installedSkillRemovedViewSchema.Type;

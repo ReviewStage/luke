@@ -14,13 +14,12 @@ import {
 } from "@repo/features";
 import { BROWSER_TABS_PLACE, browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
-import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@repo/features/agent-wire";
-import type { GitHubConnection } from "@repo/features/github-connection-wire";
-import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
-import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
-import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
-import { PAGE_OWNER, PAGE_SHOWER, type PageVersion, pagePlaceId } from "@repo/features/page-wire";
-import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
+import {
+  AGENT_MACHINE,
+  AGENT_STATUS,
+  PULL_REQUEST_STATE,
+  type TasklessAgent,
+} from "@repo/features/agent-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -31,6 +30,12 @@ import {
   type DescriptionCommentThread,
 } from "@repo/features/description-comment-wire";
 import type { DescriptionEditAnswer } from "@repo/features/description-edit";
+import type { GitHubConnection } from "@repo/features/github-connection-wire";
+import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
+import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
+import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
+import { PAGE_OWNER, PAGE_SHOWER, type PageVersion, pagePlaceId } from "@repo/features/page-wire";
+import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import type { SlackListedChannel, WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import {
@@ -54,6 +59,7 @@ import {
   TASK_STATUS,
   type Task,
   type TaskAgentsSummary,
+  type TaskCreateRequest,
   type TaskFileAnswer,
   type TaskSkillsAnswer,
   type TaskTreeAnswer,
@@ -62,7 +68,6 @@ import {
   type BlockCallFailure,
   BROWSER_TAB_OPEN_FAILURE,
   COMMENT_SUBJECT,
-  GITHUB_DISCONNECT_FAILURE,
   type HeldDescriptionDocument,
   HOST_LIVE,
   type ParentCallFailure,
@@ -74,6 +79,7 @@ import {
   type TaskCallFailure,
   type TasksCommentAnswer,
   type TasksView,
+  type TasksWriteSectionParams,
   tasksViewSchema,
 } from "@repo/features/tasks-view";
 import type { WorkspaceIntegrations } from "@repo/features/workspace-integrations-live";
@@ -81,6 +87,7 @@ import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wi
 import {
   WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
+  WORKSPACE_SLUG_PROBLEM,
   type Workspace,
   type WorkspaceMember,
   type WorkspacePhotoType,
@@ -100,20 +107,35 @@ import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Layer, Result, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import {
-  type AppHostRead,
+  GITHUB_LAST_SIGN_IN_REFUSAL,
+  WORKSPACE_NOT_PERMITTED_REFUSAL,
+  WORKSPACE_SLUG_REFUSAL,
+} from "./acts.js";
+import {
   type AppDescriptionComments,
   type AppDescriptionDocuments,
+  type AppHostRead,
   NO_KEYS_HELD,
 } from "./app-state.js";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
+import {
+  type ActInput,
+  type ActOutput,
+  type TASKS_ACTS,
+  WORKSPACE_ACTS,
+} from "./contract/index.js";
 import { type EntityStore, KEPT_READ, openEntityStore } from "./entity-store.js";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
+import { type ActHandler, ActRefused, type HostActTable } from "./host-acts.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import { memoryFileSystem } from "./testing/memory-file-system.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { agentListRow } from "./testing/task-list-rows.js";
 import { testCipher } from "./testing/test-cipher.js";
 import { windowFocus } from "./window-focus.js";
+
+/** A declared act the tasks composer answers, by its name. */
+type TasksActName = keyof typeof TASKS_ACTS;
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SECTION_ID = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
@@ -167,6 +189,8 @@ interface FakeService extends TasksClient {
   createAnswer: TaskCallResult<TaskStarted, RepositoryCallFailure>;
   /** The idempotency key each start asked was sent under, in order. */
   createKeys: (string | undefined)[];
+  /** Each start's request as the service was sent it, in order. */
+  createRequests: TaskCreateRequest[];
   /** The repositories the account reaches, as the service answers them; a failure is the service refusing the read. */
   repositoriesAnswer: TaskCallResult<GitHubRepositoriesAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
   /** Whether a repository is refused as one the App does not reach. */
@@ -582,6 +606,7 @@ function fakeService(tasks: Task[]): FakeService {
     relationAnswered: Effect.void,
     createAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     createKeys: [],
+    createRequests: [],
     repositoriesAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     repositoryUnreachable: false,
     reads: [],
@@ -1106,9 +1131,10 @@ function fakeService(tasks: Task[]): FakeService {
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
           : { ok: true, answer: found };
       }),
-    create: (_request, key) =>
+    create: (request, key) =>
       Effect.sync(() => {
         service.createKeys.push(key);
+        service.createRequests.push(request);
         return service.createAnswer;
       }),
     repositories: (workspaceId) =>
@@ -1330,10 +1356,40 @@ function subject(
       offlineRefused: { clear: () => undefined },
       githubMoved: Effect.void,
     }).pipe(Effect.provide(noNetwork));
-    const call = (method: GatewayMethod, params: WireRecord = {}) => {
-      const handler = tasks.methods[method];
-      assert.ok(handler, `no handler for ${method}`);
-      return Effect.orDie(handler(params, context));
+    /** A declared act answered by the composer's own handler, or a Gateway method it still answers. */
+    function call<Name extends TasksActName>(
+      act: Name,
+      input: ActInput<(typeof TASKS_ACTS)[Name]>,
+    ): Effect.Effect<ActOutput<(typeof TASKS_ACTS)[Name]>>;
+    function call(method: GatewayMethod, params?: WireRecord): Effect.Effect<WireValue>;
+    function call(name: TasksActName | GatewayMethod, params: unknown = {}) {
+      if (name in tasks.acts) {
+        // SAFETY: the overloads pair each act's name with its own input.
+        const handler = tasks.acts[name as TasksActName] as (
+          input: unknown,
+        ) => Effect.Effect<unknown, unknown>;
+        return Effect.orDie(handler(params));
+      }
+      const handler = tasks.methods[name as GatewayMethod];
+      assert.ok(handler, `no handler for ${name}`);
+      // SAFETY: a Gateway method is called with a record, as its overload takes.
+      return Effect.orDie(handler(params as WireRecord, context));
+    }
+    /** One of the workspaces' acts, as the act port answers it: its value, or the sentence it was refused in. */
+    const act = <Name extends keyof typeof WORKSPACE_ACTS>(
+      name: Name,
+      input: ActInput<(typeof WORKSPACE_ACTS)[Name]>,
+    ) => {
+      const workspaceActs: HostActTable<typeof WORKSPACE_ACTS> = tasks.acts;
+      const handler: ActHandler<(typeof WORKSPACE_ACTS)[Name]> = workspaceActs[name];
+      return Effect.orDie(
+        Effect.catchIf(
+          handler(input),
+          (error): error is ActRefused => error instanceof ActRefused,
+          (refused) =>
+            Effect.succeed({ refused: refused.sentence ?? WORKSPACE_ACTS[name].refusal }),
+        ),
+      );
     };
     const last = () => told.at(-1);
     /** The first view told, from now on, that `wanted` holds of. */
@@ -1368,7 +1424,7 @@ function subject(
       call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId });
     /** Opens a task as the window's press does, the window then holding its description, and lets the description's read land. */
     const openTask = (taskId: string) =>
-      Effect.tap(call(GATEWAY_METHOD.TASKS_OPEN, { taskId }), () =>
+      Effect.tap(call("TASKS_SELECT", { taskId }), () =>
         Effect.andThen(holdDescription(taskId), settled),
       );
     /** The descriptions the host holds for the windows as it last told them (`LIVE_READ.DESCRIPTION_DOCUMENT`). */
@@ -1390,6 +1446,7 @@ function subject(
     return {
       tasks,
       call,
+      act,
       told,
       pushed,
       events,
@@ -1438,11 +1495,11 @@ it.effect(
       service.pictures.set(INVITES, new Map([["picture-1", picture]]));
       const { call, told } = yield* subject(service);
 
-      const read = yield* call(GATEWAY_METHOD.TASKS_PICTURE, {
+      const read = yield* call("TASKS_PICTURE_READ", {
         planId: INVITES,
         attachmentId: "picture-1",
       });
-      const gone = yield* call(GATEWAY_METHOD.TASKS_PICTURE, {
+      const gone = yield* call("TASKS_PICTURE_READ", {
         planId: INVITES,
         attachmentId: "picture-2",
       });
@@ -1469,7 +1526,7 @@ it.effect(
       service.files["src/seats.ts"] = { file: window };
       const { call } = yield* subject(service);
 
-      const read = yield* call(GATEWAY_METHOD.TASKS_FILE, {
+      const read = yield* call("TASKS_FILE", {
         taskId: INVITES,
         path: "src/seats.ts",
         firstLine: 1,
@@ -1498,14 +1555,14 @@ it.effect(
       const read = { taskId: INVITES, path: "src/seats.ts", firstLine: 1, lastLine: 2 };
       const atCommit = { ...read, ref: "0123456789abcdef0123456789abcdef01234567" };
 
-      yield* call(GATEWAY_METHOD.TASKS_FILE, atCommit);
+      yield* call("TASKS_FILE", atCommit);
       const changed = { ...window, lines: ["const seats = 4;", "export { seats };"] };
       service.files["src/seats.ts"] = { file: changed };
 
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_FILE, atCommit), { file: window });
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_FILE, read), { file: changed });
+      assert.deepEqual(yield* call("TASKS_FILE", atCommit), { file: window });
+      assert.deepEqual(yield* call("TASKS_FILE", read), { file: changed });
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_FILE, {
+        yield* call("TASKS_FILE", {
           ...read,
           ref: "89abcdef0123456789abcdef0123456789abcdef",
         }),
@@ -1522,13 +1579,13 @@ it.effect(
       const { call } = yield* subject(service);
       const picture = "data:image/png;base64,iVBORw0KGgo=";
 
-      const kept = yield* call(GATEWAY_METHOD.TASKS_PICTURE_KEEP, { planId: INVITES, picture });
-      yield* call(GATEWAY_METHOD.TASKS_PICTURE_KEEP, { planId: INVITES, picture });
-      const third = yield* call(GATEWAY_METHOD.TASKS_PICTURE_KEEP, { planId: INVITES, picture });
+      const kept = yield* call("TASKS_PICTURE_KEEP", { planId: INVITES, picture });
+      yield* call("TASKS_PICTURE_KEEP", { planId: INVITES, picture });
+      const third = yield* call("TASKS_PICTURE_KEEP", { planId: INVITES, picture });
 
       assert.deepEqual(kept, { id: "kept-1" });
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_PICTURE, { planId: INVITES, attachmentId: "kept-1" }),
+        yield* call("TASKS_PICTURE_READ", { planId: INVITES, attachmentId: "kept-1" }),
         { contentType: PICTURE_TYPE.PNG, base64: "iVBORw0KGgo=" },
       );
       assert.deepEqual(third, { failure: PICTURE_KEEP_FAILURE.TOO_MANY });
@@ -1543,7 +1600,7 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
       fakeService([billing, invites]),
     );
 
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call("TASKS_REFRESH", undefined);
     yield* listed();
     assert.deepEqual(
       last()?.tasks.map((each) => each.name),
@@ -1552,9 +1609,7 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
     assert.equal(last()?.listStatus, TASKS_READ.READY);
     assert.equal(last()?.activeTaskId, undefined);
 
-    assert.deepEqual(yield* openTask(INVITES), {
-      opened: true,
-    });
+    assert.deepEqual(yield* openTask(INVITES), true);
     assert.equal(last()?.activeTaskId, INVITES);
     assert.deepEqual(description(INVITES)?.document, invites.document);
     assert.equal(tasks.snapshot().activeTaskId, INVITES);
@@ -1635,7 +1690,7 @@ it.effect(
       const entities = yield* Scope.provide(quit)(opened);
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       const { call, listed } = yield* Scope.provide(quit)(subject(service, { entities }));
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       yield* TestClock.adjust("30 seconds");
       const first = yield* keptAt;
@@ -1669,9 +1724,9 @@ it.effect(
       const before = yield* Scope.provide(quit)(entityPool(options));
       const kept = yield* Scope.provide(quit)(opened(before));
       const first = yield* Scope.provide(quit)(subject(service, { entities: kept, pool: before }));
-      yield* first.call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* first.call("TASKS_REFRESH", undefined);
       yield* first.listed();
-      const answered = yield* first.call(GATEWAY_METHOD.TASKS_RENAME, {
+      const answered = yield* first.call("TASKS_RENAME", {
         taskId: INVITES,
         name: "Invitations",
       });
@@ -1682,11 +1737,11 @@ it.effect(
       const relaunched = yield* subject(service, { entities, pool });
       yield* pool.requeue(entities.queue, relaunched.tasks.queueable);
       service.renameUntaken = undefined;
-      yield* relaunched.call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* relaunched.call("TASKS_REFRESH", undefined);
       yield* relaunched.listed();
       yield* relaunched.settled;
 
-      assert.deepEqual(answered, { renamed: true });
+      assert.deepEqual(answered, true);
       assert.deepEqual(
         relaunched.last()?.tasks.map((each) => each.name),
         ["Invitations"],
@@ -1710,9 +1765,9 @@ it.effect(
         }),
       });
       const { call, listed, last, settled } = yield* subject(service, { pool });
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
-      yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" });
+      yield* call("TASKS_RENAME", { taskId: INVITES, name: "Invitations" });
       const drawn = last()?.tasks.map((each) => each.name);
 
       service.renameUntaken = WRITE_UNTAKEN.REFUSED;
@@ -1752,9 +1807,9 @@ it.effect(
       const before = yield* Scope.provide(quit)(entityPool(options));
       const kept = yield* Scope.provide(quit)(opened(before));
       const first = yield* Scope.provide(quit)(subject(service, { entities: kept, pool: before }));
-      yield* first.call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* first.call("TASKS_REFRESH", undefined);
       yield* first.listed();
-      const answered = yield* first.call(GATEWAY_METHOD.TASKS_START, {
+      const answered = yield* first.call("TASKS_START", {
         name: "Invitation expiry",
         workspaceId: billing.workspaceId,
       });
@@ -1768,7 +1823,7 @@ it.effect(
       const made = { ...task(INVITES, "Invitation expiry", "", 30), createdAt: 3_000 };
       service.tasks = [...service.tasks, made];
       service.createAnswer = { ok: true, answer: { task: made } };
-      yield* relaunched.call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* relaunched.call("TASKS_REFRESH", undefined);
       yield* relaunched.listed();
       yield* relaunched.settled;
 
@@ -1802,9 +1857,9 @@ it.effect(
       };
       const pool = yield* entityPool({ mintKey: () => "start-key", replayRefused: Effect.void });
       const { call, listed, last, settled, description } = yield* subject(service, { pool });
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
-      yield* call(GATEWAY_METHOD.TASKS_START, {
+      yield* call("TASKS_START", {
         name: "Invitation expiry",
         workspaceId: billing.workspaceId,
       });
@@ -1852,11 +1907,11 @@ it.effect(
       };
       const pool = yield* entityPool({ mintKey: () => "start-key", replayRefused: Effect.void });
       const { call, listed, last, settled } = yield* subject(service, { pool });
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
 
       const starting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_START, {
+        call("TASKS_START", {
           workspaceId: billing.workspaceId,
           agent: { idempotencyKey: "agent-key", prompt: "Expire invitations." },
           quiet: true,
@@ -1919,22 +1974,48 @@ it.effect(
 );
 
 it.effect(
+  "a start reaches the service whole: its workspace, brief, planning, standing, and the device its agents run on, under the id the host minted",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
+      service.createAnswer = { ok: true, answer: { task: task(INVITES, "Rate limit", "", 10) } };
+      const asked = {
+        name: "Rate limit",
+        brief: "Rate limit search.",
+        repository: "acme/ledger",
+        workspaceId: "workspace-acme",
+        planning: false,
+        status: TASK_STATUS.BACKLOG,
+        priority: TASK_PRIORITY.HIGH,
+        assigneeId: "user-ada",
+        runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId: "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11" },
+      } as const;
+
+      yield* call("TASKS_START", { ...asked, quiet: true });
+
+      assert.deepEqual(service.createRequests, [{ ...asked, id: INVITES }]);
+    }),
+);
+
+it.effect(
   "a quiet start opens nothing and answers its task, and its agent's start where it named one",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(BILLING, "Billing export", "# Billing", 20)]);
       const { call, listed, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       const made = task(INVITES, "Invitation expiry", "", 10);
       const refusal = { failure: AGENT_CALL_FAILURE.INVALID_CHOICE };
       service.createAnswer = { ok: true, answer: { task: made } };
-      const started = yield* call(GATEWAY_METHOD.TASKS_START, {
+      const started = yield* call("TASKS_START", {
         name: "Invitation expiry",
         quiet: true,
       });
       service.createAnswer = { ok: true, answer: { task: made, agent: refusal } };
-      const withAgent = yield* call(GATEWAY_METHOD.TASKS_START, {
+      const withAgent = yield* call("TASKS_START", {
         agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
         quiet: true,
       });
@@ -1953,7 +2034,7 @@ it.effect(
       const service = fakeService([billing]);
       const { call, last, settled, listed } = yield* subject(service);
       const shown = () => last()?.tasks.some((row) => row.id === INVITES);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-earlier"]);
@@ -1965,7 +2046,7 @@ it.effect(
       service.createAnswer = { ok: false, failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
       const quickAdd = { name: "Invitation expiry", workspaceId: billing.workspaceId, quiet: true };
 
-      const refusing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_START, quickAdd));
+      const refusing = yield* Effect.forkChild(call("TASKS_START", quickAdd));
       yield* settled;
       const drawn = shown();
       yield* Deferred.succeed(answered, undefined);
@@ -1974,7 +2055,7 @@ it.effect(
 
       const made = { ...task(INVITES, "Invitation expiry", "", 30), createdAt: 3_000 };
       service.createAnswer = { ok: true, answer: { task: made, txid: "tx-start" } };
-      const start = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_START, quickAdd));
+      const start = yield* Effect.forkChild(call("TASKS_START", quickAdd));
       yield* settled;
       // A list read from before the start answers without it.
       service.live.list.set({ plans: [rowOfTask(billing)] }, ["tx-other"]);
@@ -2002,7 +2083,7 @@ it.effect(
       const billing = task(BILLING, "Billing export", "# Billing", 20);
       const service = fakeService([billing]);
       const { call, last, settled, listed, openTask, description } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       yield* openTask(BILLING);
       // The service answers the start only once let go, as one still out.
@@ -2012,7 +2093,7 @@ it.effect(
       service.createAnswer = { ok: false, failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
 
       const start = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_START, {
+        call("TASKS_START", {
           name: "Invitation expiry",
           workspaceId: billing.workspaceId,
         }),
@@ -2038,7 +2119,7 @@ it.effect(
       const billing = task(BILLING, "Billing export", "# Billing", 20);
       const service = fakeService([billing]);
       const { call, settled, listed, description } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       // The service makes the task only once let go, its record sealed from then on.
       const answered = yield* Deferred.make<void>();
@@ -2048,7 +2129,7 @@ it.effect(
       service.createAnswer = { ok: true, answer: { task: made } };
 
       const start = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_START, {
+        call("TASKS_START", {
           name: "Invitation expiry",
           workspaceId: billing.workspaceId,
         }),
@@ -2089,11 +2170,9 @@ it.effect("a start answered after another task was opened answers its task and o
       answer: { task: task(INVITES, "Invitation expiry", "", 10) },
     };
 
-    const starting = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry" }),
-    );
+    const starting = yield* Effect.forkChild(call("TASKS_START", { name: "Invitation expiry" }));
     yield* settled;
-    yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
+    yield* call("TASKS_SELECT", { taskId: BILLING });
     yield* Deferred.succeed(answered, undefined);
     yield* settled;
 
@@ -2117,11 +2196,11 @@ it.effect("a task opened again draws its held description before any read of it 
 
     // The window lets the billing task's description go as it opens the invites task again, whose it holds anew.
     yield* call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: BILLING });
-    const opening = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }));
+    const opening = yield* Effect.forkChild(call("TASKS_SELECT", { taskId: INVITES }));
     yield* call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId: INVITES });
     yield* settled;
 
-    assert.deepEqual(opening.pollUnsafe(), Exit.succeed({ opened: true }), "the open answered");
+    assert.deepEqual(opening.pollUnsafe(), Exit.succeed(true), "the open answered");
     assert.equal(last()?.activeTaskId, INVITES);
     assert.deepEqual(held(INVITES), { rows: { task: invites } });
     assert.deepEqual(
@@ -2147,11 +2226,11 @@ it.effect(
       const { call, last, settled, held, openTask, holdDescription } = yield* subject(service);
 
       yield* openTask(BILLING);
-      const opening = yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      const opening = yield* call("TASKS_SELECT", { taskId: INVITES });
       yield* holdDescription(INVITES);
       yield* settled;
 
-      assert.deepEqual(opening, { opened: true });
+      assert.deepEqual(opening, true);
       assert.equal(last()?.activeTaskId, INVITES);
       assert.deepEqual(held(INVITES), { rows: { task: invites } });
       assert.equal(held(BILLING), undefined);
@@ -2171,7 +2250,7 @@ it.effect("a press on the task already open reads nothing again", () =>
     yield* openTask(INVITES);
     const before = service.reads.length;
 
-    assert.deepEqual(yield* openTask(INVITES), { opened: true });
+    assert.deepEqual(yield* openTask(INVITES), true);
     assert.deepEqual(service.reads.slice(before), []);
     assert.deepEqual(description(INVITES), invites);
   }),
@@ -2192,7 +2271,7 @@ it.effect(
 
       yield* openTask(INVITES);
       assert.equal(held(INVITES), undefined, "the description is still read");
-      yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" });
+      yield* call("TASKS_RENAME", { taskId: INVITES, name: "Invitations" });
       assert.equal(description(INVITES)?.document.body, "# Invitations");
 
       yield* Deferred.succeed(answered, undefined);
@@ -2210,7 +2289,7 @@ it.effect(
       const billing = task(BILLING, "Billing export", "# Billing export", 20);
       const service = fakeService([billing, invites]);
       const { call, settled, listed, description, openTask } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
 
       // The read takes the task as it stands when asked, and answers only once let go.
@@ -2219,7 +2298,7 @@ it.effect(
       service.open = (taskId) =>
         Effect.flatMap(open(taskId), (read) => Effect.as(Deferred.await(answered), read));
       yield* openTask(INVITES);
-      yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: true });
+      yield* call("TASKS_PIN", { taskId: INVITES, pinned: true });
 
       yield* Deferred.succeed(answered, undefined);
       yield* settled;
@@ -2233,9 +2312,9 @@ it.effect("a refresh that reads what the view already holds tells the window not
     const billing = task(BILLING, "Billing export", "# Billing export", 20);
     const { call, told } = yield* subject(fakeService([billing]));
 
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call("TASKS_REFRESH", undefined);
     const firstRead = told.length;
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call("TASKS_REFRESH", undefined);
 
     assert.ok(firstRead > 0, "the first read is told");
     assert.equal(told.length, firstRead);
@@ -2251,7 +2330,7 @@ it.effect(
       const service = fakeService([billing]);
       const { call, tasks, listed } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       const first = tasks.snapshot();
       service.tasks = [billing, invites];
@@ -2272,7 +2351,7 @@ it.effect("the window's refresh lists the agents with no task beside the tasks",
     const { call, last, listed } = yield* subject(fakeService([billing]));
     const triage = agentRow(null, 60_000);
 
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call("TASKS_REFRESH", undefined);
     yield* listed([triage]);
 
     assert.deepEqual(
@@ -2295,7 +2374,7 @@ it.effect(
       const record = polledRecord(service, INVITES);
       service.recordLives[INVITES] = record;
       const { call, last, openTask, description, settled, listed } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       yield* openTask(INVITES);
       // Answers Sync woke hand the list's and the record's follows their waits for a write's transaction.
@@ -2307,7 +2386,7 @@ it.effect(
 
       service.editTxid = "tx-edit";
       const mine = `${INVITES_TEXT}\n\nInvites expire.`;
-      const answer = yield* call(GATEWAY_METHOD.TASKS_EDIT, {
+      const answer = yield* call("TASKS_EDIT", {
         taskId: INVITES,
         edit: { document: { base: INVITES_TEXT, value: mine } },
       });
@@ -2368,12 +2447,12 @@ it.effect(
       };
 
       service.createAnswer = { ok: true, answer: { task: made, agent: { agent } } };
-      const started = yield* call(GATEWAY_METHOD.TASKS_START, params);
+      const started = yield* call("TASKS_START", params);
       service.createAnswer = {
         ok: true,
         answer: { task: made, agent: { failure: AGENT_CALL_FAILURE.INVALID_CHOICE } },
       };
-      const refused = yield* call(GATEWAY_METHOD.TASKS_START, params);
+      const refused = yield* call("TASKS_START", params);
 
       assert.deepEqual(started, { planId: INVITES, agentStart: { agent } });
       assert.deepEqual(refused, {
@@ -2390,8 +2469,8 @@ it.effect("behind a closed account gate nothing is read and nothing starts", () 
     const { call, told, tasks } = yield* subject(service, { signedIn: false });
 
     yield* tasks.open;
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-    const started = yield* call(GATEWAY_METHOD.TASKS_START, { name: "Teammate invitations" });
+    yield* call("TASKS_REFRESH", undefined);
+    const started = yield* call("TASKS_START", { name: "Teammate invitations" });
 
     assert.deepEqual(started, { failure: TASK_CALL_FAILURE.UNANSWERED });
     assert.deepEqual(told, []);
@@ -2414,8 +2493,8 @@ it.effect(
       service.sections = { sections: [launch], entries: [], agentEntries: [] };
       service.pins = [{ repository: "acme/relay", pinnedAt: 3 }];
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       assert.deepEqual(last()?.taskSections, service.sections);
       assert.deepEqual(last()?.repositoryPins, service.pins);
@@ -2424,9 +2503,7 @@ it.effect(
       const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
       service.sections = { sections: [launch], entries: [placed], agentEntries: [] };
       const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [place] }), {
-        changed: true,
-      });
+      assert.deepEqual(yield* call("TASKS_WRITE_SECTION", { writes: [place] }), true);
       assert.deepEqual(last()?.taskSections, {
         sections: [launch],
         entries: [placed],
@@ -2435,9 +2512,7 @@ it.effect(
 
       service.sections = undefined;
       const removal = { ...place, sectionId: null };
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [removal] }), {
-        changed: false,
-      });
+      assert.deepEqual(yield* call("TASKS_WRITE_SECTION", { writes: [removal] }), false);
       assert.deepEqual(last()?.taskSections, {
         sections: [launch],
         entries: [placed],
@@ -2487,7 +2562,7 @@ it.effect(
       // The service keeps the section, then refuses to put the task in it.
       service.sections = { sections: [launch], entries: [], agentEntries: [] };
       service.sectionRefused = TASK_SECTION_WRITE.PLACE;
-      const writes = [
+      const writes: TasksWriteSectionParams["writes"] = [
         {
           kind: TASK_SECTION_WRITE.CREATE,
           id: SECTION_ID,
@@ -2497,9 +2572,7 @@ it.effect(
         { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID },
       ];
 
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes }), {
-        changed: false,
-      });
+      assert.deepEqual(yield* call("TASKS_WRITE_SECTION", { writes }), false);
       assert.deepEqual(last()?.taskSections, service.sections);
     }),
 );
@@ -2511,7 +2584,7 @@ it.effect(
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       const { call, last, settled } = yield* subject(service);
       service.sections = { sections: [], entries: [], agentEntries: [] };
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       const create = {
         kind: TASK_SECTION_WRITE.CREATE,
@@ -2530,12 +2603,10 @@ it.effect(
       service.sectionAnswered = Deferred.await(answered);
 
       const first = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [create, place] }),
+        call("TASKS_WRITE_SECTION", { writes: [create, place] }),
       );
       yield* settled;
-      const second = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [rename] }),
-      );
+      const second = yield* Effect.forkChild(call("TASKS_WRITE_SECTION", { writes: [rename] }));
       yield* settled;
       const drawn = last()?.taskSections;
       yield* Deferred.succeed(answered, undefined);
@@ -2560,12 +2631,12 @@ it.effect(
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       const { call, settled } = yield* subject(service);
       const pin = (repository: string) =>
-        call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository, pinned: true });
+        call("TASKS_PIN_REPOSITORY", { repository, pinned: true });
 
-      assert.deepEqual(yield* pin("acme/relay"), { changed: true });
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      assert.deepEqual(yield* pin("acme/relay"), true);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
-      assert.deepEqual(yield* pin("acme/web"), { changed: true });
+      assert.deepEqual(yield* pin("acme/web"), true);
       assert.deepEqual(
         service.pins.map((each) => each.repository),
         ["acme/web", "acme/relay"],
@@ -2581,7 +2652,7 @@ it.effect(
       const { call, last, told, settled } = yield* subject(service);
       const pinned = (view: TasksView | undefined) =>
         view?.repositoryPins?.map((pin) => pin.repository) ?? [];
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.sidebar.set({}, ["tx-earlier"]);
@@ -2590,7 +2661,7 @@ it.effect(
       service.pinTxid = "tx-pin";
       const from = told.length;
       const pin = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/relay", pinned: true }),
+        call("TASKS_PIN_REPOSITORY", { repository: "acme/relay", pinned: true }),
       );
       yield* settled;
       // Another Mac's change from before the pin landed is answered without it.
@@ -2599,7 +2670,7 @@ it.effect(
       service.live.sidebar.set({ pins: service.pins }, ["tx-pin"]);
       yield* nextPoll(settled);
 
-      assert.deepEqual(yield* Fiber.join(pin), { changed: true });
+      assert.deepEqual(yield* Fiber.join(pin), true);
       assert.ok(told.length > from);
       assert.deepEqual(
         told.slice(from).filter((view) => !pinned(view).includes("acme/relay")),
@@ -2609,8 +2680,8 @@ it.effect(
 
       service.pinsFail = true;
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/web", pinned: true }),
-        { changed: false },
+        yield* call("TASKS_PIN_REPOSITORY", { repository: "acme/web", pinned: true }),
+        false,
       );
       assert.deepEqual(pinned(last()), ["acme/relay"]);
     }),
@@ -2620,18 +2691,16 @@ it.effect("a pin still being written when the account signs out is drawn for nob
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
     const { call, told, tasks, settled, listed } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call("TASKS_REFRESH", undefined);
     yield* listed();
     const answered = yield* Deferred.make<void>();
     service.pinAnswered = Deferred.await(answered);
     service.markAnswered = Deferred.await(answered);
 
     const pin = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, { repository: "acme/secret", pinned: true }),
+      call("TASKS_PIN_REPOSITORY", { repository: "acme/secret", pinned: true }),
     );
-    const taskPin = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: true }),
-    );
+    const taskPin = yield* Effect.forkChild(call("TASKS_PIN", { taskId: INVITES, pinned: true }));
     yield* settled;
     const from = told.length;
     // Note that the sign-out waits on the pin's service call, which holds the one lock reads take.
@@ -2662,7 +2731,7 @@ it.effect(
       const { call, last, told, settled, listed } = yield* subject(service);
       const pinned = (view: TasksView | undefined) =>
         view?.tasks.find((row) => row.id === INVITES)?.pinnedAt !== undefined;
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
@@ -2670,9 +2739,7 @@ it.effect(
 
       service.markTxid = "tx-pin";
       const from = told.length;
-      const pin = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: true }),
-      );
+      const pin = yield* Effect.forkChild(call("TASKS_PIN", { taskId: INVITES, pinned: true }));
       yield* settled;
       const standing = last()?.pendingTasks;
       // Another Mac's change from before the pin landed is answered without it.
@@ -2685,7 +2752,7 @@ it.effect(
       ]);
       yield* nextPoll(settled);
 
-      assert.deepEqual(yield* Fiber.join(pin), { changed: true });
+      assert.deepEqual(yield* Fiber.join(pin), true);
       assert.ok(told.length > from);
       assert.deepEqual(
         told.slice(from).filter((view) => !pinned(view)),
@@ -2697,9 +2764,7 @@ it.effect(
       assert.equal(last()?.pendingTasks, undefined);
 
       service.markFails = true;
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: false }), {
-        changed: false,
-      });
+      assert.deepEqual(yield* call("TASKS_PIN", { taskId: INVITES, pinned: false }), false);
       assert.equal(pinned(last()), true);
     }),
 );
@@ -2714,7 +2779,7 @@ it.effect(
       ]);
       const { call, last, settled, listed } = yield* subject(service);
       const repositoryOf = () => last()?.tasks.find((row) => row.id === INVITES)?.repository;
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       // An answer Sync woke hands the follow its wait for a write's transaction.
       service.live.list.set({}, ["tx-earlier"]);
@@ -2722,11 +2787,11 @@ it.effect(
 
       service.repositoryTxid = "tx-repository";
       const changed = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_SET_REPOSITORY, { taskId: INVITES, repository: "acme/relay" }),
+        call("TASKS_SET_REPOSITORY", { taskId: INVITES, repository: "acme/relay" }),
       );
       yield* settled;
       // Another task's pin draws the list again before the list carries the repository.
-      yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: BILLING, pinned: true });
+      yield* call("TASKS_PIN", { taskId: BILLING, pinned: true });
       const drawn = repositoryOf();
       service.live.list.set({ plans: service.tasks.map(rowOfTask) }, ["tx-repository"]);
       yield* nextPoll(settled);
@@ -2744,12 +2809,12 @@ it.effect("a block the service answered stands on the open task through the list
       task(BILLING, "Billing", "# Draft", 11),
     ]);
     const { call, listed, openTask, description } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call("TASKS_REFRESH", undefined);
     yield* listed();
     yield* openTask(INVITES);
     const blockedBy = () => description(INVITES)?.blockedBy;
 
-    const answered = yield* call(GATEWAY_METHOD.TASKS_BLOCK, {
+    const answered = yield* call("TASKS_BLOCK", {
       taskId: INVITES,
       block: {
         change: TASK_BLOCK_CHANGE.ADD,
@@ -2774,7 +2839,7 @@ it.effect(
       };
       const service = fakeService([invites, task(BILLING, "Billing", "# Draft", 11)]);
       const { call, last, settled, listed, openTask } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       service.live.list.set({
         plans: service.tasks.map((each) => ({ ...rowOfTask(each), blocked: each.id === INVITES })),
@@ -2790,7 +2855,7 @@ it.effect(
       service.relationFails = true;
 
       const turning = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_CHANGE_RELATION, {
+        call("TASKS_CHANGE_RELATION", {
           taskId: INVITES,
           relation: {
             taskId: BILLING,
@@ -2816,19 +2881,17 @@ it.effect("a delete asked draws its task gone before the service answers", () =>
       task(BILLING, "Billing", "# Draft", 11),
     ]);
     const { call, last, settled, listed } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call("TASKS_REFRESH", undefined);
     yield* listed();
     const answered = yield* Deferred.make<void>();
     service.deleteAnswered = Deferred.await(answered);
 
-    const deleting = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.TASKS_DELETE, { taskId: INVITES }),
-    );
+    const deleting = yield* Effect.forkChild(call("TASKS_DELETE", { taskId: INVITES }));
     yield* settled;
     const drawn = last()?.tasks.map((row) => row.id);
     yield* Deferred.succeed(answered, undefined);
 
-    assert.deepEqual(yield* Fiber.join(deleting), { deleted: true });
+    assert.deepEqual(yield* Fiber.join(deleting), true);
     assert.deepEqual(drawn, [BILLING]);
   }),
 );
@@ -2842,13 +2905,13 @@ it.effect(
         task(BILLING, "Billing", "# Draft", 11),
       ]);
       const { call, last, listed, openTask, description } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       yield* openTask(INVITES);
       const parentOf = () => description(INVITES)?.parentTaskId;
       const nestedUnder = () => last()?.tasks.find((row) => row.id === INVITES)?.parentTaskId;
 
-      const answered = yield* call(GATEWAY_METHOD.TASKS_SET_PARENT, {
+      const answered = yield* call("TASKS_SET_PARENT", {
         taskId: INVITES,
         parentTaskId: BILLING,
       });
@@ -2864,11 +2927,11 @@ it.effect("a task marked done here is drawn finished now, so the recently finish
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
     const { call, told, listed } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call("TASKS_REFRESH", undefined);
     yield* listed();
     const from = told.length;
 
-    yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, { taskId: INVITES, status: TASK_STATUS.DONE });
+    yield* call("TASKS_SET_STANDING", { taskId: INVITES, status: TASK_STATUS.DONE });
 
     const drawn = told[from]?.tasks.find((row) => row.id === INVITES);
     assert.equal(drawn?.status, TASK_STATUS.DONE);
@@ -2881,7 +2944,7 @@ it.effect("a sign-out drops the view the window drew", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
     const { call, last, tasks, openTask, descriptions } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call("TASKS_REFRESH", undefined);
     yield* openTask(INVITES);
 
     yield* tasks.reset;
@@ -2903,7 +2966,7 @@ it.effect(
       service.memberships = [PERSONAL, ACME];
       const { call, last, tasks, settled } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
       assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
@@ -2920,7 +2983,7 @@ it.effect("a teammate's change reaches the view as the followed workspaces answe
     const service = fakeService([]);
     service.memberships = [PERSONAL, ACME];
     const { call, last, settled } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call("TASKS_REFRESH", undefined);
     yield* settled;
 
     service.memberships = [PERSONAL, { ...ACME, name: "Acme Labs" }];
@@ -2936,7 +2999,7 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
 
@@ -2964,7 +3027,7 @@ it.effect(
       service.workspacesFail = true;
       const { call, last, listed, settled } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       yield* settled;
       assert.equal(last()?.listStatus, TASKS_READ.READY);
@@ -3014,7 +3077,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
 
       service.memberships = [];
@@ -3023,7 +3086,7 @@ it.effect(
       assert.deepEqual(last()?.workspaces, [PERSONAL]);
 
       service.memberships = [PERSONAL];
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
       assert.deepEqual(last()?.workspaces, [PERSONAL]);
@@ -3035,14 +3098,14 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       const before = service.reads.length;
 
-      const made = yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name });
+      const made = yield* act("WORKSPACE_CREATE", { name: RELAY.name });
       yield* settled;
 
-      assert.deepEqual(made, { workspace: RELAY });
+      assert.deepEqual(made, RELAY);
       assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
       assert.deepEqual(service.reads.slice(before), [`create:${RELAY.name}`]);
     }),
@@ -3054,24 +3117,24 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       const before = service.reads.length;
 
-      const renamed = yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, {
+      const renamed = yield* act("WORKSPACE_RENAME", {
         workspaceId: ACME.id,
         name: "Acme Labs",
       });
       service.notPermitted = true;
-      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, {
+      const refused = yield* act("WORKSPACE_RENAME", {
         workspaceId: ACME.id,
         name: "Acme Research",
       });
 
       yield* settled;
-      assert.deepEqual(renamed, { workspace: { ...ACME, name: "Acme Labs" } });
-      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(renamed, { ...ACME, name: "Acme Labs" });
+      assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
       assert.deepEqual(service.reads.slice(before), [
         `rename:${ACME.id}:Acme Labs`,
@@ -3086,11 +3149,11 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       service.renamedAgain = "Acme Research";
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+      yield* act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" });
       yield* settled;
 
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
@@ -3103,15 +3166,15 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       service.renamedAgain = "Acme Research";
       const answered = yield* Deferred.make<void>();
       service.renameAnswered = Deferred.await(answered);
 
       const renaming = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+        act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" }),
       );
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
@@ -3129,15 +3192,15 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       const answered = yield* Deferred.make<void>();
       service.renameAnswered = Deferred.await(answered);
       service.followMisses = true;
 
       const renaming = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+        act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" }),
       );
       yield* settled;
       // Only the other workspace's change reaches the follow; the rename's own is lost.
@@ -3160,14 +3223,14 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       const answered = yield* Deferred.make<void>();
       service.renameAnswered = Deferred.await(answered);
 
       const renaming = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+        act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" }),
       );
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
@@ -3187,8 +3250,8 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       service.followMisses = true;
       const firstAnswered = yield* Deferred.make<void>();
@@ -3196,12 +3259,12 @@ it.effect(
       const before = service.reads.length;
 
       const first = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Alpha" }),
+        act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Alpha" }),
       );
       yield* settled;
       service.renameAnswered = Effect.void;
       const second = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Beta" }),
+        act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Beta" }),
       );
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Beta" }]);
@@ -3222,20 +3285,20 @@ it.effect("a rename still being written when the account signs out is drawn for 
   Effect.gen(function* () {
     const service = fakeService([]);
     service.memberships = [PERSONAL, ACME];
-    const { call, last, settled, tasks } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    const { act, call, last, settled, tasks } = yield* subject(service);
+    yield* call("TASKS_REFRESH", undefined);
     yield* settled;
     service.followMisses = true;
     const answered = yield* Deferred.make<void>();
     service.renameAnswered = Deferred.await(answered);
 
     const renaming = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+      act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" }),
     );
     yield* settled;
     // A second rename waits behind the first, so it would be sent only after the sign-out.
     const queued = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Research" }),
+      act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Research" }),
     );
     yield* settled;
     yield* tasks.reset;
@@ -3248,7 +3311,7 @@ it.effect("a rename still being written when the account signs out is drawn for 
     const unsent = yield* Fiber.join(queued);
     yield* settled;
 
-    assert.deepEqual(unsent, { failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(unsent, { refused: WORKSPACE_ACTS.WORKSPACE_RENAME.refusal });
     assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
     assert.deepEqual(
       service.reads.filter((read) => read.startsWith("rename:")),
@@ -3264,21 +3327,21 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.slugTaken = "acme-labs";
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       const answered = yield* Deferred.make<void>();
       service.slugAnswered = Deferred.await(answered);
 
       const setting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_SLUG_SET, { workspaceId: ACME.id, slug: "acme-labs" }),
+        act("WORKSPACE_SLUG_SET", { workspaceId: ACME.id, slug: "acme-labs" }),
       );
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, slug: "acme-labs" }]);
       yield* Deferred.succeed(answered, undefined);
       const refused = yield* Fiber.join(setting);
 
-      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.SLUG_TAKEN });
+      assert.deepEqual(refused, { refused: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.TAKEN] });
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
     }),
 );
@@ -3289,31 +3352,31 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       const before = service.reads.length;
 
-      const set = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+      const set = yield* act("WORKSPACE_PHOTO_SET", {
         workspaceId: ACME.id,
         photo: PHOTO_URL,
       });
       const drawn = last()?.workspaces;
-      const removed = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+      const removed = yield* act("WORKSPACE_PHOTO_SET", {
         workspaceId: ACME.id,
         photo: null,
       });
       service.notPermitted = true;
-      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+      const refused = yield* act("WORKSPACE_PHOTO_SET", {
         workspaceId: ACME.id,
         photo: PHOTO_URL,
       });
 
       yield* nextPoll(settled);
-      assert.deepEqual(set, { workspace: { ...ACME, photoVersion: PHOTO_URL } });
+      assert.deepEqual(set, { ...ACME, photoVersion: PHOTO_URL });
       assert.deepEqual(drawn, [PERSONAL, { ...ACME, photoVersion: PHOTO_URL }]);
-      assert.deepEqual(removed, { workspace: ACME });
-      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(removed, ACME);
+      assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
       assert.deepEqual(
         service.reads.slice(before).filter((read) => read.startsWith("photoSet:")),
@@ -3326,43 +3389,25 @@ it.effect(
     }),
 );
 
-it.effect("an SVG is refused as a workspace's photo before the service", () =>
-  Effect.gen(function* () {
-    const service = fakeService([]);
-    service.memberships = [PERSONAL, ACME];
-    const { call } = yield* subject(service);
-
-    const svg = yield* Effect.exit(
-      call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
-        workspaceId: ACME.id,
-        photo: "data:image/svg+xml;base64,PHN2Zy8+",
-      }),
-    );
-
-    assert.ok(Exit.isFailure(svg), "an SVG is no photo");
-    assert.deepEqual(service.reads, []);
-  }),
-);
-
 it.effect(
   "connecting GitHub answers the service's install address and reads nothing, and disconnecting draws the workspace without its organization",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       const before = service.reads.length;
 
-      const begun = yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id });
-      const disconnected = yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, {
+      const begun = yield* act("WORKSPACE_GITHUB_CONNECT", { workspaceId: ACME.id });
+      const disconnected = yield* act("WORKSPACE_GITHUB_DISCONNECT", {
         workspaceId: ACME.id,
       });
 
-      assert.deepEqual(begun, { url: INSTALL_URL });
+      assert.deepEqual(begun, INSTALL_URL);
       yield* settled;
       const unlinked = { ...ACME, github: null, githubInstallations: [] };
-      assert.deepEqual(disconnected, { workspace: unlinked });
+      assert.equal(disconnected, undefined);
       assert.deepEqual(last()?.workspaces, [PERSONAL, unlinked]);
       assert.deepEqual(service.reads.slice(before), [
         `connect:${ACME.id}`,
@@ -3378,15 +3423,12 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.notPermitted = true;
-      const { call } = yield* subject(service);
-      const refused = { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+      const { act } = yield* subject(service);
+      const refused = { refused: WORKSPACE_NOT_PERMITTED_REFUSAL };
 
+      assert.deepEqual(yield* act("WORKSPACE_GITHUB_CONNECT", { workspaceId: ACME.id }), refused);
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id }),
-        refused,
-      );
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, { workspaceId: ACME.id }),
+        yield* act("WORKSPACE_GITHUB_DISCONNECT", { workspaceId: ACME.id }),
         refused,
       );
     }),
@@ -3448,7 +3490,7 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
       service.members[ACME.id] = [DANA, GRACE, ALAN];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const people = service.live.people;
       const shown = () => heldMembers(pushed).at(-1);
       const standing = (members: readonly WorkspaceMember[], former?: readonly unknown[]) => ({
@@ -3462,7 +3504,7 @@ it.effect(
       const before = service.reads.length;
 
       // A role change stands, through a poll read before it that lands after its answer.
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+      yield* act("WORKSPACE_MEMBER_ROLE", {
         workspaceId: ACME.id,
         userId: GRACE.userId,
         role: WORKSPACE_ROLE.ADMIN,
@@ -3487,7 +3529,7 @@ it.effect(
       // A removal stands until the read no longer carries the member.
       people.set({ members: [DANA, admin, ALAN].map((each) => memberRow(each)) });
       yield* nextPoll(settled);
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+      yield* act("WORKSPACE_MEMBER_REMOVE", {
         workspaceId: ACME.id,
         userId: ALAN.userId,
       });
@@ -3499,7 +3541,7 @@ it.effect(
       yield* nextPoll(settled);
 
       // A handover stands as the heir's role and the account's own from its answer.
-      yield* call(GATEWAY_METHOD.WORKSPACES_TRANSFER, {
+      yield* act("WORKSPACE_TRANSFER", {
         workspaceId: ACME.id,
         userId: GRACE.userId,
       });
@@ -3526,7 +3568,7 @@ it.effect("a role change draws before the service answers, and one it refuses is
     const service = fakeService([]);
     service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
     service.members[ACME.id] = [DANA, GRACE];
-    const { call, pushed, settled } = yield* subject(service);
+    const { act, call, pushed, settled } = yield* subject(service);
     const shown = () => heldMembers(pushed).at(-1);
     const standing = (members: readonly WorkspaceMember[]) => ({
       [ACME.id]: { rows: { members } },
@@ -3540,7 +3582,7 @@ it.effect("a role change draws before the service answers, and one it refuses is
     service.notPermitted = true;
 
     const giving = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+      act("WORKSPACE_MEMBER_ROLE", {
         workspaceId: ACME.id,
         userId: GRACE.userId,
         role: WORKSPACE_ROLE.ADMIN,
@@ -3551,7 +3593,7 @@ it.effect("a role change draws before the service answers, and one it refuses is
     yield* Deferred.succeed(answered, undefined);
     const refused = yield* Fiber.join(giving);
 
-    assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+    assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
     assert.deepEqual(shown(), standing([DANA, GRACE]));
   }),
 );
@@ -3563,14 +3605,14 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.members[ACME.id] = [DANA, GRACE];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const people = service.live.people;
       yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
       people.set({ members: [memberRow(DANA), memberRow(GRACE)], former: [] });
       yield* settled;
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+      yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
       const left = { [ACME.id]: { rows: { members: [GRACE] } } };
       assert.deepEqual(heldMembers(pushed).at(-1), left);
       people.refuse({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
@@ -3624,7 +3666,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const integrations = service.live.integrations;
       const installations = () =>
         integrationsShown(pushed, ACME.id)?.sentry.installations.map((one) => one.installationId);
@@ -3651,7 +3693,7 @@ it.effect(
         answer: { configured: true, installations: [], txid: "9200" },
       };
       const disconnecting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT, {
+        act("WORKSPACE_SENTRY_DISCONNECT", {
           workspaceId: ACME.id,
           installationId: SENTRY_ROW.installationId,
         }),
@@ -3661,9 +3703,7 @@ it.effect(
       assert.deepEqual(installations(), [], "gone before the service answers");
 
       yield* Deferred.succeed(answering, undefined);
-      assert.deepEqual(yield* Fiber.join(disconnecting), {
-        sentry: { configured: true, installations: [] },
-      });
+      assert.deepEqual(yield* Fiber.join(disconnecting), { configured: true, installations: [] });
       // The read answers once more from before the disconnect, which still stands over it.
       integrations.set({ sentryInstallations: [SENTRY_ROW] });
       yield* nextPoll(settled);
@@ -3676,14 +3716,12 @@ it.effect(
       service.integrationsGate = Deferred.await(refusing);
       service.slackBotAnswer = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
       const refused = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT, { workspaceId: ACME.id }),
+        act("WORKSPACE_SLACK_BOT_DISCONNECT", { workspaceId: ACME.id }),
       );
       yield* settled;
       assert.equal(team(), undefined, "gone before the service answers");
       yield* Deferred.succeed(refusing, undefined);
-      assert.deepEqual(yield* Fiber.join(refused), {
-        failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
-      });
+      assert.deepEqual(yield* Fiber.join(refused), { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       yield* settled;
       assert.equal(team(), "Acme", "put back once the service refused it");
     }),
@@ -3695,7 +3733,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const integrations = service.live.integrations;
       const channelAsks = () =>
         service.reads.filter((read) => read === `slack-bot:${ACME.id}`).length;
@@ -3740,7 +3778,7 @@ it.effect(
       // A channel joined lays the channels its answer carries, the bot in it.
       const joined = { ...ENG_CHANNEL, member: true };
       service.slackBotAnswer = { ok: true, answer: { ...connected, channels: [joined] } };
-      yield* call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL, {
+      yield* act("WORKSPACE_SLACK_BOT_CHANNEL", {
         workspaceId: ACME.id,
         channelId: ENG_CHANNEL.id,
         member: true,
@@ -3769,16 +3807,16 @@ it.effect(
       service.memberships = [PERSONAL, { ...ACME, photoVersion: "v1" }];
       const photo = { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" };
       service.photos[ACME.id] = photo;
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const fetches = () => service.reads.filter((read) => read.startsWith("photo:"));
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       const first = heldPhotos(pushed).at(-1);
-      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+      yield* act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" });
       yield* nextPoll(settled);
       const renamed = fetches().length;
-      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: PHOTO_URL });
+      yield* act("WORKSPACE_PHOTO_SET", { workspaceId: ACME.id, photo: PHOTO_URL });
       yield* settled;
 
       const url = "data:image/png;base64,iVBORw0KGgo=";
@@ -3823,7 +3861,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const invitations = service.live.invitations;
       const shown = () => heldInvitations(pushed).at(-1);
       const standing = (rows: readonly WorkspaceInvitation[]) => ({ [ACME.id]: { rows } });
@@ -3838,19 +3876,17 @@ it.effect(
       const before = service.reads.length;
 
       // The invitation made is answered as the service made it, and stands from its answer, its link on the read's own origin.
-      const made = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+      const made = yield* act("WORKSPACE_INVITE", {
         workspaceId: ACME.id,
         email: "alan@example.com",
         role: WORKSPACE_ROLE.MEMBER,
       });
       assert.deepEqual(made, {
-        invitation: {
-          id: "inv-alan@example.com",
-          email: "alan@example.com",
-          role: WORKSPACE_ROLE.MEMBER,
-          expiresAt: "2026-10-16T12:00:00.000Z",
-          acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
-        },
+        id: "inv-alan@example.com",
+        email: "alan@example.com",
+        role: WORKSPACE_ROLE.MEMBER,
+        expiresAt: "2026-10-16T12:00:00.000Z",
+        acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
       });
       const alan = {
         id: "inv-alan@example.com",
@@ -3880,7 +3916,7 @@ it.effect(
       assert.deepEqual(shown(), standing([grace, lee]));
 
       // A cancel stands until the read no longer carries the invitation, whatever list it answered.
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
+      yield* act("WORKSPACE_INVITATION_CANCEL", {
         workspaceId: ACME.id,
         invitationId: "lee",
       });
@@ -3894,12 +3930,12 @@ it.effect(
 
       // A refused invite draws nothing.
       service.notPermitted = true;
-      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+      const refused = yield* act("WORKSPACE_INVITE", {
         workspaceId: ACME.id,
         email: "ada@example.com",
         role: WORKSPACE_ROLE.ADMIN,
       });
-      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       assert.deepEqual(shown(), standing([grace]));
       assert.deepEqual(service.reads.slice(before), [
         `invite:${ACME.id}:alan@example.com`,
@@ -3915,19 +3951,19 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
       service.live.invitations.set({ invitations: [] });
       yield* settled;
 
       // The read never carries the invitation, so the invite stands until its wait gives up, past the cancel that answered after it.
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+      yield* act("WORKSPACE_INVITE", {
         workspaceId: ACME.id,
         email: "alan@example.com",
         role: WORKSPACE_ROLE.MEMBER,
       });
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
+      yield* act("WORKSPACE_INVITATION_CANCEL", {
         workspaceId: ACME.id,
         invitationId: "inv-alan@example.com",
       });
@@ -3947,7 +3983,7 @@ it.effect("the workspaces land on the view while the GitHub connection read is s
     service.githubGate = Deferred.await(held);
     const { call, last, settled } = yield* subject(service);
 
-    const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_REFRESH));
+    const refreshing = yield* Effect.forkChild(call("TASKS_REFRESH", undefined));
     yield* settled;
 
     assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
@@ -3967,17 +4003,17 @@ it.effect(
       const { call, tasks } = yield* subject(service);
       const seals = () => service.reads.filter((read) => read === "workspaces-live").length;
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
+      yield* call("TASKS_REFRESH", undefined);
       yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
-      yield* call(GATEWAY_METHOD.TASKS_DELETE, { taskId: INVITES });
+      yield* call("TASKS_DELETE", { taskId: INVITES });
       yield* TestClock.adjust(Duration.minutes(1));
       yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       assert.equal(seals(), 1);
 
       yield* tasks.reset;
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       assert.equal(seals(), 2);
     }),
 );
@@ -3990,7 +4026,7 @@ it.effect(
       service.connection = { connected: true, login: "ada" };
       const { call, last, tasks } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       assert.deepEqual(last()?.github, { connected: true, login: "ada" });
 
       service.connection = undefined;
@@ -4009,10 +4045,10 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       const { call, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       assert.deepEqual(last()?.github, { connected: false, login: null });
 
-      const page = yield* call(GATEWAY_METHOD.GITHUB_CONNECT);
+      const page = yield* call("GITHUB_CONNECT", undefined);
       service.connection = { connected: true, login: "ada" };
       yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
 
@@ -4027,15 +4063,15 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       const { call, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       const readsBefore = service.reads.length;
       const viewBefore = last();
 
-      const read = yield* call(GATEWAY_METHOD.ADMIN_READ, {
+      const read = yield* call("ADMIN_READ", {
         procedure: "users",
         query: { window: "7" },
       });
-      const starred = yield* call(GATEWAY_METHOD.ADMIN_FAVORITE, {
+      const starred = yield* call("ADMIN_FAVORITE", {
         id: "user-ada",
         favorite: true,
       });
@@ -4057,12 +4093,11 @@ it.effect(
       const service = fakeService([]);
       service.connection = { connected: true, login: "ada" };
       const { call, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       const readsBefore = service.reads.length;
 
-      const answered = yield* call(GATEWAY_METHOD.GITHUB_DISCONNECT);
+      yield* call("GITHUB_DISCONNECT", undefined);
 
-      assert.deepEqual(answered, { connection: { connected: false, login: null } });
       assert.deepEqual(last()?.github, { connected: false, login: null });
       assert.deepEqual(service.reads.slice(readsBefore), ["github-disconnect"]);
     }),
@@ -4081,7 +4116,7 @@ it.effect(
 
       const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.WORKSPACES_REFRESH));
       for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
-      yield* call(GATEWAY_METHOD.GITHUB_DISCONNECT);
+      yield* call("GITHUB_DISCONNECT", undefined);
       yield* Deferred.succeed(held, undefined);
       yield* Fiber.join(refreshing);
 
@@ -4093,13 +4128,13 @@ it.effect("GitHub as the account's only sign-in stays connected, and says so", (
   Effect.gen(function* () {
     const service = fakeService([]);
     service.connection = { connected: true, login: "ada" };
-    const { call, last } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    const { call, last, tasks } = yield* subject(service);
+    yield* call("TASKS_REFRESH", undefined);
     service.notPermitted = true;
 
-    const answered = yield* call(GATEWAY_METHOD.GITHUB_DISCONNECT);
+    const refused = yield* Effect.flip(tasks.acts.GITHUB_DISCONNECT(undefined));
 
-    assert.deepEqual(answered, { failure: GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED });
+    assert.deepEqual(refused, new ActRefused({ sentence: GITHUB_LAST_SIGN_IN_REFUSAL }));
     assert.deepEqual(last()?.github, { connected: true, login: "ada" });
   }),
 );
@@ -4107,13 +4142,13 @@ it.effect("GitHub as the account's only sign-in stays connected, and says so", (
 it.effect("behind a closed account gate a GitHub page is never asked for", () =>
   Effect.gen(function* () {
     const service = fakeService([]);
-    const { call } = yield* subject(service, { signedIn: false });
+    const { call, tasks } = yield* subject(service, { signedIn: false });
 
-    const connect = yield* call(GATEWAY_METHOD.GITHUB_CONNECT);
-    const disconnect = yield* call(GATEWAY_METHOD.GITHUB_DISCONNECT);
+    const connect = yield* call("GITHUB_CONNECT", undefined);
+    const disconnect = yield* Effect.flip(tasks.acts.GITHUB_DISCONNECT(undefined));
 
     assert.deepEqual(connect, { failure: TASK_CALL_FAILURE.UNANSWERED });
-    assert.deepEqual(disconnect, { failure: TASK_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(disconnect, new ActRefused({}));
     assert.deepEqual(service.connectPages, []);
   }),
 );
@@ -4133,13 +4168,13 @@ it.effect("leaving a workspace reaches the service and the view then holds it no
   Effect.gen(function* () {
     const service = fakeService([]);
     service.memberships = [PERSONAL, ACME];
-    const { call, last, settled } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    const { act, call, last, settled } = yield* subject(service);
+    yield* call("TASKS_REFRESH", undefined);
 
-    const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+    const left = yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
     yield* settled;
 
-    assert.deepEqual(left, { left: true });
+    assert.equal(left, undefined);
     assert.deepEqual(last()?.workspaces, [PERSONAL]);
   }),
 );
@@ -4155,20 +4190,20 @@ it.effect(
       const service = fakeService([acmeTask]);
       service.memberships = [PERSONAL, ACME];
       service.notPermitted = true;
-      const { call, last, listed, openTask } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, listed, openTask } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       yield* openTask(INVITES);
 
-      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+      const refused = yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
 
-      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       assert.equal(last()?.activeTaskId, INVITES);
 
       service.notPermitted = false;
-      const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+      const left = yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
 
-      assert.deepEqual(left, { left: true });
+      assert.equal(left, undefined);
       assert.equal(last()?.activeTaskId, undefined);
     }),
 );
@@ -4177,11 +4212,11 @@ it.effect("leaving another workspace than the open plan's keeps the plan open", 
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
     service.memberships = [PERSONAL, ACME];
-    const { call, last, openTask } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    const { act, call, last, openTask } = yield* subject(service);
+    yield* call("TASKS_REFRESH", undefined);
     yield* openTask(INVITES);
 
-    yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+    yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
 
     assert.equal(last()?.activeTaskId, INVITES);
   }),
@@ -4195,18 +4230,18 @@ it.effect(
       service.memberships = [PERSONAL, ACME];
       service.members[ACME.id] = [ADA, GRACE];
       service.notPermitted = true;
-      const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      const { act, call, last, settled } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
 
-      const removed = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+      const removed = yield* act("WORKSPACE_MEMBER_REMOVE", {
         workspaceId: ACME.id,
         userId: ADA.userId,
       });
-      const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+      const left = yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
 
-      assert.deepEqual(removed, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
-      assert.deepEqual(left, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(removed, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
+      assert.deepEqual(left, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
       assert.deepEqual(service.members[ACME.id], [ADA, GRACE]);
     }),
@@ -4215,40 +4250,43 @@ it.effect(
 it.effect("behind a closed account gate no workspace call reaches the service", () =>
   Effect.gen(function* () {
     const service = fakeService([]);
-    const { call } = yield* subject(service, { signedIn: false });
-    const unanswered = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
+    const { act, call } = yield* subject(service, { signedIn: false });
+    /** The act refused in its own sentence, as the window hears an act the host could not answer. */
+    const unanswered = (name: keyof typeof WORKSPACE_ACTS) => ({
+      refused: WORKSPACE_ACTS[name].refusal,
+    });
 
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name }),
-      unanswered,
+      yield* act("WORKSPACE_CREATE", { name: RELAY.name }),
+      unanswered("WORKSPACE_CREATE"),
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
-      unanswered,
+      yield* act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" }),
+      unanswered("WORKSPACE_RENAME"),
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: null }),
-      unanswered,
+      yield* act("WORKSPACE_PHOTO_SET", { workspaceId: ACME.id, photo: null }),
+      unanswered("WORKSPACE_PHOTO_SET"),
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id }),
-      unanswered,
+      yield* act("WORKSPACE_GITHUB_CONNECT", { workspaceId: ACME.id }),
+      unanswered("WORKSPACE_GITHUB_CONNECT"),
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, { workspaceId: ACME.id }),
-      unanswered,
+      yield* act("WORKSPACE_GITHUB_DISCONNECT", { workspaceId: ACME.id }),
+      unanswered("WORKSPACE_GITHUB_DISCONNECT"),
     );
     yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+      yield* act("WORKSPACE_MEMBER_REMOVE", {
         workspaceId: ACME.id,
         userId: GRACE.userId,
       }),
-      unanswered,
+      unanswered("WORKSPACE_MEMBER_REMOVE"),
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id }),
-      unanswered,
+      yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id }),
+      unanswered("WORKSPACE_LEAVE"),
     );
     assert.deepEqual(service.reads, []);
   }),
@@ -4301,30 +4339,24 @@ it.effect(
 
       const window = { firstLine: 1, lastLine: 1 };
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_FILE, { ...place, path: "src/seats.ts", ...window }),
+        yield* call("TASKS_FILE", { ...place, path: "src/seats.ts", ...window }),
         file("src/seats.ts"),
       );
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_FILE, {
+        yield* call("TASKS_FILE", {
           taskId: INVITES,
           path: "docs/plan.md",
           ...window,
         }),
         file("docs/plan.md"),
       );
+      assert.deepEqual(yield* call("TASKS_TREE", { ...place, path: "src" }), folder("src"));
+      assert.deepEqual(yield* call("TASKS_SKILLS", place), skills("release"));
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_TREE, { ...place, path: "src" }),
-        folder("src"),
-      );
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_SKILLS, place), skills("release"));
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_TREE, { planId: INVITES, path: "docs" }),
+        yield* call("TASKS_TREE", { planId: INVITES, path: "docs" }),
         folder("docs"),
       );
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES }),
-        skills("review"),
-      );
+      assert.deepEqual(yield* call("TASKS_SKILLS", { planId: INVITES }), skills("review"));
     }),
 );
 
@@ -4346,7 +4378,7 @@ it.effect(
         },
       });
       const { tasks, call, settled } = yield* subject(service);
-      const asked = () => call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES });
+      const asked = () => call("TASKS_SKILLS", { planId: INVITES });
 
       assert.deepEqual(yield* asked(), { failure: TASK_CALL_FAILURE.UNANSWERED });
       service.skills[INVITES] = skillsNamed("review");
@@ -4389,9 +4421,9 @@ it.effect(
         },
       });
       const { call, listed } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
-      const asked = () => call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES });
+      const asked = () => call("TASKS_SKILLS", { planId: INVITES });
       service.skills[INVITES] = installed("review");
       assert.deepEqual(yield* asked(), installed("review"));
 
@@ -4560,9 +4592,9 @@ it.effect(
         },
       };
       service.tokenRepositorySet = { ok: true, answer: [] };
-      const { call, settled } = yield* subject(service);
+      const { act, call, settled } = yield* subject(service);
       const asked = () => service.reads.filter((read) => read.startsWith("repositories"));
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
 
       yield* call(GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW, { workspaceId: ACME.id });
@@ -4584,7 +4616,7 @@ it.effect(
         [`repositories:${ACME.id}`, "repositories"].toSorted(),
       );
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET, {
+      yield* act("WORKSPACE_TOKEN_REPOSITORY_SET", {
         workspaceId: ACME.id,
         repository: "acme/side",
         added: true,
@@ -4605,11 +4637,11 @@ it.effect(
       const service = fakeService([invites]);
       service.memberships = [PERSONAL, ACME];
       const { call, last, listed, openTask, description } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       yield* openTask(INVITES);
 
-      const moved = yield* call(GATEWAY_METHOD.TASKS_MOVE, {
+      const moved = yield* call("TASKS_MOVE", {
         taskId: INVITES,
         workspaceId: ACME.id,
       });
@@ -4624,25 +4656,23 @@ it.effect(
 );
 
 it.effect(
-  "a plan's status and priority set on the service land in the list and the open document in place, and a change naming neither never travels",
+  "a plan's status and priority set on the service land in the list and the open document in place",
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const service = fakeService([invites]);
       const { call, last, openTask, description } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listAnswers(service, { plans: [rowOfTask(invites)], agents: [], issues: [] });
       yield* openTask(INVITES);
 
-      const changed = yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, {
+      const changed = yield* call("TASKS_SET_STANDING", {
         taskId: INVITES,
         status: TASK_STATUS.DONE,
         priority: TASK_PRIORITY.HIGH,
       });
-      const bare = yield* Effect.exit(call(GATEWAY_METHOD.TASKS_SET_STANDING, { taskId: INVITES }));
 
-      assert.deepEqual(changed, { changed: true });
-      assert.ok(Exit.isFailure(bare));
+      assert.deepEqual(changed, true);
       assert.deepEqual(
         last()?.tasks.map((each) => [each.status, each.priority]),
         [[TASK_STATUS.DONE, TASK_PRIORITY.HIGH]],
@@ -4657,23 +4687,23 @@ it.effect(
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const { call, last, listed, openTask, description } = yield* subject(fakeService([invites]));
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listed();
       yield* openTask(INVITES);
       const openAssignee = () => description(INVITES)?.assignee;
 
-      const assigned = yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, {
+      const assigned = yield* call("TASKS_SET_STANDING", {
         taskId: INVITES,
         assigneeId: "user-ada",
       });
-      assert.deepEqual(assigned, { changed: true });
+      assert.deepEqual(assigned, true);
       assert.deepEqual(
         last()?.tasks.map((each) => each.assignee?.userId),
         ["user-ada"],
       );
       assert.equal(openAssignee()?.userId, "user-ada");
 
-      yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, { taskId: INVITES, assigneeId: null });
+      yield* call("TASKS_SET_STANDING", { taskId: INVITES, assigneeId: null });
       assert.deepEqual(
         last()?.tasks.map((each) => each.assignee),
         [undefined],
@@ -4775,7 +4805,7 @@ it.effect(
       // The window's own save is drawn from its answer, which the next poll's mark only confirms.
       const mine = `${theirs}\n\nOnly members invite.`;
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_EDIT, {
+        yield* call("TASKS_EDIT", {
           taskId: INVITES,
           edit: { document: { base: theirs, value: mine } },
         }),
@@ -4827,7 +4857,7 @@ it.effect("a read answering an older save than the held description lands nothin
     yield* openTask(INVITES);
     yield* followSettled;
     const mine = `${INVITES_TEXT}\n\nInvites expire.`;
-    yield* call(GATEWAY_METHOD.TASKS_EDIT, {
+    yield* call("TASKS_EDIT", {
       taskId: INVITES,
       edit: { document: { base: INVITES_TEXT, value: mine } },
     });
@@ -4864,7 +4894,7 @@ it.effect(
       const record = polledRecord(service, INVITES);
       service.recordLives[INVITES] = record;
       const { call, description, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_START, { name: "Teammate invitations" });
+      yield* call("TASKS_START", { name: "Teammate invitations" });
       yield* followSettled;
 
       // A teammate's save moves the mark, and the read it asks takes the task as it stands when asked, answering only once let go.
@@ -4878,7 +4908,7 @@ it.effect(
       record.move();
       yield* TestClock.adjust(Duration.seconds(1));
       yield* followSettled;
-      yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: true });
+      yield* call("TASKS_PIN", { taskId: INVITES, pinned: true });
       assert.equal(description(INVITES)?.pinnedAt, MARKED_AT);
 
       yield* Deferred.succeed(answered, undefined);
@@ -5120,7 +5150,7 @@ it.effect(
         ]?.rows;
         return rows?.map((thread) => thread.status);
       };
-      const resolve = call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {
+      const resolve = call("TASKS_COMMENT_ACT", {
         planId: INVITES,
         threadId: SEVEN_DAYS.id,
         action: { action: DESCRIPTION_COMMENT_ACTION.RESOLVE },
@@ -5346,7 +5376,7 @@ it.effect("an older page laid into a held history stays when a save lands a new 
     ]);
 
     // The reader scrolls back: the older page is answered, and laid after the newest.
-    assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_REVISIONS, { taskId: INVITES, before: 3 }), {
+    assert.deepEqual(yield* call("TASKS_REVISIONS", { taskId: INVITES, before: 3 }), {
       revisions: lines(2, 1),
     });
     assert.deepEqual(heldNow(), [
@@ -5381,15 +5411,13 @@ it.effect(
       // An answer Sync woke hands the held history its wait for a write's transaction.
       yield* answered(() => history.set({ revisions: [historyRow(1, 1_000)] }, ["tx-earlier"]));
 
-      const restoring = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }),
-      );
+      const restoring = yield* Effect.forkChild(call("TASKS_RESTORE", { taskId: INVITES, seq: 1 }));
       yield* followSettled;
       assert.equal(restoring.pollUnsafe(), undefined, "no answer before the history carries it");
       yield* answered(() =>
         history.set({ revisions: [historyRow(2, 2_000), historyRow(1, 1_000)] }, ["txid-1"]),
       );
-      assert.deepEqual(yield* Fiber.join(restoring), { restored: true });
+      assert.deepEqual(yield* Fiber.join(restoring), true);
     }),
 );
 
@@ -5447,7 +5475,7 @@ it.effect(
       service.live.list.refuse({ failure: TASK_CALL_FAILURE.UNANSWERED });
       const { call, last, settled } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* settled;
       assert.equal(last()?.listStatus, TASKS_READ.FAILED);
       assert.equal(last()?.live, HOST_LIVE.OFFLINE, "a service that answers no read is offline");
@@ -5486,7 +5514,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       const { call, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listAnswers(service, {
         plans: [taskRow(INVITES, "Teammate invitations"), taskRow(BILLING, "Billing export")],
         agents: [],
@@ -5517,7 +5545,7 @@ it.effect(
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       const { call, last, settled } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listAnswers(service, {
         plans: [taskRow(INVITES, "Teammate invitations, live")],
         agents: [agentRow(INVITES, 60_000)],
@@ -5534,8 +5562,8 @@ it.effect(
         [[INVITES, AGENT_STATUS.STARTING, null]],
       );
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* call(GATEWAY_METHOD.TASKS_DELETE, { taskId: BILLING });
+      yield* call("TASKS_REFRESH", undefined);
+      yield* call("TASKS_DELETE", { taskId: BILLING });
       yield* TestClock.adjust(Duration.minutes(5));
       yield* settled;
 
@@ -5555,7 +5583,7 @@ it.effect(
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       const { call, last, settled } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listAnswers(service, {
         plans: [taskRow(INVITES, "Teammate invitations, live")],
         // A settled turn, and a line written after it that no turn has taken yet.
@@ -5603,7 +5631,7 @@ it.effect(
       yield* TestClock.setTime(LIVE_NOW);
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       const { call, last, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listAnswers(service, {
         plans: [taskRow(INVITES, "Teammate invitations, live")],
         agents: [],
@@ -5640,7 +5668,7 @@ it.effect(
       yield* settled;
       assert.equal(service.liveListReads, 0, "nothing is followed before the Tasks tab asks");
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listAnswers(service, {
         plans: [taskRow(INVITES, "Teammate invitations, live")],
         agents: [],
@@ -5680,7 +5708,7 @@ it.effect(
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const service = fakeService([invites]);
       const { call, openTask, description } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call("TASKS_REFRESH", undefined);
       yield* listAnswers(service, { plans: [rowOfTask(invites)], agents: [], issues: [] });
       yield* openTask(INVITES);
       const standing = () => {
@@ -5782,11 +5810,11 @@ it.effect(
           Effect.as(Deferred.await(answering), { ok: true as const, answer: before }),
         setTokenRepository: () => Effect.succeed({ ok: true as const, answer: after }),
       });
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
-      yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET, {
+      yield* act("WORKSPACE_TOKEN_REPOSITORY_SET", {
         workspaceId: ACME.id,
         repository: "acme/side",
         added: true,

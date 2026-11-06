@@ -206,7 +206,7 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { ...service, call, told, integrations, clients, focus };
+    return { ...service, call, acts: composer.acts, told, integrations, clients, focus };
   });
 }
 
@@ -222,13 +222,13 @@ it.effect(
     Effect.gen(function* () {
       for (const options of [{ signedIn: false }, { sendsNetwork: false }]) {
         const script = { status: INTEGRATION_STATUS.CONNECTED };
-        const { call, opened, asked } = yield* subject(script, options);
-        for (const method of [
-          GATEWAY_METHOD.INTEGRATIONS_CONNECT,
-          GATEWAY_METHOD.INTEGRATIONS_CANCEL,
-          GATEWAY_METHOD.INTEGRATIONS_DISCONNECT,
+        const { call, acts, opened, asked } = yield* subject(script, options);
+        for (const act of [
+          acts.INTEGRATIONS_CONNECT,
+          acts.INTEGRATIONS_CANCEL,
+          acts.INTEGRATIONS_DISCONNECT,
         ]) {
-          assert.deepEqual(yield* call(method, LINEAR), {
+          assert.deepEqual(yield* act(LINEAR), {
             failure: INTEGRATION_CALL_FAILURE.UNANSWERED,
           });
         }
@@ -330,7 +330,9 @@ it.effect(
   "a disconnect answers only once the held read carries its transaction, gone from it",
   () =>
     Effect.gen(function* () {
-      const { call, integrations, live } = yield* subject({ status: INTEGRATION_STATUS.CONNECTED });
+      const { call, acts, integrations, live } = yield* subject({
+        status: INTEGRATION_STATUS.CONNECTED,
+      });
       const listed = () =>
         integrations.at(-1)?.[USER_ID]?.rows?.accounts?.map((account) => account.connection) ?? [];
       live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] }, ["1"]);
@@ -340,7 +342,7 @@ it.effect(
 
       let answered = false;
       const disconnecting = yield* Effect.forkChild(
-        Effect.tap(call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, LINEAR), () =>
+        Effect.tap(acts.INTEGRATIONS_DISCONNECT(LINEAR), () =>
           Effect.sync(() => {
             answered = true;
           }),
@@ -365,7 +367,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const script: ServiceScript = { status: INTEGRATION_STATUS.CONNECTED };
-      const { call, integrations, live } = yield* subject(script);
+      const { call, acts, integrations, live } = yield* subject(script);
       const label = () => integrations.at(-1)?.[USER_ID]?.rows?.accounts?.[0]?.label;
       live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] }, ["1"]);
       yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
@@ -375,7 +377,7 @@ it.effect(
       const rename = { ...LINEAR, connection: "linear", label: "Work" };
       const answered = yield* Deferred.make<void>();
       script.renameAnswered = answered;
-      const renaming = yield* Effect.forkChild(call(GATEWAY_METHOD.INTEGRATIONS_RENAME, rename));
+      const renaming = yield* Effect.forkChild(acts.INTEGRATIONS_RENAME(rename));
       yield* settled;
       assert.equal(label(), "Work", "the new label is drawn before the service answers");
       yield* Deferred.succeed(answered, undefined);
@@ -393,12 +395,9 @@ it.effect(
       live.set({ connections: [renamed] }, [RENAME_TXID]);
       yield* after(Duration.millis(500));
       script.renameRefused = true;
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.INTEGRATIONS_RENAME, { ...rename, label: "Home" }),
-        {
-          failure: INTEGRATION_CALL_FAILURE.UNANSWERED,
-        },
-      );
+      assert.deepEqual(yield* acts.INTEGRATIONS_RENAME({ ...rename, label: "Home" }), {
+        failure: INTEGRATION_CALL_FAILURE.UNANSWERED,
+      });
       assert.equal(label(), "Work", "a refused rename leaves the label the read carries");
       yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
     }),
@@ -409,7 +408,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const script: ServiceScript = { status: INTEGRATION_STATUS.CONNECTED, clients: [CLAUDE] };
-      const { call, clients } = yield* subject(script);
+      const { call, acts, clients } = yield* subject(script);
       yield* call(GATEWAY_METHOD.MCP_CLIENTS_FOLLOW);
       yield* settled;
       const held = (listed: readonly McpClient[]) => ({
@@ -418,17 +417,16 @@ it.effect(
       assert.deepEqual(clients.at(-1), held([CLAUDE]));
 
       script.revokeFails = true;
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: CLAUDE.clientId }),
-        { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED },
-      );
+      assert.deepEqual(yield* acts.MCP_CLIENTS_REVOKE({ clientId: CLAUDE.clientId }), {
+        failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED,
+      });
       assert.deepEqual(clients.at(-1), held([CLAUDE]));
 
       script.revokeFails = false;
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.MCP_CLIENTS_REVOKE, { clientId: CLAUDE.clientId }),
-        { serverUrl: SERVER_URL, clients: [] },
-      );
+      assert.deepEqual(yield* acts.MCP_CLIENTS_REVOKE({ clientId: CLAUDE.clientId }), {
+        serverUrl: SERVER_URL,
+        clients: [],
+      });
       assert.deepEqual(clients.at(-1), held([]));
     }),
 );

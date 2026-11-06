@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
+import { AGENT_BOUNDS, type AgentSummary, type TasklessAgent } from "@repo/features/agent-wire";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -63,7 +63,7 @@ import {
   stateWith,
 } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries, testQueryClientNow } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
@@ -72,7 +72,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
-import { appStateNow } from "../use-app-state.js";
+import { appStateIn } from "../use-app-state.js";
 import { AutomationsPage } from "./automations-page.js";
 
 /**
@@ -1011,7 +1011,7 @@ function serversChip(root: ParentNode = document): HTMLButtonElement | undefined
   return [...root.querySelectorAll<HTMLButtonElement>("button[aria-labelledby]")].find((each) => {
     const [fieldName] = (each.getAttribute("aria-labelledby") ?? "").split(" ");
     return (
-      fieldName !== undefined && document.getElementById(fieldName)?.textContent === "Integrations"
+      fieldName !== undefined && document.getElementById(fieldName)?.textContent === "MCP servers"
     );
   });
 }
@@ -1546,12 +1546,12 @@ test("a personal automation another member made is not called Only you, in its r
   assert.equal(picked(editor, "Owner"), "Personal");
 });
 
-test("a new agent's Integrations are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
+test("a new agent's MCP servers are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
   standing = [{ ...SWEEP, mine: true }];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const chip = serversChip() ?? assert.fail("the servers chip stands");
-  assert.match(page.textContent ?? "", /Every connected integration is on\./u);
+  assert.match(page.textContent ?? "", /Every connected MCP server is on\./u);
   assert.equal(chip.querySelectorAll(".ui-provider-mark").length, 2, "Linear's and Sentry's marks");
 
   act(() => chip.click());
@@ -1563,15 +1563,15 @@ test("a new agent's Integrations are a field chip of the owner's connected ones 
   act(() => sentry.click());
   assert.match(page.textContent ?? "", /Sentry off\./u);
   assert.equal(chip.querySelectorAll(".ui-provider-mark").length, 1, "Linear's mark alone");
-  assert.equal(nameOf(chip), "Integrations", "marks draw no words, so the field's name stands");
+  assert.equal(nameOf(chip), "MCP servers", "marks draw no words, so the field's name stands");
   const linear = document.querySelector<HTMLButtonElement>(
     "[role=switch][aria-label='Linear for this agent']",
   );
   assert.ok(linear, "Linear's switch stands");
   act(() => linear.click());
-  assert.equal(nameOf(chip), "Integrations None", "the name carries the word the chip draws");
+  assert.equal(nameOf(chip), "MCP servers None", "the name carries the word the chip draws");
   act(() => linear.click());
-  assert.equal(nameOf(chip), "Integrations");
+  assert.equal(nameOf(chip), "MCP servers");
   act(() => button("Save").click());
   await settle();
 
@@ -1581,19 +1581,19 @@ test("a new agent's Integrations are a field chip of the owner's connected ones 
   });
 });
 
-test("a new agent's Integrations row claims nothing while the owner's connections are read", async () => {
+test("a new agent's MCP servers row claims nothing while the owner's connections are read", async () => {
   standing = [{ ...SWEEP, mine: true }];
   integrationsHeld = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
   const reading = [...page.querySelectorAll("[role=status]")].map((each) => each.textContent);
-  assert.ok(reading.includes("Reading your connected integrations…"), "the row says it is reading");
-  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected integration/u);
+  assert.ok(reading.includes("Reading your connected MCP servers…"), "the row says it is reading");
+  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected MCP server/u);
   assert.equal(serversChip(page) === undefined, true, "no chip claims None while the read is out");
 });
 
-test("a new agent's Integrations row says a refused read of the owner's connections, and Retry reads them", async () => {
+test("a new agent's MCP servers row says a refused read of the owner's connections, and Retry reads them", async () => {
   standing = [{ ...SWEEP, mine: true }];
   integrationsRefusals = 1;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -1602,7 +1602,7 @@ test("a new agent's Integrations row says a refused read of the owner's connecti
   await vi.waitFor(() =>
     assert.match(
       page.querySelector("[role=alert]")?.textContent ?? "",
-      /Your connected integrations could not be read\./u,
+      /Your connected MCP servers could not be read\./u,
     ),
   );
   assert.doesNotMatch(page.textContent ?? "", /None connected yet\./u);
@@ -1610,7 +1610,7 @@ test("a new agent's Integrations row says a refused read of the owner's connecti
   act(() => button("Retry").click());
   await settle();
   await vi.waitFor(() =>
-    assert.match(page.textContent ?? "", /Every connected integration is on\./u),
+    assert.match(page.textContent ?? "", /Every connected MCP server is on\./u),
   );
   assert.equal(
     (serversChip() ?? assert.fail("the servers chip stands")).querySelectorAll(".ui-provider-mark")
@@ -1632,7 +1632,7 @@ test("another member's automation says which servers its creator switched off, o
 
   assert.match(
     page.textContent ?? "",
-    /Its creator's connected integrations, but Sentry and Notion \(account 2\) switched off\./u,
+    /Its creator's connected MCP servers, but Sentry and Notion \(account 2\) switched off\./u,
   );
   assert.equal(serversChip(page) === undefined, true);
 });
@@ -2186,14 +2186,41 @@ test("an agent the workspace's list no longer holds stays the pick it was saved 
   standing = [following];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
   await settle();
-  assert.equal(picked(page, "Agent"), "The agent it goes to now");
+  assert.equal(picked(page, "Agent"), "An agent no longer listed");
 
   pick(page, "Agent", "CI digest");
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
-  pick(page, "Agent", "The agent it goes to now");
+  pick(page, "Agent", "An agent no longer listed");
 
-  assert.equal(picked(page, "Agent"), "The agent it goes to now");
+  assert.equal(picked(page, "Agent"), "An agent no longer listed");
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
+});
+
+test("the agent a same-agent automation was saved with is named as the task list carries it once the newest no longer hold it", async () => {
+  const older = onLedger({
+    ...CI_DIGEST,
+    id: "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d90",
+    title: "Onboarding analysis",
+  });
+  workspaceAgents = [
+    ...Array.from({ length: AGENT_BOUNDS.MAX_WORKSPACE_AGENTS }, (_, at) =>
+      onLedger({
+        ...CI_DIGEST,
+        id: `8c1a6a4f-3d2e-4d8b-8b66-${String(at).padStart(12, "0")}`,
+        createdAt: 2 + at,
+      }),
+    ),
+    older,
+  ];
+  const following = automation(10, {
+    name: "Follow-up digest",
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: older.id },
+  });
+  standing = [following];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
+  await settle();
+
+  assert.equal(picked(page, "Agent"), "Onboarding analysis");
 });
 
 test("the agent a same-agent automation was saved with is not offered once its repository is changed", async () => {
@@ -2436,7 +2463,7 @@ test("the agent a same-agent automation was saved with, once the list no longer 
   await settle();
   act(() => picker(page, "Agent").click());
   const names = () => agentRows().map((row) => row.name);
-  assert.deepEqual(names(), ["Started by its first run", "The agent it goes to now", "CI digest"]);
+  assert.deepEqual(names(), ["Started by its first run", "An agent no longer listed", "CI digest"]);
 
   const search = () =>
     document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input');
@@ -2446,7 +2473,7 @@ test("the agent a same-agent automation was saved with, once the list no longer 
   type(search(), "");
   await settle();
 
-  assert.deepEqual(names(), ["Started by its first run", "The agent it goes to now", "CI digest"]);
+  assert.deepEqual(names(), ["Started by its first run", "An agent no longer listed", "CI digest"]);
 });
 
 /** What each row's glyph draws, in order: Sentry's or GitHub's mark, or the lucide icon's name. */
@@ -2857,7 +2884,10 @@ test("a webhook made in the window shows its secret once, with Copy, left out of
   assert.equal(field?.textContent, MADE_SECRET);
   assert.ok(field?.closest(".ph-no-capture"), "the secret is left out of the screen recording");
   assert.match(page.textContent ?? "", /You won't be able to see this again/u);
-  assert.ok(!JSON.stringify(appStateNow() ?? {}).includes(MADE_SECRET), "no app state holds it");
+  assert.ok(
+    !JSON.stringify(appStateIn(testQueryClientNow()) ?? {}).includes(MADE_SECRET),
+    "no app state holds it",
+  );
   act(() => button("Copy secret").click());
   await settle();
   assert.deepEqual(copied, [MADE_SECRET]);

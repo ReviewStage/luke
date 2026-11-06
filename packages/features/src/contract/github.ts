@@ -19,8 +19,8 @@
  * the bytes the wire carries (`packages/service/src/orpc/base.ts`).
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema, SchemaTransformation } from "effect";
 import {
   githubConnectAnswerSchema,
@@ -38,6 +38,7 @@ import {
   workspaceTokenRepositoriesAnswerSchema,
 } from "../github-repositories-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
 import {
   CODE_PATH_MAX_CHARS,
   taskFileAnswerSchema,
@@ -47,7 +48,7 @@ import {
   workspaceIdSchema,
 } from "../task-wire.js";
 import { workspaceTokenRepositoryRequestSchema } from "../workspace-wire.js";
-import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, declaredProcedure, exactInput, hostedProcedure, refuses } from "./base.js";
 import { taskFileQueryFields } from "./task-files.js";
 
 /** An intent's id is 43 base64url characters, so a claim past this carries no intent. */
@@ -105,11 +106,20 @@ export const githubContract = {
       }),
     )
     .output(EffectSchema.flip(githubRepositoriesAnswerSchema)),
-  tokenRepositories: hostedProcedure
+  tokenRepositories: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_TOKEN_REPOSITORIES }))
     .input(EffectSchema.Struct({ [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: workspaceIdSchema }))
     .output(EffectSchema.flip(workspaceTokenRepositoriesAnswerSchema)),
-  setTokenRepository: hostedProcedure
+  setTokenRepository: declaredProcedure
+    .errors(
+      refuses(
+        HOSTED_API_ERROR.NOT_FOUND,
+        HOSTED_API_ERROR.NOT_PERMITTED,
+        HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+        HOSTED_API_ERROR.GITHUB_UNANSWERED,
+      ),
+    )
     .meta(bodyCap(TOKEN_REPOSITORY_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.GITHUB_TOKEN_REPOSITORIES }))
     .input(exactInput(workspaceTokenRepositoryRequestSchema))

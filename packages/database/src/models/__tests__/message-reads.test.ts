@@ -126,7 +126,7 @@ const openTurn = (userId: string, conversationId: string, status: TurnStatus) =>
     ([row]) => row?.id ?? "",
   );
 
-/** A row of a turn carrying the words given, as eve's receipt of a line holds them. */
+/** A row of a turn carrying the words given, as the retired runtime's receipt of a line holds them. */
 const writeReceipt = (
   userId: string,
   conversationId: string,

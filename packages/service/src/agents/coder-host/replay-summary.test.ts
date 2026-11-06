@@ -108,7 +108,7 @@ function scripted(answer: (prompt: string) => string | undefined, finish = "stop
   return { summary, asked, bounds };
 }
 
-/** A window whose share eve compacts at leaves room for about `chunkBytes` of steps per summary call. */
+/** A window whose compaction share leaves room for about `chunkBytes` of steps per summary call. */
 const windowFor = (chunkBytes: number) =>
   Math.ceil(
     (chunkBytes / 2 + REPLAY_FIT.SUMMARY_OUTPUT_TOKENS + REPLAY_FIT.SUMMARY_PROMPT_TOKENS) / 0.9,

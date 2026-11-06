@@ -43,6 +43,7 @@ export const APP_COMMAND = {
   OPEN_ON_GITHUB: "open-on-github",
   TOGGLE_READ: "toggle-read",
   REMIND_ME: "remind-me",
+  RESOLVE: "resolve",
   PIN: "pin",
   OPEN_IN_TASK: "open-in-task",
   PREVIOUS_TASK: "previous-plan",
@@ -82,6 +83,7 @@ export const APP_COMMAND = {
   INBOX_LIST: "inbox-list",
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
+  EXIT_AGENT_THREADS: "exit-agent-threads",
   REPLY_TO_SELECTION: "reply-to-selection",
   SET_STATUS: "set-status",
   EXIT_AGENT_PAGE: "exit-agent-page",
@@ -450,6 +452,11 @@ export const APP_SHORTCUTS = {
     label: "Remind me",
     chord: { key: SHORTCUT_KEY.H, plain: true },
   },
+  // Note that E resolves the chosen Inbox items, as Gmail's and GitHub's E marks theirs done; ⌘E is Code in the editor, so it stands bare.
+  [APP_COMMAND.RESOLVE]: {
+    label: "Resolve",
+    chord: { key: SHORTCUT_KEY.E, plain: true },
+  },
   [APP_COMMAND.PIN]: {
     label: "Pin or unpin",
     chord: { key: SHORTCUT_KEY.P, plain: true },
@@ -599,6 +606,10 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.TASKS]: { label: "Tasks", chord: { key: SHORTCUT_KEY.B, shift: true } },
   [APP_COMMAND.INBOX_LIST]: {
     label: "Back to inbox list",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
+  [APP_COMMAND.EXIT_AGENT_THREADS]: {
+    label: "Back to transcript",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
   [APP_COMMAND.PREVIOUS_INBOX_ITEM]: {
@@ -889,6 +900,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.COMMENT_ON_SELECTION,
       APP_COMMAND.TOGGLE_READ,
       APP_COMMAND.REMIND_ME,
+      APP_COMMAND.RESOLVE,
       APP_COMMAND.PIN,
       APP_COMMAND.VERSION_HISTORY,
       APP_COMMAND.OPEN_ON_GITHUB,
@@ -899,6 +911,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.INBOX,
       APP_COMMAND.TASKS,
       APP_COMMAND.INBOX_LIST,
+      APP_COMMAND.EXIT_AGENT_THREADS,
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.REPLY_TO_SELECTION,
