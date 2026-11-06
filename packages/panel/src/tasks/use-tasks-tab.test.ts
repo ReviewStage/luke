@@ -3848,16 +3848,18 @@ it.effect(
       const file = { file: FILE_REF.path };
       const pulls = { changes: AGENT_ID };
       act(() => panel().onOpenFile(FILE_REF));
+      yield* passing(Duration.seconds(30));
+      // The file is left half a minute after it opened, between any two minutes the window counts.
       act(() => panel().onChoose(pulls));
       act(() => panel().onPin({ task: TASK.id }, pulls, "Pull request"));
       yield* landed;
       const strip = panel().strip;
       assert.deepEqual(strip, [file, pulls]);
 
-      yield* passing(Duration.hours(23));
-      assert.deepEqual(panel().strip, strip, "a tab viewed within the day stays");
+      yield* passing(Duration.subtract(Duration.hours(24), Duration.seconds(30)));
+      assert.deepEqual(panel().strip, strip, "a day has not passed since the file was left");
 
-      yield* passing(Duration.hours(1));
+      yield* passing(Duration.seconds(30));
       assert.deepEqual(
         panel().strip,
         [pulls],
