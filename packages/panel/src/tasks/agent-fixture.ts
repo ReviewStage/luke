@@ -53,6 +53,7 @@ import {
 } from "@repo/features/agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER } from "@repo/features/page-wire";
+import { PORT_FORWARD_STATE, type PortForwardingAnswer } from "@repo/features/port-forward-acts";
 import { CHAPTER_KIND, CHAPTER_RISK, LINE_REF_SIDE } from "@repo/features/pull-request-chapters";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import {
@@ -988,6 +989,22 @@ function terminalStage(stage: AgentStage): TerminalStage | undefined {
   return "terminal" in stage ? stage.terminal : undefined;
 }
 
+/** The agent's forwarding as Forward to localhost turns it, its dev server's two ports forwarded while on, the second's own port taken on this Mac. */
+const FORWARDING = { on: false };
+
+/** The agent's forwarding as the host would answer it now. */
+function forwardingAnswer(): PortForwardingAnswer {
+  if (!FORWARDING.on) return { on: false, running: false, ports: [] };
+  return {
+    on: true,
+    running: true,
+    ports: [
+      { port: 3000, localPort: 3000, state: PORT_FORWARD_STATE.CONNECTED },
+      { port: 5173, localPort: 5174, state: PORT_FORWARD_STATE.LISTENING },
+    ],
+  };
+}
+
 /** One kind's answer, from its payload and the profile's stage. */
 type StagedAnswer<Kind extends PortActKind> = (
   payload: PortActPayload<Kind>,
@@ -1043,6 +1060,11 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     if (terminal?.kind === TERMINAL_STAGE.PORT) postShellPort(terminal);
   },
   [ACT_KIND.TERMINAL_DETACH]: () => closeHeldPort(),
+  [ACT_KIND.PORT_FORWARD_READ]: () => forwardingAnswer(),
+  [ACT_KIND.PORT_FORWARD_SET]: ({ on }) => {
+    FORWARDING.on = on;
+    return forwardingAnswer();
+  },
 };
 
 /**
