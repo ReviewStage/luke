@@ -117,6 +117,7 @@ import {
   lastFinished,
 } from "../tasks/agent-tab-card.js";
 import { useAgentsElsewhere } from "../tasks/agents-elsewhere.js";
+import { useChangesPeopleOf } from "../tasks/changes-people.js";
 import { TaskChipCard } from "../tasks/chip-cards.js";
 import {
   CloudBrowserDraftPane,
@@ -154,7 +155,7 @@ import {
   TRANSCRIPT_COPY,
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
-import type { AgentsControl } from "../tasks/use-agents.js";
+import type { AgentsControl, HeldPeople } from "../tasks/use-agents.js";
 import { OnLeavingHere, PullRequestsOnGitHub } from "../tasks/use-open-link.js";
 import { usePlanComments } from "../tasks/use-plan-comments.js";
 import {
@@ -640,6 +641,8 @@ export interface PanelCards {
   readonly shownAgent: string | undefined;
   /** Opens an agent's tab in the plan's column, as a pull request's card offers. */
   readonly onOpenAgent: (agentId: string) => void;
+  /** Who each agent's pull request names, as its Changes tab last read them. */
+  readonly people: ReadonlyMap<string, HeldPeople>;
 }
 
 /** An agent's tab card as a row of its browser hangs it, named as the row names the agent. */
@@ -786,7 +789,7 @@ export function panelEntries(input: {
             subject: agentSubject(cards.agents, agentId, cards.held, cards.shownAgent === agentId),
             models: cards.agents.models,
             pullRequest,
-            people: peopleOf(cards.agents.changesPeople.get(agentId), pullRequest),
+            people: peopleOf(cards.people.get(agentId), pullRequest),
             onOpenAgent: () => cards.onOpenAgent(agentId),
           });
     return {
@@ -1001,6 +1004,8 @@ function stripTabs(input: {
   pagePlace: PagePlace;
   /** Whether the Inbox kind holds one thread, as it does beside the window's Inbox, and is named Thread. */
   thread: boolean;
+  /** Who each agent's pull request names, as its Changes tab last read them. */
+  people: ReadonlyMap<string, HeldPeople>;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, held } = input;
   const { copied, onOpenAgent, shownAgent, agentsOf } = input;
@@ -1077,7 +1082,7 @@ function stripTabs(input: {
       people:
         pullRequest === undefined
           ? undefined
-          : peopleOf(own.changesPeople.get(tab.changes), pullRequest),
+          : peopleOf(input.people.get(tab.changes), pullRequest),
       onOpenAgent: () => onOpenAgent(tab.changes),
     });
     return {
@@ -1287,6 +1292,7 @@ function PanelTabs({
   transcriptDoors: TranscriptDoors | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
+  const people = useChangesPeopleOf(useMemo(() => changes.map((tab) => tab.changes), [changes]));
   const kinds = stripTabs({
     panel,
     unread,
@@ -1305,6 +1311,7 @@ function PanelTabs({
     pagePlace,
     // Note that beside the window's Inbox the one Inbox tab is the chosen thread, never a task's Inbox.
     thread: holder === SIDE_PANEL_HOLDER.INBOX,
+    people,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   // Note that only a task's panel hands its looks over, since an agent's page holds its panel under the agent's id.
@@ -2656,6 +2663,10 @@ export function SidePanel({
   const wiring: PanelWiring | undefined = listing ? undefined : { tab: tabId, panel: panelId };
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
+  const offeredChanges = panel.changes;
+  const changesPeople = useChangesPeopleOf(
+    useMemo(() => offeredChanges.map((tab) => tab.changes), [offeredChanges]),
+  );
   const offers = panelOffers({
     holder,
     taskId,
@@ -2673,6 +2684,7 @@ export function SidePanel({
       pagePlace,
       shownAgent,
       onOpenAgent: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
+      people: changesPeople,
     },
   });
   // Note that the panel is drawn only with something in it; while shut, it stands here only for the toggle's ask, as the "+" menu hung from the toggle.

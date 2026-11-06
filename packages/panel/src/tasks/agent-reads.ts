@@ -11,7 +11,7 @@
 import type { AgentChangesAnswerView, AgentMessagesParams } from "@repo/features/agent-view";
 import type { TasksSkillsParams } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
-import { queryOptions } from "@tanstack/react-query";
+import { queryOptions, skipToken } from "@tanstack/react-query";
 import { askAct } from "../act.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { pullRequestAsked } from "./pull-request-number.js";
@@ -96,11 +96,14 @@ function landedChanges(answer: AgentChangesAnswerView) {
  * those asks alone; a failure stands as the query's error, the changes last
  * read standing beside it.
  */
-export function agentChangesQueryOptions(agentId: string, number: number | undefined) {
+export function agentChangesQueryOptions(agentId: string | undefined, number: number | undefined) {
   return queryOptions({
     queryKey: [QUERY_ROOT.AGENT_CHANGES, agentId, number ?? null],
-    queryFn: () =>
-      askAct(ACT_KIND.AGENTS_CHANGES, pullRequestAsked(agentId, number)).then(landedChanges),
+    queryFn:
+      agentId === undefined
+        ? skipToken
+        : () =>
+            askAct(ACT_KIND.AGENTS_CHANGES, pullRequestAsked(agentId, number)).then(landedChanges),
     staleTime: Number.POSITIVE_INFINITY,
     // Note that each answer is its own, an answer alike to the last included, since the tab reads the
     // marks again with every answer and lets go of a file read whole for the one before.

@@ -1,4 +1,4 @@
-import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@repo/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   type AgentAttachment,
   type AgentChangesPeople,
@@ -32,12 +32,11 @@ import {
   type QueryClient,
   useIsMutating,
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOfferedModels } from "../account-choices.js";
 import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
 import { actMutation } from "../act-mutations.js";
@@ -50,7 +49,6 @@ import {
   useNewAgentDraft,
 } from "../composer-drafts.js";
 import type { ShownFailure } from "../failure-report.js";
-import { QUERY_ROOT } from "../query-keys.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
@@ -73,7 +71,6 @@ import {
   startFailureNote,
 } from "./agent-model.js";
 import {
-  agentChangesQueryOptions,
   agentMessagesQueryOptions,
   agentPageQueryOptions,
   repositorySkillsQueryOptions,
@@ -227,35 +224,6 @@ interface ArchivePress {
 export interface HeldPeople {
   readonly url: string;
   readonly people: AgentChangesPeople;
-}
-
-/** The agents whose own pull request's changes this window has read, as the cache holds them. */
-function agentsWithChangesRead(queryClient: QueryClient): readonly string[] {
-  return queryClient
-    .getQueryCache()
-    .findAll({ queryKey: [QUERY_ROOT.AGENT_CHANGES] })
-    .flatMap((query) => {
-      const [, agentId, number] = query.queryKey;
-      return typeof agentId === "string" && number === null ? [agentId] : [];
-    });
-}
-
-/** An agent's changes as read, which a failure never is. */
-type ChangesRead = Exclude<AgentChangesAnswerView, { readonly failure: unknown }>;
-
-/** Who each agent's own pull request names, by agent, from its changes as last read, each answer beside its agent's id; none for an agent unread or naming none. */
-function peopleByAgent(
-  agentIds: readonly string[],
-  answers: readonly (ChangesRead | undefined)[],
-): ReadonlyMap<string, HeldPeople> {
-  const people = new Map<string, HeldPeople>();
-  agentIds.forEach((agentId, at) => {
-    const answer = answers[at];
-    if (answer === undefined || answer.pullRequest === null) return;
-    const { url, files: _files, truncated: _truncated, ...named } = answer.pullRequest;
-    people.set(agentId, { url, people: named });
-  });
-  return people;
 }
 
 /** Everything the "+" menu, the tabs, and the agent tab draw and press. */
@@ -449,8 +417,6 @@ export interface AgentsControl {
    * there are none, a port that refused included.
    */
   generateChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
-  /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
-  changesPeople: ReadonlyMap<string, HeldPeople>;
   /** The words a dictation into an agent's box is likely to say, read off the open task. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a workspace, or while the Skills experiment is off. */
@@ -1516,36 +1482,6 @@ export function useAgents(input: {
   // apart from the agents' own, so it never stands for what an agent published.
   const numberedPullRequests = useAppSlice(numberedPullRequestsAtom);
 
-  // Note that who a pull request names is kept beside the agent, with the
-  // pull request it was read for, so its Changes card says them wherever it
-  // hangs once its tab has read them, and never for another pull request.
-  // The observers are disabled because they only read what `useChangesReads` fetched.
-  // Note that every agent whose changes this window read is named, a pinned tab's of another task among them,
-  // found in the cache again each time the cache holds the changes of one more agent, or one fewer.
-  const changesHeld = useSyncExternalStore(
-    useCallback((heard: () => void) => queryClient.getQueryCache().subscribe(heard), [queryClient]),
-    () => agentsWithChangesRead(queryClient).length,
-  );
-  const peopleAgentIds = useMemo(
-    () => agentsWithChangesRead(queryClient),
-    [queryClient, changesHeld],
-  );
-  const combinePeople = useCallback(
-    (results: readonly { readonly data?: ChangesRead | undefined }[]) =>
-      peopleByAgent(
-        peopleAgentIds,
-        results.map((result) => result.data),
-      ),
-    [peopleAgentIds],
-  );
-  const changesPeople = useQueries({
-    queries: peopleAgentIds.map((id) => ({
-      ...agentChangesQueryOptions(id, undefined),
-      enabled: false,
-    })),
-    combine: combinePeople,
-  });
-
   const generateChapters = useCallback<AgentsControl["generateChapters"]>(
     (agentId, number) =>
       sendChapters(pullRequestAsked(agentId, number)).catch(
@@ -1664,7 +1600,6 @@ export function useAgents(input: {
     readTranscript,
     pullRequests,
     numberedPullRequests,
-    changesPeople,
     generateChapters,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,

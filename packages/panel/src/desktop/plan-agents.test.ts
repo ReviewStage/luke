@@ -12,6 +12,7 @@ import type { InboxItem } from "@repo/features/inbox-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { item } from "../testing/desktop-inbox.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { PlanAgents } from "./plan-agents.js";
@@ -123,24 +124,26 @@ function mount(
   root = createRoot(host);
   act(() =>
     root?.render(
-      createElement(PlanAgents, {
-        agents: control,
-        held: { agents: new Map(), workers: new Map() },
-        tab: undefined,
-        folded,
-        waiting,
-        onOpenAgent: (agentId) => opened.agents.push(agentId),
-        onOpenPullRequest: (agentId) => opened.pullRequests.push(agentId),
-        starts: starts
-          ? [{ label: "New agent", onSelect: () => opened.phone.push("new agent") }]
-          : [],
-        phone: !phone
-          ? undefined
-          : {
-              archived: null,
-              onOpenInbox: () => opened.phone.push("inbox"),
-            },
-      }),
+      withQueryClient(
+        createElement(PlanAgents, {
+          agents: control,
+          held: { agents: new Map(), workers: new Map() },
+          tab: undefined,
+          folded,
+          waiting,
+          onOpenAgent: (agentId) => opened.agents.push(agentId),
+          onOpenPullRequest: (agentId) => opened.pullRequests.push(agentId),
+          starts: starts
+            ? [{ label: "New agent", onSelect: () => opened.phone.push("new agent") }]
+            : [],
+          phone: !phone
+            ? undefined
+            : {
+                archived: null,
+                onOpenInbox: () => opened.phone.push("inbox"),
+              },
+        }),
+      ),
     ),
   );
   return { host, opened };

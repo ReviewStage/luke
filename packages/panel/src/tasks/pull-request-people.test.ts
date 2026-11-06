@@ -15,9 +15,9 @@ import {
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { Tooltip } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement } from "react";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { tabCard } from "../desktop/tab-card.js";
 import { MemberDirectory } from "../member-directory.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
@@ -28,6 +28,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { useChangesPeople } from "./changes-people.js";
 import { PullRequestCard, peopleOf } from "./pull-request-card.js";
 import type { AgentsControl } from "./use-agents.js";
 
@@ -282,6 +283,32 @@ test("Files changed names nobody, with files or without, since the Pull request 
     });
 
   assert.deepEqual([await names(changesNaming(PEOPLE)), await names(noFiles)], [false, false]);
+});
+
+test("the people an agent's Changes tab read are named on its pull request's card wherever it hangs", async () => {
+  /** The agent's pull request's card, hung apart from its tab, naming whom the tab read. */
+  function HungCard(): ReactElement {
+    return card(peopleOf(useChangesPeople(AGENT.id), PULL_REQUEST));
+  }
+  const strip = await draw(
+    createElement(
+      Fragment,
+      null,
+      createElement(ChangesTabReading, {
+        agentId: AGENT.id,
+        control,
+        shown: true,
+        repository: "acme/relay",
+        tree: { open: false, onToggle: () => undefined },
+      }),
+      createElement(HungCard),
+    ),
+  );
+
+  await vi.waitFor(() =>
+    assert.equal(strip.querySelector('[aria-label="Reviewers"]') !== null, true),
+  );
+  assert.equal(reviewerRows(strip).length, 4);
 });
 
 test("a card says the people its tab read only for the pull request they were read for", () => {

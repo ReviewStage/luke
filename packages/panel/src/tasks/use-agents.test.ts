@@ -24,7 +24,6 @@ import type { PortActKind, PortActPayload } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@repo/wire";
-import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -35,7 +34,6 @@ import { handHostReads, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
 import { ToastHost } from "../toast.js";
-import { agentChangesQueryOptions } from "./agent-reads.js";
 import { type AgentsControl, MODELS_READ, useAgents } from "./use-agents.js";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -126,7 +124,6 @@ function mount(
   const answers = new Map<AnyKind, Queued[]>();
   let keys = 0;
   let control: AgentsControl | undefined;
-  let queryClient: QueryClient | undefined;
   let restand: ((next: Standing) => void) | undefined;
   /** One ask answered from its kind's queue, and written down. */
   const scripted = (kind: AnyKind, payload: unknown): Promise<WireBoundaryInput> => {
@@ -146,7 +143,6 @@ function mount(
   function Probe() {
     const [held, setHeld] = useState(initial);
     restand = setHeld;
-    queryClient = useQueryClient();
     control = useAgents({
       acts: {
         // SAFETY: the test scripts each kind's answer in that kind's own shape, whichever side carries it.
@@ -188,11 +184,6 @@ function mount(
     control: () => {
       assert.ok(control);
       return control;
-    },
-    /** The Query client the hook reads through, as another surface would fill its cache. */
-    queryClient: () => {
-      assert.ok(queryClient);
-      return queryClient;
     },
     stand: async (next: Partial<Standing>) => {
       act(() => restand?.({ ...initial, ...next }));
@@ -564,45 +555,6 @@ test("on an agent's own page, its agent is continued and forked through the page
   });
   act(() => tab.control().onDropFork());
   assert.equal(tab.control().draft, undefined, "nothing but a fork starts here, so its draft goes");
-});
-
-test("an agent's changes as read say who its pull request names, by agent and with the pull request read, so its Changes card says them wherever it hangs, and a read naming no pull request drops them", async () => {
-  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [STARTED] });
-  const url = "https://github.com/acme/relay/pull/42";
-  tab.answer(
-    ACT_KIND.AGENTS_CHANGES,
-    {
-      pullRequest: {
-        url,
-        files: [],
-        truncated: false,
-        author: { login: "luke-agent[bot]", bot: true },
-        reviewers: [{ by: { login: "octocat", bot: false }, state: "approved" }],
-      },
-    },
-    { pullRequest: null },
-  );
-  await tab.mount();
-  assert.equal(tab.control().changesPeople.get(AGENT), undefined);
-
-  // The changes read as the agent's Changes tab reads them.
-  const read = () =>
-    tab.queryClient().fetchQuery({ ...agentChangesQueryOptions(AGENT, undefined), staleTime: 0 });
-  await act(() => read());
-  await vi.waitFor(() =>
-    assert.deepEqual(tab.control().changesPeople.get(AGENT), {
-      url,
-      people: {
-        author: { login: "luke-agent[bot]", bot: true },
-        reviewers: [{ by: { login: "octocat", bot: false }, state: "approved" }],
-      },
-    }),
-  );
-
-  await act(() => read());
-  await vi.waitFor(() =>
-    assert.equal(tab.control().changesPeople.get(AGENT), undefined, "no pull request names nobody"),
-  );
 });
 
 test("a pull request's chapters are generated for the agent's own pull request or the one a tab names by its number, and an ask the port refused is heard as unanswered", async () => {
