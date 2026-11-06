@@ -12,7 +12,8 @@
  * its `onCreate`, as Vercel's examples set one up: the `agent` user made in
  * it as the SDK does, and the checkout made. The checkout stands on the drive:
  * kept as the agent left it where an earlier sandbox of the session made it;
- * on a fork of its workspace's repository's base drive, fetched up to the
+ * as the source left it on a fork of the drive of the agent it was continued
+ * or forked from (`../agent-drive.ts`); on a fork of its workspace's repository's base drive, fetched up to the
  * default branch and installed again, which fills in only what landed since;
  * or cloned whole onto an empty drive (`../coder-host/checkout.ts`, the
  * token at the firewall for the clone alone), the base drive filled past the
@@ -689,7 +690,9 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
 
   /**
    * The agent's checkout on its drive, as the drive came: one kept from an
-   * earlier sandbox of the session stands as the agent left it; a fork of
+   * earlier sandbox of the session stands as the agent left it, as does one
+   * forked from the drive of the agent it was started from, as that agent
+   * left it; a fork of
    * the base drive is brought up to the default branch and installed again,
    * which fills in only what changed since the fill; an empty drive has the
    * repository cloned onto it whole. An install that failed is said in the
@@ -703,7 +706,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     from: AgentDriveFrom,
   ) =>
     Effect.gen(function* () {
-      if (from === AGENT_DRIVE_FROM.KEPT) return;
+      if (from === AGENT_DRIVE_FROM.KEPT || from === AGENT_DRIVE_FROM.SOURCE) return;
       if (from === AGENT_DRIVE_FROM.EMPTY) {
         return yield* cloneAgentRepository(agent, sandbox, read);
       }
@@ -833,7 +836,12 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       if (Option.isSome(base) && checkout !== undefined) {
         yield* fillBaseDriveInBackground(agent, base.value, image, checkout.read);
       }
-      const drive = yield* agentDrive(api, sessionId, Option.getOrUndefined(base));
+      const drive = yield* agentDrive(
+        api,
+        sessionId,
+        Option.getOrUndefined(base),
+        agent.startedFrom?.drive,
+      );
       return yield* gotOn(agent, sessionId, image, drive, checkout);
     });
 
