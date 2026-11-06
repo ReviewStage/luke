@@ -12,6 +12,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import {
   changedSections,
@@ -220,7 +221,9 @@ test("a picture replaced in a version reads as the old one struck and the new on
   assert.ok(unit);
 
   const drawn = renderToStaticMarkup(
-    createElement(MarkdownMessage, { words: unit.words, edit: { marks: unit.marks } }),
+    withQueryClient(
+      createElement(MarkdownMessage, { words: unit.words, edit: { marks: unit.marks } }),
+    ),
   );
 
   assert.deepEqual(marked(diff, MARKDOWN_MARK.DELETED), [

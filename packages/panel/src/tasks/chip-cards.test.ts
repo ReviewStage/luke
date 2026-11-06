@@ -53,7 +53,7 @@ import {
   holdPages,
   stateWith,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { ChipCards, type TaskFocus } from "./chip-cards.js";
@@ -377,6 +377,8 @@ async function drawn(
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
+  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  writeAppState(state);
   const reads = handHostReads({ items: feed });
   fakeActPort({});
   // Note that a workspace's automations are laid on the document as a card holds them, as the host lays them.

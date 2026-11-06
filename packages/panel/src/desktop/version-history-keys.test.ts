@@ -13,6 +13,7 @@ import { SHELL_ROOM } from "../shell-room.js";
 import { HISTORY_READ } from "../tasks/use-description-history.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -114,37 +115,49 @@ function drawn(
   roots.push(root);
   act(() =>
     root.render(
-      createElement(DesktopVersionHistory, {
-        sidebar: {
-          collapsed: false,
-          compact: false,
-          overlay: SIDEBAR_OVERLAY.CLOSED,
-          width: 264,
-          onToggle: ignore,
-          onOverlay: ignore,
-          onResize: ignore,
-          staged: false,
-        },
-        room: SHELL_ROOM.WIDE,
-        history: {
-          canGoBack: stepBehind !== undefined,
-          canGoForward: false,
-          onBack: onExit,
-          onForward: ignore,
-          steps: {
-            back:
-              stepBehind === undefined
-                ? []
-                : [{ at: 0, title: { label: stepBehind }, page: { kind: "inbox", of: undefined } }],
-            forward: [],
+      withQueryClient(
+        createElement(DesktopVersionHistory, {
+          sidebar: {
+            collapsed: false,
+            compact: false,
+            overlay: SIDEBAR_OVERLAY.CLOSED,
+            width: 264,
+            onToggle: ignore,
+            onOverlay: ignore,
+            onResize: ignore,
+            staged: false,
           },
-          onGoTo: ignore,
-        },
-        subject: taskVersionSubject(tasks),
-        account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
-        onExit,
-        onRestored: ignore,
-      }),
+          room: SHELL_ROOM.WIDE,
+          history: {
+            canGoBack: stepBehind !== undefined,
+            canGoForward: false,
+            onBack: onExit,
+            onForward: ignore,
+            steps: {
+              back:
+                stepBehind === undefined
+                  ? []
+                  : [
+                      {
+                        at: 0,
+                        title: { label: stepBehind },
+                        page: { kind: "inbox", of: undefined },
+                      },
+                    ],
+              forward: [],
+            },
+            onGoTo: ignore,
+          },
+          subject: taskVersionSubject(tasks),
+          account: {
+            status: ACCOUNT_STATUS.SIGNED_IN,
+            email: "dev@example.com",
+            provider: "github",
+          },
+          onExit,
+          onRestored: ignore,
+        }),
+      ),
     ),
   );
   return container;

@@ -18,6 +18,7 @@ import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
 import type { SkillSource } from "./tasks/skill-picker.js";
 import { PULL_REQUEST_MOMENT } from "./tasks/use-link-standing.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "./testing/frames.js";
 import { restOn } from "./testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
@@ -94,7 +95,7 @@ function drawn(element: ReactElement): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(element));
+  act(() => root.render(withQueryClient(element)));
   return container;
 }
 

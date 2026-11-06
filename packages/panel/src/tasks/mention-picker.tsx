@@ -43,7 +43,7 @@ import {
   workspaceOfSlug,
 } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { AppInboxItems } from "@repo/host/app-state";
+import type { AppInboxItems, AppStateSnapshot } from "@repo/host/app-state";
 import { EXPERIMENT } from "@repo/settings";
 import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import {
@@ -111,12 +111,7 @@ import {
 import { QUERY_ROOT } from "../query-keys.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
-import {
-  appStateDerivedAtom,
-  appStateQuery,
-  selectExperiment,
-  useAppSlice,
-} from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { SERVER_PAGE_HEAD_CLASS } from "./agent-servers.js";
@@ -370,21 +365,24 @@ const SEARCH_PAUSE = Duration.millis(250);
 const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
 
 /** The window's tasks, workspaces, and agents on no task, which tell their readers only when one is a new list, so a patch to the open plan draws no list again. */
-const listedTasksAtom: Atom.Atom<{
+interface ListedTasks {
   readonly tasks: readonly TaskSummary[];
   readonly workspaces: readonly Workspace[];
   readonly tasklessAgents: readonly TasklessAgent[];
-}> = Atom.withEquality(
-  appStateDerivedAtom((state) => ({
-    tasks: state?.tasks.tasks ?? [],
-    workspaces: state?.tasks.workspaces ?? [],
-    tasklessAgents: state?.tasks.tasklessAgents ?? NO_TASKLESS_AGENTS,
-  })),
-  (held, next) =>
-    held.tasks === next.tasks &&
-    held.workspaces === next.workspaces &&
-    held.tasklessAgents === next.tasklessAgents,
-);
+}
+
+/** The lists before the first document arrives. */
+const NO_LISTED_TASKS: ListedTasks = {
+  tasks: [],
+  workspaces: [],
+  tasklessAgents: NO_TASKLESS_AGENTS,
+};
+
+const selectListedTasks = (state: AppStateSnapshot): ListedTasks => ({
+  tasks: state.tasks.tasks,
+  workspaces: state.tasks.workspaces,
+  tasklessAgents: state.tasks.tasklessAgents ?? NO_TASKLESS_AGENTS,
+});
 
 /** The list's own name, which its listbox is read by. */
 const MENU_LABEL = "Mention";
@@ -1789,7 +1787,7 @@ export function useMentionPicker({
   const people =
     directory.members === undefined ? [] : directoryPeople(directory.members, readerId);
   // The tasks offered are the workspace's the words stand in: the one that names it, else the plan's, else the one its slug names.
-  const listed = useAppSlice(listedTasksAtom);
+  const listed = useQuery({ ...appStateQuery, select: selectListedTasks }).data ?? NO_LISTED_TASKS;
   const tasksWorkspaceId =
     workspaceId ??
     listed.tasks.find((task) => task.id === taskId)?.workspaceId ??

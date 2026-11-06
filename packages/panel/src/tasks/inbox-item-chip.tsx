@@ -10,8 +10,9 @@ import type {
 } from "@repo/host/app-state";
 import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useMemo } from "react";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectInbox, selectTasks } from "../use-app-state.js";
 import { useHostRead } from "../use-host-read.js";
 import { InboxItemCard, inboxItemGlyph } from "./inbox-item-parts.js";
 import {
@@ -116,8 +117,8 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
   const namedAgent = "agentId" in place ? place.agentId : undefined;
   const { itemId } = place;
   const fed = useHostRead(LIVE_READ.INBOX_ITEMS).rows;
-  const tasks = useAppSlice(APP_SLICE.TASKS);
-  const inbox = useAppSlice(APP_SLICE.INBOX);
+  const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
+  const inbox = useQuery({ ...appStateQuery, select: selectInbox }).data;
   const found = useMemo(() => {
     if (planId !== undefined) return fedItemOf(fed, { planId, itemId });
     return fedItemOf(fed, namedAgent === undefined ? { itemId } : { agentId: namedAgent, itemId });
@@ -147,7 +148,7 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
 
 /** The brief main holds of an item that waits, by its id; none for one settled or unknown. */
 function useWaitingBrief(itemId: string): WaitingBrief | undefined {
-  const inbox = useAppSlice(APP_SLICE.INBOX);
+  const inbox = useQuery({ ...appStateQuery, select: selectInbox }).data;
   return [...(inbox?.waiting ?? []).flatMap((task) => task.items), ...(inbox?.taskless ?? [])].find(
     (each) => each.id === itemId,
   );
