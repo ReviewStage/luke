@@ -21,7 +21,7 @@ import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { AgentForward } from "./agent-forward.js";
+import { AgentForward, useForwardEntry } from "./agent-forward.js";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { paneToggleAction, TreeToggle, usePaneRoom } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
@@ -46,7 +46,9 @@ import { WorkingTime } from "./working-time.js";
  * terminal's screen (`terminal/`), which fills the rest. A state with
  * something to do lays one slim bar over the screen with one text action
  * and its key, and the terminal prints a state with nothing to do as a dim
- * line at the end of its own scrollback (`terminal-model.ts`). The tab
+ * line at the end of its own scrollback (`terminal-model.ts`). A phone's
+ * room draws no bar, so its header's ⋯ offers the shells, the agent, and
+ * the Forward menu instead. The tab
  * connects only while it is shown (`use-terminal-session.ts`).
  *
  * The whole tab is left out of the screen recording, because the shell's
@@ -164,6 +166,8 @@ export function TerminalTab({
   const phone = usePhoneRoom();
   // Note that a phone has no title bar to carry "connecting…", so a state only that bar says is said in a bar over the screen.
   const bar = look.bar ?? (phone ? look.phoneBar : undefined);
+  // Note that the Forward chip stands in the bar a phone's room draws none of, so there it is a submenu of the ⋯.
+  const forward = useForwardEntry(subject.agent);
   useTabActions(
     phone
       ? [
@@ -176,6 +180,7 @@ export function TerminalTab({
               onSelect: onOpenAgent,
             },
           ],
+          ...(forward === undefined ? [] : [[forward]]),
         ]
       : undefined,
   );
@@ -204,7 +209,7 @@ export function TerminalTab({
           }
           actions={
             <>
-              {subject.agent === undefined ? null : <AgentForward agent={subject.agent} />}
+              <AgentForward agent={subject.agent} />
               <TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />
             </>
           }

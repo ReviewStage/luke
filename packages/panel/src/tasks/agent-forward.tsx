@@ -18,6 +18,7 @@ import { PlugIcon } from "@repo/ui/icons";
 import { useQuery } from "@tanstack/react-query";
 import { pressAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import type { MenuSubmenu } from "../desktop/action-menu.js";
 import { appStateQuery, selectCapability, selectPortForwarding } from "../use-app-state.js";
 
 /**
@@ -89,9 +90,36 @@ function portRows(answer: PortForwardingAnswer, onOpen: (localPort: number) => v
 }
 
 /** The agent's forwarding as the host keeps it: off for any agent but the one forwarded. */
-function useForwarding(agentId: string): PortForwardingAnswer {
+function useForwarding(agentId: string | undefined): PortForwardingAnswer {
   const forwarding = useQuery({ ...appStateQuery, select: selectPortForwarding }).data;
-  return forwarding?.agentId === agentId ? forwarding : OFF;
+  return agentId !== undefined && forwarding?.agentId === agentId ? forwarding : OFF;
+}
+
+/** Whether this platform forwards ports and the agent has any to forward: one in a cloud sandbox. */
+function useOffered(agent: Pick<AgentSummary, "machine"> | undefined): boolean {
+  const offered =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.PORT_FORWARDS) }).data ===
+    true;
+  return offered && agent !== undefined && agent.machine !== AGENT_MACHINE.DEVICE;
+}
+
+/** The menu's switch and its port rows, as the chip and a phone's ⋯ both offer them. */
+function forwardItems(
+  agentId: string,
+  answer: PortForwardingAnswer,
+): { toggle: MenuAction; ports: MenuAction[] } {
+  return {
+    toggle: {
+      label: WORDS.MENU,
+      checked: answer.on,
+      mark: MENU_ITEM_MARK.SWITCH,
+      stays: true,
+      onSelect: () => void pressAct(ACT_KIND.PORT_FORWARD_SET, { agentId, on: !answer.on }),
+    },
+    ports: portRows(answer, (localPort) =>
+      appPlatform().openWeb(`http://${localAddress(localPort)}`),
+    ),
+  };
 }
 
 /** The chip and its menu. */
@@ -106,16 +134,7 @@ function ForwardControl({ agentId }: { agentId: string }): React.JSX.Element {
   ) : (
     <PlugIcon aria-hidden="true" />
   );
-  const toggle: MenuAction = {
-    label: WORDS.MENU,
-    checked: answer.on,
-    mark: MENU_ITEM_MARK.SWITCH,
-    stays: true,
-    onSelect: () => void pressAct(ACT_KIND.PORT_FORWARD_SET, { agentId, on: !answer.on }),
-  };
-  const ports = portRows(answer, (localPort) =>
-    appPlatform().openWeb(`http://${localAddress(localPort)}`),
-  );
+  const { toggle, ports } = forwardItems(agentId, answer);
   return (
     <>
       <Chip
@@ -143,11 +162,29 @@ function ForwardControl({ agentId }: { agentId: string }): React.JSX.Element {
 export function AgentForward({
   agent,
 }: {
-  agent: Pick<AgentSummary, "id" | "machine">;
+  agent: Pick<AgentSummary, "id" | "machine"> | undefined;
 }): React.JSX.Element | null {
-  const offered =
-    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.PORT_FORWARDS) }).data ===
-    true;
-  if (!offered || agent.machine === AGENT_MACHINE.DEVICE) return null;
+  const offered = useOffered(agent);
+  if (!offered || agent === undefined) return null;
   return <ForwardControl agentId={agent.id} />;
+}
+
+/**
+ * The chip's menu as a submenu of the Terminal tab's ⋯, for a room too
+ * narrow for the tab's bar, where the chip would otherwise stand nowhere;
+ * none where the chip draws nothing. A port's row says where it is
+ * forwarded, its press opening it, without the chip's Open hint.
+ */
+export function useForwardEntry(
+  agent: Pick<AgentSummary, "id" | "machine"> | undefined,
+): MenuSubmenu | undefined {
+  const offered = useOffered(agent);
+  const answer = useForwarding(agent?.id);
+  if (!offered || agent === undefined) return undefined;
+  const { toggle, ports } = forwardItems(agent.id, answer);
+  return {
+    label: forwardChipWords(answer),
+    icon: <PlugIcon aria-hidden="true" />,
+    items: [toggle, ...ports].map(({ hint: _hint, ...item }) => item),
+  };
 }
