@@ -28,7 +28,7 @@ import { OpenPersonProvider } from "../person-door.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
-import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { type TasksControl, taskRenameMutation } from "../tasks/use-tasks-tab.js";
 import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -135,10 +135,10 @@ function openTab(
       asked.deleted.push(taskId);
       return deletes();
     },
-    onRenameTask: (taskId, name) => {
+    renameTask: taskRenameMutation(({ taskId, name }) => {
       asked.renamed.push([taskId, name]);
       return renames();
-    },
+    }, undefined),
     onMarkTask: (taskId, mark) => asked.marked.push([taskId, mark]),
     sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
   });

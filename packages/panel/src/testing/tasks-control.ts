@@ -24,13 +24,19 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
-import { type AgentsControl, MODELS_READ } from "../tasks/use-agents.js";
+import {
+  AGENT_RENAME_SHAPE,
+  type AgentsControl,
+  agentRenameMutation,
+  MODELS_READ,
+} from "../tasks/use-agents.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { DRAWN_KINDS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   type TasksControl,
+  taskRenameMutation,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
 import { handHostReads, holdTranscripts, type TranscriptsHeld } from "./app-state.js";
@@ -304,7 +310,12 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
     onOpenIntegrations: ignore,
     onOpenApiKeys: ignore,
     archiving: false,
-    onRename: () => Promise.resolve(false),
+    rename: {
+      ...AGENT_RENAME_SHAPE,
+      options: agentRenameMutation(() =>
+        Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED, cause: undefined }),
+      ),
+    },
     onArchive: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
     onDelete: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
     // An agent read again stands as the control's list has it.
@@ -571,7 +582,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     onLeaveTask: ignore,
     onGoHome: ignore,
-    onRenameTask: () => Promise.resolve(true),
+    renameTask: taskRenameMutation(() => Promise.resolve(true), undefined),
     onDraftName: ignore,
     onMarkTask: ignore,
     onSettleTasks: ignore,
