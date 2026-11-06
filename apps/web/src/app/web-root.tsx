@@ -37,7 +37,7 @@ import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { AppStateSubscription, appStateQuery } from "@repo/panel/use-app-state";
-import { ErrorBoundary, ReloadState } from "@repo/ui/error-boundary";
+import { ErrorBoundary, RELOAD_ROOM, ReloadState } from "@repo/ui/error-boundary";
 import { createBrowserHistory } from "@tanstack/react-router";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -156,14 +156,21 @@ export async function mountWebApp(
     uninstall();
     rootElement.replaceChildren();
     await runtime.dispose();
-    createRoot(rootElement).render(<ReloadState failure={TAB_FAILED} onReload={reloadTab} />);
+    createRoot(rootElement).render(
+      <ReloadState
+        failure={TAB_FAILED}
+        error={error}
+        room={RELOAD_ROOM.WINDOW}
+        onReload={reloadTab}
+      />,
+    );
     return undefined;
   }
   liftLoadingFrame(rootElement);
   const router = createPanelRouter(tabHistory, queryClient);
   const root = createRoot(rootElement, { onCaughtError: reportCaught });
   root.render(
-    <ErrorBoundary failure={TAB_FAILED} onReload={reloadTab}>
+    <ErrorBoundary failure={TAB_FAILED} room={RELOAD_ROOM.WINDOW} onReload={reloadTab}>
       <RegistryContext.Provider value={rendererRegistry}>
         <QueryProvider>
           <AppStateSubscription />

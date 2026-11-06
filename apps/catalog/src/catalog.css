@@ -362,6 +362,14 @@ body {
   width: 200px;
 }
 
+/* A region whose drawing failed, tall enough for the mark, the words,
+   Reload, and what was thrown. */
+.catalog-reload-room {
+  display: flex;
+  flex-direction: column;
+  height: 440px;
+}
+
 /* A region a failed read would have filled, its failure centered in it. */
 .catalog-error-region {
   align-items: center;

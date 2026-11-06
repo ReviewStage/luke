@@ -1,8 +1,8 @@
 /**
  * error-boundary.test.ts -- a child that throws while drawing leaves its
- * place saying so, one alert with its sentence and Reload, rather than
- * nothing, and the rest of the window stands; Reload runs what it is handed
- * and draws the place again.
+ * place saying so, one alert with its sentence and Reload, and what it
+ * threw under it, rather than nothing, and the rest of the window stands;
+ * Reload runs what it is handed and draws the place again.
  */
 
 // @vitest-environment jsdom
@@ -19,6 +19,11 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const FAILURE = "This window could not be shown.";
+
+/** What a failed place's alert says around `failure`: the heading, the sentence and its promise, and Reload with its chord. */
+function alertSaying(failure: string): string {
+  return `Something went wrong${failure} Reloading usually fixes it.Reload⌘R`;
+}
 
 let roots: Root[] = [];
 
@@ -64,10 +69,12 @@ test("a child that throws while drawing draws the failure and Reload rather than
   );
   const alerts = page.querySelectorAll('[role="alert"]');
   expect(alerts).toHaveLength(1);
-  expect(alerts[0]?.textContent).toBe(`${FAILURE}Reload`);
-  expect(page.textContent).toBe(`The sidebar${FAILURE}Reload`);
+  expect(alerts[0]?.textContent).toBe(alertSaying(FAILURE));
+  expect(page.textContent).toBe(
+    `The sidebar${alertSaying(FAILURE)}Error: The place could not draw.`,
+  );
   expect([...page.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
-    "Reload",
+    "Reload⌘R",
   ]);
 });
 
@@ -75,7 +82,7 @@ test("a place that names no failure says the boundary's own sentence", () => {
   const Place = placeThatThrows({ now: true });
   const page = mount(createElement(ErrorBoundary, null, createElement(Place)));
   expect(page.querySelector('[role="alert"]')?.textContent).toBe(
-    "This page could not be shown.Reload",
+    alertSaying("This page could not be shown."),
   );
 });
 
@@ -106,5 +113,5 @@ test("a place that throws again on Reload says its failure again", () => {
   const Place = placeThatThrows({ now: true });
   const page = mount(createElement(ErrorBoundary, { failure: FAILURE }, createElement(Place)));
   act(() => page.querySelector("button")?.click());
-  expect(page.querySelector('[role="alert"]')?.textContent).toBe(`${FAILURE}Reload`);
+  expect(page.querySelector('[role="alert"]')?.textContent).toBe(alertSaying(FAILURE));
 });

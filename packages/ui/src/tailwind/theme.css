@@ -825,6 +825,8 @@
   --spacing-glyph: var(--ui-glyph-size, var(--ui-space-16));
   --spacing-glyph-inset: calc(var(--ui-glyph-size, var(--ui-space-16)) - var(--ui-space-2));
   --color-shortcut-ink: var(--ui-shortcut-ink, var(--ui-color-text-muted));
+  /* A note after a button's words (a count, a badge, a chord): muted on a quiet press, the press's own ink a step quieter on a filled one (`button.css`). */
+  --color-button-note: var(--ui-button-note-ink, var(--ui-color-text-muted));
   --text-shortcut: var(--ui-shortcut-text, var(--ui-type-caption-size));
   --spacing-working-mark: var(--ui-working-mark-size, var(--ui-space-16));
   --color-mark-strip-ink: var(--ui-mark-strip-ink);

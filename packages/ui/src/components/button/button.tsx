@@ -628,12 +628,12 @@ export function Button({
         {icon}
         <span className={WORDS}>{children}</span>
         {badge === undefined ? null : (
-          <span className="ui-button-badge inline-flex flex-none items-center text-muted-foreground text-caption">
+          <span className="ui-button-badge inline-flex flex-none items-center text-button-note text-caption">
             {badge}
           </span>
         )}
         {trailing === undefined ? null : (
-          <span className="ui-button-trailing inline-flex flex-none items-center text-muted-foreground text-caption tabular-nums">
+          <span className="ui-button-trailing inline-flex flex-none items-center text-button-note text-caption tabular-nums">
             {trailing}
           </span>
         )}

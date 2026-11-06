@@ -62,8 +62,12 @@ function ErrorStates(): React.JSX.Element {
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-reload" title="A place that failed to draw">
-        <div className="catalog-frame catalog-region catalog-error-region">
-          <ReloadState failure="This window could not be shown." onReload={stay} />
+        <div className="catalog-frame catalog-reload-room">
+          <ReloadState
+            failure="This window could not be shown."
+            error={new TypeError("Cannot read properties of undefined (reading 'id')")}
+            onReload={stay}
+          />
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-alone" title="No Retry">

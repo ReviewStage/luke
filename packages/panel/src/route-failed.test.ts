@@ -55,7 +55,7 @@ test("a lazy route that landed and threw while drawing is drawn again in place o
     root.render(createElement(RouterProvider, { router }));
   });
   const reload = [...host.querySelectorAll("button")].find(
-    (button) => button.textContent === "Reload",
+    (button) => button.textContent?.startsWith("Reload") === true,
   );
   assert.ok(reload, "the route says it failed, with Reload");
 
