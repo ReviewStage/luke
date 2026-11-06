@@ -19,8 +19,6 @@ import { EXPERIMENT } from "@repo/settings";
 import {
   Button,
   EDITABLE_BLOCK_CLASS,
-  EDITABLE_BLOCK_KIND,
-  EditableBlock,
   IconButton,
   SavedTick,
   STATUS_TONE,
@@ -52,12 +50,10 @@ import {
 } from "react";
 import { KEPT, type Kept, notKept } from "../act.js";
 import { ActorStack } from "../actor-ref.js";
-import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import {
   DESCRIPTION_PLACEHOLDER,
   type DescriptionEditorHandle,
-  PLACEMENT_END,
 } from "../description-editor/contract.js";
 import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
 import { useEditedLinksHost } from "../link-menu.js";
@@ -81,6 +77,7 @@ import {
   DescriptionDocumentEditor,
   DocumentBlock,
   EditableTitle,
+  EmptyDocumentBlock,
   textBoxOf,
   useTextRoom,
   useWordsKeptOnClose,
@@ -109,7 +106,7 @@ import {
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import { TaskPath, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
 import { TaskTitle } from "./task-title.js";
-import { EDITOR_PLACE, useDescriptionEditing } from "./use-description-editing.js";
+import { EDITOR_PLACE, type EditorHost, useDescriptionEditing } from "./use-description-editing.js";
 import { useOpenLink } from "./use-open-link.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
 import { useTaskMaker } from "./use-task-origin.js";
@@ -289,36 +286,16 @@ function EditTime({
 }
 
 /**
- * What an editable description with no text says at rest: the editor's own
+ * What an editable description with no text says: the editor's own
  * placeholder, in its type and its quieter ink, so the room does not read as
- * blank and nothing moves as a press opens the editor there. It is a block of
- * the document (`EditableBlock`), as a written section is, so it takes the
- * text cursor and no link's look, and the keyboard steps onto it from the
- * title; a press or Return opens the editor, and the pointer or the keyboard
- * reaching it reads the editor's bundle ahead.
+ * blank. It stands at rest, and in the editor's place while the editor
+ * mounts, so nothing moves or blinks out as a press opens it there.
  */
-function EmptyDescriptionLine({
-  entry,
-  onOpen,
-}: {
-  entry: boolean;
-  onOpen: () => void;
-}): React.JSX.Element {
-  const prefetchEditorBundle = usePrefetchEditorBundle();
+function EmptyDescriptionWords(): React.JSX.Element {
   return (
-    <EditableBlock
-      label="Description"
-      kind={EDITABLE_BLOCK_KIND.TEXT}
-      entry={entry}
-      onPointerEnter={prefetchEditorBundle}
-      onFocus={prefetchEditorBundle}
-      onPress={onOpen}
-      onOpen={onOpen}
-    >
-      <Text variant={TEXT_VARIANT.INHERIT} tone={TEXT_TONE.MUTED}>
-        <ReplayUnmask>{DESCRIPTION_PLACEHOLDER}</ReplayUnmask>
-      </Text>
-    </EditableBlock>
+    <Text variant={TEXT_VARIANT.INHERIT} tone={TEXT_TONE.MUTED}>
+      <ReplayUnmask>{DESCRIPTION_PLACEHOLDER}</ReplayUnmask>
+    </Text>
   );
 }
 
@@ -1376,16 +1353,22 @@ export const DescriptionBody = memo(function DescriptionBody({
   // The text a thread being started is laid over, handed to the units only while one is, since every unit is drawn again when it changes.
   const { pending } = useCommentFocus();
   const pendingText = pending === undefined ? undefined : task.document.body;
-  // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.
+  // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section, or its placeholder where it has none.
   const standing =
     editing.cursor === EDITOR_PLACE.TITLE
       ? onRename !== undefined
-      : views.some((view) => view.id === editing.cursor);
+      : editing.cursor === EDITOR_PLACE.EMPTY
+        ? views.length === 0
+        : views.some((view) => view.id === editing.cursor);
   const entry = standing
     ? editing.cursor
     : onRename === undefined
-      ? views[0]?.id
+      ? (views[0]?.id ?? EDITOR_PLACE.EMPTY)
       : EDITOR_PLACE.TITLE;
+  // The block an editor closed by the keyboard gives it back to: the section its caret stood in, or the placeholder of a description it leaves with no words, or the title.
+  const editorHostOf = (section: number, words: string): EditorHost =>
+    views[section]?.id ??
+    (views.length === 0 && words.trim() === "" ? EDITOR_PLACE.EMPTY : EDITOR_PLACE.TITLE);
   const sections = views.map((view, section) =>
     editable ? (
       <DocumentBlock
@@ -1478,10 +1461,9 @@ export const DescriptionBody = memo(function DescriptionBody({
           <Fragment key={HEAD_KEY}>{head?.(room)}</Fragment>
           {!documented ? null : editing.editor === undefined ? (
             editable && views.length === 0 ? (
-              <EmptyDescriptionLine
-                entry={entry === undefined}
-                onOpen={() => editing.open(PLACEMENT_END)}
-              />
+              <EmptyDocumentBlock entry={entry === EDITOR_PLACE.EMPTY} editing={editing}>
+                <EmptyDescriptionWords />
+              </EmptyDocumentBlock>
             ) : (
               sections
             )
@@ -1490,8 +1472,8 @@ export const DescriptionBody = memo(function DescriptionBody({
               task={task}
               editor={editing.editor}
               editing={editing}
-              drawn={sections}
-              hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
+              drawn={views.length === 0 ? <EmptyDescriptionWords /> : sections}
+              hostOf={editorHostOf}
               mentions={mentionDoors}
               scroller={scroller}
               handle={editorHandle}

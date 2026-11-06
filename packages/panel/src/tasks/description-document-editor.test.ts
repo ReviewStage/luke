@@ -262,6 +262,9 @@ function unsavedWords(container: HTMLElement): boolean {
   );
 }
 
+/** The fixture task with no description written yet. */
+const EMPTY_TASK: Task = { ...DOCUMENT_TASK, document: { body: "", assumptions: [] } };
+
 function mount(
   answers: readonly TasksEditAnswer[] = [],
   first: Task = DOCUMENT_TASK,
@@ -856,10 +859,9 @@ test("a press anywhere on an empty description's room opens its text with the ca
   assert.ok(body.contains(container.querySelector(".description-document-editor")));
 });
 
-test("an empty description at rest says to write it in a block of the document, which a press or Return opens with the caret in it", () => {
-  const empty = { ...DOCUMENT_TASK, document: { body: "", assumptions: [] } };
+test("an empty description at rest says to write it in a block of the document, which a press or Return opens and Escape gives the keyboard back to", async () => {
   const pressed = mount();
-  pressed.render(empty);
+  pressed.render(EMPTY_TASK);
   const line = block(pressed.container, "Description");
   assert.equal(line.textContent, "Write the description");
   act(() => line.click());
@@ -872,10 +874,38 @@ test("an empty description at rest says to write it in a block of the document, 
   pressed.unmount();
 
   const keyed = mount();
-  keyed.render(empty);
+  keyed.render(EMPTY_TASK);
   _press(block(keyed.container, "Description"), "Enter");
   assert.equal(open().markdown, "");
   assert.deepEqual(open().placement, PLACEMENT_END);
+
+  act(() => open().onFinish(0, FINISH.ESCAPE));
+  await settle();
+  assert.ok(
+    document.activeElement === block(keyed.container, "Description"),
+    "the keyboard is back on the block it opened from",
+  );
+});
+
+test("an empty description pressed while the editor's bundle loads goes on saying to write it", async () => {
+  const landed = bundles;
+  const gate = Promise.withResolvers<DescriptionEditorModule>();
+  bundles = sideBundles({ descriptionEditor: () => gate.promise });
+  try {
+    const { container, render } = mount();
+    render(EMPTY_TASK);
+    act(() => block(container, "Description").click());
+    const editor = container.querySelector(".description-document-editor");
+
+    assert.ok(editor, "the editor stands in the block's place");
+    assert.equal(editor.textContent, "Write the description");
+    await act(async () => {
+      gate.resolve(STAND_IN);
+      await gate.promise;
+    });
+  } finally {
+    bundles = landed;
+  }
 });
 
 test("a press on a description's room under its text opens it at the end, beside it on the nearest line, and above it nowhere", () => {
