@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "81c1d055-f2ba-4349-b77a-5dccfe8c5b92",
-  "prevIds": ["2fa813ce-2179-41c4-a737-81e9f17dff27", "6d3a2c70-1d7e-4cff-a044-9d5f907e3b0b"],
+  "id": "edf5c3bf-cb4a-4aef-8e28-ba906d188713",
+  "prevIds": ["afb0af0c-984c-43e6-950f-8dd3c331f129"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -9105,7 +9105,7 @@
     {
       "type": "uuid",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
