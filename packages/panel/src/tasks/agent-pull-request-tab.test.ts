@@ -6629,7 +6629,6 @@ test("on a phone no Preview stands beside the title, and Files changed draws no 
     "Refresh",
     "Preview – luke-web",
     "Show files",
-    "Open files on GitHub",
     "View options",
     "Collapse all files",
     "Copy patch",

@@ -6,7 +6,7 @@ import type {
 } from "@orpc/contract";
 import { ACCOUNT_ACTS, accountActsContract } from "./account.js";
 import { ACCOUNT_ASK_ACTS, accountAskActsContract } from "./account-asks.js";
-import { agentInboxActsContract } from "./agent-inbox.js";
+import { AGENT_INBOX_ACTS, agentInboxActsContract } from "./agent-inbox.js";
 import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
 import { browserLiveActsContract } from "./browser-live.js";
@@ -44,6 +44,7 @@ export {
 } from "../mac-command-ask.js";
 export { ACCOUNT_ACTS } from "./account.js";
 export { ACCOUNT_ASK_ACTS } from "./account-asks.js";
+export { AGENT_INBOX_ACTS } from "./agent-inbox.js";
 export { ACT_ERROR } from "./base.js";
 export { CLI_INSTALL_OUTCOME, type CliInstallAnswer } from "./cli.js";
 export {
@@ -97,6 +98,7 @@ export { CONTACT_MAILTO } from "./window-surface.js";
 export const HOST_ACTS = {
   ...ACCOUNT_ACTS,
   ...ACCOUNT_ASK_ACTS,
+  ...AGENT_INBOX_ACTS,
   ...SETTINGS_ACTS,
 };
 
