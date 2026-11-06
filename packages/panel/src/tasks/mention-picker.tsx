@@ -14,7 +14,6 @@ import {
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@repo/features/integration-wire";
 import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   encodeMention,
   isMentionableTool,
@@ -81,7 +80,13 @@ import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@repo/ui
 import { searchTokens } from "@repo/ui/search-tokens";
 import { type SkillOption, skillWord } from "@repo/ui/skill-mention";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
-import { queryOptions, skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  queryOptions,
+  skipToken,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -100,6 +105,7 @@ import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } fro
 import { useAutomations } from "../desktop/use-automations.js";
 import { unreadShown } from "../failure-report.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
+import { inboxItemsQuery, inboxItemsRetryMutation } from "../live-reads.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
 import {
@@ -112,7 +118,6 @@ import { QUERY_ROOT } from "../query-keys.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
 import { appStateQuery, selectExperiment } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { SERVER_PAGE_HEAD_CLASS } from "./agent-servers.js";
 import {
@@ -1800,10 +1805,11 @@ export function useMentionPicker({
     ? workspaceTaskRows(descriptionsOn ? taskId : undefined, tasksWorkspace, listed.tasks)
     : [];
   // The threads offered are the workspace's as the account's feed holds them, which the host holds for the session.
-  const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
+  const feed = useQuery(inboxItemsQuery());
+  const retryFeed = useMutation(inboxItemsRetryMutation());
   const threadsAsked = open && tasksWorkspace !== undefined;
   const threadRowsOffered = threadsAsked
-    ? threadRows(feed.rows, taskId, tasksWorkspace, listed.tasks, listed.tasklessAgents)
+    ? threadRows(feed.data, taskId, tasksWorkspace, listed.tasks, listed.tasklessAgents)
     : [];
   // The automations offered are the workspace's, followed only while the list stands open.
   const automationsAsked = open && tasksWorkspace !== undefined;
@@ -1929,7 +1935,7 @@ export function useMentionPicker({
         !pathsFailed &&
         treeKey(taskId, workspaceId, repository) !== undefined) ||
       (skills !== undefined && skills.known === undefined && !skills.unread) ||
-      (threadsAsked && feed.status === HOST_READ_STATUS.LOADING) ||
+      (threadsAsked && feed.isPending) ||
       (automationsAsked && automationsRead === undefined));
   // The list says a read could not be read, never that nothing matches, and Retry reads it again.
   const failures: readonly MentionReadFailure[] = open
@@ -1940,8 +1946,8 @@ export function useMentionPicker({
           : []),
         ...(pathsFailed ? [{ read: MENTION_READ.FILES, retry: () => void readPathsAgain() }] : []),
         ...(skills?.unread === true ? [{ read: MENTION_READ.SKILLS, retry: skills.ask }] : []),
-        ...(threadsAsked && feed.status === HOST_READ_STATUS.FAILED
-          ? [{ read: MENTION_READ.THREADS, retry: feed.retry }]
+        ...(threadsAsked && feed.isError
+          ? [{ read: MENTION_READ.THREADS, retry: () => retryFeed.mutate() }]
           : []),
         ...(automationsRead !== undefined && "failure" in automationsRead
           ? [{ read: MENTION_READ.AUTOMATIONS, retry: automations.reload }]

@@ -1,4 +1,4 @@
-import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@repo/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   type AgentAttachment,
   type AgentChangesPeople,
@@ -29,6 +29,7 @@ import { EXPERIMENT } from "@repo/settings";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import {
+  mutationOptions,
   type QueryClient,
   useIsMutating,
   useMutation,
@@ -37,7 +38,15 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOfferedModels } from "../account-choices.js";
-import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
+import {
+  type ActedResult,
+  type ActResult,
+  type AgentActAnswer,
+  askAct,
+  sendAct,
+  type Unreached,
+  unreachedAs,
+} from "../act.js";
 import { actMutation } from "../act-mutations.js";
 import {
   DRAFT_PLACE,
@@ -48,6 +57,8 @@ import {
   useNewAgentDraft,
 } from "../composer-drafts.js";
 import type { ShownFailure } from "../failure-report.js";
+import { modelsRetryMutation } from "../live-reads.js";
+import type { RenameShape } from "../rename-write.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
@@ -58,7 +69,6 @@ import {
   selectExperiment,
   selectPullRequestPublished,
 } from "../use-app-state.js";
-import { HOST_READ_STATUS } from "../use-host-read.js";
 import {
   ARCHIVE_NOT_READY,
   archiveWords,
@@ -105,6 +115,75 @@ type StartFailure = Failure & { readonly cause?: unknown };
 
 /** An agent's act that never answered, settled as unanswered with the error beneath. */
 const agentUnreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
+
+/** An agent's rename as a mutation asks it: the agent, and the title already trimmed and changed. */
+interface AgentRenameAsk {
+  readonly agentId: string;
+  readonly title: string;
+}
+
+/** An agent's rename as each surface renaming one holds it, a mutation of its own sent through `send`; the service's refusal is its answer's failure. */
+export function agentRenameMutation(send: (asked: AgentRenameAsk) => Promise<AgentActAnswer>) {
+  return mutationOptions({ mutationKey: [ACT_KIND.AGENTS_RENAME], mutationFn: send });
+}
+
+/** What an agent's delete answers: that it was deleted, or why not, an act that never arrived among them. */
+type AgentDeleteAnswer =
+  | ActResult<typeof ACT_KIND.AGENTS_DELETE>
+  | Unreached<typeof AGENT_CALL_FAILURE.UNANSWERED>;
+
+/** What a delete the service refused is said as, by why. */
+function deleteAnswered(answer: AgentDeleteAnswer): ActedResult {
+  if (!("failure" in answer)) return { status: ACTION_RESULT_STATUS.ACCEPTED };
+  const notReady = answer.failure === AGENT_CALL_FAILURE.AGENT_NOT_READY;
+  return {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: notReady ? ARCHIVE_NOT_READY : DELETE_WORDS.refused,
+    cause: answer,
+  };
+}
+
+/**
+ * An agent's delete as the question asking it holds it, a mutation of its
+ * own sent through `send`, answered as that question reads it. Note that
+ * the delete answers once the task list carries it, so the page's agent
+ * leaves with its row.
+ */
+export function agentDeleteMutation(send: (agentId: string) => Promise<AgentDeleteAnswer>) {
+  return mutationOptions({
+    mutationKey: [ACT_KIND.AGENTS_DELETE],
+    mutationFn: (agentId: string) => send(agentId).then(deleteAnswered),
+  });
+}
+
+/** An agent's delete as a question holds it. */
+type AgentDeleteMutation = ReturnType<typeof agentDeleteMutation>;
+
+/** A repository added to an agent: the agent, and the repository. */
+interface RepositoryAdded {
+  readonly agentId: string;
+  readonly repository: string;
+}
+
+/** A repository added to an agent as the dialog asking holds it, a mutation of its own sent through `send`; it draws nothing on the agent's row, so its answer is only the dialog's to say. */
+export function agentAddRepositoryMutation(
+  send: (added: RepositoryAdded) => Promise<AgentActAnswer>,
+) {
+  return mutationOptions({ mutationKey: [ACT_KIND.AGENTS_ADD_REPOSITORY], mutationFn: send });
+}
+
+/** A repository added to an agent, as the dialog asking holds it. */
+type AgentAddRepositoryMutation = ReturnType<typeof agentAddRepositoryMutation>;
+
+/** An agent's rename as a surface holds it. */
+type AgentRenameMutation = ReturnType<typeof agentRenameMutation>;
+
+/** How an agent's rename is asked and read back, its refusal its answer's failure. */
+export const AGENT_RENAME_SHAPE = {
+  ask: (agentId: string, title: string): AgentRenameAsk => ({ agentId, title }),
+  asked: ({ agentId, title }: AgentRenameAsk) => ({ subjectId: agentId, name: title }),
+  refused: (answer: AgentActAnswer) => "failure" in answer,
+} satisfies RenameShape<AgentActAnswer, AgentRenameAsk>;
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
@@ -223,6 +302,20 @@ interface OpeningLine {
 interface ArchivePress {
   readonly asked?: true;
 }
+
+/** An agent archived or brought back, as a mutation asks it, and whether a question was asked first. */
+interface ArchiveAsk extends ArchivePress {
+  readonly agentId: string;
+  readonly archived: boolean;
+}
+
+/** An agent's archive as each place pressing it holds its own mutation over it, run through `run`, answering whether it was kept. */
+export function agentArchiveMutation(run: (asked: ArchiveAsk) => Promise<ActedResult>) {
+  return mutationOptions({ mutationKey: [ROW_WRITE.AGENT_ARCHIVE.kind], mutationFn: run });
+}
+
+/** An agent's archive, as a place pressing it holds it. */
+type AgentArchiveMutation = ReturnType<typeof agentArchiveMutation>;
 
 /** Who an agent's pull request names, as its Changes tab last read them, and the pull request's page they were read for. */
 export interface HeldPeople {
@@ -380,16 +473,16 @@ export interface AgentsControl {
   onChoose: ChoiceWriter;
   /** Switches one agent's MCP servers for its next turn on, drawn at once by the host; a refusal is said in a toast. */
   onSwitchServers: ServersWriter;
-  /** Adds a repository beside the ones an agent works in, which the service checks out and tells it of (`add-repository.tsx`); answers the agent, or why not, for the dialog that asked to say. None where a surface offers no add. */
-  onAddRepository?: ((agentId: string, repository: string) => Promise<AgentActAnswer>) | undefined;
+  /** The add of a repository beside the ones an agent works in, which the service checks out and tells it of (`add-repository.tsx`), as the dialog asking holds its own mutation over it: answering the agent, or why not, for that dialog to say. None where a surface offers no add. */
+  addRepository?: AgentAddRepositoryMutation | undefined;
   /** Opens Settings on its Integrations page, where an MCP server is connected. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page at the provider's harness row, where the developer's key for it is; at the page's top where none is known. */
   onOpenApiKeys: (provider: ModelProvider | undefined) => void;
   /** Whether an archive asked here is still out, the agent it took coming back should the service refuse it. */
   archiving: boolean;
-  /** Renames one agent, drawn at once by the host; answers whether the rename took. */
-  onRename: (agentId: string, title: string) => Promise<boolean>;
+  /** The rename a surface renaming an agent holds its own mutation over, drawn at once by the host, with how its refusal is asked, read back, and said. */
+  rename: RenameShape<AgentActAnswer, AgentRenameAsk> & { readonly options: AgentRenameMutation };
   /**
    * Archives one agent, a turn it still runs stopped first, or brings it
    * back, drawn at once by the host, and offering Undo in a toast, which ⌘Z
@@ -399,12 +492,10 @@ export interface AgentsControl {
    */
   /** Archives or unarchives an agent, answering whether it was kept, with what refused it beneath a refusal. */
   onArchive: (agentId: string, archived: boolean, how?: ArchivePress) => Promise<ActedResult>;
-  /**
-   * Deletes one agent for good, a turn it still runs stopped first, taking
-   * it out of the list and saying so in a toast; a refusal is answered
-   * rather than said, for the dialog that asked to say.
-   */
-  onDelete: (agentId: string) => Promise<ActedResult>;
+  /** The same archive, as a question asking it first holds its own mutation over it. */
+  archiveAgent: AgentArchiveMutation;
+  /** An agent's delete, as the question asking it holds its own mutation over it, answered as that question reads it. */
+  deleteAgent: AgentDeleteMutation;
   /** Reads one agent again now by its id, as its own page reads it, answering it as it stands, or nothing where the read did not land. */
   readAgent: (agentId: string) => Promise<AgentSummary | undefined>;
   /** One read of an agent's transcript past a cursor at once, as Copy transcript asks it. */
@@ -413,8 +504,6 @@ export interface AgentsControl {
   pullRequests: ReadonlyMap<string, AgentPullRequest>;
   /** Each pull request a Pull request tab names by its number, by agent and then by number (`pull-request-number.ts`), as the host holds what was published of it while a surface holds it. */
   numberedPullRequests: ByPullRequestTab<AgentPullRequest>;
-  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
-  readChanges: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>;
   /**
    * One pull request's chapters generated for its head now, or the
    * generation already under way; answers once the generation lands, which
@@ -423,8 +512,6 @@ export interface AgentsControl {
    * there are none, a port that refused included.
    */
   generateChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
-  /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
-  changesPeople: ReadonlyMap<string, HeldPeople>;
   /** The words a dictation into an agent's box is likely to say, read off the open task. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a workspace, or while the Skills experiment is off. */
@@ -690,7 +777,6 @@ export interface ModelsRead {
 }
 
 export function useAgents(input: {
-  acts: Pick<ActHandle, "act">;
   /** The open task, or none. */
   taskId: string | undefined;
   /**
@@ -738,7 +824,6 @@ export function useAgents(input: {
 }): AgentsControl {
   const { taskId, agentId, repository } = input;
   // Note that the reads below stay on `act` until they move to queries; every write is a mutation.
-  const { act } = input.acts;
   const queryClient = useQueryClient();
   const { mutateAsync: sendStart, isPending: starting } = useMutation(
     actMutation(ACT_KIND.AGENTS_START),
@@ -748,12 +833,7 @@ export function useAgents(input: {
   const { mutateAsync: sendMessage } = useMutation(actMutation(ACT_KIND.AGENTS_MESSAGE));
   const { mutateAsync: sendChoice } = useMutation(actMutation(ACT_KIND.AGENTS_CHOOSE));
   const { mutateAsync: sendServers } = useMutation(actMutation(ACT_KIND.AGENTS_SERVERS));
-  const { mutateAsync: sendAddRepository } = useMutation(
-    actMutation(ACT_KIND.AGENTS_ADD_REPOSITORY),
-  );
-  const { mutateAsync: sendRename } = useMutation(actMutation(ACT_KIND.AGENTS_RENAME));
   const { mutateAsync: sendArchive } = useMutation(actMutation(ROW_WRITE.AGENT_ARCHIVE.kind));
-  const { mutateAsync: sendDelete } = useMutation(actMutation(ACT_KIND.AGENTS_DELETE));
   const { mutateAsync: sendChapters } = useMutation(actMutation(ACT_KIND.CHAPTERS_GENERATE));
   const { mutateAsync: sendInboxAnswer } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_ANSWER));
   const { mutateAsync: sendInboxMessage } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_MESSAGE));
@@ -909,23 +989,23 @@ export function useAgents(input: {
    * An ask that landed settles once the slice says how it went (below),
    * since a Try again answers alike whether its ask was answered or not.
    */
-  const retryModels = offered.retry;
+  const { mutateAsync: retryModels } = useMutation(modelsRetryMutation());
   const readModels = useCallback(() => {
     modelsGeneration.current += 1;
     const generation = modelsGeneration.current;
     // The menu reads again while a read is out, so a Retry shows its reading.
     setModelsRead({ state: MODELS_READ.READING, generation });
-    retryModels().then(() => setModelsLanded(generation));
+    retryModels()
+      .catch(() => undefined)
+      .then(() => setModelsLanded(generation));
     rendererPause(MODELS_READ_BOUND_MS).then(() => settleModels(generation, MODELS_READ.FAILED));
   }, [retryModels, settleModels]);
   // Note that a landed ask reads as read only where the slice holds models, and as failed where it never answered, so a card waiting on its devices never takes no list for an empty one.
   useEffect(() => {
     if (modelsLanded === 0) return;
-    if (offered.rows !== undefined) settleModels(modelsLanded, MODELS_READ.READ);
-    else if (offered.status === HOST_READ_STATUS.FAILED) {
-      settleModels(modelsLanded, MODELS_READ.FAILED);
-    }
-  }, [modelsLanded, offered.rows, offered.status, settleModels]);
+    if (offered.data !== undefined) settleModels(modelsLanded, MODELS_READ.READ);
+    else if (offered.isError) settleModels(modelsLanded, MODELS_READ.FAILED);
+  }, [modelsLanded, offered.data, offered.isError, settleModels]);
 
   /** One Start asked of the service on the task, or, from the page's agent, where that agent is, held as under way until it answers. */
   const askStart = (
@@ -1377,32 +1457,28 @@ export function useAgents(input: {
   );
 
   // A repository added draws nothing on the agent's row, so its answer is only the dialog's to say.
-  const onAddRepository = useCallback(
-    (agentId: string, repository: string): Promise<AgentActAnswer> =>
-      sendAddRepository({ agentId, addRepository: { repository } }).catch(agentUnreached),
-    [sendAddRepository],
+  const addRepository = agentAddRepositoryMutation(({ agentId, repository }) =>
+    sendAct(ACT_KIND.AGENTS_ADD_REPOSITORY, { agentId, addRepository: { repository } }).catch(
+      agentUnreached,
+    ),
   );
 
   // A rename's field closes as the edit ends, and the host draws the new name at once, so a second
   // rename may be out before the first answers; only the newest one's refusal is said, in a toast,
-  // as the name it replaced comes back.
-  const renames = useRef(new Map<string, number>());
-  const onRename = async (agentId: string, title: string): Promise<boolean> => {
-    const rename = (renames.current.get(agentId) ?? 0) + 1;
-    renames.current.set(agentId, rename);
-    const answer: AgentActAnswer = await sendRename({
-      agentId,
-      title,
-    }).catch(agentUnreached);
-    if (!("failure" in answer)) return true;
-    if (renames.current.get(agentId) === rename) {
+  // as the name it replaced comes back, which the call's own `onSettled` keeps to.
+  const rename = {
+    ...AGENT_RENAME_SHAPE,
+    options: agentRenameMutation((asked) => sendAct(ACT_KIND.AGENTS_RENAME, asked)),
+    onRefused: (
+      answer: AgentActAnswer | undefined,
+      error: Error | null,
+      { subjectId }: { readonly subjectId: string },
+    ) =>
       failed(RENAME_FAILED, {
         surface: FAILURE_SURFACE.AGENT_RENAME,
-        cause: answer,
-        about: { agentId },
-      });
-    }
-    return false;
+        cause: answer ?? error,
+        about: { agentId: subjectId },
+      }),
   };
 
   // The agents the list draws as they stand at each call, and the archive's
@@ -1419,15 +1495,14 @@ export function useAgents(input: {
   // not put back what took one: its toast then keeps an Undo of its own,
   // read through a ref because the press lands renders after the toast was
   // raised, as it does where the list shows no row of the agent to put back.
-  const onArchive = async (
-    agentId: string,
-    archived: boolean,
-    { asked }: ArchivePress = {},
-  ): Promise<ActedResult> => {
+  const archiveAgent = agentArchiveMutation(async ({ agentId, archived, asked }) => {
     const pressed = pressRows(ROW_WRITE.AGENT_ARCHIVE, agentDoors, [
       { id: agentId, after: { archived } },
     ]);
-    const answer: AgentActAnswer = await sendArchive({ agentId, archived }).catch(agentUnreached);
+    const answer: AgentActAnswer = await sendAct(ROW_WRITE.AGENT_ARCHIVE.kind, {
+      agentId,
+      archived,
+    }).catch(agentUnreached);
     const words = archiveWords(archived);
     if ("failure" in answer) {
       const notReady = answer.failure === AGENT_CALL_FAILURE.AGENT_NOT_READY;
@@ -1443,23 +1518,19 @@ export function useAgents(input: {
         void archiveNow.current(agentId, !archived).then((result) => sayRefusal(result, agentId)));
     toast({ ...undoToast(words.done, undo), replayUnmasked: true });
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
-  };
+  });
+  const { mutateAsync: archive } = useMutation(archiveAgent);
+  const onArchive = (
+    agentId: string,
+    archived: boolean,
+    how: ArchivePress = {},
+  ): Promise<ActedResult> => archive({ agentId, archived, ...how });
   const archiveNow = useRef(onArchive);
   archiveNow.current = onArchive;
 
-  const onDelete = async (agentId: string): Promise<ActedResult> => {
-    const answer = await sendDelete({ agentId }).catch(agentUnreached);
-    if ("failure" in answer) {
-      const notReady = answer.failure === AGENT_CALL_FAILURE.AGENT_NOT_READY;
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: notReady ? ARCHIVE_NOT_READY : DELETE_WORDS.refused,
-        cause: answer,
-      };
-    }
-    // Note that the delete answers once the task list carries it, so the page's agent leaves with its row.
-    return { status: ACTION_RESULT_STATUS.ACCEPTED };
-  };
+  const deleteAgent = agentDeleteMutation((agentId) =>
+    sendAct(ACT_KIND.AGENTS_DELETE, { agentId }).catch(agentUnreached),
+  );
   const sayRefusal = (result: ActionResult, agentId: string) => {
     if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
     failed(result.reason, {
@@ -1491,42 +1562,6 @@ export function useAgents(input: {
   const numberedPullRequests =
     useQuery({ ...appStateQuery, select: selectNumberedPullRequests }).data ??
     NO_NUMBERED_PULL_REQUESTS;
-
-  // Note that who a pull request names is kept beside the agent, with the
-  // pull request it was read for, so its Changes card says them wherever it
-  // hangs once its tab has read them, and never for another pull request.
-  // Each agent's reads are numbered, so only its newest read's answer is kept,
-  // as the tab draws only its newest.
-  const [changesPeople, setChangesPeople] = useState<ReadonlyMap<string, HeldPeople>>(
-    () => new Map(),
-  );
-  const changesAsked = useRef(new Map<string, number>());
-  const readChanges = useCallback<AgentsControl["readChanges"]>(
-    (agentId, number) => {
-      // Note that another pull request's people are not this agent's, so they are never kept beside it.
-      if (number !== undefined) {
-        return act(ACT_KIND.AGENTS_CHANGES, pullRequestAsked(agentId, number));
-      }
-      const ask = (changesAsked.current.get(agentId) ?? 0) + 1;
-      changesAsked.current.set(agentId, ask);
-      return act(ACT_KIND.AGENTS_CHANGES, { agentId }).then((answer) => {
-        if (changesAsked.current.get(agentId) !== ask || !("pullRequest" in answer)) return answer;
-        const read = answer.pullRequest;
-        setChangesPeople((was) => {
-          const next = new Map(was);
-          if (read === null) {
-            next.delete(agentId);
-          } else {
-            const { url, files: _files, truncated: _truncated, ...people } = read;
-            next.set(agentId, { url, people });
-          }
-          return next;
-        });
-        return answer;
-      });
-    },
-    [act],
-  );
 
   const generateChapters = useCallback<AgentsControl["generateChapters"]>(
     (agentId, number) =>
@@ -1585,8 +1620,8 @@ export function useAgents(input: {
   const steadyContinueAgent = useSteadyDoor(continueAgent);
 
   const readInboxImage = useCallback<InboxImageReader>(
-    (params) => act(ACT_KIND.AGENTS_INBOX_ATTACHMENT, params),
-    [act],
+    (params) => askAct(ACT_KIND.AGENTS_INBOX_ATTACHMENT, params),
+    [],
   );
 
   // Handed back steady, so a part drawn from the agents holds while they do (`memo`).
@@ -1615,11 +1650,10 @@ export function useAgents(input: {
     listFailed,
     listMissing,
     onRetryList,
-    models: offered.rows?.models,
-    modelsFailed:
-      offered.status === HOST_READ_STATUS.FAILED || modelsRead.state === MODELS_READ.FAILED,
+    models: offered.data?.models,
+    modelsFailed: offered.isError || modelsRead.state === MODELS_READ.FAILED,
     modelsRead,
-    macs: offered.rows === undefined ? undefined : (offered.rows.macs ?? []),
+    macs: offered.data === undefined ? undefined : (offered.data.macs ?? []),
     readModels,
     onUnarchive: undefined,
     continueAgent: startsOn === undefined ? undefined : steadyContinueAgent,
@@ -1634,20 +1668,19 @@ export function useAgents(input: {
     onMessage,
     onChoose,
     onSwitchServers,
-    onAddRepository,
+    addRepository,
     onOpenIntegrations: () => latest.current.onOpenIntegrations(),
     me: input.me,
     onOpenApiKeys: (provider) => latest.current.onOpenApiKeys(provider),
     archiving,
-    onRename,
+    archiveAgent,
+    rename,
     onArchive,
-    onDelete,
+    deleteAgent,
     readAgent,
     readTranscript,
     pullRequests,
     numberedPullRequests,
-    readChanges,
-    changesPeople,
     generateChapters,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,

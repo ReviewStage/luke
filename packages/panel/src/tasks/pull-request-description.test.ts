@@ -23,7 +23,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
@@ -244,9 +244,13 @@ function description(container: HTMLElement): HTMLElement {
  * words clicked, and on no element of the editor's.
  */
 async function clickWords(container: HTMLElement, words: string, at = 0): Promise<void> {
-  const target =
-    [...description(container).querySelectorAll("p")].find((each) => each.textContent === words) ??
-    assert.fail(`${words} are drawn`);
+  // Note that the words stand once the pull request's read reaches its query.
+  const target = await vi.waitFor(
+    () =>
+      [...description(container).querySelectorAll("p")].find(
+        (each) => each.textContent === words,
+      ) ?? assert.fail(`${words} are drawn`),
+  );
   const text = target.firstChild ?? assert.fail("the words are a text node");
   Object.defineProperty(document, "caretRangeFromPoint", {
     configurable: true,
@@ -433,5 +437,7 @@ test("leaving while an edit is on its way to GitHub writes it once, and holds no
   changeHeld = undefined;
   const again = await drawTab();
   assert.equal(editorIn(again), null, "no refused draft opens again");
-  assert.match(description(again).textContent ?? "", /Accepted ones stay\./u);
+  await vi.waitFor(() =>
+    assert.match(description(again).textContent ?? "", /Accepted ones stay\./u),
+  );
 });

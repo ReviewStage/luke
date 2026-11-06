@@ -20,6 +20,7 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
 import { DescriptionBody, type SectionLinks } from "./description-body.js";
+import { descriptionEditMutation } from "./description-edit-mutation.js";
 
 // Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
@@ -259,7 +260,9 @@ function drawnEditable(): HTMLElement {
           unlandedBundles(),
           createElement(DescriptionBody, {
             task: TASK,
-            onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+            edit: descriptionEditMutation(TASK.id, () =>
+              Promise.reject(new Error("Nothing is saved in this test.")),
+            ),
             sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
           }),
         ),
@@ -447,7 +450,9 @@ test("a click on a folder's chip in a description that can be edited opens no ed
       withQueryClient(
         createElement(DescriptionBody, {
           task: FILES_TASK,
-          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+          edit: descriptionEditMutation(FILES_TASK.id, () =>
+            Promise.reject(new Error("Nothing is saved in this test.")),
+          ),
           sectionLinks: {
             workspace: WORKSPACE,
             onOpen: () => undefined,
@@ -478,7 +483,9 @@ function drawnTitled() {
     const [asks, setAsks] = useState(0);
     return createElement(DescriptionBody, {
       task: TASK,
-      onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+      edit: descriptionEditMutation(TASK.id, () =>
+        Promise.reject(new Error("Nothing is saved in this test.")),
+      ),
       onRename: () => Promise.resolve(true),
       rename: { asks, asked: undefined, onBegin: () => setAsks((count) => count + 1) },
       sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },

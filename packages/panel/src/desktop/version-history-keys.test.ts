@@ -221,12 +221,15 @@ test("the foot counts the older versions, and reading them is its press", async 
   expect(foot(view)?.textContent).toBe("Show 2 more");
 
   act(() => foot(view)?.click());
-  expect(foot(view)?.getAttribute("aria-label")).toBe("Reading older versions");
+  // Note that the read stands out once its mutation's notification has drawn it.
+  await vi.waitFor(() =>
+    expect(foot(view)?.getAttribute("aria-label")).toBe("Reading older versions"),
+  );
   act(() => foot(view)?.click());
   expect(read).toHaveLength(1);
 
   await act(async () => read[0]?.(true));
-  expect(foot(view)?.textContent).toBe("Show 2 more");
+  await vi.waitFor(() => expect(foot(view)?.textContent).toBe("Show 2 more"));
 });
 
 test("a read of older versions that failed says so with Retry, which reads again", async () => {
@@ -237,15 +240,15 @@ test("a read of older versions that failed says so with Retry, which reads again
     onLoadEarlier: () => Promise.resolve(outcomes[reads++] ?? true),
   });
   await act(async () => foot(view)?.click());
-  expect(foot(view)).toBeNull();
+  await vi.waitFor(() => expect(foot(view) === null).toBe(true));
   expect(view.querySelector('[role="alert"]')?.textContent).toContain(
     "Could not read older versions.",
   );
 
   const retry = [...view.querySelectorAll("button")].find((each) => each.textContent === "Retry");
   await act(async () => retry?.click());
+  await vi.waitFor(() => expect(view.querySelector('[role="alert"]') === null).toBe(true));
   expect(reads).toBe(2);
-  expect(view.querySelector('[role="alert"]')).toBeNull();
   expect(foot(view)?.textContent).toBe("Show 2 more");
 });
 

@@ -37,7 +37,6 @@ import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
-import { HOST_READ_STATUS } from "../use-host-read.js";
 // Note that Settings is loaded as the shell loads it, on first use, so the
 // module is read here first and its load settles within the test's own ticks.
 import "./desktop-settings.js";
@@ -58,7 +57,7 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
  */
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
 /** A signed-in account's Settings, its page and its presses given by the window. */
 const SETTINGS: SettingsPanelProps = {
@@ -69,7 +68,6 @@ const SETTINGS: SettingsPanelProps = {
     provider: "github",
   },
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: accepted,
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {
@@ -123,8 +121,8 @@ function line(seq: number) {
 /** The description's history as main holds it for the version history: two revisions, each the description as it stands. */
 const HELD_HISTORY = {
   rows: { revisions: [line(3), line(2)] },
-  status: HOST_READ_STATUS.READY,
-  retry: () => Promise.resolve(),
+  failed: false,
+  onRetry: () => undefined,
 };
 
 /** The history's older pages and its restore, as the service answers them. */
@@ -385,7 +383,7 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
 
 test("Settings on a stage wide enough for panes, but under the split's line by its own width, shows its list, then a page chosen alone under a way back, and splits again once wide", async () => {
   const page = await mount(UNDER_SPLIT, createElement(SettingsWindow, { link: undefined }));
-  assert.equal(the(page, ".desktop-shell").dataset["room"], "wide", "the stage is no phone's");
+  assert.equal(the(page, ".desktop-shell").dataset.room, "wide", "the stage is no phone's");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 
   press(the(page, SETTINGS_COLUMNS.list), "Appearance");

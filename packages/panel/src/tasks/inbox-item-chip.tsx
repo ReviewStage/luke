@@ -1,7 +1,6 @@
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type {
   AppInboxItems,
   AppInboxSlice,
@@ -12,8 +11,8 @@ import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@repo/
 import { GLYPH } from "@repo/ui/icons";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useMemo } from "react";
+import { inboxItemsQuery } from "../live-reads.js";
 import { appStateQuery, selectInbox, selectTasks } from "../use-app-state.js";
-import { useHostRead } from "../use-host-read.js";
 import { InboxItemCard, inboxItemGlyph } from "./inbox-item-parts.js";
 import {
   agentHolder,
@@ -116,7 +115,7 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
   const planId = "planId" in place ? place.planId : undefined;
   const namedAgent = "agentId" in place ? place.agentId : undefined;
   const { itemId } = place;
-  const fed = useHostRead(LIVE_READ.INBOX_ITEMS).rows;
+  const fed = useQuery(inboxItemsQuery()).data;
   const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
   const inbox = useQuery({ ...appStateQuery, select: selectInbox }).data;
   const found = useMemo(() => {

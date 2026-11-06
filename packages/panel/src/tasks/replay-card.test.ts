@@ -23,10 +23,10 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
@@ -183,6 +183,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 function press(element: Element | null | undefined): void {
@@ -289,7 +290,8 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   await settle();
 
   const body = container.querySelector("[data-replay-card] .ui-disclosure-body");
-  assert.match(body?.textContent ?? "", /Builds on luke\/start-from/u);
+  // Note that the foot stands once what the source published reaches its query.
+  await vi.waitFor(() => assert.match(body?.textContent ?? "", /Builds on luke\/start-from/u));
   assert.doesNotMatch(body?.textContent ?? "", /left out/u);
   const steps = [...container.querySelectorAll("[data-replay-step]")];
   assert.deepEqual(

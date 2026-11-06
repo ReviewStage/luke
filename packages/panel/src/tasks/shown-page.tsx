@@ -1,4 +1,3 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   type FrameBox,
   PAGE_PICK_ACT,
@@ -16,10 +15,12 @@ import {
 import type { PagePlace } from "@repo/features/page-wire";
 import { PAGE_EMBED_HEIGHT, PageEmbed, type PageEmbedHeight, usePressAway } from "@repo/ui";
 import { replyOf } from "@repo/ui/reply-quote";
+import { useQuery } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
 import { type ReactNode, type RefObject, useEffect, useReducer, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
-import { useHostRead } from "../use-host-read.js";
+import { pagesQuery } from "../live-reads.js";
+
 import { PAGE_SANDBOX, useFrameLinks } from "./page-pane.js";
 import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import { pressPlace, ReplyPress, useReplyDoor } from "./reply-to-selection.js";
@@ -222,7 +223,7 @@ export function ShownNewestPage({
   place: PagePlace;
   pageId: string;
 }): ReactNode {
-  const page = useHostRead(LIVE_READ.PAGES, place).rows?.find((each) => each.id === pageId);
+  const page = useQuery(pagesQuery(place)).data?.find((each) => each.id === pageId);
   if (page === undefined) return null;
   return <ShownPage place={place} pageId={page.id} version={page.version} title={page.title} />;
 }

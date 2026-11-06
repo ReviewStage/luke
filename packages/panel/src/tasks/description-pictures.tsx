@@ -18,7 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act.js";
+import { askAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import type { PictureDrawer } from "../markdown-message.js";
 import { OUTSIDE_GLYPH_CLASS, PictureBlock } from "../picture-block.js";
@@ -109,7 +109,6 @@ export function DescriptionPictures({
   sectionNote?: ((heading: string) => ReactNode) | undefined;
   children: ReactNode;
 }): React.JSX.Element {
-  const { act } = useAct();
   const queryClient = useQueryClient();
   const [viewing, setViewing] = useState<Viewing | undefined>(undefined);
   const names = useRef(new Map<string, string>());
@@ -120,8 +119,8 @@ export function DescriptionPictures({
   shownText.current = text;
   const read = useCallback(
     (owner: string, id: string) =>
-      act(ACT_KIND.TASKS_PICTURE_READ, { planId: owner, attachmentId: id }),
-    [act],
+      askAct(ACT_KIND.TASKS_PICTURE_READ, { planId: owner, attachmentId: id }),
+    [],
   );
   const door = useMemo<DescriptionPicturesDoor>(
     () => ({

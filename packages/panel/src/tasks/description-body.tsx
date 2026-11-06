@@ -35,7 +35,7 @@ import { GLYPH } from "@repo/ui/icons";
 import type { MarkdownTaskToggler } from "@repo/ui/markdown";
 import { commentSpansIn, useDescriptionCommentsControl } from "@repo/ui/description-comments";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { diffArrays } from "diff";
 import {
   Fragment,
@@ -92,6 +92,11 @@ import {
   useTextRoom,
   useWordsKeptOnClose,
 } from "./description-document-editor.js";
+import {
+  type DescriptionEditMutation,
+  type DescriptionEditSend,
+  descriptionEditMutation,
+} from "./description-edit-mutation.js";
 import { DescriptionPictures, useDescriptionPictureDrawer } from "./description-pictures.js";
 import {
   UNIT_ATTRIBUTED_CLASS,
@@ -101,11 +106,7 @@ import {
 import { TaskPath, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
-import {
-  EDITOR_PLACE,
-  type DescriptionEditDoor,
-  useDescriptionEditing,
-} from "./use-description-editing.js";
+import { EDITOR_PLACE, useDescriptionEditing } from "./use-description-editing.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
 import { useTaskMaker } from "./use-task-origin.js";
 import {
@@ -618,8 +619,8 @@ function useMentionChips(
   }, [opensFiles, agentOf, pullRequestOf, taskId, workspace, repository, anchorKey]);
 }
 
-/** The door of a document nothing is edited through: every edit answered as unanswered. */
-const NO_EDIT: DescriptionEditDoor = () =>
+/** How a document nothing is edited through sends a write: every one answered as unanswered. */
+const NO_EDIT: DescriptionEditSend = () =>
   Promise.reject(new Error("This description cannot be edited here."));
 
 /** Where a title's draft goes when nothing else names the task: nowhere. */
@@ -691,7 +692,7 @@ function queuedWrite(writes: DescriptionWrites, write: () => Promise<Kept> | Kep
  */
 function savedOver(
   writes: DescriptionWrites,
-  save: DescriptionEditDoor,
+  save: DescriptionEditSend,
   drawn: DrawnDescription,
   edit: { readonly base: string; readonly value: string },
   kept: string | undefined,
@@ -1017,13 +1018,13 @@ export interface TitleRename {
 /**
  * The task's document: its name as the title over its text. `onShowHistory` opens the description's version history from the
  * byline's "Edited", on the description as it stands, and from a section's, on the
- * revision of the save it names. With `onEdit`, the text is edited whole in
+ * revision of the save it names. With `edit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
  * name through `onDraftName` as they are typed, and with `rename` the title's ⋯
  * offers Rename through the open task's door; without them the document is
  * drawn read-only. A date chip in an editable description's words at rest opens
  * its picker where it stands, and a date changed there saves the description
- * through `onEdit` with the date written anew (`SectionDates`), as a task
+ * through `edit` with the date written anew (`SectionDates`), as a task
  * item's box ticks it. An editable description opens its text from a press on the
  * panel's empty room, as a document editor's page does (`useTextRoom`): at
  * the end under its last line, or anywhere where it has no text yet, and on
@@ -1038,7 +1039,7 @@ export interface TitleRename {
 export const DescriptionBody = memo(function DescriptionBody({
   task,
   onShowHistory,
-  onEdit,
+  edit,
   onRename,
   onDraftName = NO_DRAFT,
   rename,
@@ -1053,7 +1054,8 @@ export const DescriptionBody = memo(function DescriptionBody({
 }: {
   task: Task;
   onShowHistory?: ShowHistory;
-  onEdit?: DescriptionEditDoor | undefined;
+  /** The writes to the plan's words, each place writing them holding its own mutation over them (`descriptionEditMutation`); none where nothing is edited. */
+  edit?: DescriptionEditMutation | undefined;
   /** Renames the task, from its title, answering whether the name was taken. */
   onRename?: ((name: string) => Promise<boolean>) | undefined;
   /** Draws the name typed into the title wherever the task is named, or none once it is left. */
@@ -1080,7 +1082,7 @@ export const DescriptionBody = memo(function DescriptionBody({
   // While Descriptions is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
   const documented =
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
-  const editable = onEdit !== undefined && documented;
+  const editable = edit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
   // Note that what each section is drawn from is held steady across draws,
@@ -1097,7 +1099,8 @@ export const DescriptionBody = memo(function DescriptionBody({
     () => ({ reader: editReader, sections: sectionEdits, agents: steadyAgents }),
     [editReader, sectionEdits, steadyAgents],
   );
-  const editing = useDescriptionEditing(task.id, text, onEdit ?? NO_EDIT, place);
+  const descriptionWrites = edit ?? descriptionEditMutation(task.id, NO_EDIT);
+  const editing = useDescriptionEditing(task.id, text, descriptionWrites, place);
   const showHistory = useSteadyDoor(onShowHistory);
   const marks = useMemo<SectionMarks>(
     () => ({
@@ -1229,6 +1232,9 @@ export const DescriptionBody = memo(function DescriptionBody({
     [toast],
   );
   // The description as drawn last, which a tick waiting its turn and a date read as the picker closes are written over.
+  // Note that a tick and a date save on a mutation of this description's writes, which runs in their order behind the editor's.
+  const { mutateAsync: saveWrite } = useMutation(descriptionWrites);
+  const onEdit = edit === undefined ? undefined : saveWrite;
   const latestDescription = useRef({ cut, id: task.id, body: task.document.body, onEdit });
   latestDescription.current = { cut, id: task.id, body: task.document.body, onEdit };
   // Note that ticks are sent one at a time, in the order pressed, each over
@@ -1356,7 +1362,7 @@ export const DescriptionBody = memo(function DescriptionBody({
       />
     ),
   );
-  const titled = onEdit !== undefined && onRename !== undefined;
+  const titled = edit !== undefined && onRename !== undefined;
   const titleMenu =
     !titleActions || linked === undefined ? null : (
       <TitleLink

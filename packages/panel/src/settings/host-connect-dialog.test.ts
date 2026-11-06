@@ -7,7 +7,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -72,6 +72,10 @@ async function opened(): Promise<string[]> {
     ),
   );
   await settle();
+  // Note that the pairing lands through a query, so the dialog is read once it no longer reads it.
+  await vi.waitFor(() =>
+    assert.equal((document.body.textContent ?? "").includes("Reading the code"), false),
+  );
   return told;
 }
 
@@ -113,6 +117,8 @@ test("a code no pairing has, or one held after too many such codes, says so and 
   ] as const) {
     fakeActPort({ [ACT_KIND.HOSTS_PAIRING_READ]: () => Promise.resolve(refusal) });
     await opened();
+    // Note that the code read last stands while it is read again, so the refusal is read once it is this one's.
+    await vi.waitFor(() => assert.equal((document.body.textContent ?? "").includes(says), true));
 
     const text = document.body.textContent ?? "";
     assert.ok(text.includes(says), text);

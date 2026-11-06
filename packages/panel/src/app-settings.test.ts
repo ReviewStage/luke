@@ -35,7 +35,6 @@ const DOORS: SettingsDoors = {
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: () => undefined,
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: () => Promise.reject(new Error("Not in this test.")),
   onRequestMicrophone: () => undefined,
   // SAFETY: the doors under test never reach the workspace's own control.
   workspace: {} as SettingsDoors["workspace"],

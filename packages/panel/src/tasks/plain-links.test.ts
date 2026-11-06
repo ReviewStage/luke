@@ -26,6 +26,7 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { DescriptionBody } from "./description-body.js";
+import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { HISTORY_READ } from "./use-description-history.js";
@@ -173,7 +174,9 @@ test("the description's editor draws a plain link as every place does, whole", a
   const container = drawn(
     createElement(DescriptionBody, {
       task: TASK,
-      onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+      edit: descriptionEditMutation(TASK.id, () =>
+        Promise.reject(new Error("Nothing is saved in this test.")),
+      ),
       sectionLinks: SECTION_LINKS,
     }),
   );
@@ -192,7 +195,9 @@ test("a plain link pressed in the description opens in the browser and opens no 
   const container = drawn(
     createElement(DescriptionBody, {
       task: TASK,
-      onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+      edit: descriptionEditMutation(TASK.id, () =>
+        Promise.reject(new Error("Nothing is saved in this test.")),
+      ),
       sectionLinks: SECTION_LINKS,
     }),
   );

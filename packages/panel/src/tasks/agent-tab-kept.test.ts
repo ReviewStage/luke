@@ -19,7 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { focusRestOn } from "../testing/hint-rest.js";
 import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
@@ -222,12 +222,14 @@ function runningTab() {
       await act(async () => {
         for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
       });
+      await settleQueries();
     },
     async answer(next: AgentMessagesAnswerView) {
       await act(async () => {
         telling.tell(TRANSCRIPT, next);
         for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
       });
+      await settleQueries();
     },
     openEarlierFold() {
       const fold = container.querySelector<HTMLElement>(
@@ -354,6 +356,7 @@ test("a page that adds a call to a running turn draws that call alone, the calls
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   assert.ok(asked.includes("agent-0"), "the turn's open run of calls is drawn");
 
   asked.length = 0;
@@ -361,5 +364,6 @@ test("a page that adds a call to a running turn draws that call alone, the calls
     telling.tell(TRANSCRIPT, page([messaged(6)], AGENT_STATUS.RUNNING, "1:2"));
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   assert.deepEqual(asked, ["agent-5"]);
 });

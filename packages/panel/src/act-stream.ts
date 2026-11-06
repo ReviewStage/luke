@@ -14,9 +14,9 @@ import { rendererFork } from "./renderer-runtime.js";
  * changed while it was broken lands then, and the place keeps what it last
  * held meanwhile rather than throwing where it draws.
  *
- * `use-host-read.ts` is its one importer but its own test, and the lint
- * rule `anti-slop/no-follow-outside-host-read` refuses any other: the hook
- * holds every read a surface shows open through here.
+ * `use-host-read.ts` and `live-reads.ts` are its only importers but its own
+ * test, and the lint rule `anti-slop/no-follow-outside-host-read` refuses
+ * any other: they hold every read a surface shows open through here.
  */
 
 /** How long a broken stream waits before it is opened again. */

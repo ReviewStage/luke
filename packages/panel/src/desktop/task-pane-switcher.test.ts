@@ -17,6 +17,7 @@ import { useTaskRenameOffer } from "../tasks/task-menu-items.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
+import { taskRenameMutation } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
@@ -156,10 +157,10 @@ function mount(
                 activeTaskId: TASK.id,
                 region: { kind: DOCUMENT_REGION.READY, task: TASK },
                 pages: paged ? [PAGE] : undefined,
-                onRenameTask: (taskId, name) => {
+                renameTask: taskRenameMutation(({ taskId, name }) => {
                   told.push(`rename ${taskId} ${name}`);
                   return Promise.resolve(true);
-                },
+                }, undefined),
                 repositoryMenu:
                   repositoryAsk === undefined
                     ? undefined
@@ -472,7 +473,7 @@ function RefusingTask(): React.JSX.Element {
       activeTaskId: TASK.id,
       region: { kind: DOCUMENT_REGION.READY, task },
       onDraftName: (_taskId, name) => setDraft(name),
-      onRenameTask: () => Promise.resolve(false),
+      renameTask: taskRenameMutation(() => Promise.resolve(false), undefined),
     }),
   });
 }

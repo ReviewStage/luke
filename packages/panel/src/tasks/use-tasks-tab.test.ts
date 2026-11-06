@@ -33,6 +33,7 @@ import {
   TASKS_READ,
   type TasksView,
 } from "@repo/features/tasks-view";
+import { ACT_UNREACHED_WORDS } from "@repo/features/words";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -56,7 +57,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { type ActHandle, KEPT, type Kept } from "../act.js";
+import { KEPT, type Kept } from "../act.js";
 import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
@@ -75,6 +76,7 @@ import {
   fakeActs,
   fakeAppBridge,
   fakeAppBridgeCalls,
+  refusedOnPort,
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
@@ -224,6 +226,9 @@ const SENT_ON_MUTATIONS: readonly PortActKind[] = [
   ACT_KIND.TASKS_FIND,
   ACT_KIND.AGENTS_PAGE,
   ACT_KIND.AGENTS_INBOX_ITEM_HOME,
+  ACT_KIND.GITHUB_CONNECT,
+  ACT_KIND.GITHUB_DISCONNECT,
+  ACT_KIND.TASKS_REVISIONS,
 ];
 
 function mount(
@@ -310,12 +315,6 @@ function mount(
     const [held, setHeld] = useState(standing);
     restand = setHeld;
     control = useTasksTab({
-      acts: {
-        // A kind the test does not answer is recorded and refused.
-        // SAFETY: each kind is answered by its own procedure's answer, the dispatch on the kind the one erasure.
-        act: (<Kind extends PortActKind>(kind: Kind, ...args: unknown[]) =>
-          portAnswer(kind, ...args)) as ActHandle["act"],
-      },
       tasks: held.tasks,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
       signedIn: held.signedIn,
@@ -1311,7 +1310,8 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   assert.equal(tab.control().agentView.agentId, AGENT_ID);
   // Note that the open task's pages stay held beneath the agent's page.
   assert.deepEqual(asked, [{ taskId: TASK.id }, { agentId: AGENT_ID }]);
-  assert.deepEqual(tab.control().agentView.pages, [page]);
+  // Note that the agent's pages stand once they reach their query.
+  await vi.waitFor(() => assert.deepEqual(tab.control().agentView.pages, [page]));
   assert.deepEqual(panelOf(tab), { open: true, tab: { page: page.id } });
 });
 
@@ -1943,6 +1943,8 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   );
   await settle();
   assert.deepEqual(asked, [{ taskId: TASK.id }]);
+  // Note that each read of the pages reaches their query one notify tick later, which lands before the tabs move.
+  await vi.waitFor(() => assert.equal(tab.control().pages?.length, 1));
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(PULLS));
   act(() => panel().onClose(PULLS));
@@ -1953,6 +1955,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
     reads.deliverPages({ [PAGE_OWNER.TASK]: { [TASK.id]: { rows: [] } }, [PAGE_OWNER.AGENT]: {} }),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(tab.control().pages?.length, 0));
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panelOf(tab), { open: true, tab: PULLS });
@@ -2492,8 +2495,8 @@ test("Settings' GitHub row is the connection main's view holds, its Connect and 
 
   assert.deepEqual(tab.control().github, { connected: true, login: null });
   assert.deepEqual(tab.told.slice(-2), [ACT_KIND.GITHUB_CONNECT, ACT_KIND.GITHUB_DISCONNECT]);
-  // The test leaves Disconnect unanswered, which the bridge refuses.
-  assert.equal(newestToastSays(), "Not answered in this test.");
+  // The test leaves Disconnect unanswered, a failure on the way to the service rather than a refusal.
+  assert.equal(newestToastSays(), ACT_UNREACHED_WORDS);
 });
 
 test("the repository chooser says the account manages the workspace it owns, and not one it is a member of", () => {
@@ -2510,7 +2513,7 @@ test("a Disconnect whose page did not open says why in a toast", async () => {
   const refusal = "Could not disconnect GitHub on this system.";
   const tab = mount(
     { shown: true, tasks: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },
-    { [ACT_KIND.GITHUB_DISCONNECT]: () => Promise.reject(new Error(refusal)) },
+    { [ACT_KIND.GITHUB_DISCONNECT]: () => Promise.reject(refusedOnPort(refusal)) },
   );
 
   act(() => {
@@ -2551,14 +2554,20 @@ test("the repository chip's list for a workspace with GitHub connected is its re
       installationUrl: "https://github.com/apps/luke/installations/new",
     },
   };
-  const tab = mount({
-    shown: true,
-    tasks: {
-      ...TWO_WORKSPACES,
-      workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
-    },
-  });
+  // Note that the tab and the chip stand on one registry over the document the lists are laid on, so the document each writes into the test's client is the same one.
   holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => listed);
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  const tab = mount(
+    {
+      shown: true,
+      tasks: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
+      },
+    },
+    {},
+    registry,
+  );
   installScrollIntoView();
   const chip = document.body.appendChild(document.createElement("div"));
   const chipRoot = createRoot(chip);
@@ -2566,7 +2575,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   act(() =>
     chipRoot.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        registry,
         createElement(RepositoryChip, {
           value: null,
           chooser: tab.control().newTask.repositoriesIn(ACME.id),
@@ -2581,17 +2590,21 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   await settle();
 
   const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
-  assert.deepEqual(
-    [
-      // A row names the repository, then its owner after it.
-      [...menu.querySelectorAll('[role="option"]')].map((row) =>
-        [".ui-combobox-option-detail", ".ui-combobox-option-label"]
-          .map((part) => row.querySelector(part)?.textContent)
-          .join("/"),
-      ),
-      [...menu.querySelectorAll('[role="group"]')].map((group) => group.getAttribute("aria-label")),
-    ],
-    [["acme/relay"], []],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      [
+        // A row names the repository, then its owner after it.
+        [...menu.querySelectorAll('[role="option"]')].map((row) =>
+          [".ui-combobox-option-detail", ".ui-combobox-option-label"]
+            .map((part) => row.querySelector(part)?.textContent)
+            .join("/"),
+        ),
+        [...menu.querySelectorAll('[role="group"]')].map((group) =>
+          group.getAttribute("aria-label"),
+        ),
+      ],
+      [["acme/relay"], []],
+    ),
   );
 });
 
@@ -2707,9 +2720,10 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   );
 
   const moved = tab.control().onMoveTask("billing", ACME.id);
+  // Note that the move is sent a step after the press, as its mutation sends it, and the workspaces land and one is chosen while it is out.
+  await vi.waitFor(() => assert.equal(answers.length, 1));
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));
-  await vi.waitFor(() => assert.equal(answers.length, 1));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
 

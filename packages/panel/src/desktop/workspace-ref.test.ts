@@ -5,7 +5,7 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "./workspace-ref.js";
@@ -81,7 +81,10 @@ test("a workspace with a photo is named by the photo once it loads, and the name
     }),
   );
   await settle();
-  const image = view.querySelector("img") ?? assert.fail("the photo is asked for");
+  // Note that the photo is asked for once the host's read of it reaches its query.
+  const image = await vi.waitFor(
+    () => view.querySelector("img") ?? assert.fail("the photo is asked for"),
+  );
   act(() => image.dispatchEvent(new Event("load")));
 
   assert.equal(image.getAttribute("src"), PHOTO_URL);

@@ -463,20 +463,23 @@ export function useEditorPictures(
         return keep(taken, url);
       }
       const named = descriptionAttachmentOf(taken.from);
+      // Note that a picture the window holds already is copied as it stands, since a picture's query never goes stale.
       const read =
         named === undefined || door === undefined
           ? undefined
-          : await door.read(named.taskId, named.attachmentId).catch(() => undefined);
-      if (read === undefined || "failure" in read) {
+          : await queryClient
+              .fetchQuery(pictureQuery(named.taskId, named.attachmentId, door.read))
+              .catch(() => undefined);
+      if (read?.kind !== PICTURE_STATE.READY) {
         return settled(taken.upload, {
           kind: UPLOAD.FAILED,
           reason: UPLOAD_WORDS.NOT_COPIED,
           taken,
         });
       }
-      return keep(taken, dataUrlOf(read.contentType, read.base64));
+      return keep(taken, read.url);
     },
-    [door, keep, settled],
+    [door, keep, settled, queryClient],
   );
   // Note that the doors handed the editor once read the newest of these as they run.
   const beginning = useRef(begin);

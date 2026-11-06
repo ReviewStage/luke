@@ -22,6 +22,7 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
 import { DescriptionBody } from "./description-body.js";
+import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the description, its comments, and its history stand only while the account has Descriptions on.
@@ -123,10 +124,10 @@ async function editing(): Promise<HTMLElement> {
   const container = drawn(
     createElement(DescriptionBody, {
       task: TASK,
-      onEdit: (request) => {
+      edit: descriptionEditMutation(TASK.id, (request) => {
         saved.push(request.document.value);
         return Promise.resolve({ saved: true });
-      },
+      }),
       sectionLinks: SECTION_LINKS,
     }),
   );

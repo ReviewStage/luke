@@ -22,7 +22,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { installShownFailureReporter } from "../failure-report.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab, AgentTab } from "./agent-tab.js";
 
@@ -148,6 +148,7 @@ async function runningTab(first: AgentMessagesAnswerView, worker = false, opened
     draw(opened);
     await settle();
   });
+  await settleQueries();
   return {
     container,
     /** The agent's row as the list next reads it, as its status moves. */
@@ -156,12 +157,14 @@ async function runningTab(first: AgentMessagesAnswerView, worker = false, opened
         draw(agent);
         await settle();
       });
+      await settleQueries();
     },
     async answer(next: AgentMessagesAnswerView) {
       await act(async () => {
         telling.tell(transcript, next);
         await settle();
       });
+      await settleQueries();
     },
   };
 }

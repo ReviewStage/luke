@@ -8,24 +8,61 @@ import {
   settingFromOption,
   settingRowsForPage,
 } from "@repo/settings";
-import type { ActionResult } from "@repo/wire";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@repo/wire/app-settings";
+import { useSettingRowWrite } from "./row-write.js";
 import { SelectRow } from "./select-row.js";
 import { SwitchRow } from "./switch-row.js";
-import type { SettingsWrites } from "./writes.js";
 
 /** One value a choice's control offers, as the schema hands it. */
 type SettingOption = NonNullable<
   ReturnType<typeof settingRowsForPage>[number]["control"]
 >["options"][number];
 
+/** A toggle's row: the shared switch (`switch-row.tsx`), writing its setting through a mutation of its own. */
+function SchemaToggleRow({
+  id,
+  field,
+  label,
+  detail,
+  changed,
+  checked,
+}: {
+  id: string;
+  field: AppSettingField;
+  label: string;
+  detail: string | undefined;
+  changed: boolean;
+  checked: boolean;
+}): React.JSX.Element {
+  const write = useSettingRowWrite(
+    field,
+    (enabled: boolean) => enabled,
+    (value) => value === true,
+    true,
+  );
+  return (
+    <SwitchRow
+      {...(isAppSettingId(id) ? { anchor: id } : undefined)}
+      label={label}
+      labelReplayUnmasked
+      detail={detail}
+      changed={changed}
+      checked={checked}
+      write={write}
+    />
+  );
+}
+
 /**
  * A choice's row: the shared pop-up (`select-row.tsx`), whose menu searches
  * where the schema gives the set a search field and reads whole where it
- * does not, each option wearing the faces its section hands it, where it hands some.
+ * does not, each option wearing the faces its section hands it, where it
+ * hands some, writing its setting through a mutation of its own.
  */
 function SchemaChoiceRow({
   id,
+  field,
+  view,
   label,
   detail,
   changed,
@@ -33,9 +70,10 @@ function SchemaChoiceRow({
   options,
   search,
   faces,
-  onChange,
 }: {
   id: string;
+  field: AppSettingField;
+  view: SettingsRowsInput;
   label: string;
   detail: string | undefined;
   changed: boolean;
@@ -45,8 +83,8 @@ function SchemaChoiceRow({
   faces: ((token: string) => React.ReactNode) | undefined;
   /** The searchable menu's empty field words, for a set long enough to search. */
   search: string | undefined;
-  onChange: (token: string) => Promise<ActionResult>;
 }): React.JSX.Element {
+  const write = useSettingRowWrite(field, (token: string) => settingFromOption(field, token, view));
   return (
     <SelectRow
       label={label}
@@ -65,7 +103,7 @@ function SchemaChoiceRow({
       }
       placeholder={search}
       {...(isAppSettingId(id) ? { anchor: id } : undefined)}
-      onChange={onChange}
+      write={write}
     />
   );
 }
@@ -83,13 +121,11 @@ export function SchemaSettingRows({
   page,
   section = SETTING_SECTION.MAIN,
   view,
-  writes,
   faces,
 }: {
   page: (typeof SCHEMA_SETTINGS_PAGE)[keyof typeof SCHEMA_SETTINGS_PAGE];
   section?: SettingSection;
   view: SettingsRowsInput;
-  writes: SettingsWrites;
   /** What each of a choice's options shows beside its words, by the setting it stores and its token; none where its options are words alone. */
   faces?: ((field: AppSettingField, token: string) => React.ReactNode) | undefined;
 }): React.JSX.Element {
@@ -97,15 +133,14 @@ export function SchemaSettingRows({
     const { field, entry, changed, control } = row;
     if (entry.kind === APP_SETTING_KIND.TOGGLE) {
       return [
-        <SwitchRow
+        <SchemaToggleRow
           key={entry.id}
-          {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
+          id={entry.id}
+          field={field}
           label={entry.label}
-          labelReplayUnmasked
           detail={entry.detail}
           changed={changed}
           checked={entry.value === APP_TOGGLE_VALUE.ON}
-          onChange={(enabled) => writes.setting(field, enabled)}
         />,
       ];
     }
@@ -114,6 +149,8 @@ export function SchemaSettingRows({
       <SchemaChoiceRow
         key={entry.id}
         id={entry.id}
+        field={field}
+        view={view}
         label={entry.label}
         detail={entry.detail}
         changed={changed}
@@ -121,7 +158,6 @@ export function SchemaSettingRows({
         options={control.options}
         search={control.search}
         faces={faces === undefined ? undefined : (token) => faces(field, token)}
-        onChange={(token) => writes.setting(field, settingFromOption(field, token, view))}
       />,
     ];
   });

@@ -19,7 +19,7 @@ import { experimentsOn } from "@repo/settings/testing";
 import { holdExits } from "@repo/ui/testing/held-exits";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import type { ComposerTrigger, MentionNode } from "../description-editor/contract.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { handHostReads, handState, holdAutomations, registryWith } from "../testing/app-state.js";
@@ -395,7 +395,7 @@ test("on a plan, the workspace's automations are found by their name, a pick wri
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   assert.deepEqual(asked, [{ kind: AUTOMATION_FOLLOW.WORKSPACE, id: "workspace-stage" }]);
-  assert.deepEqual(rows(page), ["Deploy notes"]);
+  await vi.waitFor(() => assert.deepEqual(rows(page), ["Deploy notes"]));
 
   act(() => {
     picker().onKey(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));

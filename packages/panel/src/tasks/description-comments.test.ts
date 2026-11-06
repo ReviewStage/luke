@@ -48,6 +48,7 @@ import { relayout } from "../testing/resize-observer.js";
 import type { EditAgents } from "./edit-ref.js";
 import { DescriptionBody } from "./description-body.js";
 import { COMMENTS_FILTER, CommentFocusScope, PageComments } from "./description-comments.js";
+import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the description, its comments, and its history stand only while the account has Descriptions on.
@@ -1331,7 +1332,7 @@ async function caretInThread() {
             children: createElement(DescriptionBody, {
               task: PLAN,
               sectionLinks: PAGE_LINKS,
-              onEdit: () => Promise.resolve({ saved: true } as const),
+              edit: descriptionEditMutation(PLAN.id, () => Promise.resolve({ saved: true } as const)),
             }),
           }),
         ),

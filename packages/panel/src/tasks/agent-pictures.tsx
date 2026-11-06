@@ -22,7 +22,7 @@ import {
 } from "@repo/ui/picture-read";
 import { useQueries } from "@tanstack/react-query";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
-import { useAct } from "../act.js";
+import { askAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import { PictureBlock } from "../picture-block.js";
 import { type PictureReader, pictureQuery } from "../picture-query.js";
@@ -80,15 +80,14 @@ export const AgentPicturesProvider = AgentPicturesContext.Provider;
  * the service reads them from its own transcript.
  */
 export function useAgentPictureDoor(agentId: string, callId?: string): AgentPictureDoor {
-  const { act } = useAct();
   const read = useCallback(
     (_owner: string, pictureId: string) =>
-      act(ACT_KIND.AGENTS_PICTURE, {
+      askAct(ACT_KIND.AGENTS_PICTURE, {
         agentId,
         pictureId,
         ...(callId === undefined ? undefined : { callId }),
       }),
-    [act, agentId, callId],
+    [agentId, callId],
   );
   return useMemo(() => ({ owner: callId ?? agentId, read }), [agentId, callId, read]);
 }

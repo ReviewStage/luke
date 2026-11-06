@@ -521,10 +521,14 @@ test("a link to a page of the item's task, pressed in a transcript beside the In
   assert.match(panelTabs(container)?.[0] ?? "", /^▸ Batch the invitations/);
 
   // Note that the chip is the transcript's, drawn in the panel, not the item's words.
-  const chip = [
-    ...container.querySelectorAll<HTMLElement>('aside[aria-label="Panel"] [data-mention-ref]'),
-  ].find((each) => each.textContent?.includes("Invite funnel"));
-  assert.ok(chip, "the transcript names the page");
+  // Note that the transcript is drawn once its page reaches its query.
+  const chip = await vi.waitFor(
+    () =>
+      [
+        ...container.querySelectorAll<HTMLElement>('aside[aria-label="Panel"] [data-mention-ref]'),
+      ].find((each) => each.textContent?.includes("Invite funnel")) ??
+      assert.fail("the transcript names the page"),
+  );
   act(() => chip.click());
   await settle();
 

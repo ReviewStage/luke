@@ -17,7 +17,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -200,10 +200,13 @@ test("Home greets the reader by first name over New task's composer, the items w
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
   assert.ok(page.querySelector(".home-composer .new-task-composer"), "New task's composer stands");
-  assert.deepEqual(sections(page), {
-    Inbox: [RETRY_429.title],
-    Recent: [CACHE.name, RETRIES.name, DASHBOARD.name],
-  });
+  // Note that the Inbox's items stand once the account's feed reaches its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(sections(page), {
+      Inbox: [RETRY_429.title],
+      Recent: [CACHE.name, RETRIES.name, DASHBOARD.name],
+    }),
+  );
 
   act(() => row(page, CACHE.name).click());
   act(() => row(page, RETRY_429.title).click());
@@ -252,14 +255,15 @@ test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async (
 });
 
 test("nothing waiting draws no Inbox section, but an Inbox that could not be read says so, and a list that could not be read says so under Recent", async () => {
-  const quiet = mount({}, []);
-  await settle();
-  assert.deepEqual(Object.keys(sections(quiet.page)), ["Recent"]);
+  // Note that the feed that could not be read comes first, since the test's one client keeps a feed that answered, as the window does.
+  const unread = mount({}, [RETRY_429], SHELL_ROOM.WIDE, true);
+  await vi.waitFor(() =>
+    assert.match(unread.page.textContent ?? "", /Some inbox items could not be read\./u),
+  );
   act(() => root?.unmount());
 
-  const unread = mount({}, [RETRY_429], SHELL_ROOM.WIDE, true);
-  await settle();
-  assert.match(unread.page.textContent ?? "", /Some inbox items could not be read\./u);
+  const quiet = mount({}, []);
+  await vi.waitFor(() => assert.deepEqual(Object.keys(sections(quiet.page)), ["Recent"]));
   act(() => root?.unmount());
 
   const refused = mount({ listRead: false, listFailed: true }, []);

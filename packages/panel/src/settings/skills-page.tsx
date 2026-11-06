@@ -3,7 +3,6 @@ import type {
   InstalledSkillSummary,
 } from "@repo/features/installed-skill-route-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { formatBytes } from "@repo/features/number-format";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords } from "@repo/features/words";
@@ -52,11 +51,15 @@ import { useCallback, useState } from "react";
 import { type ActResult, askAct } from "../act.js";
 import { actMutation } from "../act-mutations.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import {
+  installedSkillsQuery,
+  installedSkillsRetryMutation,
+  workspaceMembersQuery,
+} from "../live-reads.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -368,14 +371,15 @@ function ShownSkills({
   pause: ((ms: number) => Promise<void>) | undefined;
 }): React.JSX.Element {
   // The skills as the host holds them, followed live while the page shows them, so one a teammate installs meanwhile draws as it lands.
-  const held = useHostRead(LIVE_READ.INSTALLED_SKILLS, workspace.id);
+  const held = useQuery(installedSkillsQuery(workspace.id));
+  const retry = useMutation(installedSkillsRetryMutation());
   const [adding, setAdding] = useState(false);
   // Note that the card keeps what is typed and previewed while it is drawn, from its opening until its fade has run, so each opening starts afresh.
   const added = useDrawnThroughExit(adding);
   const [landed, setLanded] = useState<ReadonlySet<string>>(new Set());
-  const members = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspace.id).rows?.members;
+  const members = useQuery(workspaceMembersQuery(workspace.id)).data?.members;
 
-  const skills = held.rows;
+  const skills = held.data;
   // Note that an install lights only its own rows, each once, which say what it made; the host draws them.
   const installed = useCallback((made: readonly InstalledSkillSummary[]) => {
     setLanded(new Set(made.map((each) => each.id)));
@@ -414,10 +418,13 @@ function ShownSkills({
           )}
         </SettingsRow>
       </SettingsSection>
-      {skills === undefined && held.status === HOST_READ_STATUS.FAILED ? (
+      {skills === undefined && held.isError ? (
         <SettingsSection>
           <SettingsLine>
-            <ErrorState failure={unreadShown(FAILURE_SURFACE.SKILLS_READ)} onRetry={held.retry}>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.SKILLS_READ)}
+              onRetry={() => retry.mutate({ workspaceId: workspace.id })}
+            >
               {SKILLS_LINE.READ_FAILED}
             </ErrorState>
           </SettingsLine>

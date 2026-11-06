@@ -18,7 +18,6 @@ import {
   type AutomationSummary,
 } from "@repo/features/automation-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { momentText } from "@repo/features/time-format";
 import type { Workspace } from "@repo/features/workspace-wire";
@@ -66,7 +65,7 @@ import {
 import { ACTOR_KIND, actorName } from "@repo/ui/actor-model";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useState } from "react";
 import { unreachedAs } from "../act.js";
@@ -76,12 +75,12 @@ import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import { workspaceIntegrationsQuery, workspaceIntegrationsRetryMutation } from "../live-reads.js";
 import { MemberDirectory, useCreator } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { rowMenu } from "./action-menu.js";
 import {
   AutomationEditor,
@@ -118,7 +117,7 @@ import {
 } from "./automation-words.js";
 import { PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { useWorkspaceRuns, type WorkspaceRunsRead } from "./use-automation-runs.js";
-import { useAutomations } from "./use-automations.js";
+import { AUTOMATION_DELETE_MUTATION, useAutomations } from "./use-automations.js";
 
 /**
  * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.
@@ -496,9 +495,9 @@ function listState(
  */
 function useRowDeletion(
   groups: readonly AutomationGroup[],
-  remove: ReturnType<typeof useAutomations>["remove"],
   onDeleted: (automationId: string) => void,
 ) {
+  const removing = useMutation(AUTOMATION_DELETE_MUTATION);
   const [asking, setAsking] = useState<AutomationSummary | undefined>(undefined);
   const asked =
     asking !== undefined &&
@@ -509,7 +508,7 @@ function useRowDeletion(
     { subject: asked !== undefined, surfaceOpen: true },
     () => {
       if (asked === undefined) return Promise.resolve(ACCEPTED);
-      return remove(asked.id).then((answer): ActionResult => {
+      return removing.mutateAsync(asked.id).then((answer): ActionResult => {
         if ("failure" in answer) {
           return {
             status: ACTION_RESULT_STATUS.REJECTED,
@@ -619,11 +618,11 @@ function ListPage({
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
   const now = useMinute();
   const workspace = tasks.workspace;
-  const { read, reload, toggle, remove } = automations;
+  const { read, reload, toggle } = automations;
   const groups =
     read !== undefined && "automations" in read ? automationGroups(read.automations) : [];
   const workspacesUnread = workspace === undefined && tasks.workspacesFailed;
-  const deletion = useRowDeletion(groups, remove, (automationId) =>
+  const deletion = useRowDeletion(groups, (automationId) =>
     view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId }),
   );
   return (
@@ -951,11 +950,12 @@ const SENTRY_UNREAD: SentryOffer = {
  */
 function useWorkspaceSentry(workspaceId: string): SentryOffer {
   const installSentry = useMutation(actMutation(ACT_KIND.WORKSPACE_SENTRY_INSTALL));
-  const integrations = useHostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, workspaceId);
+  const integrations = useQuery(workspaceIntegrationsQuery(workspaceId));
+  const { mutate: retryIntegrations } = useMutation(workspaceIntegrationsRetryMutation());
   // Note that a read that failed offers what one still out does, so a saved Sentry trigger stays editable; the editor says the failure above its rows.
-  const read = integrations.rows?.sentry;
-  const failed = read === undefined && integrations.status === HOST_READ_STATUS.FAILED;
-  const retry = integrations.retry;
+  const read = integrations.data?.sentry;
+  const failed = read === undefined && integrations.isError;
+  const retry = () => retryIntegrations({ workspaceId });
   const installing = installSentry.isPending;
   const refusal = installSentry.error?.message;
   const onInstall = () => {
@@ -967,8 +967,7 @@ function useWorkspaceSentry(workspaceId: string): SentryOffer {
 
 /** Whether a listed workspace's Slack bot is connected, held as Sentry is; not while the read is out or failed. */
 function useWorkspaceSlackBot(workspaceId: string): boolean {
-  const integrations = useHostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, workspaceId);
-  return integrations.rows?.slack.team !== undefined;
+  return useQuery(workspaceIntegrationsQuery(workspaceId)).data?.slack.team !== undefined;
 }
 
 /** The editor over a listed workspace, offered that workspace's Sentry and Slack bot. */

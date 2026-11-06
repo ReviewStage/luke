@@ -16,7 +16,7 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-w
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { AutomationDirectory } from "../automation-directory.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -145,8 +145,13 @@ async function agentCard() {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-  hover(container.querySelector("[data-agent-ref]") ?? assert.fail("the agent is named"));
-  const card = cards()[0] ?? assert.fail("the agent's card hangs");
+  // Note that the card names the automation once the workspace's automations reach their query, each hover drawing it afresh.
+  const card = await vi.waitFor(() => {
+    hover(container.querySelector("[data-agent-ref]") ?? assert.fail("the agent is named"));
+    const hung = cards()[0] ?? assert.fail("the agent's card hangs");
+    assert.equal(hung.textContent?.includes("Morning Sentry triage"), true);
+    return hung;
+  });
   return { card, opened };
 }
 

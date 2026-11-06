@@ -12,7 +12,7 @@ import { readExperiments } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { DescriptionBody } from "./description-body.js";
-import type { DescriptionEditDoor } from "./use-description-editing.js";
+import { type DescriptionEditSend, descriptionEditMutation } from "./description-edit-mutation.js";
 
 // Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
@@ -58,7 +58,7 @@ function taskWith(body: string, by: typeof DEAN, at: number): Task {
   };
 }
 
-const NEVER_SAVED: DescriptionEditDoor = () => new Promise(() => undefined);
+const NEVER_SAVED: DescriptionEditSend = () => new Promise(() => undefined);
 
 /**
  * Draws `task` on Dean's page as the task's own page hands it over: every
@@ -80,7 +80,7 @@ function draw(task: Task): void {
         createElement(DescriptionBody, {
           task,
           reader: { readerId: DEAN.userId },
-          onEdit: (request) => NEVER_SAVED(request),
+          edit: descriptionEditMutation(task.id, NEVER_SAVED),
           onShowHistory: () => undefined,
           sectionLinks: { workspace: "acme", onOpen: () => undefined, reveal: undefined },
         }),

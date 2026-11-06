@@ -30,6 +30,7 @@ import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import type { EditAgents } from "./edit-ref.js";
 import { DescriptionBody } from "./description-body.js";
+import { descriptionEditMutation } from "./description-edit-mutation.js";
 import type { TaskLooks } from "./use-task-looks.js";
 
 // Note that the description, its comments, and its history stand only while the account has Descriptions on.
@@ -289,7 +290,7 @@ test("an edit the service names no member for, or read without an account id, is
     "Dean Stratakos now",
   );
   const former = await draw(editedAs({ ...unnamed, by: LEE }), { readerId: DEAN.userId });
-  assert.equal(editedLines(former)[1], "Lee Park (former member) now");
+  await vi.waitFor(() => assert.equal(editedLines(former)[1], "Lee Park (former member) now"));
   const mark = former.querySelector(".description-unit-byline .actor-mark");
   assert.equal(mark?.querySelector("img")?.getAttribute("src"), LEE_PICTURE);
 });
@@ -352,7 +353,9 @@ test("a teammate's card says who they are and what they last changed in the desc
   const card = cardOf(await draw(task, { readerId: DEAN.userId }));
 
   assert.ok(card.querySelector('[data-actor-card="person"]'), "a person's card hangs");
-  assert.match(card.textContent ?? "", /Charles Pancharles@example\.com · Member/u);
+  await vi.waitFor(() =>
+    assert.match(card.textContent ?? "", /Charles Pancharles@example\.com · Member/u),
+  );
   assert.match(card.textContent ?? "", /Edited Goal and Risks · now$/u);
 });
 
@@ -503,7 +506,9 @@ test("a save that writes a section above the one the keyboard stands on leaves T
             readerId: undefined,
             children: createElement(DescriptionBody, {
               task,
-              onEdit: () => Promise.reject(new Error("Nothing is saved here.")),
+              edit: descriptionEditMutation(task.id, () =>
+                Promise.reject(new Error("Nothing is saved here.")),
+              ),
             }),
           }),
         ),

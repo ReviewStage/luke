@@ -27,6 +27,7 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { DescriptionBody } from "./description-body.js";
 import { CommentFocusScope } from "./description-comments.js";
+import { descriptionEditMutation } from "./description-edit-mutation.js";
 
 // Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
@@ -127,7 +128,7 @@ async function opened() {
             children: createElement(DescriptionBody, {
               task: PLAN,
               sectionLinks: PAGE_LINKS,
-              onEdit: () => Promise.resolve({ saved: true } as const),
+              edit: descriptionEditMutation(PLAN.id, () => Promise.resolve({ saved: true } as const)),
             }),
           }),
         ),

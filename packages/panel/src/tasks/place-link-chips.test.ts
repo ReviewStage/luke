@@ -18,7 +18,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -215,19 +215,21 @@ test("a bare link to a place the window knows is called by its name, the task's 
     [],
   );
 
-  assert.deepEqual(chips(container), [
-    ["plan", "Teammate invitations"],
-    ["plan", "Teammate invitations"],
-    ["page", "Unfurl matrix"],
-    ["place", "Keep expired links?"],
-    ["agent", "Expire old invitations"],
-    ["page", "Unfurl matrix"],
-    ["place", "Keep expired links?"],
-    ["place", "Message from Expire old invitations"],
-    ["person", "Sam Okafor"],
-    ["agent", "Triage new Sentry issues"],
-    ["place", "Nightly triage"],
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(chips(container), [
+      ["plan", "Teammate invitations"],
+      ["plan", "Teammate invitations"],
+      ["page", "Unfurl matrix"],
+      ["place", "Keep expired links?"],
+      ["agent", "Expire old invitations"],
+      ["page", "Unfurl matrix"],
+      ["place", "Keep expired links?"],
+      ["place", "Message from Expire old invitations"],
+      ["person", "Sam Okafor"],
+      ["agent", "Triage new Sentry issues"],
+      ["place", "Nightly triage"],
+    ]),
+  );
   assert.deepEqual(
     [...container.querySelectorAll("a")].map((link) => link.textContent),
     [],

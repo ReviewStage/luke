@@ -1,5 +1,4 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { type MentionPlace, sectionAnchors } from "@repo/features/mention-link";
 import type { CatalogModel } from "@repo/features/models-wire";
 import { descriptionSections } from "@repo/features/description-document";
@@ -25,10 +24,10 @@ import {
 } from "react";
 import { askAct } from "../act.js";
 import { actMutation } from "../act-mutations.js";
+import { descriptionDocumentQuery } from "../live-reads.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import type { MentionNode } from "../description-editor/contract.js";
 import { QUERY_ROOT } from "../query-keys.js";
-import { useHeldRows } from "../use-host-read.js";
 import { agentActor, agentName } from "./agent-model.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import type { MentionHolder } from "./mention-holder.js";
@@ -296,7 +295,7 @@ async function newestRevisionText(taskId: string): Promise<string | null> {
 export function useSavedDescriptionText(
   task: Pick<TaskSummary, "id" | "updatedAt"> | undefined,
 ): string | undefined {
-  const held = useHeldRows(LIVE_READ.DESCRIPTION_DOCUMENT, task?.id);
+  const held = useQuery({ ...descriptionDocumentQuery(task?.id), enabled: false }).data;
   const openText = held !== undefined && "task" in held ? held.task.document.body : undefined;
   const reading = openText === undefined ? task?.id : undefined;
   const savedAt = task?.updatedAt;

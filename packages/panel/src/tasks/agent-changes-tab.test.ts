@@ -6,6 +6,7 @@ import { ORPCError } from "@orpc/client";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import {
   AGENT_CALL_FAILURE,
+  type AgentChangesAnswerView,
   type AgentPullRequestViewedAnswerView,
   PULL_REQUEST_PART,
 } from "@repo/features/agent-view";
@@ -54,6 +55,7 @@ import { findRanges, reveal } from "../find-matches.js";
 import { rendererRegistry } from "../renderer-runtime.js";
 import {
   type AnyAct,
+  answeringChanges,
   FAKE_ANSWER,
   type FakeActAnswer,
   fakeActPort,
@@ -152,21 +154,26 @@ let viewedReads = 0;
 /** What the next read of the marks waits on, where a test holds it; none answers at once. */
 let viewedHeld: Promise<void> | undefined;
 
+/** The agent's changes as the service answers them: the pull request's files as the test set them. */
+const readChanges = (): Promise<AgentChangesAnswerView> =>
+  Promise.resolve({
+    pullRequest: {
+      url: "https://github.com/acme/relay/pull/7",
+      ...commits,
+      truncated,
+      files,
+      reviewers: [],
+      comments: [],
+    },
+  });
+
+/** How the act port answers the changes this test, the service's answer unless a test stands another in. */
+let answerChanges: typeof readChanges = readChanges;
+
 const control = agentsControl({
   agents: [AGENT],
   agentIds: [AGENT.id],
   models: [],
-  readChanges: () =>
-    Promise.resolve({
-      pullRequest: {
-        url: "https://github.com/acme/relay/pull/7",
-        ...commits,
-        truncated,
-        files,
-        reviewers: [],
-        comments: [],
-      },
-    }),
 });
 
 /** What the stand-in bundle was handed, mount first, each draw after it. */
@@ -271,6 +278,8 @@ beforeEach(() => {
   fakeAppBridge({});
   handSettings();
   holdViewedReads();
+  answerChanges = readChanges;
+  fakeActPort({ ...fakeActPortCalls(), ...answeringChanges(() => answerChanges()) });
 });
 
 afterEach(() => {
@@ -317,15 +326,29 @@ let heldReads: ChangesReads | undefined;
 
 /** Reads the changes again as the Pull request tab's Refresh does, the one Refresh its screen offers, with the review threads. */
 async function refreshAsTheTab(threads?: ChangesThreads): Promise<void> {
+  const landed = heldReads?.count ?? 0;
   act(() => {
     heldReads?.ask();
     threads?.refresh?.();
   });
+  // Note that the changes land through a query, so the refresh is done once its answer has, or it failed.
+  await vi.waitFor(() =>
+    assert.equal(
+      heldReads?.out === false && ((heldReads.count ?? 0) > landed || heldReads.refreshFailed),
+      true,
+    ),
+  );
   await flush();
 }
 
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
 async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
+  await render(options);
+  return lastDrawn();
+}
+
+/** Draws the view in the root standing, without asking what it drew. */
+async function render(options: DrawOptions = {}): Promise<void> {
   const { ChangesTabReading } = await import("../testing/changes-tab.js");
   const tab = createElement(ChangesTabReading, {
     agentId: AGENT.id,
@@ -357,7 +380,6 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
     ),
   );
   await flush();
-  return lastDrawn();
 }
 
 /** Draws the agent's Files changed view afresh, its read landed, and answers what the list was last drawn with. */
@@ -367,7 +389,19 @@ async function drawTab(options: DrawOptions = {}): Promise<DiffListProps> {
   registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  return redraw(options);
+  // Note that the reads waited on are this tab's own, never the last test's.
+  heldReads = undefined;
+  await render(options);
+  // Note that the changes land through a query, so the view is read once its read has settled.
+  await vi.waitFor(() => assert.equal(heldReads?.answer !== undefined && !heldReads.out, true));
+  await flush();
+  return lastDrawn();
+}
+
+/** Draws the tab as `drawTab` does, then waits for the member's marks to be read, which reach the view a notify tick after their read answers. */
+async function drawMarked(options: DrawOptions = {}): Promise<void> {
+  await drawTab(options);
+  await vi.waitFor(() => viewedBox(files[0]?.path ?? assert.fail("a file is changed")));
 }
 
 function lastDrawn(): DiffListProps {
@@ -703,7 +737,7 @@ test("while the tree is hidden a strip stands in its place, a mark for each file
     changed("b.ts", { status: CHANGED_FILE_STATUS.DELETED }),
   ];
   const { tree } = heldTree(false);
-  await drawTab({ tree });
+  await drawMarked({ tree });
 
   const strip =
     document.querySelector<HTMLElement>(".file-tree-strip .ui-mark-strip") ??
@@ -884,7 +918,7 @@ test("every key of Files changed's table answers inside the view", async () => {
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
   answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
-  await drawTab();
+  await drawMarked();
 
   const unanswered = FILES_CHANGED_KEYS.filter((key) => {
     // Each key is pressed with a file stood on, which Escape needs.
@@ -1018,7 +1052,7 @@ test("the diff settings set the layout, the indicators, and a switch for every d
     ligatures: true,
     backgrounds: false,
   };
-  assert.deepEqual(lastDrawn().look, expected);
+  await vi.waitFor(() => assert.deepEqual(lastDrawn().look, expected));
   assert.deepEqual((await drawTab()).look, expected);
 });
 
@@ -1088,7 +1122,7 @@ test("with Changed words Off a changed line is tinted whole, for this view and t
   await drawTab();
 
   await pick(openSettings(), "Changed words", "Off");
-  assert.equal(lastDrawn().look.inlineDiff, "none");
+  await vi.waitFor(() => assert.equal(lastDrawn().look.inlineDiff, "none"));
 
   assert.equal((await drawTab()).look.inlineDiff, "none");
 });
@@ -1114,7 +1148,10 @@ test("a setting is drawn as written while its write is out, so a press reads the
   const popover = openSettings();
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
 
-  assert.equal(lastDrawn().look.ligatures, true, "drawn before the document comes back");
+  // Note that the write is drawn once its mutation hands it to React, a tick after the press.
+  await vi.waitFor(() =>
+    assert.equal(lastDrawn().look.ligatures, true, "drawn before the document comes back"),
+  );
   await flush();
   assert.equal(lastDrawn().look.ligatures, true);
 });
@@ -1159,19 +1196,20 @@ test("a refused write flips the switch back and is said in a toast, and the swit
   const popover = openSettings();
 
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
-  assert.equal(
-    settingControl(popover, '[role="switch"]', "Ligatures").getAttribute("aria-checked"),
-    "true",
-    "the switch flips before the write answers",
+  await vi.waitFor(() =>
+    assert.equal(
+      settingControl(popover, '[role="switch"]', "Ligatures").getAttribute("aria-checked"),
+      "true",
+      "the switch flips before the write answers",
+    ),
   );
   // Note that the write reaches the act port a few steps after the press, as its mutation sends it.
   await vi.waitFor(() => assert.equal(held.length, 1));
   held[0]?.("Could not save that setting.");
-  await flush();
+  await vi.waitFor(() => assert.equal(newestToastSays(), "Could not save that setting."));
 
   const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
   assert.equal(ligatures.getAttribute("aria-checked"), "false");
-  assert.equal(newestToastSays(), "Could not save that setting on this system.");
   assert.equal(ligatures.disabled, false);
   assert.equal(lastDrawn().look.ligatures, false);
 });
@@ -1223,11 +1261,7 @@ test("a review thread is drawn under its line in its file, and one a push outdat
 
 test("a refresh that fails after the changes were read keeps the files drawn, says Could not refresh with Retry, and Retry reads again", async () => {
   let failing = false;
-  const flaky = {
-    ...control,
-    readChanges: (...args: Parameters<typeof control.readChanges>) =>
-      failing ? Promise.reject(new Error("offline")) : control.readChanges(...args),
-  };
+  answerChanges = () => (failing ? Promise.reject(new Error("offline")) : readChanges());
   /** The alert that says the refresh did not land, none while it did. */
   const refreshNote = () =>
     [...document.querySelectorAll('[role="alert"]')].find((each) =>
@@ -1235,7 +1269,6 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
     );
   let threadReads = 0;
   await drawTab({
-    control: flaky,
     threads: {
       list: [],
       draw: () => null,
@@ -1244,10 +1277,11 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
       },
     },
   });
-  assert.equal(refreshNote(), undefined);
+  assert.equal(refreshNote() === undefined, true);
 
   failing = true;
   await refreshAsTheTab();
+  await vi.waitFor(() => assert.equal(refreshNote() !== undefined, true));
 
   const note = refreshNote();
   assert.ok(note, "the refresh says it did not land");
@@ -1263,10 +1297,9 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
   );
   const readsBefore = threadReads;
   act(() => retry?.click());
-  await flush();
+  await vi.waitFor(() => assert.equal(refreshNote() === undefined, true));
 
   assert.equal(threadReads, readsBefore + 1, "Retry reads the review threads with the files");
-  assert.equal(refreshNote(), undefined);
   assert.deepEqual(
     lastDrawn().files.map((file) => file.path),
     ["src/seats.ts"],
@@ -1599,7 +1632,7 @@ function viewedBox(path: string): HTMLInputElement {
 test("the member's viewed marks tick their files and fold them; a file changed since reads not viewed", async () => {
   viewedAnswer = MARKED;
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   assert.deepEqual(
     ["a.ts", "b.ts", "c.ts"].map((path) => viewedBox(path).checked),
@@ -1621,7 +1654,7 @@ test("ticking a file's box marks it viewed on GitHub at once and folds it; one G
       : { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
   );
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("c.ts").click());
   await flush();
@@ -1664,7 +1697,7 @@ test("a box ticks the moment it is pressed, and unticks where GitHub refuses the
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("c.ts").click());
   await flush();
@@ -1682,7 +1715,7 @@ test("V marks the file the keys stand on viewed and steps on to the next, and is
   assert.equal(press(listBox(), { key: "v" }), false, "with no marks read V is not the list's");
 
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
-  await drawTab();
+  await drawMarked();
   press(listBox(), { key: "j" });
   press(listBox(), { key: "v" });
   await flush();
@@ -1708,7 +1741,7 @@ test("each tree row is handed its file's lines, how many review threads stand on
     ],
     draw: () => null,
   };
-  await drawTab({ threads, treeOpen: true });
+  await drawMarked({ threads, treeOpen: true });
 
   const marks = lastMarks();
   assert.deepEqual(
@@ -1728,7 +1761,7 @@ test("a tree row's Viewed toggle marks its file viewed on GitHub as its header's
   viewedAnswer = MARKED;
   const asked = answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
-  await drawTab({ treeOpen: true });
+  await drawMarked({ treeOpen: true });
 
   const onViewed = treeProps.at(-1)?.onViewed ?? assert.fail("the tree is handed a Viewed door");
   act(() => onViewed("c.ts"));
@@ -1751,6 +1784,12 @@ test("a member with no GitHub sign-in is offered one, and no Viewed box stands u
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
   files = [changed("a.ts")];
   await drawTab();
+  await vi.waitFor(() =>
+    assert.match(
+      document.querySelector('[role="alert"]')?.textContent ?? "",
+      /Sign in with GitHub/u,
+    ),
+  );
 
   assert.equal(header("a.ts").querySelector(".diff-list-viewed") === null, true);
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /Sign in with GitHub/u);
@@ -1759,7 +1798,7 @@ test("a member with no GitHub sign-in is offered one, and no Viewed box stands u
 test("the marks are read again with the files on a Refresh, so the two describe the same push", async () => {
   viewedAnswer = MARKED;
   files = [changed("a.ts")];
-  await drawTab();
+  await drawMarked();
   assert.equal(viewedReads, 1);
 
   await refreshAsTheTab();
@@ -1796,7 +1835,7 @@ test("presses on one file go to GitHub one at a time, the last of them winning, 
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("c.ts").click());
   act(() => viewedBox("c.ts").click());
@@ -1822,7 +1861,7 @@ test("a read asked before a mark settled never undoes it, and a read that does n
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   // A refresh's read stays out while the member marks the file and GitHub takes it.
   const reading = Promise.withResolvers<void>();
@@ -1839,7 +1878,9 @@ test("a read asked before a mark settled never undoes it, and a read that does n
   viewedHeld = undefined;
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
   await refreshAsTheTab();
-  assert.equal(header("c.ts").querySelector(".diff-list-viewed") === null, true);
+  await vi.waitFor(() =>
+    assert.equal(header("c.ts").querySelector(".diff-list-viewed") === null, true),
+  );
 });
 
 test("unmarking a deleted file opens it, and a press GitHub refuses puts back the fold chosen before", async () => {
@@ -1852,7 +1893,7 @@ test("unmarking a deleted file opens it, and a press GitHub refuses puts back th
     refuse ? { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Locked." } : DONE,
   );
   files = [changed("old.ts", { status: CHANGED_FILE_STATUS.DELETED }), changed("new.ts")];
-  await drawTab();
+  await drawMarked();
   assert.deepEqual(folds()[1], ["old.ts", true]);
 
   act(() => viewedBox("old.ts").click());
@@ -1874,7 +1915,7 @@ test("a mark GitHub took stands where the press queued after it is refused, as G
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("c.ts").click());
   act(() => viewedBox("c.ts").click());
@@ -1893,7 +1934,7 @@ test("a last press GitHub was never asked for is sent even where the press befor
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("c.ts").click());
   act(() => viewedBox("c.ts").click());
@@ -1912,7 +1953,7 @@ test("a refused mark leaves a fold chosen since, as Collapse all chose it", asyn
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
   const held = holdMarks();
   files = [changed("a.ts"), changed("b.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("a.ts").click());
   await flush();
@@ -1947,7 +1988,10 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
   assert.equal(note().querySelector(".drawn-thread")?.textContent, "why-42");
 
   press(listBox(), { key: "i" });
-  await flush();
+  // Note that the setting is drawn once its write's mutation hands it to React, a tick after the press.
+  await vi.waitFor(() =>
+    assert.equal(note().querySelector(".diff-thread-chip-row > summary") === null, false),
+  );
   const chip =
     note().querySelector<HTMLElement>(".diff-thread-chip-row > summary") ??
     assert.fail("a chip stands");
@@ -1981,11 +2025,12 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
   );
 
   press(listBox(), { key: "i" });
-  await flush();
-  assert.equal(
-    note().querySelector(".diff-thread-chip-row > summary"),
-    null,
-    "I again draws every thread whole",
+  await vi.waitFor(() =>
+    assert.equal(
+      note().querySelector(".diff-thread-chip-row > summary") === null,
+      true,
+      "I again draws every thread whole",
+    ),
   );
 });
 
@@ -1996,13 +2041,18 @@ test("minimized, the threads on no line take a row of their own for their chip, 
   };
   await drawTab({ threads });
   press(listBox(), { key: "i" });
-  await flush();
-  const [outdated, current] = lastDrawn().files[0]?.annotations ?? [];
   const chipOf = (key: string | undefined) =>
     lastDrawn()
       .renderAnnotation("src/seats.ts", key ?? "")
       .querySelector(".diff-thread-chip-row");
-  assert.equal(chipOf(outdated?.key)?.hasAttribute("data-above"), true, "above the diff");
+  await vi.waitFor(() =>
+    assert.equal(
+      chipOf(lastDrawn().files[0]?.annotations[0]?.key)?.hasAttribute("data-above"),
+      true,
+      "above the diff",
+    ),
+  );
+  const [, current] = lastDrawn().files[0]?.annotations ?? [];
   assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
 });
 
@@ -2051,16 +2101,15 @@ test("a review thread on a line between hunks moves onto its line once a gap ope
 
   // Minimized, the thread that moved is its line's chip.
   press(listBox(), { key: "i" });
-  await flush();
-  assert.equal(
+  const gapChip = () =>
     lastDrawn()
       .renderAnnotation("src/seats.ts", `${PAGE}#in-gap`)
-      .querySelector(".diff-thread-chip-row > summary")
-      ?.getAttribute("aria-label"),
-    "1 comment by octo · 1 open, show",
+      .querySelector(".diff-thread-chip-row > summary");
+  await vi.waitFor(() =>
+    assert.equal(gapChip()?.getAttribute("aria-label"), "1 comment by octo · 1 open, show"),
   );
   press(listBox(), { key: "i" });
-  await flush();
+  await vi.waitFor(() => assert.equal(gapChip() === null, true));
 
   // The gap closed again, its patch read anew.
   act(() => lastDrawn().onDrawn?.("src/seats.ts", []));
@@ -2159,6 +2208,12 @@ function answerFileReads(answer: (path: string, ref?: string) => TasksFileAnswer
   const asked: AnyAct[] = [];
   fakeActs({
     act: (request: AnyAct) => {
+      // Note that the changes are still the service's, as the test set them.
+      if (request.kind === ACT_KIND.AGENTS_CHANGES) {
+        return answerChanges().then(
+          (value): FakeActAnswer => ({ status: FAKE_ANSWER.DONE, value }),
+        );
+      }
       if (request.kind === ACT_KIND.TASKS_FILE) asked.push(request);
       const outcome: FakeActAnswer = {
         status: FAKE_ANSWER.DONE,
@@ -2233,7 +2288,6 @@ test("no file is read whole for an agent on no task, a head not named, or a task
     agents: [{ ...AGENT, planId: null }],
     agentIds: [AGENT.id],
     models: [],
-    readChanges: control.readChanges,
   });
   assert.equal((await drawTab({ control: taskless })).readTexts, undefined, "no task");
   commits = {};
@@ -2417,6 +2471,12 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
   const held: Array<() => void> = [];
   fakeActs({
     act: (request: AnyAct) => {
+      // Note that the changes are still the service's, as the test set them.
+      if (request.kind === ACT_KIND.AGENTS_CHANGES) {
+        return answerChanges().then(
+          (value): FakeActAnswer => ({ status: FAKE_ANSWER.DONE, value }),
+        );
+      }
       const value =
         request.kind === ACT_KIND.TASKS_FILE
           ? {

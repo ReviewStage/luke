@@ -1,4 +1,3 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import { sectionAnchors } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
 import { descriptionSections } from "@repo/features/description-document";
@@ -13,9 +12,9 @@ import {
   useAutomation,
   useAutomationsLanded,
 } from "../automation-directory.js";
+import { pagesQuery, descriptionDocumentQuery } from "../live-reads.js";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
 import { appStateQuery, selectWorkspaces } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHeldRows, useHostRead } from "../use-host-read.js";
 import { holderTaskId } from "./mention-holder.js";
 import { useMentionedReader } from "./mentioned-place.js";
 import { PageCard } from "./page-card.js";
@@ -93,7 +92,7 @@ export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string
  */
 export function useSectionHeading(taskId: string | undefined, anchor: string): string | undefined {
   const page = useTaskMentions();
-  const held = useHeldRows(LIVE_READ.DESCRIPTION_DOCUMENT, taskId);
+  const held = useQuery({ ...descriptionDocumentQuery(taskId), enabled: false }).data;
   const text =
     taskId === undefined
       ? undefined
@@ -196,9 +195,9 @@ export function PageChipCard({
   reading?: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
-  const read = useHostRead(LIVE_READ.PAGES, place);
-  if (read.status === HOST_READ_STATUS.LOADING) return reading ?? fallback;
-  const page = read.rows?.find((each) => each.id === pageId);
+  const read = useQuery(pagesQuery(place));
+  if (read.isPending) return reading ?? fallback;
+  const page = read.data?.find((each) => each.id === pageId);
   if (page === undefined) return fallback;
   return <PageCard place={place} page={page} />;
 }

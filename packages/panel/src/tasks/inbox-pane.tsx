@@ -1672,11 +1672,7 @@ export function InboxPane({
     }),
     [listedAgents, archived, models, me, pullRequests, item.agentId, onOpenAgent],
   );
-  const { images: pictures, onImage, onRetryImage } = control;
-  const images: InboxImageReads = useMemo(
-    () => ({ images: pictures, onImage, onRetryImage }),
-    [pictures, onImage, onRetryImage],
-  );
+  const { images } = control;
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;

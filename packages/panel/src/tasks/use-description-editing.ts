@@ -23,16 +23,17 @@ import {
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TasksEditAnswer } from "@repo/features/tasks-view";
 import { STATUS_TONE } from "@repo/ui";
+import { MutationObserver, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import type { DescriptionEditorPlacement } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { useSteadyDoor } from "../steady-door.js";
 import { type ToastNotice, useToast, useWithdrawToast } from "../toast.js";
 import { type ConflictWords, conflictWords, type EditPlace } from "./edit-ref.js";
+import type { DescriptionEditMutation } from "./description-edit-mutation.js";
 
 /**
  * use-description-editing.ts -- the open task's one editor: whether its text is open, which block the keyboard stands on, and its saves as the developer pauses.
@@ -58,8 +59,8 @@ const savePauseAtom = rendererRuntime.fn((stamp: number) =>
   Effect.as(Effect.sleep(SAVE_PAUSE), stamp),
 );
 
-/** How the document saves an edit: what the words were written from, and the developer's. */
-export type DescriptionEditDoor = (request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
+/** How words are saved once their task is left: through a mutation of that task's own, which outlives the editor. */
+type LeftSave = (request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 
 /** The words each task was left with that did not save, by the task's id, until they save or the developer comes back to them. */
 const leftUnsavedAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, DocumentEditor>>(new Map()));
@@ -100,10 +101,10 @@ const LEFT_UNSAVED = {
   KEEP_MINE: "Keep mine",
 } as const;
 
-/** What a task's words are saved through once it is left: its id, its door, who its conflict is named for, and where they are kept and said. */
+/** What a task's words are saved through once it is left: its id, its save, who its conflict is named for, and where they are kept and said. */
 interface LeftTask {
   readonly taskId: string;
-  readonly door: DescriptionEditDoor;
+  readonly save: LeftSave;
   readonly place: EditPlace;
   readonly registry: AtomRegistry.AtomRegistry;
   readonly toast: (notice: ToastNotice) => void;
@@ -176,7 +177,7 @@ function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol, cause?: u
 }
 
 /**
- * Saves the words of a task left through its door, keeping them where that
+ * Saves the words of a task left through its save, keeping them where that
  * save does not land; they are unsaved work under `saving`, its own mark,
  * until it answers. `cause` is what the save before it came to, where one
  * did, kept for the toast where there is nothing to send again.
@@ -194,7 +195,7 @@ function saveLeft(
     return;
   }
   const sent = editorSent(now, request);
-  left.door(request).then(
+  left.save(request).then(
     (answered) => keepLeft(left, editorAnswered(sent, answered), saving, failureOf(answered)),
     (refused: Error) => keepLeft(left, editorRefused(sent, refused.message), saving, refused),
   );
@@ -265,24 +266,6 @@ export function useMarkTitleUnsaved(): (unsaved: boolean) => void {
 }
 
 /**
- * The door a task's description saves through, bound to that task's id and steady
- * across its draws. Note that a door calling the newest `edit` with the id
- * open now would send the words a task was left with, which save after it is
- * left, to the task opened since.
- */
-export function useDescriptionEditDoor(
-  taskId: string | undefined,
-  edit: (taskId: string, request: DescriptionEditRequest) => Promise<TasksEditAnswer>,
-): DescriptionEditDoor | undefined {
-  const save = useSteadyDoor(edit);
-  return useMemo(
-    () =>
-      taskId === undefined ? undefined : (request: DescriptionEditRequest) => save(taskId, request),
-    [taskId, save],
-  );
-}
-
-/**
  * The editor over the open description's text as `text` holds it; none can open
  * without one, and a conflict names its writer for the reader `place`
  * holds. Note that a save's answer lands only on the editor it was sent
@@ -292,9 +275,11 @@ export function useDescriptionEditDoor(
 export function useDescriptionEditing(
   taskId: string,
   text: string | undefined,
-  edit: DescriptionEditDoor,
+  edit: DescriptionEditMutation,
   place: EditPlace,
 ): DescriptionEditing {
+  const queryClient = useQueryClient();
+  const { mutateAsync: save } = useMutation(edit);
   const [editor, setEditor] = useState<DocumentEditor | undefined>(undefined);
   const [placement, setPlacement] = useState<DescriptionEditorPlacement | undefined>(undefined);
   const [selecting, setSelecting] = useState<EditorHost | undefined>(undefined);
@@ -316,12 +301,12 @@ export function useDescriptionEditing(
   const opening = useRef(0);
   // The save out, which words typed after it wait on as a task is left.
   const flight = useRef<Promise<TasksEditAnswer> | undefined>(undefined);
-  // The door of the task last drawn, moved on after each commit, so a
-  // cleanup as another task opens still holds the door of the one it leaves.
-  const door = useRef(edit);
+  // The writes of the task last drawn, moved on after each commit, so a
+  // cleanup as another task opens still holds the writes of the one it leaves.
+  const writes = useRef(edit);
   const drawnPlace = useRef(place);
   useEffect(() => {
-    door.current = edit;
+    writes.current = edit;
     drawnPlace.current = place;
   });
 
@@ -337,7 +322,7 @@ export function useDescriptionEditing(
       setEditor((now) => (now !== undefined && opening.current === sentFrom ? next(now) : now));
     latest.current = editorSent(held, request);
     setEditor(latest.current);
-    flight.current = door.current(request);
+    flight.current = save(request);
     flight.current.then(
       (answered) => {
         landed((now) => editorAnswered(now, answered));
@@ -380,9 +365,9 @@ export function useDescriptionEditing(
   });
 
   // Another task opened, or the document gone, takes the editor with it, and
-  // words not yet saved are sent through the door of the task they were
+  // words not yet saved are sent through the writes of the task they were
   // typed in. Note that the cleanup is what sends them, because it still
-  // holds that task's door and runs before the document can go. A task
+  // holds that task's writes and runs before the document can go. A task
   // opening that was left with words unsaved opens its editor on them.
   useEffect(() => {
     opening.current += 1;
@@ -396,9 +381,11 @@ export function useDescriptionEditing(
       heldWords.current?.();
       const held = latest.current;
       if (held === undefined) return;
+      // Note that words left save through a mutation of the task they were typed in, which outlives this editor and runs in that plan's order.
+      const leaving = new MutationObserver(queryClient, writes.current);
       const left: LeftTask = {
         taskId,
-        door: door.current,
+        save: (request) => leaving.mutate(request),
         place: drawnPlace.current,
         registry,
         toast,

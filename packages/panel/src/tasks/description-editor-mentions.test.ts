@@ -20,9 +20,10 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handState, registryWith } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { DescriptionBody } from "./description-body.js";
+import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 /**
@@ -69,7 +70,7 @@ beforeEach(() => {
 afterEach(async () => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   // Note that the saves a description left as it went answer before its atoms go.
-  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  await settledWrites();
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
 });
@@ -91,7 +92,9 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   registries.push(registry);
   const body = createElement(DescriptionBody, {
     task: task,
-    onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+    edit: descriptionEditMutation(task.id, () =>
+      Promise.reject(new Error("Nothing is saved in this test.")),
+    ),
     sectionLinks: {
       workspace: "acme",
       onOpen: () => undefined,

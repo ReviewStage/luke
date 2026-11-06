@@ -1,4 +1,3 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_REFUSAL,
@@ -19,12 +18,16 @@ import {
 import { ACT_KIND } from "@repo/host/acts";
 import { STATUS_TONE } from "@repo/ui";
 import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { actMutation } from "../act-mutations.js";
 import { DRAFT_PLACE, useDraftWriter } from "../composer-drafts.js";
+import {
+  type CommentSubject,
+  descriptionCommentsQuery,
+  descriptionCommentsRetryMutation,
+} from "../live-reads.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { type CommentSubject, HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
  * use-description-comments.ts -- a description's comment threads, or one of its task's pages', as one control: held by the host while the surface shows them, and each write on its way back.
@@ -111,7 +114,8 @@ function refusalWords(refusal: DescriptionCommentRefusal): string {
 export function useDescriptionComments(
   subject: CommentSubject | undefined,
 ): DescriptionCommentsControl | undefined {
-  const read = useHostRead(LIVE_READ.DESCRIPTION_COMMENTS, subject);
+  const read = useQuery(descriptionCommentsQuery(subject));
+  const { mutate: retryComments } = useMutation(descriptionCommentsRetryMutation());
   const { mutateAsync: sendStart } = useMutation(actMutation(ACT_KIND.TASKS_COMMENT_START));
   const { mutateAsync: sendCommentAct } = useMutation(actMutation(ACT_KIND.TASKS_COMMENT_ACT));
   const toast = useToast();
@@ -199,7 +203,14 @@ export function useDescriptionComments(
     [planId, sendCommentAct, note, takenBack, drafts],
   );
 
-  const { rows, status, retry } = read;
+  const rows = read.data;
+  const { isSuccess, isError } = read;
+  // Note that Try again moves with the subject alone, as the read's own did, since a render builds it anew.
+  const pageId = subject?.pageId;
+  const retry = useCallback(() => {
+    if (planId === undefined) return;
+    retryComments(pageId === undefined ? { taskId: planId } : { taskId: planId, pageId });
+  }, [retryComments, planId, pageId]);
   return useMemo(
     () =>
       planId === undefined
@@ -207,13 +218,13 @@ export function useDescriptionComments(
         : {
             planId,
             threads: rows ?? NO_THREADS,
-            read: status === HOST_READ_STATUS.READY,
-            failed: status === HOST_READ_STATUS.FAILED,
+            read: isSuccess,
+            failed: isError,
             onRetry: retry,
             notes,
             start,
             act,
           },
-    [planId, rows, status, retry, notes, start, act],
+    [planId, rows, isSuccess, isError, retry, notes, start, act],
   );
 }

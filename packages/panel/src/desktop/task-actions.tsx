@@ -55,7 +55,7 @@ import {
 } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   type RefObject,
   useCallback,
@@ -82,6 +82,7 @@ import { useChordLinks } from "../copy-link-item.js";
 import { leftMark } from "../draft-mark.js";
 import { confirmFailure } from "../failure-report.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { renameWrite } from "../rename-write.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { useTaskSendFailed } from "../tasks/failed-lines.js";
@@ -110,7 +111,7 @@ import {
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { useReadMark, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
-import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { TASK_RENAME_SHAPE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, appStateQuery, selectExperiment, useAppSlice } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
@@ -225,8 +226,9 @@ export interface TaskRowTab
     | "me"
     | "workspaces"
     | "taskSections"
-    | "onRenameTask"
+    | "renameTask"
     | "onDeleteTask"
+    | "deleteTask"
     | "onSettleTasks"
     | "onMarkTask"
     | "onSetTaskStanding"
@@ -236,6 +238,7 @@ export interface TaskRowTab
     | "onRemoveTaskParent"
     | "onChangeRepository"
     | "onMoveTask"
+    | "moveTask"
     | "onWriteSections"
   > {
   /** The tab's tasks as they stand when read. */
@@ -260,8 +263,9 @@ export function taskRowTab(
     me: tasks.me,
     workspaces: tasks.workspaces,
     taskSections: tasks.taskSections,
-    onRenameTask: tasks.onRenameTask,
+    renameTask: tasks.renameTask,
     onDeleteTask: tasks.onDeleteTask,
+    deleteTask: tasks.deleteTask,
     onSettleTasks: tasks.onSettleTasks,
     onMarkTask: tasks.onMarkTask,
     onSetTaskStanding: tasks.onSetTaskStanding,
@@ -271,6 +275,7 @@ export function taskRowTab(
     onRemoveTaskParent: tasks.onRemoveTaskParent,
     onChangeRepository: tasks.onChangeRepository,
     onMoveTask: tasks.onMoveTask,
+    moveTask: tasks.moveTask,
     onWriteSections: tasks.onWriteSections,
     tasksNow,
     onCopyDescription: tasks.copy.onPress,
@@ -831,9 +836,10 @@ export function useTaskMenuItems(
     surface: FAILURE_SURFACE.TASK_DELETE,
     about: { taskId },
   });
+  const deleting = useMutation(tasks.deleteTask);
   const deletion = useConfirmDialog(
     { subject: task !== undefined, surfaceOpen: tasks.shown },
-    () => tasks.onDeleteTask(taskId).then(heard),
+    () => deleting.mutateAsync(taskId).then(heard),
     confirmFailure(FAILURE_SURFACE.TASK_DELETE, { taskId }),
   );
   // Mark done as the chord runs it: on a task not already done, and nothing otherwise.
@@ -1087,7 +1093,8 @@ export function SidebarTask({
   childCount?: ChildTaskCount | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
-  const rename = useInlineRename(task.id, tasks.onRenameTask);
+  const renaming = useMutation(tasks.renameTask);
+  const rename = useInlineRename(task.id, renameWrite(renaming, TASK_RENAME_SHAPE));
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
   const actions = useTaskMenuItems(taskRowTab(tasks), task.id, task.name, {
     rename: rename.begin,

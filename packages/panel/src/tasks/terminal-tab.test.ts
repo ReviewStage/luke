@@ -1051,8 +1051,8 @@ test("a refused shell rename reopens its field holding the name typed, says unde
   act(() => {
     reopened?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  await settle();
-  assert.equal(tab.rows()[0]?.name, "zsh");
+  // Note that the refusal is let go of as its mutation resets, which reaches React a tick later.
+  await vi.waitFor(() => assert.equal(tab.rows()[0]?.name, "zsh"));
   assert.ok(!tab.container.textContent?.includes("could not be renamed"));
 });
 
