@@ -51,7 +51,8 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * are added. The token stands on its own, needing no GitHub account linked
  * first. The step is done once the workspace
  * reaches a repository, which is read again whenever the window is focused,
- * so a trip finished in the browser lands on its own.
+ * so a trip finished in the browser lands on its own, its done line naming
+ * the owners the repositories stand on.
  */
 
 /** What setup says over GitHub's cards, which setup lets be skipped: agents work in the account's repositories. */
@@ -72,10 +73,42 @@ function CardWords({ children }: { children: React.ReactNode }): React.JSX.Eleme
   );
 }
 
-/** How many repositories the workspace reaches, and through which route, as the done card says it. */
-function reachedWords(count: number, route: GitHubAccess): string {
+/** The most owners the done line names before it counts the rest. */
+const OWNERS_NAMED = 3;
+
+/** The owners the workspace's repositories stand on, each once, in the order the read lists them, the most recently updated first. */
+function ownersOf(repositories: readonly GitHubRepository[]): string {
+  const owners = [...new Set(repositories.map(({ owner }) => owner))];
+  const named = owners.slice(0, OWNERS_NAMED);
+  const rest = owners.length - named.length;
+  return new Intl.ListFormat("en", { type: "conjunction" }).format(
+    rest > 0 ? [...named, `${rest} more`] : named,
+  );
+}
+
+/**
+ * What the done line says: how many repositories the workspace reaches, the
+ * owners they stand on, so a developer sees which GitHub account or
+ * organization was connected, and the route they are reached through.
+ * Note that the owners are a person's words and stay masked in a screen
+ * recording.
+ */
+function ReachedWords({
+  repositories,
+  route,
+}: {
+  repositories: readonly GitHubRepository[];
+  route: GitHubAccess;
+}): React.JSX.Element {
+  const count = repositories.length;
   const counted = count === 1 ? "1 repository" : `${count} repositories`;
-  return `${counted} ${ROUTE_WORDS[route]}`;
+  return (
+    <>
+      {`${counted} on `}
+      <ReplayMask>{ownersOf(repositories)}</ReplayMask>
+      {` ${ROUTE_WORDS[route]}`}
+    </>
+  );
 }
 
 /**
@@ -234,7 +267,7 @@ export function GitHubSetup({
   const done =
     reached > 0 ? (
       <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-        {reachedWords(reached, route)}
+        <ReachedWords repositories={repositories ?? []} route={route} />
       </SettingsRowStateLine>
     ) : null;
   const options: readonly ChoiceOption<GitHubAccess>[] = [
