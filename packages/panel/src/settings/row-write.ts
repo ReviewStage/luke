@@ -18,7 +18,7 @@ import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type UseMutationResult, useMutation } from "@tanstack/react-query";
 import { actFailureWords } from "../act.js";
-import { settingMutation } from "../act-mutations.js";
+import { type SettingWrite, settingMutation } from "../act-mutations.js";
 import { showToast, TOAST_HOLD } from "../toast.js";
 
 /** Why a row's write was refused: its sentence, and the answer or the error that refused it. */
@@ -91,12 +91,6 @@ export function rowWrite<Value, Answer, Variables>(
 export function actionRefused(answer: ActionResult): string | undefined {
   return answer.status === ACTION_RESULT_STATUS.ACCEPTED ? undefined : answer.reason;
 }
-
-/** What a setting's write asks: the field and its stored value. */
-type SettingWrite = {
-  readonly field: AppSettingField;
-  readonly value: AppSettingValue<AppSettingField>;
-};
 
 /**
  * The write of the setting `field`, as its row's `useMutation(settingMutation())`
