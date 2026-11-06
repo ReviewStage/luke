@@ -375,6 +375,7 @@ body,
 .app-stage[data-capture="true"],
 body:has(.app-stage[data-capture="true"]) {
   --ui-duration-shape: 0s;
+  --ui-duration-showcase: 0s;
   --ui-duration-exit: 0s;
   --ui-duration-quick: 0s;
   --ui-duration-fast: 0s;
