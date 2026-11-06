@@ -10,7 +10,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { fakeAppBridge } from "./testing/app-bridge.js";
-import { deliveryOf, stateWith } from "./testing/app-state.js";
+import { deliveryOf, signedInAs, stateWith } from "./testing/app-state.js";
 import { onRegistry, readAppState, testQueryClientNow } from "./testing/copy-feedback.js";
 import { appStateQuery } from "./use-app-state.js";
 
@@ -140,16 +140,24 @@ test("a delivery older than the document held is dropped", async () => {
   assert.equal(drawn.at(-1), held);
 });
 
-test("a window whose second read is refused follows on from the document its first read laid, rather than holding every delivery back", async () => {
-  const first = stateWith({}, {});
+test("a delivery heard after the window's second read is refused asks for the whole document again, rather than laying itself over the document an earlier read left", async () => {
+  const before = signedInAs({ id: "user-ada", email: "ada@example.com", name: "Ada" });
+  const after = {
+    ...signedInAs({ id: "user-bo", email: "bo@example.com", name: "Bo" }),
+    version: 3,
+    network: { online: false, reachable: true },
+  };
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  const answers = [
+    () => Promise.resolve(before),
+    () => Promise.reject(new Error("gone")),
+    () => Promise.resolve(after),
+  ];
   let reads = 0;
   fakeAppBridge({
     requestAppState: () => {
       reads += 1;
-      return reads === 1
-        ? Promise.resolve(structuredClone(first))
-        : Promise.reject(new Error("gone"));
+      return answers[reads - 1]?.() ?? Promise.resolve(after);
     },
     onAppState: (listener) => {
       listeners.add(listener);
@@ -162,17 +170,14 @@ test("a window whose second read is refused follows on from the document its fir
   act(() => root?.render(onRegistry(AtomRegistry.make(), createElement("div"))));
   await settle();
 
+  // The account moved on main while the window could not read it, so this delivery was built on Bo's document, not Ada's.
   act(() => {
     for (const listener of listeners) {
-      listener({ version: 2, entries: { network: { online: false, reachable: true } } });
+      listener({ version: 3, entries: { network: { online: false, reachable: true } } });
     }
   });
   await settle();
 
-  assert.equal(reads, 2, "the subscription asked for the document again");
-  assert.deepEqual(testQueryClientNow().getQueryData(appStateQuery.queryKey), {
-    ...first,
-    version: 2,
-    network: { online: false, reachable: true },
-  });
+  assert.equal(reads, 3, "the delivery asked for the whole document again");
+  assert.deepEqual(testQueryClientNow().getQueryData(appStateQuery.queryKey), after);
 });

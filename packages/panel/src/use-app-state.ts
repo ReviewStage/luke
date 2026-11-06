@@ -94,23 +94,21 @@ export const appStateQuery = queryOptions({
   retry: false,
 });
 
+/** A window's subscription to `app:state`: how it stops, and how the whole document is asked for. */
+interface Hearing {
+  readonly stop: () => void;
+  readonly read: () => Promise<AppStateSnapshot>;
+}
+
 /**
- * Subscribes to `app:state`, then asks for the document once, handing a
- * refusal to `onRefused`, and answers what stops the subscription; none where the bridge cannot be heard, as a test's
- * fake answering other calls alone cannot, which leaves the client on the
- * document seeded into it. Note that the read is asked after the
- * subscription stands, so a delivery sent while it is in flight is heard.
+ * Subscribes to `app:state`; none where the bridge cannot be heard, as a
+ * test's fake answering other calls alone cannot, which leaves the client on
+ * the document seeded into it.
  */
-function heard(
-  onDelivered: (delivered: AppStateDelivery) => void,
-  onRead: (read: AppStateSnapshot) => void,
-  onRefused: (cause: unknown) => void,
-): (() => void) | undefined {
+function heard(onDelivered: (delivered: AppStateDelivery) => void): Hearing | undefined {
   try {
     const bridge = appBridge();
-    const stop = bridge.onAppState(onDelivered);
-    bridge.requestAppState().then(onRead, onRefused);
-    return stop;
+    return { stop: bridge.onAppState(onDelivered), read: () => bridge.requestAppState() };
   } catch {
     return undefined;
   }
@@ -119,21 +117,25 @@ function heard(
 /**
  * Writes every reading of the document into `client` as it arrives, and
  * answers what stops it. A delivery is what moved since the last `app:state`
- * sent, not the whole document, so the document is read once here, after
- * subscribing: a delivery heard before that read answers waits for it and is
- * laid over it then (`adopt`), and none sent between the root's own read and
- * this subscription is lost. A fixture run's stage moving on its own
- * (`fixture-moves.ts`) hands the document held on to be staged anew, and its
- * staging waits on the fixture, so its writes queue behind one another. The
- * client is handed to the fixture while it is written into, whose staged
- * acts read the run from it (`act.ts`). A refused read follows on from the
- * document the client holds, and a staging that throws is reported and
- * passed over.
+ * sent, not the whole document, and names no version it was built on, so it
+ * is laid only over a whole read asked after subscribing: one heard before
+ * that read answers waits for it and is laid over it then (`adopt`), and
+ * none sent between the root's own read and this subscription is lost. A
+ * refused read leaves the deliveries waiting, and the next one heard asks
+ * for the whole document again, rather than lay them over a document they
+ * were not built on, such as the root's older read or another account's.
+ *
+ * A fixture run's stage moving on its own (`fixture-moves.ts`) hands the
+ * document held on to be staged anew, and its staging waits on the fixture,
+ * so its writes queue behind one another; one that throws is reported and
+ * passed over. The client is handed to the fixture while it is written
+ * into, whose staged acts read the run from it (`act.ts`).
  */
 function followAppState(client: QueryClient): () => void {
   let following = true;
   let held: AppStateSnapshot | undefined;
   let early: AppStateDelivery[] = [];
+  let reading = false;
   let staging: Promise<void> | undefined;
   const write = (state: AppStateSnapshot): void => {
     if (!state.run.fixtureMode && staging === undefined) {
@@ -156,44 +158,43 @@ function followAppState(client: QueryClient): () => void {
       });
     staging = next;
   };
+  const readWhole = (): void => {
+    if (hearing === undefined) return;
+    reading = true;
+    hearing.read().then(
+      (read) => {
+        reading = false;
+        if (!following) return;
+        held = early.reduce(adopt, read);
+        early = [];
+        write(held);
+      },
+      (cause: unknown) => {
+        reading = false;
+        console.error("The window's state could not be read; the next delivery asks again.", cause);
+      },
+    );
+  };
   const takeBack = handFixtureClient(client);
-  const stopHearing = heard(
-    (delivered) => {
-      if (held === undefined) {
-        early.push(delivered);
-        return;
-      }
-      const next = adopt(held, delivered);
-      if (next === held) return;
-      held = next;
-      write(next);
-    },
-    (read) => {
-      if (!following) return;
-      held = early.reduce(adopt, read);
-      early = [];
-      write(held);
-    },
-    // Note that a refused read follows on from the document the client holds, the root's own read,
-    // rather than leaving every later delivery waiting on a read that will never answer.
-    (cause) => {
-      console.error(
-        "The window's state could not be read again; it follows on from what it holds.",
-        cause,
-      );
-      const holding = client.getQueryData<AppStateSnapshot>(appStateQuery.queryKey);
-      if (!following || holding === undefined) return;
-      held = early.reduce(adopt, holding);
-      early = [];
-      if (held !== holding) write(held);
-    },
-  );
+  const hearing = heard((delivered) => {
+    if (held === undefined) {
+      early.push(delivered);
+      if (!reading) readWhole();
+      return;
+    }
+    const next = adopt(held, delivered);
+    if (next === held) return;
+    held = next;
+    write(next);
+  });
+  // Note that the read is asked after the subscription stands, so a delivery sent while it is in flight is heard.
+  readWhole();
   const stopMoves = onFixtureMoved(() => {
     if (held !== undefined) write(held);
   });
   return () => {
     following = false;
-    stopHearing?.();
+    hearing?.stop();
     stopMoves();
     takeBack();
   };
