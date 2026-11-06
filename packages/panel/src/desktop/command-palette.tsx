@@ -90,6 +90,7 @@ import {
   experimentOn,
   HOST_CAPABILITY,
   type HostCapability,
+  NO_EXPERIMENTS,
 } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
 import {
@@ -146,6 +147,7 @@ import {
   taskRow,
 } from "@repo/ui/task-list-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@repo/ui/tasks-model";
+import { type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Fragment,
   isValidElement,
@@ -195,6 +197,7 @@ import { fileName } from "../tasks/file-ref-model.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
 import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts.js";
 import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";
+import { taskTreeQueryOptions } from "../tasks/repository-reads.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem, type OpenTaskRename, useTaskRenameOffer } from "../tasks/task-menu-items.js";
 import { TaskKey } from "../tasks/task-standing.js";
@@ -207,7 +210,7 @@ import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-pa
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability, useExperimentChoices } from "../use-app-state.js";
+import { appStateQuery, selectCapability, selectExperimentChoices } from "../use-app-state.js";
 import { HOST_READ_STATUS, type HostRead, useHostRead } from "../use-host-read.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
@@ -286,13 +289,7 @@ const FILES_READ = {
   FAILED: "failed",
 } as const;
 
-/**
- * The open task's repository as the palette read it, whole, in one listing:
- * which task and repository it is of, and its files by path, or why they
- * were not listed.
- */
-type FilesHeld = { taskId: string; repository: string } & FilesRead;
-
+/** The open task's repository as the palette read it, whole, in one listing: its files by path, or why they were not listed. */
 type FilesRead =
   | { read: typeof FILES_READ.READING }
   | { read: typeof FILES_READ.LISTED; paths: readonly string[]; truncated: boolean }
@@ -615,10 +612,22 @@ function filesOf(answer: TasksTreeAnswer): FilesRead {
   return { read: FILES_READ.MISSED, notice: refusalLine(answer.refusal, answer.branch) };
 }
 
+/** The whole of the open task's repository, listed in one read, which the Files rows are. */
+function paletteFilesQueryOptions(taskId: string | undefined) {
+  return taskTreeQueryOptions(taskId === undefined ? undefined : { taskId }, "", true);
+}
+
+/** The files as the palette holds them: none before they are asked for, and reading while a read is out, a Retry's among them. */
+function filesHeld(files: UseQueryResult<TasksTreeAnswer>): FilesRead | undefined {
+  if (files.isFetching) return { read: FILES_READ.READING };
+  if (files.isError) return { read: FILES_READ.FAILED };
+  return files.data === undefined ? undefined : filesOf(files.data);
+}
+
 /** What the Files filter says in place of rows: why there are none to search yet, a failed read with its Retry, or nothing. */
 function filesNotice(
   repositoryOpen: boolean,
-  held: FilesHeld | undefined,
+  held: FilesRead | undefined,
   onRetry: () => void,
 ): PaletteNotice | undefined {
   if (!repositoryOpen) return { kind: PALETTE_NOTICE.SAID, line: NO_REPOSITORY_LINE };
@@ -1519,7 +1528,7 @@ function taskCommandRows(
   const renamed = rename?.taskId === task.id ? rename.begin : undefined;
   const commands: readonly { item: PanelCommand; run: () => void }[] = [
     ...(renamed === undefined ? [] : [{ item: PANEL_COMMAND.RENAME_TASK, run: renamed }]),
-    ...(experimentOn(experiments, EXPERIMENT.PLANS)
+    ...(experimentOn(experiments, EXPERIMENT.DESCRIPTIONS)
       ? [{ item: PANEL_COMMAND.VERSION_HISTORY, run: () => tasks.history.onOpen(task.id) }]
       : []),
     {
@@ -1939,7 +1948,6 @@ export function CommandPalette({
   tasks,
   links,
   settings,
-  readFiles,
 }: {
   available: boolean;
   tab: PanelTab;
@@ -1954,11 +1962,10 @@ export function CommandPalette({
     capabilities: readonly HostCapability[];
     onViewChange: (view: SettingsView) => void;
   };
-  /** Lists everything in the task's repository in one read, which the Files rows are. */
-  readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const experiments = useExperimentChoices();
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   // How many times ⌘K has opened the palette, each of which chooses its first row.
@@ -1966,9 +1973,7 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   // Each key pressed in the search field is timed to the paint after it, which its ranking of every row is among.
   const keystrokes = useKeystrokeSpans(PANEL_SPAN.KEYSTROKE_COMMAND_PALETTE);
-  const [files, setFiles] = useState<FilesHeld | undefined>(undefined);
-  // The read of the files asked last, by its count: only its answer is kept.
-  const filesAsk = useRef(0);
+  const queryClient = useQueryClient();
   // Whether the keyboard was in the side panel when ⌘K was pressed, which puts its tab's link first, as ⌥⌘C there would.
   const [fromPanel, setFromPanel] = useState(false);
   const chosen = useRef<(() => void) | undefined>(undefined);
@@ -1989,8 +1994,10 @@ export function CommandPalette({
           // The files are read afresh by the first search of each opening,
           // since the branch they are listed on moves, and a read still out
           // from the last opening is not kept.
-          filesAsk.current += 1;
-          setFiles(undefined);
+          void queryClient.resetQueries({
+            queryKey: paletteFilesQueryOptions(tasks.activeTaskId).queryKey,
+            exact: true,
+          });
           setOpen(true);
         }
       : undefined,
@@ -2139,17 +2146,14 @@ export function CommandPalette({
   // The task's terminals and Browser tabs are offered as the panel's "+" offers them, through its own doors.
   const openTerminal = useOpenTerminal(tasks.sidePanel, noFocusMove);
   const offerDoors: PanelOfferDoors = {
-    onNewTerminal: useCapability(HOST_CAPABILITY.TERMINALS)
-      ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
-      : undefined,
+    onNewTerminal:
+      useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
+      true
+        ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
+        : undefined,
   };
   const taskId = tasks.activeTaskId;
   const repository = tasks.tasks.find((task) => task.id === taskId)?.repository ?? null;
-  // The files held are the open task's repository's, or none of its.
-  const held =
-    files !== undefined && files.taskId === taskId && files.repository === repository
-      ? files
-      : undefined;
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
   const filesOpen = opensTaskItems(tasks) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
@@ -2171,27 +2175,10 @@ export function CommandPalette({
 
   // Note that the repository is read the first time its files are searched
   // rather than as the palette opens, because most of its uses never ask
-  // for a file, and kept for the opening while the task and its repository
-  // stay the same. A read that answers after a later one was asked is not
-  // kept, since it may list an older branch than the later one does.
-  useEffect(() => {
-    if (!filesAsked || taskId === undefined || repository === null || held !== undefined) return;
-    filesAsk.current += 1;
-    const ask = filesAsk.current;
-    setFiles({ taskId, repository, read: FILES_READ.READING });
-    const keep = (read: FilesRead) => {
-      if (filesAsk.current === ask) setFiles({ taskId, repository, ...read });
-    };
-    readFiles(taskId).then(
-      (answer) => keep(filesOf(answer)),
-      () => keep({ read: FILES_READ.FAILED }),
-    );
-  }, [filesAsked, taskId, repository, held, readFiles]);
-  // Note that a Retry drops the failed read, so the effect above reads the files again.
-  const retryFiles = () => {
-    filesAsk.current += 1;
-    setFiles(undefined);
-  };
+  // for a file, and kept for the opening while the task stays the same.
+  const filesQuery = useQuery({ ...paletteFilesQueryOptions(taskId), enabled: filesAsked });
+  const held = filesOpen ? filesHeld(filesQuery) : undefined;
+  const retryFiles = () => void filesQuery.refetch();
 
   const paths = held?.read === FILES_READ.LISTED ? held.paths : undefined;
   const fileQuery = filter === PALETTE_FILTER.FILES || tokens.length > 0 ? sought : undefined;

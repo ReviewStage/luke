@@ -1,4 +1,5 @@
-import { createContext, type ReactNode, type RefObject, useContext, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
+import { type PageScroll, PageScrollContext } from "../page-frame/page-scroll.js";
 import { useHeadingAway } from "../page-header/heading-away.js";
 import { PAGE_HEADER_END, PageHeader } from "../page-header/page-header.js";
 import { RevealArea, revealArea } from "../reveal/reveal.js";
@@ -45,7 +46,7 @@ import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolb
  *
  * A long list on a page draws only the rows near the view (`VirtualRows`),
  * in the page's own scroller, which the page hands its sections
- * (`useSettingsPageScroll`) with the column of sections, whose resizing
+ * (`usePageScroll`) with the column of sections, whose resizing
  * moves where such a list stands.
  *
  * A page whose name is not yet known, Settings while its chunk loads, stands
@@ -73,22 +74,6 @@ import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolb
  * title's line is only as wide as what it holds.
  */
 const SKELETON_TITLE_WIDTH = "calc(5 * var(--ui-control-height))";
-
-/** The page's scroller and its column of sections, as a list drawing only the rows near the view reads them (`VirtualRows`'s `scroller` and `shiftedBy`). */
-export interface SettingsPageScroll {
-  readonly scroller: RefObject<HTMLElement | null>;
-  readonly sections: RefObject<HTMLElement | null>;
-}
-
-/** No page: a list outside one finds no scroller, as a scroller not yet drawn is none. */
-const NO_PAGE: SettingsPageScroll = { scroller: { current: null }, sections: { current: null } };
-
-const SettingsPageScrollContext = createContext<SettingsPageScroll>(NO_PAGE);
-
-/** The scroller of the page a section stands on, and its column of sections. */
-export function useSettingsPageScroll(): SettingsPageScroll {
-  return useContext(SettingsPageScrollContext);
-}
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
@@ -124,7 +109,7 @@ export function SettingsPage({
   const head = useRef<HTMLDivElement>(null);
   const sections = useRef<HTMLDivElement>(null);
   const named = useHeadingAway(page, head);
-  const [scroll] = useState((): SettingsPageScroll => ({ scroller: page, sections }));
+  const [scroll] = useState((): PageScroll => ({ scroller: page, shiftedBy: sections }));
   const phone = look === TOOLBAR_LOOK.PHONE;
   return (
     <div className="ui-settings-page-frame flex h-full min-h-0 min-w-0 grow basis-0 flex-col">
@@ -175,9 +160,7 @@ export function SettingsPage({
               className="ui-settings-page-sections flex min-w-0 flex-col gap-page-section-gap"
               {...revealArea()}
             >
-              <SettingsPageScrollContext.Provider value={scroll}>
-                {children}
-              </SettingsPageScrollContext.Provider>
+              <PageScrollContext value={scroll}>{children}</PageScrollContext>
             </div>
           </RevealArea>
         </div>

@@ -74,8 +74,9 @@ import {
 } from "@repo/ui";
 import { InfoIcon } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
@@ -614,7 +615,9 @@ function usePastedSecret({
   failed: string;
   refused: (rejection: ProviderKeyRejection) => string;
 }): PastedSecret {
-  const { act } = useAct();
+  const { mutateAsync: sendProviderKeysSave } = useMutation(
+    actMutation(ACT_KIND.PROVIDER_KEYS_SAVE),
+  );
   const [editing, setEditing] = useState(false);
   const [pasted, setPasted] = useState("");
   const [saving, setSaving] = useState(false);
@@ -635,7 +638,7 @@ function usePastedSecret({
     if (key === "" || saving) return;
     setSaving(true);
     setRejection(undefined);
-    void act(ACT_KIND.PROVIDER_KEYS_SAVE, payload(key))
+    void sendProviderKeysSave(payload(key))
       .catch(() => undefined)
       .then((answer) => {
         setSaving(false);
@@ -764,7 +767,9 @@ function useClaudePlan(
   plan: SubscriptionKeySummary | undefined,
   field: React.RefObject<HTMLInputElement | null>,
 ): { secret: PastedSecret; removal: DialogConfirm } {
-  const { act } = useAct();
+  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+    actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
+  );
   const secret = usePastedSecret({
     held: plan !== undefined,
     field,
@@ -779,7 +784,7 @@ function useClaudePlan(
   const { cancel } = secret;
   const disconnect = useCallback(
     (): Promise<ActionResult> =>
-      act(ACT_KIND.PROVIDER_KEYS_REMOVE, {
+      sendProviderKeysRemove({
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
         kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
       })
@@ -794,7 +799,7 @@ function useClaudePlan(
           cancel();
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
-    [act, cancel],
+    [sendProviderKeysRemove, cancel],
   );
   const removal = useConfirmDialog(
     { subject: plan !== undefined, surfaceOpen: true },
@@ -952,7 +957,9 @@ interface ChatGptPlan {
  * says so.
  */
 function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
-  const { act } = useAct();
+  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+    actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
+  );
   const [connecting, setConnecting] = useState(false);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const [notice, setNotice] = useState(false);
@@ -969,7 +976,7 @@ function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
 
   const disconnect = useCallback(
     (): Promise<ActionResult> =>
-      act(ACT_KIND.PROVIDER_KEYS_REMOVE, {
+      sendProviderKeysRemove({
         provider: PROVIDER_KEY_PROVIDER.OPENAI,
         kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
       })
@@ -984,7 +991,7 @@ function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
           setUnconfirmed(removed.revocationUnconfirmed === true);
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
-    [act],
+    [sendProviderKeysRemove],
   );
   const removal = useConfirmDialog(
     { subject: plan !== undefined, surfaceOpen: true },
@@ -1182,7 +1189,9 @@ function useApiKey(
   stored: ProviderKeySummary | undefined,
   field: React.RefObject<HTMLInputElement | null>,
 ): { secret: PastedSecret; removal: DialogConfirm } {
-  const { act } = useAct();
+  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+    actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
+  );
   const secret = usePastedSecret({
     held: stored !== undefined,
     field,
@@ -1192,7 +1201,7 @@ function useApiKey(
   });
   const remove = useCallback(
     (): Promise<ActionResult> =>
-      act(ACT_KIND.PROVIDER_KEYS_REMOVE, { provider })
+      sendProviderKeysRemove({ provider })
         .catch(() => undefined)
         .then((answer): ActionResult => {
           if (answer === undefined || "failure" in answer) {
@@ -1200,7 +1209,7 @@ function useApiKey(
           }
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
-    [act, provider],
+    [sendProviderKeysRemove, provider],
   );
   const removal = useConfirmDialog(
     { subject: stored !== undefined, surfaceOpen: true },
@@ -1355,7 +1364,9 @@ function DefaultRow({
   provider: ProviderKeyProvider;
   chosen: Credential;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendProviderKeysForAgents } = useMutation(
+    actMutation(ACT_KIND.PROVIDER_KEYS_FOR_AGENTS),
+  );
   const harness = HARNESS[provider];
   const label = `New ${harness.name} agents use`;
   const [turning, setTurning] = useState(false);
@@ -1365,7 +1376,7 @@ function DefaultRow({
     if (next === chosen || turning) return;
     setTurning(true);
     setRefused(undefined);
-    void act(ACT_KIND.PROVIDER_KEYS_FOR_AGENTS, {
+    void sendProviderKeysForAgents({
       provider,
       kind: harness.plan,
       forAgents: next === CREDENTIAL.SUBSCRIPTION,

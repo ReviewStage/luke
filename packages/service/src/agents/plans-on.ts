@@ -16,7 +16,7 @@ import { Effect } from "effect";
 import { logStoreFailure } from "../http/store-failure.js";
 
 /**
- * Whether the member has Plans on (`EXPERIMENT.PLANS`), for an agent they
+ * Whether the member has Plans on (`EXPERIMENT.DESCRIPTIONS`), for an agent they
  * started of the kind given or for their own calls: what decides whether an
  * agent is offered `edit_plan` and `look_at_picture`, handed its task's plan
  * and the plan's comments, and told of either. A pilot plans through
@@ -32,7 +32,7 @@ export function plansOnFor(
     if (kind === AGENT_KIND.PILOT && (yield* accountExperimentOn(userId, EXPERIMENT.PILOT))) {
       return true;
     }
-    return yield* accountExperimentOn(userId, EXPERIMENT.PLANS);
+    return yield* accountExperimentOn(userId, EXPERIMENT.DESCRIPTIONS);
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.orElseSucceed(() => false),

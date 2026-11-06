@@ -30,4 +30,9 @@ export const QUERY_ROOT = {
   WORKSPACE_AGENTS: "workspace-agents",
   REPOSITORY_PATHS: "repository-paths",
   AGENT_PART: "agent-part",
+  /** The window's one app-state document (`use-app-state.ts`'s `appStateQuery`), read by no id. */
+  APP_STATE: "appState",
+  TASK_FILE: "task-file",
+  TASK_TREE: "task-tree",
+  PAGE_SOURCE: "page-source",
 } as const;

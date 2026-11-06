@@ -212,7 +212,7 @@ const PLAN_NOTE = { kind: NOTE_KIND.ADD, section: "Problem", text: "Seats drift.
 
 /** Plans turned on or off for the account, as Settings › Experimental turns it. */
 const plansFor = (userId: string, on: boolean) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: on } });
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
 /** Memory turned on for the account, as Settings › Experimental turns it on. */
 const memoryOn = (userId: string) =>

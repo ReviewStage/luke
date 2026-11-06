@@ -69,7 +69,7 @@ import {
   useConfirmDialog,
   useFilePicker,
   useMenu,
-  useSettingsPageScroll,
+  usePageScroll,
   wholeWordsHint,
 } from "@repo/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@repo/ui/actor-model";
@@ -88,9 +88,10 @@ import { inputProblem } from "@repo/ui/reported-failure";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { VIRTUAL_ROWS_ANCHOR, VirtualRows } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { useAccountPreferences } from "../account-choices.js";
-import { useAct } from "../act.js";
+import { actMutation, pressMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu } from "../desktop/action-menu.js";
@@ -459,7 +460,15 @@ function MemberRow({
   /** Whether the list's rows may carry a ⋯, so one without keeps its room. */
   slotted: boolean;
 }): React.JSX.Element {
-  const { act, press } = useAct();
+  const { mutateAsync: sendWorkspaceTransfer } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_TRANSFER),
+  );
+  const { mutateAsync: sendWorkspaceMemberRole } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_MEMBER_ROLE),
+  );
+  const { mutate: sendWorkspaceMemberRemove } = useMutation(
+    pressMutation(ACT_KIND.WORKSPACE_MEMBER_REMOVE),
+  );
   const workspaceId = workspace.id;
   const { userId } = member;
   const may = memberActs(workspace, member, userId === readerId);
@@ -469,19 +478,19 @@ function MemberRow({
   const remove = useConfirmDialog(
     { subject: may.remove, surfaceOpen: true },
     () => {
-      void press(ACT_KIND.WORKSPACE_MEMBER_REMOVE, { workspaceId, userId });
+      sendWorkspaceMemberRemove({ workspaceId, userId });
       return Promise.resolve(ACCEPTED);
     },
     confirmFailure(FAILURE_SURFACE.WORKSPACE_MEMBER_REMOVE, { workspaceId }),
   );
   const makeOwner = useConfirmDialog(
     { subject: may.transfer, surfaceOpen: true },
-    () => act(ACT_KIND.WORKSPACE_TRANSFER, { workspaceId, userId }).then(answered, refusedWith),
+    () => sendWorkspaceTransfer({ workspaceId, userId }).then(answered, refusedWith),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_TRANSFER, { workspaceId }),
   );
   const giveRole = (role: WorkspaceInvitation["role"]) => {
     setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_MEMBER_ROLE, { workspaceId, userId, role }).catch((refused: Error) =>
+    sendWorkspaceMemberRole({ workspaceId, userId, role }).catch((refused: Error) =>
       setRefusal(refused.message),
     );
   };
@@ -612,12 +621,12 @@ function MemberLeave({
   ownName: string | undefined;
   onLeft: () => void;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendWorkspaceLeave } = useMutation(actMutation(ACT_KIND.WORKSPACE_LEAVE));
   const workspaceId = workspace.id;
   const leave = useConfirmDialog(
     { subject: true, surfaceOpen: true },
     () =>
-      act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then(() => {
+      sendWorkspaceLeave({ workspaceId }).then(() => {
         onLeft();
         return ACCEPTED;
       }, refusedWith),
@@ -754,7 +763,9 @@ function OwnerLeave({
   workspace: Workspace;
   members: ListRead<WorkspaceMember>;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendWorkspaceTransfer } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_TRANSFER),
+  );
   // Note that the admins stand in the order the menu lists them, so the first offered is the first listed.
   const admins = memberRows(
     members !== undefined && "items" in members
@@ -769,7 +780,7 @@ function OwnerLeave({
     () =>
       heir === undefined
         ? Promise.resolve(ACCEPTED)
-        : act(ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: workspace.id, userId: heir.userId }).then(
+        : sendWorkspaceTransfer({ workspaceId: workspace.id, userId: heir.userId }).then(
             () => ACCEPTED,
             refusedWith,
           ),
@@ -897,12 +908,12 @@ function MemberRows({
   readerId: string | undefined;
   members: readonly WorkspaceMember[];
 }): React.JSX.Element {
-  const { scroller, sections } = useSettingsPageScroll();
+  const { scroller, shiftedBy } = usePageScroll();
   const keys = useMemo(() => members.map((member) => member.userId), [members]);
   return (
     <VirtualRows
       scroller={scroller}
-      shiftedBy={sections}
+      shiftedBy={shiftedBy}
       keys={keys}
       estimate={MEMBER_ESTIMATE_PX}
       anchor={VIRTUAL_ROWS_ANCHOR.START}
@@ -958,7 +969,9 @@ function InviteButton({ workspace }: { workspace: Workspace }): React.JSX.Elemen
  * `Button`.
  */
 function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Element {
-  const { press } = useAct();
+  const { mutate: sendWorkspaceInvitationCancel } = useMutation(
+    pressMutation(ACT_KIND.WORKSPACE_INVITATION_CANCEL),
+  );
   const copy = useCopyToast();
   const {
     rows: pending,
@@ -967,7 +980,7 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
   } = useHostRead(LIVE_READ.WORKSPACE_INVITATIONS, workspaceId);
 
   const cancel = (invitationId: string) =>
-    void press(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId });
+    sendWorkspaceInvitationCancel({ workspaceId, invitationId });
 
   // Note that the question goes with its invitation, canceled or accepted meanwhile.
   const [canceling, setCanceling] = useState<WorkspaceInvitation>();
@@ -1095,7 +1108,9 @@ function ManagedGitHub({
   /** The chevron folding GitHub's accounts under the row, last at its end. */
   chevron: React.ReactNode;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendWorkspaceGithubConnect } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_GITHUB_CONNECT),
+  );
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
   // Note that a second press while the browser is being sent is taken as none, because an install begun again replaces the first one's intent.
@@ -1106,7 +1121,7 @@ function ManagedGitHub({
     underWay.current = true;
     setOpening(true);
     setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId })
+    sendWorkspaceGithubConnect({ workspaceId })
       .catch((refused: Error) => setRefusal(refused.message))
       .finally(() => {
         underWay.current = false;
@@ -1235,7 +1250,12 @@ function ManagedSentry({
   workspace: Workspace;
   sentry: WorkspaceSentry;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendWorkspaceSentryInstall } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_SENTRY_INSTALL),
+  );
+  const { mutateAsync: sendWorkspaceSentryDisconnect } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_SENTRY_DISCONNECT),
+  );
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
   const [installing, setInstalling] = useState(false);
@@ -1246,7 +1266,7 @@ function ManagedSentry({
     underWay.current = true;
     setInstalling(true);
     setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId })
+    sendWorkspaceSentryInstall({ workspaceId })
       .catch((refused: Error) => setRefusal(refused.message))
       .finally(() => {
         underWay.current = false;
@@ -1262,7 +1282,7 @@ function ManagedSentry({
     () =>
       leaving === undefined
         ? Promise.resolve(ACCEPTED)
-        : act(ACT_KIND.WORKSPACE_SENTRY_DISCONNECT, {
+        : sendWorkspaceSentryDisconnect({
             workspaceId,
             installationId: leaving.installationId,
           }).then(() => ACCEPTED, refusedWith),
@@ -1385,7 +1405,12 @@ function ManagedSlackBot({
   /** The chevron folding the bot's rows under its row, last at its end. */
   chevron: React.ReactNode;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendWorkspaceSlackBotConnect } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT),
+  );
+  const { mutateAsync: sendWorkspaceSlackBotDisconnect } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT),
+  );
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
   const [addRefusal, setAddRefusal] = useState<string>();
@@ -1396,7 +1421,7 @@ function ManagedSlackBot({
     underWay.current = true;
     setConnecting(true);
     setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT, { workspaceId })
+    sendWorkspaceSlackBotConnect({ workspaceId })
       .catch((refused: Error) => setRefusal(refused.message))
       .finally(() => {
         underWay.current = false;
@@ -1405,11 +1430,7 @@ function ManagedSlackBot({
   };
   const disconnect = useConfirmDialog(
     { subject: slack.team !== undefined, surfaceOpen: true },
-    () =>
-      act(ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT, { workspaceId }).then(
-        () => ACCEPTED,
-        refusedWith,
-      ),
+    () => sendWorkspaceSlackBotDisconnect({ workspaceId }).then(() => ACCEPTED, refusedWith),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_SLACK_BOT_DISCONNECT),
   );
   const actions =
@@ -1488,7 +1509,9 @@ function ManagedSlackBot({
  * press, and a refusal puts it back.
  */
 function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.JSX.Element | null {
-  const { act } = useAct();
+  const { mutateAsync: sendWorkspaceSlackBotNotifications } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS),
+  );
   const on = useAccountPreferences().rows?.slackNotifications;
   if (on === undefined) return null;
   return (
@@ -1498,7 +1521,7 @@ function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.
       checked={on}
       changed={!on}
       onChange={(notifications) =>
-        act(ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS, { workspaceId, notifications }).then(
+        sendWorkspaceSlackBotNotifications({ workspaceId, notifications }).then(
           () => ACCEPTED,
           refusedWith,
         )
@@ -1637,7 +1660,7 @@ interface SlugAsk {
  * no link written under it stops opening.
  */
 function useSlugDialog(workspace: Workspace): SlugAsk {
-  const { press } = useAct();
+  const { mutate: sendWorkspaceSlugSet } = useMutation(pressMutation(ACT_KIND.WORKSPACE_SLUG_SET));
   const workspaceId = workspace.id;
   const standing = workspace.slug ?? "";
   const [slug, setSlug] = useState(standing);
@@ -1647,7 +1670,7 @@ function useSlugDialog(workspace: Workspace): SlugAsk {
   const confirm = useConfirmDialog(
     { subject: workspace.role === WORKSPACE_ROLE.OWNER, surfaceOpen: true },
     () => {
-      void press(ACT_KIND.WORKSPACE_SLUG_SET, { workspaceId, slug });
+      sendWorkspaceSlugSet({ workspaceId, slug });
       return Promise.resolve(ACCEPTED);
     },
     confirmFailure(FAILURE_SURFACE.WORKSPACE_WRITE, { workspaceId }),
@@ -1725,7 +1748,10 @@ function useSlugDialog(workspace: Workspace): SlugAsk {
  * and Rename its outline `Button`.
  */
 function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendWorkspacePhotoSet } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_PHOTO_SET),
+  );
+  const { mutateAsync: sendWorkspaceRename } = useMutation(actMutation(ACT_KIND.WORKSPACE_RENAME));
   const workspaceId = workspace.id;
   const manages = managesWorkspace(workspace);
   const renamable = manages && workspace.personal !== true;
@@ -1736,11 +1762,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   const set = workspace.photoVersion !== undefined;
   const remove = useConfirmDialog(
     { subject: manages && set, surfaceOpen: true },
-    () =>
-      act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo: null }).then(
-        () => ACCEPTED,
-        refusedWith,
-      ),
+    () => sendWorkspacePhotoSet({ workspaceId, photo: null }).then(() => ACCEPTED, refusedWith),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_WRITE),
   );
   // Note that focus goes back to Rename once the edit ends, since the host draws the new name on the press.
@@ -1753,7 +1775,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
     if (name === undefined) return;
     renames.current += 1;
     const asked = renames.current;
-    act(ACT_KIND.WORKSPACE_RENAME, { workspaceId, name }).catch((refused: Error) => {
+    sendWorkspaceRename({ workspaceId, name }).catch((refused: Error) => {
       if (renames.current === asked) setRefusal(refused.message);
     });
   };
@@ -1763,7 +1785,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
     photoOfFile(file)
       .then((read) => {
         if ("refusal" in read) throw new Error(read.refusal);
-        return act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo: read.photo });
+        return sendWorkspacePhotoSet({ workspaceId, photo: read.photo });
       })
       .then(
         () => undefined,

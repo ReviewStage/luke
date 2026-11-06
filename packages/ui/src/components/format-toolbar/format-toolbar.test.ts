@@ -128,7 +128,7 @@ test("a mark's press tells its owner which, leaving the focus in the editor, and
   expect(press(toolbar, "Link").getAttribute("aria-keyshortcuts")).toBe("Meta+K");
 });
 
-test("the plan's toolbar leads with Turn into, naming the block, and ends with Comment", () => {
+test("the description's toolbar leads with Turn into, naming the block, and ends with Comment", () => {
   const { toolbar, told } = mount([], {
     turnInto: true,
     current: WRITING_BLOCK.HEADING_2,

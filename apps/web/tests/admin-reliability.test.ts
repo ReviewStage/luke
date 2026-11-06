@@ -108,6 +108,7 @@ let root: Root | undefined;
 /** jsdom's stand-in for the browser's ResizeObserver, which it lacks; a list row measures its title with one, and the page is never resized. */
 class StillResizeObserver {
   observe(): void {}
+  unobserve(): void {}
   disconnect(): void {}
 }
 

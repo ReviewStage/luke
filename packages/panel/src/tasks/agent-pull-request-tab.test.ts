@@ -1404,12 +1404,15 @@ test("a reaction is pressed to take the reader's own back, waits on its change w
   const removing = Promise.withResolvers<void>();
   changeHeld = removing.promise;
   act(() => pressed.click());
-  assert.deepEqual(changes, [
-    [
-      AGENT.id,
-      { action: PULL_REQUEST_ACTION.REMOVE_REACTION, subject: "PR_42", content: REACTION.HEART },
-    ],
-  ]);
+  // Note that a change reaches the act port a few steps after its press, as its mutation sends it.
+  await vi.waitFor(() =>
+    assert.deepEqual(changes, [
+      [
+        AGENT.id,
+        { action: PULL_REQUEST_ACTION.REMOVE_REACTION, subject: "PR_42", content: REACTION.HEART },
+      ],
+    ]),
+  );
   assert.equal(pressed.getAttribute("aria-busy"), "true", "the heart waits on its change");
   assert.ok(
     [
@@ -1460,9 +1463,11 @@ test("a reaction pressed again before the conversation is read again takes back 
     "who else gave it is still named",
   );
   act(() => eyes.click());
-  assert.deepEqual(
-    changes.map(([, request]) => request.action),
-    [PULL_REQUEST_ACTION.ADD_REACTION, PULL_REQUEST_ACTION.REMOVE_REACTION],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      changes.map(([, request]) => request.action),
+      [PULL_REQUEST_ACTION.ADD_REACTION, PULL_REQUEST_ACTION.REMOVE_REACTION],
+    ),
   );
   await settle();
   await act(async () => fresh.resolve({ pullRequest: reacted(undefined) }));
@@ -1509,10 +1514,12 @@ test("Add reaction opens one row of GitHub's eight, each named, the arrows movin
   const rocket = choices[6] ?? assert.fail("the row offers Rocket");
   act(() => rocket.click());
   assert.equal(entry.querySelector('[role="toolbar"]'), null, "a pick closes the row");
-  assert.deepEqual(changes.at(-1), [
-    AGENT.id,
-    { action: PULL_REQUEST_ACTION.ADD_REACTION, subject: "IC_2", content: REACTION.ROCKET },
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(changes.at(-1), [
+      AGENT.id,
+      { action: PULL_REQUEST_ACTION.ADD_REACTION, subject: "IC_2", content: REACTION.ROCKET },
+    ]),
+  );
   assert.deepEqual(
     [...entry.querySelectorAll(REACTION_PILL)].map((each) => [
       each.textContent,
@@ -2661,7 +2668,9 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
     note.querySelector<HTMLButtonElement>('[aria-label="Dismiss"]') ??
     assert.fail("the line may be dismissed");
   act(() => dismiss.click());
-  assert.equal(tab.querySelector(".pull-request-write-note"), null);
+  await vi.waitFor(() =>
+    assert.ok(tab.querySelector(".pull-request-write-note") === null, "the line is dismissed"),
+  );
 });
 
 /** How the pull request may be merged where a test says nothing else: squash or rebase, nothing asked for yet, checks passing. */
@@ -2960,9 +2969,11 @@ test("while a merge's change is out its press stands busy, and where GitHub refu
   };
   const tab = await draw(merging(MERGE_STATE.CLEAN));
   await pressBox(tab, "Squash and merge");
-  const [press] = mergePresses(tab);
-  assert.equal(press?.getAttribute("aria-busy"), "true");
-  assert.equal(press?.getAttribute("aria-label"), "Merging");
+  await vi.waitFor(() => {
+    const [press] = mergePresses(tab);
+    assert.equal(press?.getAttribute("aria-busy"), "true");
+    assert.equal(press?.getAttribute("aria-label"), "Merging");
+  });
   resolve();
   await settle();
   assert.equal(
@@ -3484,7 +3495,7 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
     { workspace: "", place: { kind: LINK_PLACE.CHANGES, planId: elsewhere, agentId: away.id } },
     { workspace: "", place: { kind: LINK_PLACE.CHANGES, agentId: taskless.id } },
   ]);
-  assert.deepEqual(opened, ["https://github.com/acme/relay/pull/46"]);
+  await vi.waitFor(() => assert.deepEqual(opened, ["https://github.com/acme/relay/pull/46"]));
 });
 
 test("a pull request of the stack GitHub's merge queue holds says Queued in the stack's menu, and one it does not says nothing of it", async () => {
@@ -3659,6 +3670,7 @@ test("the reviewer picker lists the repository's teams then its people, the auth
     },
   });
   await settle();
+  await vi.waitFor(() => picker());
   act(() => picker().click());
   await settle();
   assert.deepEqual(
@@ -3995,6 +4007,7 @@ test("while a thread's resolve is out, its reply stands still, neither sent nor 
 
   writeReply(card(), "Done.");
   act(() => threadPress(card(), "Resolve conversation").click());
+  await vi.waitFor(() => assert.equal(threadPress(card(), "Reply").disabled, true));
   pressInBox(card(), { key: "Enter", metaKey: true });
   pressInBox(card(), { key: "Escape" });
 

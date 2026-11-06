@@ -46,8 +46,9 @@ import {
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayWords } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
@@ -276,7 +277,9 @@ function ClientRow({
   arrived: boolean;
   onRevoked: (client: McpClient) => void;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendMcpClientsRevoke } = useMutation(
+    actMutation(ACT_KIND.MCP_CLIENTS_REVOKE),
+  );
   const name = clientName(client);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
 
@@ -286,7 +289,7 @@ function ClientRow({
       reason: `Revoking ${name} didn't finish. Try again.`,
     };
     setRejection(undefined);
-    return act(ACT_KIND.MCP_CLIENTS_REVOKE, { clientId: client.clientId }).then(
+    return sendMcpClientsRevoke({ clientId: client.clientId }).then(
       (answer): ActionResult => {
         if ("failure" in answer) {
           setRejection(refused.reason);

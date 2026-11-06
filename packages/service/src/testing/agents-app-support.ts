@@ -681,7 +681,7 @@ export const openTask = (
     yield* savePlanText(owner, task.id, SAVED);
     // Both accounts have Plans on, so an agent started on the task is handed its plan.
     for (const account of [owner, other]) {
-      yield* writeAccountPreferences(account, { experiments: { [EXPERIMENT.PLANS]: true } });
+      yield* writeAccountPreferences(account, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
     }
     const installation = freshInstallation();
     assert.equal(

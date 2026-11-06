@@ -43,7 +43,7 @@ function mount(element: ReactElement): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), element)));
+  act(() => root.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), element)));
   return container;
 }
 

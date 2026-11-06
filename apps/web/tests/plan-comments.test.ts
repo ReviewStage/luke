@@ -97,7 +97,7 @@ interface Answered {
 
 /** The account's Plans turned on or off, which its agents are handed a plan's comment threads by. */
 const plansFor = (userId: string, on: boolean) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: on } });
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
 /** An account with Plans on, whose agents are handed a plan's comment threads only then. */
 const openAccount = (name: string) =>

@@ -72,7 +72,7 @@ test("the popover divides the read into the instructions, the tools, the plan, a
     [
       ["System prompt", "~1.2K"],
       ["Tool definitions", "~2.8K"],
-      ["Plan", "~600"],
+      ["Description", "~600"],
       ["Conversation", "~615.4K"],
     ],
   );

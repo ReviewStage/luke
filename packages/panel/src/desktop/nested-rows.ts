@@ -85,6 +85,22 @@ export function nestsOf(nested: readonly Depth[]): (ListRowNest | undefined)[] {
 }
 
 /**
+ * Where a row moved from the slot `from` to the slot `to` among the rows a
+ * run draws, rows on their way out (`useLeaving`) among them, lands among
+ * the rows still listed: how many of those stand before it once it is
+ * moved, a row on its way out counting for none, so a move read against
+ * the rows listed (`movedBeside`) goes where it was carried.
+ */
+export function listedSlot(
+  drawn: readonly { readonly leaving: boolean }[],
+  from: number,
+  to: number,
+): number {
+  const before = to > from ? drawn.slice(0, to + 1) : drawn.slice(0, to);
+  return before.filter((entry, at) => !entry.leaving && at !== from).length;
+}
+
+/**
  * The drawn row a move of the row at `from` toward the slot `to` lands
  * beside: the sibling whose rows `to` falls among, or, where that is the
  * row's own, the next sibling down; none where the move would carry it out

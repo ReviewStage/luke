@@ -117,6 +117,7 @@ test("a related task's row is led by its owner's relation and ends with its open
         AtomRegistry.make(),
         createElement(RelatedTasks, {
           tasks,
+          room: { scroller: { current: container }, column: { current: container } },
           label: "Related tasks",
           rows: [{ task: TASK, relation: "Blocks" }],
           onOpenTask: (taskId: string) => opened.push(taskId),
@@ -165,6 +166,7 @@ test("a related task's row says it is blocked beside its name and how many of it
         AtomRegistry.make(),
         createElement(RelatedTasks, {
           tasks,
+          room: { scroller: { current: container }, column: { current: container } },
           label: "Sub-tasks",
           rows: [{ task: blocked }],
           onOpenTask: tasks.onSelect,
@@ -201,6 +203,7 @@ test("under a finger, a related task's row draws no ⋯, and a long press on it 
         AtomRegistry.make(),
         createElement(RelatedTasks, {
           tasks,
+          room: { scroller: { current: container }, column: { current: container } },
           label: "Sub-tasks",
           rows: [{ task: TASK }],
           onOpenTask: () => undefined,

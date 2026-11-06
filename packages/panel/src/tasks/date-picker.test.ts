@@ -50,7 +50,7 @@ const registries: AtomRegistry.AtomRegistry[] = [];
 
 /** A registry of the test's own, as the window's root provides one, so words a plan left unsaved in one test are not the next one's. */
 function ownRegistry(): AtomRegistry.AtomRegistry {
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   registries.push(registry);
   return registry;
 }
@@ -683,7 +683,7 @@ test("a day picked from the plan at rest whose save is refused leaves the date a
     before,
     "the chip names the date as it was",
   );
-  assert.equal(newestToastSays(), "The plan could not be saved.");
+  assert.equal(newestToastSays(), "The description could not be saved.");
 });
 
 test("a tick, a date and a tick from the plan at rest, before it is drawn anew, are each written over the one before", async () => {

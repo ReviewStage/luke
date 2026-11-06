@@ -1,11 +1,15 @@
 /**
- * plan.ts -- `vespin plan show` and `plan edit`: a task's plan printed as the Markdown it is, and written whole from a file or stdin.
+ * plan.ts -- `vespin description show` and `description edit`: a task's description printed as the Markdown it is, and written whole from a file or stdin.
  *
- * A plan is one Markdown text (`plan-edit.ts`). `edit` writes it through the
- * procedure the app's plan editor saves with, `plans.edit`, naming the text
- * it read just before as the base, so a write an agent made in between is
- * kept where the two do not touch the same lines, and is refused as a
- * conflict where they do, with nothing changed.
+ * A description is one Markdown text (`plan-edit.ts`). `edit` writes it
+ * through the procedure the app's description editor saves with,
+ * `plans.edit`, naming the text it read just before as the base, so a write
+ * an agent made in between is kept where the two do not touch the same
+ * lines, and is refused as a conflict where they do, with nothing changed.
+ *
+ * `vespin plan`, the group's name before the rename, is still read as
+ * `vespin description` (`currentCommandLine`), and listed nowhere, so a
+ * script written against it keeps working.
  */
 
 import { CLI_EXIT } from "@repo/features/cli-exit";
@@ -17,10 +21,17 @@ import { answer, CommandFailed, readInput } from "../output.js";
 import { askService, session } from "../session.js";
 import { resolveTaskId } from "../tasks.js";
 
+/** The group's name, and its name before the rename, which a command line may still lead with. */
+const CURRENT_GROUP_NAME = "description";
+const RETIRED_GROUP_NAME = "plan";
+
+/** The global flags that take the word after them as their value (`flags.ts`), so it is no command's name. */
+const VALUE_FLAGS: ReadonlySet<string> = new Set(["--url", "--workspace", "-w"]);
+
 /**
- * A task's plan written whole: `value` laid over `base`, the text it was
- * read as, answered with the plan as saved, or a refusal saying why nothing
- * was.
+ * A task's description written whole: `value` laid over `base`, the text
+ * it was read as, answered with the description as saved, or a refusal
+ * saying why nothing was.
  */
 export function writePlan(taskId: string, base: string, value: string) {
   return Effect.gen(function* () {
@@ -34,10 +45,10 @@ export function writePlan(taskId: string, base: string, value: string) {
       exit: CLI_EXIT.REFUSED,
       message:
         "conflict" in saved
-          ? "The plan changed in the same lines while it was written, so nothing was saved. Run vespin plan show, and write it again."
+          ? "The description changed in the same lines while it was written, so nothing was saved. Run vespin description show, and write it again."
           : saved.refused === PLAN_EDIT_REFUSAL.TOO_LONG
-            ? `The plan is longer than a plan may be (${TASK_BOUNDS.MAX_BODY_CHARS} characters), so nothing was saved.`
-            : "The plan was refused, so nothing was saved.",
+            ? `The description is longer than a description may be (${TASK_BOUNDS.MAX_BODY_CHARS} characters), so nothing was saved.`
+            : "The description was refused, so nothing was saved.",
     });
   });
 }
@@ -59,10 +70,13 @@ const showCommand = Command.make("show", { task: taskArgument }, ({ task }) =>
     });
   }),
 ).pipe(
-  Command.withDescription("Print a task's plan as Markdown"),
+  Command.withDescription("Print a task's description as Markdown"),
   Command.withExamples([
-    { command: "vespin plan show ACME-42", description: "Print the plan" },
-    { command: "vespin plan show ACME-42 > plan.md", description: "Save it to edit" },
+    { command: "vespin description show ACME-42", description: "Print the description" },
+    {
+      command: "vespin description show ACME-42 | jq -r .body > description.md",
+      description: "Save it to edit",
+    },
   ]),
 );
 
@@ -72,7 +86,7 @@ const editCommand = Command.make(
     task: taskArgument,
     file: Flag.String("file").pipe(
       Flag.withAlias("F"),
-      Flag.withDescription("The whole plan, as Markdown, from a file or - for stdin"),
+      Flag.withDescription("The whole description, as Markdown, from a file or - for stdin"),
     ),
   },
   ({ task, file }) =>
@@ -84,24 +98,46 @@ const editCommand = Command.make(
       const saved = yield* writePlan(id, plan.document.body, value);
       yield* answer({
         json: { id: saved.id, name: saved.name, body: saved.document.body },
-        lines: [`Saved the plan of ${saved.name}.`],
+        lines: [`Saved the description of ${saved.name}.`],
         ids: [saved.id],
       });
     }),
 ).pipe(
-  Command.withDescription("Replace a task's plan with Markdown from a file or stdin"),
+  Command.withDescription("Replace a task's description with Markdown from a file or stdin"),
   Command.withExamples([
-    { command: "vespin plan edit ACME-42 -F plan.md", description: "Write the plan from a file" },
     {
-      command: "vespin plan show ACME-42 | sed 's/TODO/Done/' | vespin plan edit ACME-42 -F -",
+      command: "vespin description edit ACME-42 -F description.md",
+      description: "Write the description from a file",
+    },
+    {
+      command:
+        "vespin description show ACME-42 | jq -r .body | sed 's/TODO/Done/' | vespin description edit ACME-42 -F -",
       description: "Edit it in a pipe",
     },
   ]),
 );
 
-/** The plan group: show and edit. */
-export const planCommand = Command.make("plan").pipe(
-  Command.withDescription("Print or write a task's plan"),
+/** The description group: show and edit. */
+export const planCommand = Command.make(CURRENT_GROUP_NAME).pipe(
+  Command.withDescription("Print or write a task's description"),
   Command.withSubcommands([showCommand, editCommand]),
-  Command.withExamples([{ command: "vespin plan show ACME-42", description: "Print the plan" }]),
+  Command.withExamples([
+    { command: "vespin description show ACME-42", description: "Print the description" },
+  ]),
 );
+
+/**
+ * A command line as this build reads it: one leading with the group's name
+ * before the rename, `plan`, read as `description`. Note that we rename here
+ * rather than with `Command.withAlias`, because an alias is listed in
+ * `--help` beside the name, and the old name should be listed nowhere. The
+ * group's name is the first word that is neither a flag nor the value a
+ * global flag before it takes.
+ */
+export function currentCommandLine(args: ReadonlyArray<string>): ReadonlyArray<string> {
+  const at = args.findIndex(
+    (word, index) => !word.startsWith("-") && !VALUE_FLAGS.has(args[index - 1] ?? ""),
+  );
+  if (args[at] !== RETIRED_GROUP_NAME) return args;
+  return args.with(at, CURRENT_GROUP_NAME);
+}

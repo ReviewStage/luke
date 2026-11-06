@@ -53,6 +53,9 @@ export const MIRROR_FRAME = {
   REQUEST: "request",
 } as const;
 
+/** A full commit id: 40 lowercase hex characters. */
+const COMMIT_ID_PATTERN = /^[0-9a-f]{40}$/u;
+
 /** A file's path, relative to the checkout's root with `/` between its folders, as git lists it. */
 const path = EffectSchema.NonEmptyString;
 
@@ -62,8 +65,11 @@ const size = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0));
 export const mirrorFrameSchema = EffectSchema.Union([
   EffectSchema.Struct({
     type: EffectSchema.Literal(MIRROR_FRAME.HEADER),
-    /** The merge base of the checkout's `HEAD` and the branch it was cloned from, a commit GitHub holds. */
-    base: EffectSchema.NonEmptyString,
+    /**
+     * The merge base of the checkout's `HEAD` and the branch it was cloned from, a commit GitHub holds.
+     * A full commit id and nothing else, since the sandbox is the agent's and the Mac hands this to git as an argument.
+     */
+    base: EffectSchema.String.check(EffectSchema.isPattern(COMMIT_ID_PATTERN)),
   }),
   EffectSchema.Struct({
     type: EffectSchema.Literal(MIRROR_FRAME.MANIFEST),

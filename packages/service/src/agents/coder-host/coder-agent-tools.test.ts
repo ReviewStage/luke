@@ -4418,7 +4418,7 @@ test("create_automation and update_automation take a Sentry trigger once the wor
 
 /** Turns the Plans experiment on or off for a member, whose agents read and write no plan while it is off. */
 async function turnPlans(userId: string, on: boolean): Promise<void> {
-  await database.run(writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: on } }));
+  await database.run(writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } }));
 }
 
 /** Turns the Memory experiment on for each member, whose agents are refused memory otherwise. */

@@ -117,6 +117,7 @@ import { MESSAGE_BLOCK, messageBlocks, messageText, replyOf } from "@repo/ui/rep
 import { UNREPORTED } from "@repo/ui/reported-failure";
 import { ReplayUnmask, writeWithheldSheet } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
+import { VIRTUAL_ROWS_ANCHOR, VirtualRows, type VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { visibleViewport } from "@repo/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Equal } from "effect";
@@ -151,6 +152,7 @@ import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { enterSubmitKey } from "../enter-sends.js";
 import { confirmFailure, failureShown, unreadShown } from "../failure-report.js";
+import { useFindOpen } from "../find-in-tab.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import {
@@ -162,6 +164,7 @@ import {
 } from "../plan-editor/contract.js";
 import { centerWithin } from "../scroll-within.js";
 import { useAttachedFiles } from "../use-attached-files.js";
+import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -428,7 +431,7 @@ const COMMENT_WORDS = {
   REOPENED_IT: "reopened this",
   EDITED: "edited",
   OPEN_THREAD: "Open thread",
-  SHOW_WORDS: "Show in the plan",
+  SHOW_WORDS: "Show in the description",
   SHOW_ELEMENT: "Show on the page",
   WHOLE_PAGE: "Whole page",
   DISCARD: "Discard",
@@ -1917,6 +1920,7 @@ const NO_LAYER: RefObject<HTMLElement | null> = { current: null };
 export function PlanCommentLayer({
   body,
   scroller,
+  shown: planShown,
   unitClass,
   sections,
   text,
@@ -1925,6 +1929,8 @@ export function PlanCommentLayer({
 }: {
   body: RefObject<HTMLDivElement | null>;
   scroller: RefObject<HTMLDivElement | null>;
+  /** Whether the plan is the tab its column shows. */
+  shown: boolean;
   /** The class each section's drawn words wear, in the order of `sections`. */
   unitClass: string;
   sections: readonly PlanSection[];
@@ -2463,6 +2469,7 @@ export function PlanCommentLayer({
           wide={wide}
           top={listTop}
           scroller={scroller}
+          shown={planShown}
         />
       </div>
     );
@@ -2722,7 +2729,7 @@ function CommentsSkeleton(): React.JSX.Element {
 const NO_COMMENTS = {
   [COMMENTS_FILTER.OPEN]: {
     title: "No comments",
-    line: "Select words in the plan, or press a block's comment button, to start a thread.",
+    line: "Select words in the description, or press a block's comment button, to start a thread.",
   },
   [COMMENTS_FILTER.RESOLVED]: {
     title: "No resolved comments",
@@ -2737,6 +2744,24 @@ function listedRank(card: DrawnCard): number {
 
 /** No measure of a row a list lays out, which the margin's slots take and a list's need not. */
 const NO_SLOT = () => undefined;
+
+/** No threads to find in, while no find bar stands open. */
+const NO_FIND_ROWS: readonly FindRow[] = [];
+
+/** How tall a thread is taken to be in a list before it is drawn, in pixels: its quote, a comment, and its reply field. */
+const LISTED_ESTIMATE_PX = 200;
+
+/** The room between two threads in a list, in pixels: a control's gap (`--ui-control-gap`), as two cards stand apart (`CommentsRow`). */
+const LISTED_GAP_PX = 8;
+
+/** The words a thread draws that a find counts before its row is drawn: its quote, and its comments' words and files. */
+function threadFindRow(thread: PlanCommentThread): FindRow {
+  const entries = thread.entries.flatMap((entry) => [
+    entry.words ?? "",
+    ...(entry.files ?? []).map((file) => file.name),
+  ]);
+  return { key: thread.id, words: [quoteWords(thread), ...entries].join("\n") };
+}
 
 /**
  * The threads a list draws, each whole, under what is drawn over them: why
@@ -2753,6 +2778,8 @@ function ThreadList({
   doors,
   onShowWords,
   flush,
+  scroller,
+  handle,
 }: {
   control: PlanCommentsControl;
   listed: readonly PlanCommentThread[];
@@ -2762,13 +2789,24 @@ function ThreadList({
   onShowWords: (thread: PlanCommentThread) => (() => void) | undefined;
   /** Whether the list stands flush in a column of its own, as the plan's margin, rather than inset in a pane. */
   flush?: boolean;
+  /** The scroller the threads stand in, which draws only those near its view (`VirtualRows`). */
+  scroller: RefObject<HTMLElement | null>;
+  handle: RefObject<VirtualRowsHandle | null>;
 }): React.JSX.Element {
   const held = useMarginCards(
     listed.map((thread) => ({ id: thread.id, thread, pending: undefined, top: 0, open: true })),
     true,
   );
   const rows = [...held.drawn].sort((a, b) => listedRank(a) - listedRank(b));
+  const keys = rows.map((card) => card.id);
   const none = !control.failed && rows.length === 0 && control.read;
+  const { gone } = held;
+  // Note that a thread leaving where its row is not drawn has no fade to wait out, so it is let go at once.
+  useLayoutEffect(() => {
+    for (const card of rows) {
+      if (card.leaving && handle.current?.rowElement(card.id) === undefined) gone(card.id);
+    }
+  });
   return (
     <div
       className="comments-list box-border px-ui-16 pt-ui-16 pb-ui-24 data-empty:flex data-empty:min-h-full data-empty:flex-col data-flush:p-0"
@@ -2794,30 +2832,34 @@ function ThreadList({
       ) : !control.read ? (
         <CommentsSkeleton />
       ) : (
-        rows.map((card) =>
-          card.thread === undefined ? null : (
-            <MarginSlot
-              key={card.id}
-              card={card}
-              moves={false}
-              slotRef={NO_SLOT}
-              onGone={held.gone}
-              flows
-            >
-              <CommentsRow>
-                {/* Note that every thread stands whole here, its replies and its field, its quote the way to what it is on. */}
-                <ThreadCard
-                  thread={card.thread}
-                  open
-                  place={THREAD_PLACE.LIST}
-                  quote
-                  doors={doors}
-                  onShowWords={onShowWords(card.thread)}
-                />
-              </CommentsRow>
-            </MarginSlot>
-          ),
-        )
+        <VirtualRows
+          scroller={scroller}
+          keys={keys}
+          estimate={LISTED_ESTIMATE_PX}
+          gap={LISTED_GAP_PX}
+          anchor={VIRTUAL_ROWS_ANCHOR.START}
+          holdsFocus
+          handle={handle}
+        >
+          {(index) => {
+            const card = rows[index];
+            return card?.thread === undefined ? null : (
+              <MarginSlot card={card} moves={false} slotRef={NO_SLOT} onGone={gone} flows>
+                <CommentsRow>
+                  {/* Note that every thread stands whole here, its replies and its field, its quote the way to what it is on. */}
+                  <ThreadCard
+                    thread={card.thread}
+                    open
+                    place={THREAD_PLACE.LIST}
+                    quote
+                    doors={doors}
+                    onShowWords={onShowWords(card.thread)}
+                  />
+                </CommentsRow>
+              </MarginSlot>
+            );
+          }}
+        </VirtualRows>
       )}
     </div>
   );
@@ -2836,7 +2878,7 @@ const LISTING_WORDS = {
 /** What the plan's Comments toggle says, and what its press does. */
 const TOGGLE_WORDS = {
   LIST: "List all comments",
-  MARGIN: "Show comments beside the plan",
+  MARGIN: "Show comments beside the description",
 } as const;
 
 /** The toggle's words: how many threads the plan holds, as the byline's other phrases say what they count. */
@@ -2887,6 +2929,7 @@ function PlanCommentList({
   wide,
   top,
   scroller,
+  shown,
 }: {
   doors: ThreadDoors;
   listing: CommentsFilter;
@@ -2895,19 +2938,37 @@ function PlanCommentList({
   /** Where the list starts in the body, under the toggle. */
   top: number;
   scroller: RefObject<HTMLDivElement | null>;
+  /** Whether the plan is the tab its column shows, which alone a find over the column searches. */
+  shown: boolean;
 }): React.JSX.Element {
   const { reveal, revealed } = useCommentFocus();
   const { control } = doors;
-  const open = control.threads.filter(openThread);
-  const resolved = control.threads.filter((thread) => !openThread(thread));
+  const { threads: all } = control;
+  const open = useMemo(() => all.filter(openThread), [all]);
+  const resolved = useMemo(() => all.filter((thread) => !openThread(thread)), [all]);
   const listed = listing === COMMENTS_FILTER.OPEN ? open : resolved;
   const list = useRef<HTMLDivElement>(null);
+  const run = useRef<VirtualRowsHandle>(null);
+  // Note that the threads' words are read only while a find bar stands open over the plan, which then finds in the plan's words and the threads' alike.
+  const finding = useFindOpen();
+  const findRows = useMemo(
+    () => (finding ? listed.map(threadFindRow) : NO_FIND_ROWS),
+    [finding, listed],
+  );
+  useVirtualFind({ root: scroller, rows: findRows, handle: run, findable: shown });
   const scrolledAsk = useRef<number | undefined>(undefined);
+  const broughtAsk = useRef<number | undefined>(undefined);
   useLayoutEffect(() => {
     const box = wide ? scroller.current : list.current;
-    const row = list.current?.querySelector(`.comment-card[data-thread="${revealed?.thread}"]`);
-    if (revealed === undefined || box === null || row == null) return;
-    if (scrolledAsk.current === revealed.ask) return;
+    if (revealed === undefined || box === null || scrolledAsk.current === revealed.ask) return;
+    const row = list.current?.querySelector(`.comment-card[data-thread="${revealed.thread}"]`);
+    // A thread its run has not drawn is brought in first, and scrolled to once it is drawn.
+    if (row == null) {
+      if (broughtAsk.current === revealed.ask) return;
+      broughtAsk.current = revealed.ask;
+      run.current?.bringIn(revealed.thread);
+      return;
+    }
     scrolledAsk.current = revealed.ask;
     box.scrollTop +=
       row.getBoundingClientRect().top - box.getBoundingClientRect().top - REVEAL_ROOM;
@@ -2946,6 +3007,8 @@ function PlanCommentList({
       doors={doors}
       onShowWords={(thread) => (openThread(thread) ? () => reveal(thread.id) : undefined)}
       flush
+      scroller={wide ? scroller : list}
+      handle={run}
     />
   );
   return wide ? (
@@ -2989,6 +3052,7 @@ function ThreadsPane({
   onFilter,
   empty,
   list,
+  run,
   className,
   onShowWords,
   lead,
@@ -3002,6 +3066,8 @@ function ThreadsPane({
   /** What the list says when it holds nothing, by its filter. */
   empty: Record<CommentsFilter, { readonly title: string; readonly line: string | undefined }>;
   list: RefObject<HTMLDivElement | null>;
+  /** The run of threads the list draws, near its view alone. */
+  run: RefObject<VirtualRowsHandle | null>;
   className: string;
   onShowWords: (thread: PlanCommentThread) => (() => void) | undefined;
 }): React.JSX.Element {
@@ -3037,6 +3103,8 @@ function ThreadsPane({
             empty={empty[filter]}
             doors={doors}
             onShowWords={onShowWords}
+            scroller={list}
+            handle={run}
           />
         </ScrollArea>
       </WordsDatePickerRoom>
@@ -3140,6 +3208,7 @@ export function PageComments({
   onOpen: (thread: PlanCommentThread | undefined) => void;
 }): React.JSX.Element {
   const list = useRef<HTMLDivElement>(null);
+  const run = useRef<VirtualRowsHandle>(null);
   usePressAway(NO_LAYER, () => undefined, {
     onPressAway: open === undefined ? undefined : () => onOpen(undefined),
     holds: keepsPageCardOpen,
@@ -3157,9 +3226,11 @@ export function PageComments({
     if (openedFilter !== undefined) onFilter(openedFilter);
   }, [first, openedFilter, onFilter]);
   useLayoutEffect(() => {
-    const card = list.current?.querySelector<HTMLElement>(`.comment-card[data-thread="${first}"]`);
-    if (first === undefined || list.current === null || card === null || card === undefined) return;
-    centerWithin(list.current, card);
+    if (first === undefined || list.current === null) return;
+    const card = list.current.querySelector<HTMLElement>(`.comment-card[data-thread="${first}"]`);
+    // A thread its run has not drawn is brought into the middle of the pane as it is drawn.
+    if (card === null) run.current?.bringIn(first);
+    else centerWithin(list.current, card);
   }, [first, filter]);
   return (
     <ThreadsPane
@@ -3169,6 +3240,7 @@ export function PageComments({
       onFilter={onFilter}
       empty={NO_PAGE_COMMENTS}
       list={list}
+      run={run}
       lead={lead}
       className="page-comments relative h-full"
       onShowWords={(thread) =>

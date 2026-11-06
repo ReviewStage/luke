@@ -2,8 +2,9 @@ import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { INVITATION_ROLE, inviteesOf } from "@repo/features/workspace-invitation-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { EMAIL_CHIP_STATE, type EmailChip, type EmailChipState } from "@repo/ui";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { useAct } from "./act.js";
+import { actMutation } from "./act-mutations.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 
 /**
@@ -113,7 +114,7 @@ function wrongOf(invitees: readonly Invitee[]): number {
  * comma is still one the form sends.
  */
 export function useInvitees(yours: string | undefined): Invitees {
-  const { act } = useAct();
+  const { mutateAsync: sendWorkspaceInvite } = useMutation(actMutation(ACT_KIND.WORKSPACE_INVITE));
   const [invitees, setInvitees] = useState<readonly Invitee[]>([]);
   const [typed, setTyped] = useState("");
   const mark = (email: string, state: EmailChipState, reason?: string) =>
@@ -142,7 +143,7 @@ export function useInvitees(yours: string | undefined): Invitees {
       for (const email of emails) {
         mark(email, EMAIL_CHIP_STATE.SENDING);
         try {
-          await act(ACT_KIND.WORKSPACE_INVITE, {
+          await sendWorkspaceInvite({
             workspaceId,
             email,
             role: INVITATION_ROLE.MEMBER,

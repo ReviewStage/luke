@@ -50,7 +50,7 @@ import {
   useConfirmDialog,
   useLeaving,
   useMenu,
-  useSettingsPageScroll,
+  usePageScroll,
   VisuallyHidden,
 } from "@repo/ui";
 import { ACTOR_KIND, type Actor, actorName, personActor } from "@repo/ui/actor-model";
@@ -65,8 +65,9 @@ import {
   type VirtualRowsHandle,
 } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useId, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
@@ -601,7 +602,7 @@ function MemoryList({
     setKept(new Set());
   };
   const keepers = keepersOf(searched);
-  const { scroller, sections } = useSettingsPageScroll();
+  const { scroller, shiftedBy } = usePageScroll();
   const run = useRef<VirtualRowsHandle>(null);
   const keys = useMemo(() => listed.map((each) => each.memory.id), [listed]);
   const order = useMemo(() => [keys], [keys]);
@@ -638,7 +639,7 @@ function MemoryList({
           >
             <VirtualRows
               scroller={scroller}
-              shiftedBy={sections}
+              shiftedBy={shiftedBy}
               keys={keys}
               estimate={MEMORY_ESTIMATE_PX}
               gap={MEMORY_GAP_PX}
@@ -702,7 +703,7 @@ export function MemorySection({
   /** Asks for the workspaces again. */
   onRetryWorkspaces: (() => void) | undefined;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendMemoriesForget } = useMutation(actMutation(ACT_KIND.MEMORIES_FORGET));
   const workspaceId = workspace?.id;
   // The memories as the host holds them, followed live while the page shows them, so a memory an agent keeps meanwhile draws as it lands.
   const memories = useHostRead(LIVE_READ.MEMORIES, signedIn ? workspaceId : undefined);
@@ -722,7 +723,7 @@ export function MemorySection({
       }
       const out = { workspaceId, id };
       setForgetting(out);
-      return act(ACT_KIND.MEMORIES_FORGET, { workspaceId, id })
+      return sendMemoriesForget({ workspaceId, id })
         .catch(() => undefined)
         .then((answer): ActionResult => {
           setForgetting((current) => (current === out ? undefined : current));
@@ -731,7 +732,7 @@ export function MemorySection({
             : { status: ACTION_RESULT_STATUS.ACCEPTED };
         });
     },
-    [act, workspaceId],
+    [sendMemoriesForget, workspaceId],
   );
 
   // Note that several are forgotten one after another, each sent once the one before answered, and the first refusal stops the rest.

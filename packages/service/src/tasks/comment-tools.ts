@@ -50,7 +50,7 @@ import { logStoreFailure } from "../http/store-failure.js";
  * answers what it did as the model reads it, never a failure.
  */
 
-/** Where a call reads and writes: the plan the door bound, who writes, the member whose turn it is and the agent, and whether the plan's own threads are reached, which they are not while Plans is off (`EXPERIMENT.PLANS`), its pages' alone. */
+/** Where a call reads and writes: the plan the door bound, who writes, the member whose turn it is and the agent, and whether the plan's own threads are reached, which they are not while Plans is off (`EXPERIMENT.DESCRIPTIONS`), its pages' alone. */
 export interface CommentToolBinding {
   readonly taskId: string;
   readonly writer: PlanCommentWriterRef;

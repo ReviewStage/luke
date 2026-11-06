@@ -1556,9 +1556,7 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
     }),
   );
   await settle();
-  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
-  assert.ok(more, "the page's toolbar has a ⋯");
-  act(() => more.click());
+  openPageMenu(page);
   const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
     (each) => each.textContent === "Copy link",
   );
@@ -1569,12 +1567,18 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
   assert.equal(newestToastSays(), "Link copied");
 });
 
-/** Opens the page's ⋯ and answers the item under `label`, or fails saying it is not offered. */
+/** Opens the page's menu as a reader does: a right-click on the agent's name in its toolbar. */
+function openPageMenu(page: HTMLElement): void {
+  const name =
+    page.querySelector(".ui-toolbar-title-menu") ?? assert.fail("the toolbar names the agent");
+  act(() => {
+    name.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+}
+
+/** Opens the page's menu and answers the item under `label`, or fails saying it is not offered. */
 function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
-  const more =
-    page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]') ??
-    assert.fail("the page's toolbar has a ⋯");
-  act(() => more.click());
+  openPageMenu(page);
   return (
     [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
       (each) => each.textContent === label,
@@ -1585,9 +1589,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
 test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order: Copy link and the transcript's two copies, Rename, Show terminal, Archive, and Permanently delete last, and no Run, which its Pull request tab offers", async () => {
   const page = mount();
   await settle();
-  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
-  assert.ok(more);
-  act(() => more.click());
+  openPageMenu(page);
 
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (each) => each.textContent,
@@ -1625,7 +1627,7 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
   assert.deepEqual(pins, [{ agentId: AGENT_ID, pinned: true }]);
 
   assert.deepEqual(offered(), [], "the menu closed on the pin");
-  act(() => page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
+  openPageMenu(page);
   assert.deepEqual(offered(), [
     "Copy link",
     "Copy transcript",
@@ -1681,10 +1683,7 @@ test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its san
   listed = { ...PAGE, archivedAt: 2 };
   const { page, chosen } = mountHearingPanel();
   await settle();
-  const more =
-    page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]') ??
-    assert.fail("the page's toolbar has a ⋯");
-  act(() => more.click());
+  openPageMenu(page);
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (each) => each.textContent,
   );
@@ -2053,7 +2052,11 @@ test("on a phone the page is headed by its way back's glyph, the agent's name ce
     "one control a corner",
   );
   assert.ok(head.querySelector("h1")?.textContent, "the agent's name is the title");
-  assert.ok(pageMenuItem(page, "Show panel"), "the ⋯ offers the panel");
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
+  const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
+    (each) => each.textContent,
+  );
+  assert.ok(offered.includes("Show panel"), "the ⋯ offers the panel");
   act(() => head.querySelector<HTMLButtonElement>("button")?.click());
   assert.deepEqual(left, ["away"], "the way back goes where the shell says");
 });

@@ -59,9 +59,12 @@ import {
 import type { ServerRow } from "@repo/ui/agent-servers-model";
 import { GLYPH, PlusIcon, RefreshCwIcon } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
+import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useId, useRef, useState } from "react";
-import { type ActHandle, useAct } from "./act.js";
+import type { ActResult, ActVariables } from "./act.js";
+import { actMutation } from "./act-mutations.js";
 import { confirmFailure, refusedShown } from "./failure-report.js";
 import { type GitHubConnectControl, useGitHubConnection } from "./github-connect.js";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "./integration-grant.js";
@@ -339,6 +342,7 @@ function RowToolsPanel({
   const rows = useRef(new Map<string, HTMLElement>());
   const body = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const run = useRef<VirtualRowsHandle>(null);
   // A tool the search no longer finds hands its place to the first that it does.
   const current = shown.find((tool) => tool.name === held) ?? shown[0];
 
@@ -371,7 +375,11 @@ function RowToolsPanel({
     // Note that Escape stops here, because it hands the focus back to the list rather than leaving Settings.
     event.preventDefault();
     event.stopPropagation();
-    if (current !== undefined) rows.current.get(current.name)?.focus({ preventScroll: true });
+    if (current === undefined) return;
+    const row = rows.current.get(current.name);
+    // Note that the tool held may have been scrolled out of the rows drawn, so it is brought in first.
+    if (row !== undefined) row.focus({ preventScroll: true });
+    else run.current?.bringIn(current.name, () => rows.current.get(current.name)?.focus());
   };
 
   return (
@@ -381,6 +389,8 @@ function RowToolsPanel({
           {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
           <div className="integration-tools-list p-ui-4" onFocus={onRowFocus}>
             <IntegrationToolList
+              scroller={list}
+              handle={run}
               server={name}
               toolWordsShown={toolWordsShown}
               tools={shown}
@@ -421,7 +431,9 @@ function RowToolsPanel({
  * provider's first leaves the page with its row as the answer lands.
  */
 function disconnectAccount(
-  act: ActHandle["act"],
+  disconnectIntegration: (
+    variables: ActVariables<typeof ACT_KIND.INTEGRATIONS_DISCONNECT>,
+  ) => Promise<ActResult<typeof ACT_KIND.INTEGRATIONS_DISCONNECT>>,
   github: GitHubConnectControl,
   row: ServerRow,
 ): Promise<ActionResult> {
@@ -431,7 +443,7 @@ function disconnectAccount(
     reason: `${name} could not be disconnected. Try again.`,
   };
   if (grantedBySignIn(provider)) return github.disconnect().then(() => ACCEPTED);
-  return act(ACT_KIND.INTEGRATIONS_DISCONNECT, {
+  return disconnectIntegration({
     provider,
     ...(connection === provider ? undefined : { connection }),
   }).then(
@@ -461,7 +473,12 @@ export function IntegrationRow({
   onRetryTools: () => void;
 }): React.JSX.Element {
   const panelId = useId();
-  const { act } = useAct();
+  const { mutateAsync: sendIntegrationsRename } = useMutation(
+    actMutation(ACT_KIND.INTEGRATIONS_RENAME),
+  );
+  const { mutateAsync: disconnectIntegration } = useMutation(
+    actMutation(ACT_KIND.INTEGRATIONS_DISCONNECT),
+  );
   const tokens = tools?.tokens ?? NO_TOKENS;
   const { provider, connection, name, account, accountName } = row;
   const { cancelSignIn } = statuses;
@@ -517,7 +534,7 @@ export function IntegrationRow({
     if (label === undefined || label === account?.label) return;
     setRejection(undefined);
     const refused = () => setRejection(`${name} could not be renamed. Try again.`);
-    void act(ACT_KIND.INTEGRATIONS_RENAME, { provider, connection, label }).then((answer) => {
+    void sendIntegrationsRename({ provider, connection, label }).then((answer) => {
       if ("failure" in answer) refused();
     }, refused);
   };
@@ -525,7 +542,7 @@ export function IntegrationRow({
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog(
     { subject: connected, surfaceOpen: true },
-    () => disconnectAccount(act, github, row),
+    () => disconnectAccount(disconnectIntegration, github, row),
     confirmFailure(FAILURE_SURFACE.INTEGRATION_DISCONNECT),
   );
 

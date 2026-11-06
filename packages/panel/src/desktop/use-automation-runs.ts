@@ -2,8 +2,9 @@ import { AUTOMATION_CALL_FAILURE, type AutomationRunView } from "@repo/features/
 import type { AutomationRunSummary, AutomationWorkspaceRun } from "@repo/features/automation-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { HOST_READ_STATUS, type HostRead, useHostRead } from "../use-host-read.js";
 
 /**
@@ -39,7 +40,7 @@ function useRunsRead<Run>(id: string | undefined, held: HostRead<readonly Run[]>
 
 /** One automation's runs, none held before it exists, with its Run now. */
 export function useAutomationRuns(automationId: string | undefined) {
-  const { act } = useAct();
+  const { mutateAsync: runAutomation } = useMutation(actMutation(ACT_KIND.AUTOMATIONS_RUN));
   const { read, reload } = useRunsRead(
     automationId,
     useHostRead(LIVE_READ.AUTOMATION_RUNS, automationId),
@@ -47,11 +48,11 @@ export function useAutomationRuns(automationId: string | undefined) {
   /** Runs it now under a key of the press's own; the run it made is laid on the held runs as it lands. */
   const runNow = useCallback((): Promise<AutomationRunView> => {
     if (automationId === undefined) return Promise.resolve(UNANSWERED);
-    return act(ACT_KIND.AUTOMATIONS_RUN, {
+    return runAutomation({
       automationId,
       idempotencyKey: crypto.randomUUID(),
     }).catch((): AutomationRunView => UNANSWERED);
-  }, [act, automationId]);
+  }, [runAutomation, automationId]);
   return { read: read satisfies RunsRead, reload, runNow };
 }
 

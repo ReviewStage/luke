@@ -1,5 +1,6 @@
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-frame.js";
+import { type PageScroll, PageScrollContext } from "../page-frame/page-scroll.js";
 import { useHeadingAway } from "../page-header/heading-away.js";
 import { PageHeader } from "../page-header/page-header.js";
 import { Toolbar, type ToolbarPickUp } from "../toolbar/toolbar.js";
@@ -107,6 +108,13 @@ export function DetailPage({
   const body = useRef<HTMLDivElement>(null);
   const header = useRef<HTMLDivElement>(null);
   const named = useHeadingAway(body, header);
+  const main = useRef<HTMLDivElement>(null);
+  const side = useRef<HTMLElement>(null);
+  const mainContent = useRef<HTMLDivElement>(null);
+  const sideContent = useRef<HTMLDivElement>(null);
+  // Note that each column is the scroller its content is handed, which it is wherever it scrolls on its own; in a pane too narrow for two, where the body scrolls both, a column lets all its rows show.
+  const [mainScroll] = useState((): PageScroll => ({ scroller: main, shiftedBy: mainContent }));
+  const [sideScroll] = useState((): PageScroll => ({ scroller: side, shiftedBy: sideContent }));
   const underToolbar = heading.frame === PAGE_FRAME.TOOLBAR;
   const barOutside = !underToolbar && onPickUp !== undefined;
   // Note that the caller hears the name when it or its visibility changes, because its bar stands outside this page and cannot read the header itself.
@@ -129,7 +137,7 @@ export function DetailPage({
       )}
       <div ref={body} className="ui-detail-page-body flex-1 min-h-0">
         {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a column scrolls on its own, and a column of words holds nothing else a keyboard could reach to scroll it by. */}
-        <div className={`ui-detail-page-main ${COLUMN_CLASS}`} tabIndex={0}>
+        <div ref={main} className={`ui-detail-page-main ${COLUMN_CLASS}`} tabIndex={0}>
           {underToolbar ? null : (
             <div
               ref={header}
@@ -143,16 +151,21 @@ export function DetailPage({
               />
             </div>
           )}
-          <div className={`ui-detail-page-content ${CONTENT_CLASS}`}>{children}</div>
+          <div ref={mainContent} className={`ui-detail-page-content ${CONTENT_CLASS}`}>
+            <PageScrollContext value={mainScroll}>{children}</PageScrollContext>
+          </div>
         </div>
         {secondary === undefined ? null : (
           <aside
+            ref={side}
             className={`ui-detail-page-secondary ${COLUMN_CLASS}`}
             aria-label={secondary.label}
             // biome-ignore lint/a11y/noNoninteractiveTabindex: it scrolls on its own, as the main column does.
             tabIndex={0}
           >
-            <div className={`ui-detail-page-content ${CONTENT_CLASS}`}>{secondary.content}</div>
+            <div ref={sideContent} className={`ui-detail-page-content ${CONTENT_CLASS}`}>
+              <PageScrollContext value={sideScroll}>{secondary.content}</PageScrollContext>
+            </div>
           </aside>
         )}
       </div>

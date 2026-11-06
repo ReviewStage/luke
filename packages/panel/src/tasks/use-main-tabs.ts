@@ -447,6 +447,24 @@ function withViewed(
   });
 }
 
+/**
+ * The state with the task's details let go of its tabs viewed, so the task
+ * opens on its agents next time, its main view, whatever opens it: the
+ * details stand as the tab shown only while the task stays open on them.
+ */
+function withDetailsLeft(held: HeldState, taskId: string): HeldState {
+  return withChoices(held, taskId, (was) =>
+    was.recent?.some(isOverviewTab) === true
+      ? { ...was, recent: was.recent.filter((tab) => !isOverviewTab(tab)) }
+      : was,
+  );
+}
+
+/** The state as a launch reads it: every task's details let go of its tabs viewed (`withDetailsLeft`). */
+function withEveryDetailsLeft(held: HeldState): HeldState {
+  return Object.keys(held.tasks).reduce(withDetailsLeft, held);
+}
+
 /** The state with the agent's tab open, where it was closed. */
 function withOpened(held: HeldState, tab: MainTab): HeldState {
   if (!isAgentTab(tab) || !held.closedAgents.includes(tab.agent)) return held;
@@ -639,11 +657,12 @@ function currentTasks(
 function readStored(): HeldState {
   const kept = Option.map(
     decodeKept(storedText(STORAGE_KEY)),
-    ({ closedAgents, dozing, tasks, plans }): HeldState => ({
-      closedAgents,
-      dozing: dozing ?? [],
-      tasks: currentTasks(tasks ?? plans ?? {}),
-    }),
+    ({ closedAgents, dozing, tasks, plans }): HeldState =>
+      withEveryDetailsLeft({
+        closedAgents,
+        dozing: dozing ?? [],
+        tasks: currentTasks(tasks ?? plans ?? {}),
+      }),
   );
   return Option.getOrElse(kept, () =>
     Option.match(decodeSidePanel(storedText(SIDE_PANEL_KEY)), {
@@ -707,6 +726,15 @@ export function useMainTabs(
     () => ({ taskId, agents, named, draft, detailsFirst }),
     [taskId, agents, named, draft, detailsFirst],
   );
+  // A task left on its details lets them go, so it opens on its agents again wherever it is opened
+  // from; a phone's, whose details are where a task opens, keeps them.
+  const [standing, setStanding] = useState(taskId);
+  if (standing !== taskId) {
+    setStanding(taskId);
+    if (standing !== undefined && !detailsFirst) {
+      update((held) => withDetailsLeft(held, standing));
+    }
+  }
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
   useEffect(() => {

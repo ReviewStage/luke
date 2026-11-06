@@ -12,9 +12,10 @@ import { ACT_KIND } from "@repo/host/acts";
 import { STATUS_TONE } from "@repo/ui";
 import { keepPictureRead, PICTURE_STATE, pictureNow } from "@repo/ui/picture-cache";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import type { AgentPictureDoor } from "./agent-pictures.js";
 import type { HeldComposer } from "./use-agent-composer.js";
@@ -113,7 +114,7 @@ export interface AgentQueueControl {
 }
 
 export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): AgentQueueControl {
-  const { act } = useAct();
+  const { mutateAsync: sendQueue } = useMutation(actMutation(ACT_KIND.AGENTS_QUEUE));
   const toast = useToast();
   const messages = queue?.messages ?? NO_MESSAGES;
   const listed = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
@@ -131,10 +132,7 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
       ...(drawnAs.length === 0 ? undefined : { pictures: drawnAs }),
     };
     // Note that a message queued behind the box's own sends is asked only once they settle, so it never reaches the service ahead of them.
-    const asked =
-      after === undefined
-        ? act(ACT_KIND.AGENTS_QUEUE, params)
-        : after.then(() => act(ACT_KIND.AGENTS_QUEUE, params));
+    const asked = after === undefined ? sendQueue(params) : after.then(() => sendQueue(params));
     return asked
       .catch(() => UNANSWERED)
       .then((answer) => {
