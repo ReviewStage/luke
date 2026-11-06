@@ -1099,6 +1099,7 @@ function subject(
     };
     return {
       call,
+      flushHeldCloses: composer.flushHeldCloses,
       transcripts,
       /** Each of `transcript`'s rows the host laid, in order. */
       held: (transcript?: { readonly agentId: string; readonly callId?: string }) =>
@@ -3531,6 +3532,127 @@ it.effect(
       live.account.set({ ...parts, items: [], plans: [{ ...plan, toDo: 0 }] }, ["9300"]);
       yield* nextPoll;
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
+    }),
+);
+
+it.effect(
+  "a close held for its Undo drops its question at once and asks the service nothing until it is let go: undone, it stands again and the service never hears of it; let go, it is sent",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealAccount, live, asked, accountInboxes } = yield* subject();
+      sealAccount(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+      const plan = { planId: TASK_ID, items: 1, toDo: 1, updatedAt: ITEM.updatedAt };
+      const parts = { planless: [], automations: [], failedRuns: [] };
+      live.account.set({ ...parts, items: [WAITING], plans: [plan] }, ["9100"]);
+      yield* toldTimes(accountInboxes, 1);
+      /** How many items wait, as the account inbox was last told. */
+      const waiting = () => {
+        const told = accountInboxes().at(-1);
+        assert.ok(isRecord(told) && Array.isArray(told.items));
+        return told.items.length;
+      };
+      const closes = () => asked.filter((each) => each.startsWith("close:"));
+      const close = { itemId: ITEM.id, revision: ITEM.revision, held: true };
+
+      const undone = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, { ...close, clientKey: "close-1" }),
+      );
+      yield* settled;
+      assert.equal(waiting(), 0);
+      const undo = yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE, {
+        clientKey: "close-1",
+        send: false,
+      });
+      yield* Fiber.join(undone);
+      yield* settled;
+      assert.deepEqual(undo, { held: true });
+      assert.equal(waiting(), 1);
+      assert.deepEqual(closes(), []);
+
+      const sent = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, { ...close, clientKey: "close-2" }),
+      );
+      yield* settled;
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE, { clientKey: "close-2", send: true });
+      yield* Fiber.join(sent);
+      yield* settled;
+      assert.deepEqual(closes(), [`close:${ITEM.id}:${ITEM.revision}:close-2`]);
+      // Note that an Undo past the send finds nothing held to take back.
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE, {
+          clientKey: "close-2",
+          send: false,
+        }),
+        { held: false },
+      );
+    }),
+);
+
+it.effect(
+  "an Undo pressed while its close waits behind a write the service has not answered is kept: the close, sent at last, is taken back and never reaches the service",
+  () =>
+    Effect.gen(function* () {
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
+      const { call, asked, answerMarks } = yield* subject({ pool });
+      const closes = () => asked.filter((each) => each.startsWith("close:"));
+
+      answerMarks(false);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: false });
+      yield* settled;
+      assert.equal(pool.queued().length, 1, "the mark waits for the service");
+      const closing = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
+          itemId: ITEM.id,
+          revision: ITEM.revision,
+          clientKey: "close-1",
+          held: true,
+        }),
+      );
+      yield* settled;
+      assert.equal(pool.queued().length, 2, "the close waits behind the mark");
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE, {
+          clientKey: "close-1",
+          send: false,
+        }),
+        { held: true },
+      );
+
+      answerMarks(true);
+      yield* pool.resend;
+      yield* settled;
+      yield* Fiber.join(closing);
+      assert.deepEqual(closes(), []);
+      assert.deepEqual(pool.queued(), []);
+    }),
+);
+
+it.effect(
+  "a close held for its Undo is sent, not dropped, when the host quits before its window lets it go",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, flushHeldCloses } = yield* subject();
+      const closing = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
+          itemId: ITEM.id,
+          revision: ITEM.revision,
+          clientKey: "close-1",
+          held: true,
+        }),
+      );
+      yield* settled;
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [],
+      );
+      yield* flushHeldCloses;
+      yield* Fiber.join(closing);
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [`close:${ITEM.id}:${ITEM.revision}:close-1`],
+      );
     }),
 );
 

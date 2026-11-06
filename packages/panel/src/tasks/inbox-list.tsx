@@ -1,4 +1,4 @@
-import { type InboxItem, inboxAddressedTo } from "@repo/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem, inboxAddressedTo } from "@repo/features/inbox-wire";
 import type { CatalogModel } from "@repo/features/models-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskStatus } from "@repo/features/task-wire";
@@ -83,6 +83,7 @@ import {
   useState,
 } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import {
   holdsPicks,
@@ -113,7 +114,7 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { type InboxCloser, useInboxCloseAsk } from "./inbox-close.js";
+import type { InboxResolver } from "./inbox-close.js";
 import {
   INBOX_COLUMNS,
   type InboxColumnsShown,
@@ -458,9 +459,8 @@ interface InboxHeadSelecting {
  * alike (`ListRow`'s `menu`), offers
  * Copy link, the item's link by its id alone (`inbox-item-actions.tsx`), where
  * the list hands down a workspace to write it under. Where the list
- * hands down `onAskClose`, an open item's row offers to close it without an
- * answer, asked first through the list's one question (`inbox-close.tsx`),
- * as the last item of its menu. The row is drawn again only where it is
+ * hands down `onResolve`, an open item's row offers Resolve beside them, at
+ * once with Undo (`inbox-close.tsx`). The row is drawn again only where it is
  * handed another prop (`memo`), as ⌘K's rows are: its listed item, which the
  * list keeps while the item and its holder do (`inboxListed`), whether it
  * is chosen, and what it shows of its draft as the list read it once for
@@ -484,7 +484,7 @@ export const InboxItemRow = memo(function InboxItemRow({
   selectKey,
   onChoose,
   onMark,
-  onAskClose,
+  onResolve,
   onRemind,
   onPickRemind,
   several,
@@ -516,8 +516,8 @@ export const InboxItemRow = memo(function InboxItemRow({
   onChoose: (listed: InboxListed) => void;
   /** Marks the item read or unread; none where the row offers no mark. */
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
-  /** Asks to close an open item without an answer, through the list's one question; none where the row offers no close. */
-  onAskClose?: ((item: InboxItem) => void) | undefined;
+  /** Resolves open items without an answer; none where the row offers no resolve. */
+  onResolve?: InboxResolver | undefined;
   /** Sets the item's reminder, or cancels it; none where the row offers no reminder. */
   onRemind?: InboxReminder | undefined;
   /** Opens the date picker on the row for a reminder at the reader's own time, where the row offers a reminder. */
@@ -539,10 +539,10 @@ export const InboxItemRow = memo(function InboxItemRow({
   const addressedTo = inboxAddressedTo(item);
   const addressee = usePerson(addressedTo);
   const coarse = useCoarsePointer();
-  // Note that U and H act only on the chosen item, so only its row names their chords.
+  // Note that U, H, and E act only on the chosen item, so only its row names their chords.
   const { groups } = useInboxItemActions(item, {
     onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
-    onAskClose,
+    onResolve,
     keyed: chosen,
     remind:
       onRemind === undefined || onPickRemind === undefined
@@ -1529,8 +1529,8 @@ export function InboxList({
   onChoose: (listed: InboxListed) => void;
   /** Marks an item read or unread from its row or the selection's bar, answering whether the service took it; none where the rows offer no mark. */
   onMark?: InboxListMark | undefined;
-  /** Closes an open item without an answer from its row or the selection's bar; none where the rows offer no close. */
-  onClose?: InboxCloser | undefined;
+  /** Resolves open items without an answer from a row, the selection's head, or E; none where the rows offer no resolve. */
+  onClose?: InboxResolver | undefined;
   /** Sets an item's reminder from its row's menu or H, or cancels it; none where the rows offer no reminder. */
   onRemind?: InboxReminder | undefined;
   /** Told as the pointer comes onto the list and leaves it, while which its rows hold their places (`use-held-inbox-list.ts`); none where nothing holds them. */
@@ -1601,7 +1601,6 @@ export function InboxList({
   const remindMany = useRemindMany(onRemind);
   const selection = useInboxSelection({
     listed: picks,
-    shown: head.shown,
     onClear: unpick,
     onMark,
     onClose,
@@ -1621,11 +1620,19 @@ export function InboxList({
   // Note that a phone's head is its own, so a phone keeps the acts in a bar at the list's foot.
   const phone = usePhoneRoom();
   const footed = head.phone !== undefined || (head.tab === true && phone);
-  // Note that every row asks its close through the list's one question, rather than each drawing its own shut.
-  const closing = useInboxCloseAsk(
-    onClose,
-    head.shown,
-    (itemId) => listedItems(view).find(({ item }) => item.id === itemId)?.item,
+  const resolve = useSteadyDoor(onClose);
+  // Note that E resolves every item chosen where several are, else the item open beside the list, as U and H act on it.
+  const resolvable = picks.length > 0 ? picks : drawn.filter(({ item }) => item.id === chosen);
+  useAppCommand(
+    APP_COMMAND.RESOLVE,
+    head.shown &&
+      onClose !== undefined &&
+      resolvable.some(({ item }) => item.status === INBOX_STATUS.OPEN)
+      ? () => {
+          onClose(resolvable.map(({ item }) => item));
+          unpick();
+        }
+      : undefined,
   );
   // Note that a row whose item is done with is drawn gray, the chosen row kept on Questions and every such row on All alike.
   // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
@@ -1650,7 +1657,7 @@ export function InboxList({
       selectKey={leaving ? undefined : listed.item.id}
       onChoose={choose}
       onMark={mark}
-      onAskClose={onClose === undefined ? undefined : closing.ask}
+      onResolve={onClose === undefined ? undefined : resolve}
       onRemind={onRemind === undefined ? undefined : remind}
       onPickRemind={onRemind === undefined ? undefined : pickRemind}
       several={several !== undefined && picked.has(listed.item.id) ? several : undefined}
@@ -1730,8 +1737,6 @@ export function InboxList({
           </ReplayUnmask>
         </Stack>
       ) : null}
-      {selection.dialog}
-      {closing.dialog}
       {reminding.popover}
       {columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>

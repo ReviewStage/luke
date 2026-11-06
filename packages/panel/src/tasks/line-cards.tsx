@@ -80,7 +80,7 @@ function leadOf(lead: LineLead, received: boolean): string {
 export const THREAD_LINE_DID = {
   [THREAD_LINE_EVENT.MESSAGE]: { AFTER_NAME: "wrote in", OWN: "Wrote in" },
   [THREAD_LINE_EVENT.ANSWER]: { AFTER_NAME: "answered", OWN: "Answered" },
-  [THREAD_LINE_EVENT.CLOSE]: { AFTER_NAME: "closed", OWN: "Closed" },
+  [THREAD_LINE_EVENT.CLOSE]: { AFTER_NAME: "resolved", OWN: "Resolved" },
 } as const satisfies Record<ThreadLineMetadata["event"], LineLead>;
 
 /** The agent whose transcript is drawn, whose threads its thread lines are on; none where no transcript says. */

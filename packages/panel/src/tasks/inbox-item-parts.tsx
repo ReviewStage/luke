@@ -56,6 +56,7 @@ import {
   holderName,
   INBOX_HOLDER,
   INBOX_LINE,
+  INBOX_SETTLED_STANDING,
   type InboxHolder,
   type InboxLineKind,
   type InboxListed,
@@ -180,7 +181,7 @@ export function ItemMark({
   );
 }
 
-/** The glyph saying what an item asks, as its row's second line leads with it: its open ask's kind, a tick where an answer settled it, and none before words alone. */
+/** The glyph saying what an item asks, as its row's second line leads with it: its open ask's kind, a tick where an answer settled it, Resolve's mark where a member resolved it, and none before words alone. */
 export function inboxLineGlyph(kind: InboxLineKind): React.JSX.Element | null {
   switch (kind) {
     case INBOX_LINE.DECIDE:
@@ -191,9 +192,21 @@ export function inboxLineGlyph(kind: InboxLineKind): React.JSX.Element | null {
       return <PenLineIcon aria-hidden="true" />;
     case INBOX_LINE.SETTLED:
       return <CheckIcon aria-hidden="true" />;
+    case INBOX_LINE.RESOLVED:
+      return <GLYPH.RESOLVED />;
     case INBOX_LINE.SAID:
       return null;
   }
+}
+
+/** The mark of how a settled item ended, as its card's line wears it: Resolve's for a member's resolve, Withdrawn's for an ask its agent took back, and a tick for an answer. */
+function settledGlyph(item: InboxItem): React.JSX.Element {
+  if (item.status !== INBOX_STATUS.CLOSED) return <CheckIcon />;
+  return inboxSettledStanding(item) === INBOX_SETTLED_STANDING.RESOLVED ? (
+    <GLYPH.RESOLVED />
+  ) : (
+    <GLYPH.WITHDRAWN />
+  );
 }
 
 /**
@@ -261,7 +274,7 @@ export function InboxItemCard({
       {settled === undefined ? null : (
         <HoverCardRow
           look={HOVER_CARD_ROW_LOOK.DETAIL}
-          glyph={item.status === INBOX_STATUS.CLOSED ? <GLYPH.DISMISSED /> : <CheckIcon />}
+          glyph={settledGlyph(item)}
           label={settled}
         />
       )}
