@@ -43,9 +43,10 @@ import type { SidePanelControl } from "./use-side-panel.js";
  * shell opened there (`macShell.open`). Main then posts the shell's port,
  * which carries its bytes and how it stands (`TERMINAL_CONNECTION`) and
  * nothing else. Hidden, the tab closes the port; the shell goes on running
- * in main, which holds what it printed meanwhile for the next attach, and
- * a reload attaches to it again. A shell main no longer holds, refused on
- * attach, is dropped from the list and the next one found.
+ * in main, which holds the latest of what it printed for the next attach,
+ * drawn on a cleared screen, and a reload attaches to it again. A shell
+ * main no longer holds, refused on attach, is dropped from the list and the
+ * next one found.
  *
  * A shell that ended takes any key for a new one, and the bar's action (its
  * click, or Return) asks again for a mirror or a shell main could not make.
@@ -268,6 +269,8 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
       const asked: AttachAsked = { shell: target };
       held.asked.push(asked);
       setShell(target);
+      // Note that the screen is cleared, because main draws all it holds of the shell again.
+      held.handle?.reset();
       enter({ kind: TERMINAL_STATE.CONNECTING });
       // An attach main refused posts no port, so it is out of the line, and
       // its shell, which main no longer holds, out of the list; the next one

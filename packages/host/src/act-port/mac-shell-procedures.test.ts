@@ -19,7 +19,7 @@ import { type TestActPort, testActPort } from "./testing.js";
  * from a script: a shell belongs to the window that opened it, which alone
  * attaches to and closes it; its port carries what it printed, its exit,
  * and what the panel typed and resized; a page's end leaves it running and
- * the next attach draws what it printed meanwhile; output pauses the shell
+ * the next attach draws what it printed before and meanwhile; output pauses the shell
  * past the tab's acks; and the window's end kills it. A window is an inert
  * object of its own. Synthetic ids, folders, and bytes throughout.
  */
@@ -197,7 +197,7 @@ it.effect("what the panel types and resizes on the port reaches the shell", () =
 );
 
 it.effect(
-  "a page's end closes the port and leaves the shell running, and the next attach draws what it printed meanwhile",
+  "a page's end closes the port and leaves the shell running, and the next attach draws what it printed before and meanwhile",
   () =>
     Effect.gen(function* () {
       const { actPort, shells, opened, pageGone } = fixture();
@@ -205,6 +205,7 @@ it.effect(
 
       yield* actPort.perform(open, panel);
       yield* actPort.perform(attach("shell-1"), panel);
+      shells[0]?.print("$ make\r\n");
       pageGone(panel.sender);
       shells[0]?.print("built\r\n");
       yield* actPort.perform(attach("shell-1"), panel);
@@ -214,6 +215,7 @@ it.effect(
       assert.ok(!shells[0]?.heard.includes("kill"));
       assert.deepEqual(carried(after), [
         { type: TERMINAL_PORT_MESSAGE.STATE, state: TERMINAL_CONNECTION.ATTACHED },
+        "$ make\r\n",
         "built\r\n",
       ]);
     }),

@@ -13,10 +13,12 @@
  * loads next attaches to it again; the window itself going ends its shells.
  *
  * What a shell prints is never read here, logged, or written to app state:
- * it passes from the shell to its window's one port and is let go. While no
- * port stands, the latest `MISSED_MAX_BYTES` of it is held for the window's
- * next attach and nobody else, so a tab shown again draws what its shell
- * printed while it was hidden.
+ * it passes from the shell to its window's one port. The latest
+ * `PRINTED_MAX_BYTES` of it is held for the window's next attach and nobody
+ * else, whether or not a port stood as it was printed, so a tab drawn again
+ * on a fresh screen (shown again, a reload, or another shell chosen) draws
+ * the lines its shell printed before as well as those printed while it was
+ * away.
  */
 
 import {
@@ -62,8 +64,8 @@ export interface MacShellActsDependencies<Sender> {
   createId: () => string;
 }
 
-/** The most of what a shell printed while no port stood that is held for the next attach. */
-const MISSED_MAX_BYTES = 256 * 1024;
+/** The most of what a shell printed that is held for the next attach. */
+const PRINTED_MAX_BYTES = 256 * 1024;
 
 /** One shell a window opened, and where its port stands. */
 interface Held {
@@ -73,9 +75,9 @@ interface Held {
   /** Bytes posted that the tab has not acked. */
   unacked: number;
   paused: boolean;
-  /** What the shell printed while no port stood, oldest first. */
-  missed: Uint8Array[];
-  missedBytes: number;
+  /** The latest of what the shell printed, oldest first. */
+  printed: Uint8Array[];
+  printedBytes: number;
   /** The shell's exit status, once it exited. */
   exitCode: number | undefined;
 }
@@ -87,21 +89,24 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
   return actor.panel ? Effect.void : Effect.fail(refused());
 }
 
-/** What a shell printed, posted on its port and the shell paused once the tab fell far enough behind, or held while no port stands. */
-function output(held: Held, bytes: Uint8Array): void {
-  if (held.port === undefined) {
-    held.missed.push(bytes);
-    held.missedBytes += bytes.length;
-    while (held.missedBytes > MISSED_MAX_BYTES && held.missed.length > 1) {
-      held.missedBytes -= held.missed.shift()?.length ?? 0;
-    }
-    return;
-  }
+/** Bytes posted on the shell's port, the shell paused once the tab fell far enough behind; none while no port stands. */
+function post(held: Held, bytes: Uint8Array): void {
+  if (held.port === undefined) return;
   held.port.post({ type: TERMINAL_PORT_MESSAGE.OUTPUT, data: bytes });
   held.unacked += bytes.length;
   if (held.paused || held.unacked <= TERMINAL_FLOW.PAUSE_ABOVE_BYTES) return;
   held.paused = true;
   held.shell.pause();
+}
+
+/** What a shell printed, held for the next attach, its oldest let go past the bound, and posted where a port stands. */
+function output(held: Held, bytes: Uint8Array): void {
+  held.printed.push(bytes);
+  held.printedBytes += bytes.length;
+  while (held.printedBytes > PRINTED_MAX_BYTES && held.printed.length > 1) {
+    held.printedBytes -= held.printed.shift()?.length ?? 0;
+  }
+  post(held, bytes);
 }
 
 /** The shell's port closed and its count let go; the shell reads on, since nothing waits on a port that is gone. */
@@ -132,13 +137,16 @@ function heard(held: Held, message: WireBoundaryInput): void {
   else held.shell.resize(inbound.cols, inbound.rows);
 }
 
-/** How the shell stands told on its port: attached, what it printed while away, and its exit where it exited. */
+/**
+ * How the shell stands told on its port: attached, the latest of what it
+ * printed, and its exit where it exited. Note that all it holds is drawn,
+ * not only what was printed while no port stood, because the tab draws an
+ * attach on a cleared screen, the lines it showed before gone with it.
+ */
 function attached(held: Held, port: HostTerminalPort): void {
   held.port = port;
   port.post({ type: TERMINAL_PORT_MESSAGE.STATE, state: TERMINAL_CONNECTION.ATTACHED });
-  const missed = held.missed.splice(0);
-  held.missedBytes = 0;
-  for (const bytes of missed) output(held, bytes);
+  for (const bytes of held.printed) post(held, bytes);
   if (held.exitCode === undefined) return;
   port.post({
     type: TERMINAL_PORT_MESSAGE.STATE,
@@ -212,8 +220,8 @@ export function macShellProcedures<Sender>(
           port: undefined,
           unacked: 0,
           paused: false,
-          missed: [],
-          missedBytes: 0,
+          printed: [],
+          printedBytes: 0,
           exitCode: undefined,
         };
         const agents = shellsOf(context.actor.sender);
