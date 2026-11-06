@@ -130,7 +130,7 @@ import {
   inboxReadAllRequestSchema,
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
-import type { AnyLiveRead, LiveReadParams } from "./live-read.js";
+import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
 import {
   type AccountInboxItemsLiveAnswer,
   type AccountInboxLiveAnswer,
@@ -526,7 +526,7 @@ export class HostedAgentClient {
   }
 
   /** A declared live read sealed for following, or polled where `poll` asks (`askLiveRead`). */
-  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadParams<Read>, poll?: HostedPoll) {
+  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadAsked<Read>, poll?: HostedPoll) {
     return askLiveRead(this.#hosted.live, read, params, poll);
   }
 
