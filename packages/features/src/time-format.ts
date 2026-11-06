@@ -170,12 +170,14 @@ export function distanceText(deltaMs: number): string {
 
 /**
  * When a moment to come is due, as a row says it in few words: its time
- * today, "3:04 PM"; its weekday and time inside a week, "Mon 9:00 AM"; and
- * its date past that, "Nov 20", as a reminder's row names when it comes back.
+ * today, "3:04 PM"; its weekday and time inside the week ahead, "Mon 9:00
+ * AM"; and its date past that, "Nov 20", as a reminder's row names when it
+ * comes back. Note that a day already gone is named by its date too, since a
+ * weekday alone would read as the one to come.
  */
 export function dueText(at: number, now: number): string {
   if (midnightOf(at) === midnightOf(now)) return TIME_OF_DAY.format(at);
-  return at - now < WEEK_MS ? WEEKDAY_AND_TIME.format(at) : dateText(at, now, true);
+  return at > now && at - now < WEEK_MS ? WEEKDAY_AND_TIME.format(at) : dateText(at, now, true);
 }
 
 /** A day and a time in the fewest words, as a version is named: "Oct 11, 2:14 PM". */

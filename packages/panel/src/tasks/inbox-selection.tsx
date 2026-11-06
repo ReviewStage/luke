@@ -3,7 +3,7 @@ import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { ConfirmDialog, type SelectionGlyphAct, STATUS_TONE, useConfirmDialog } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { firstRefusal, type Kept } from "../act.js";
 import { COMMAND_PLACE, commandWords, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
@@ -77,6 +77,9 @@ export function useInboxSelection({
   onPick?: ((items: readonly InboxItem[], onAt: (at: number) => void) => void) | undefined;
 }): InboxSelection {
   const toast = useToast();
+  // The items chosen as of the latest draw, which a time picked after the picker opened is set on.
+  const chosenNow = useRef(listed);
+  chosenNow.current = listed;
   // The open items Resolve asked about, at the revisions it asked on.
   const [resolving, setResolving] = useState<readonly InboxListed[]>([]);
   const open = listed.filter(({ item }) => item.status === INBOX_STATUS.OPEN);
@@ -176,7 +179,11 @@ export function useInboxSelection({
                 ? undefined
                 : () =>
                     onPick(items, (at) => {
-                      onRemindMany(items, at);
+                      // Note that only the items still chosen as the time is picked take it, since one may have left the list while the picker stood.
+                      const still = items.filter((item) =>
+                        chosenNow.current.some((each) => each.item.id === item.id),
+                      );
+                      onRemindMany(still, at);
                       onClear();
                     }),
             ),

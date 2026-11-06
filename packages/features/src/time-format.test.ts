@@ -92,11 +92,12 @@ test("every clock is a 12-hour one, a schedule's included", () => {
   assert.equal(weekdayAndTimeText(new Date(2026, 9, 19, 14, 5).getTime()), "Mon 2:05 PM");
 });
 
-test("a moment to come is due at its time today, its weekday and time inside a week, and its date past that", () => {
+test("a moment to come is due at its time today, its weekday and time inside a week, and its date past that or once its day is gone", () => {
   const now = new Date(2026, 10, 6, 14, 3).getTime();
   assert.equal(dueText(new Date(2026, 10, 6, 15, 4).getTime(), now), "3:04 PM");
   assert.equal(dueText(new Date(2026, 10, 9, 9, 0).getTime(), now), "Mon 9:00 AM");
   assert.equal(dueText(new Date(2026, 10, 20, 9, 0).getTime(), now), "Nov 20");
+  assert.equal(dueText(new Date(2026, 10, 3, 9, 0).getTime(), now), "Nov 3");
 });
 
 test("a playhead reads minutes and two-digit seconds, past an hour in minutes", () => {
