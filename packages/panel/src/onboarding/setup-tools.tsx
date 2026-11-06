@@ -49,12 +49,12 @@ const TOOLS: readonly IntegrationProvider[] = [
 /** The provider a server name that parses as none would be drawn as; never reached. */
 const FIRST_TOOL = INTEGRATION_PROVIDER.LINEAR;
 
-/** What the rows look like while where they stand is read: each a provider not yet connected, its mark and Connect. */
+/** What the rows look like while where they stand is read: each a provider not yet connected, its mark, the line saying what it gives agents, and Connect. */
 const TOOLS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   {
     headed: false,
     rows: TOOLS.map(() => ({
-      described: false,
+      described: true,
       mark: SETTINGS_ROW_MARK_WIDTH,
       controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
     })),

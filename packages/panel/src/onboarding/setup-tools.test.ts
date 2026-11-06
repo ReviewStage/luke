@@ -23,7 +23,7 @@ import { ToolRows } from "./setup-tools.js";
  * Setup's tools step over a bridge answering where every provider stands as
  * the service would: a connected account is named beside its provider, as
  * Settings › Integrations names it, so the developer sees which account
- * each tool connected.
+ * each tool connected, and one not connected says what it gives agents.
  */
 
 const NOTION = INTEGRATION_PROVIDER.NOTION;
@@ -69,7 +69,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("a connected account is named beside its provider, and a tool not connected by its provider alone", async () => {
+test("a connected account is named beside its provider, and a tool not connected by its provider alone, saying what it gives agents", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -86,4 +86,11 @@ test("a connected account is named beside its provider, and a tool not connected
     return account ? `${label.textContent} · ${account}` : label.textContent;
   });
   assert.deepEqual(names, ["Linear", "Slack", "Sentry", "Notion · Acme"]);
+  assert.equal(
+    container
+      .querySelector('[id$="label"]')
+      ?.closest(".ui-settings-row")
+      ?.textContent?.includes("Issues, projects, and cycles"),
+    true,
+  );
 });

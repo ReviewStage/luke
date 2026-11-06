@@ -18,6 +18,7 @@ import {
   INTEGRATION_LABEL_MAX,
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
+  INTEGRATION_PURPOSE,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
@@ -77,9 +78,11 @@ import { MenuRow } from "./settings/menu-row.js";
  * Acme"), and under it says where the connection stands once that needs
  * saying: connected with the count of its server's tools, a sign-in the
  * browser is waited on with Reopen and Cancel, one that failed or never
- * finished with Try again, or one expired with Reconnect. Its ⋯ keeps
- * Reconnect, Disconnect (asked first), and, where the provider allows,
- * Add another account and Rename. A surface that hands it the server's
+ * finished with Try again, or one expired with Reconnect. A row with nothing
+ * of that to say and not connected says instead what the provider gives
+ * agents (`INTEGRATION_PURPOSE`), so a Connect is never pressed blind. Its
+ * ⋯ keeps Reconnect, Disconnect (asked first), and, where the provider
+ * allows, Add another account and Rename. A surface that hands it the server's
  * tools (`tools`) lets the row open onto them in place; one that hands none
  * says their count alone. Settings › Integrations' own words
  * (`settings/integrations-page.tsx`) say the rest of how a row behaves.
@@ -605,7 +608,11 @@ export function IntegrationRow({
           description:
             connected && tools !== undefined && tools.all.length > 0 ? (
               <ToolsLine name={name} panelId={panelId} tools={tools} />
-            ) : line === undefined ? null : (
+            ) : line === undefined ? (
+              connected ? null : (
+                INTEGRATION_PURPOSE[provider]
+              )
+            ) : (
               <RowLineText
                 line={line}
                 act={
