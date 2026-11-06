@@ -11,7 +11,8 @@ import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { GLYPH } from "@repo/ui/icons";
 import { type InlineRename, useInlineRename } from "@repo/ui/use-inline-rename";
-import { pressAct } from "../act.js";
+import { useMutation } from "@tanstack/react-query";
+import { pressMutation } from "../act-mutations.js";
 import { appPlatform } from "../app-platform.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
@@ -379,6 +380,7 @@ export function useAgentActions(
   const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
   const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
+  const { mutate: openMacTerminal } = useMutation(pressMutation(ACT_KIND.MAC_TERMINAL_LOCAL_AGENT));
   const thisMac = useThisMac();
   const local = agent.machine === AGENT_MACHINE.DEVICE;
   // Note that a local agent runs in a worktree on its device, which no relayed tab reaches, so its
@@ -386,7 +388,7 @@ export function useAgentActions(
   const onThisMac = thisMac?.deviceId !== undefined && agent.mac?.deviceId === thisMac.deviceId;
   const terminal = local
     ? macTerminal && onThisMac
-      ? () => void pressAct(ACT_KIND.MAC_TERMINAL_LOCAL_AGENT, { agentId: agent.id })
+      ? () => openMacTerminal({ agentId: agent.id })
       : undefined
     : onOpenTerminal === undefined
       ? undefined

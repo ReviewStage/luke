@@ -9,8 +9,10 @@ import {
 import type { AutomationSummary } from "@repo/features/automation-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { unreachedAs, useAct } from "../act.js";
+import { unreachedAs } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
@@ -40,7 +42,12 @@ const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
 /** One workspace's automations, none held while no workspace is listed, with the writes that make, change, and delete one. */
 export function useAutomations(workspaceId: string | undefined) {
-  const { act } = useAct();
+  const { mutateAsync: sendCreate } = useMutation(actMutation(ACT_KIND.AUTOMATIONS_CREATE));
+  const { mutateAsync: sendChange } = useMutation(actMutation(ACT_KIND.AUTOMATIONS_CHANGE));
+  const { mutateAsync: sendDelete } = useMutation(actMutation(ACT_KIND.AUTOMATIONS_DELETE));
+  const { mutateAsync: sendNewSecret } = useMutation(
+    actMutation(ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET),
+  );
   const held = useHostRead(LIVE_READ.AUTOMATIONS, workspaceId);
   // Note that the read keeps one identity while its rows do, so a page memoized on it draws again only as they move.
   const rows = held.rows;
@@ -51,13 +58,13 @@ export function useAutomations(workspaceId: string | undefined) {
   }, [workspaceId, rows, held.status]);
   const create = useCallback(
     (params: AutomationCreateParams): Promise<AutomationView> =>
-      act(ACT_KIND.AUTOMATIONS_CREATE, params).catch(unreached),
-    [act],
+      sendCreate(params).catch(unreached),
+    [sendCreate],
   );
   const change = useCallback(
     (params: AutomationChangeParams): Promise<AutomationView> =>
-      act(ACT_KIND.AUTOMATIONS_CHANGE, params).catch(unreached),
-    [act],
+      sendChange(params).catch(unreached),
+    [sendChange],
   );
   /** One automation turned on or off, and why where the service refused it. */
   const toggle = useCallback(
@@ -66,14 +73,14 @@ export function useAutomations(workspaceId: string | undefined) {
   );
   const remove = useCallback(
     (automationId: string): Promise<AutomationDeletedView> =>
-      act(ACT_KIND.AUTOMATIONS_DELETE, { automationId }).catch(unreached),
-    [act],
+      sendDelete({ automationId }).catch(unreached),
+    [sendDelete],
   );
   /** A webhook's new secret, answered once for the asking page to show; the list keeps the automation alone. */
   const newWebhookSecret = useCallback(
     (automationId: string): Promise<AutomationView> =>
-      act(ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET, { automationId }).catch(unreached),
-    [act],
+      sendNewSecret({ automationId }).catch(unreached),
+    [sendNewSecret],
   );
   return { read, reload: held.retry, create, change, toggle, remove, newWebhookSecret };
 }
