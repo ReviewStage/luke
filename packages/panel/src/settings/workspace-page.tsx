@@ -73,7 +73,7 @@ import {
   wholeWordsHint,
 } from "@repo/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@repo/ui/actor-model";
-import { CONFIRM_STAGE } from "@repo/ui/confirm-state";
+import { CONFIRM_STAGE, neverBusyAct } from "@repo/ui/confirm-state";
 import {
   CrownIcon,
   ExternalLinkIcon,
@@ -92,6 +92,7 @@ import { useMemo, useRef, useState } from "react";
 import { useAccountPreferences } from "../account-choices.js";
 import { actMutation, pressMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
@@ -473,7 +474,7 @@ function MemberRow({
   /** Whether the list's rows may carry a ⋯, so one without keeps its room. */
   slotted: boolean;
 }): React.JSX.Element {
-  const { mutateAsync: sendWorkspaceTransfer } = useMutation(
+  const { mutateAsync: sendWorkspaceTransfer, ...transferring } = useMutation(
     actMutation(ACT_KIND.WORKSPACE_TRANSFER),
   );
   const { mutateAsync: sendWorkspaceMemberRole } = useMutation(
@@ -490,15 +491,17 @@ function MemberRow({
   // Note that the dialog lets go at once, since the row it stands in goes with the removal the host draws on the press.
   const remove = useConfirmDialog(
     { subject: may.remove, surfaceOpen: true },
-    () => {
-      sendWorkspaceMemberRemove({ workspaceId, userId });
-      return Promise.resolve(ACCEPTED);
-    },
+    neverBusyAct(() => sendWorkspaceMemberRemove({ workspaceId, userId })),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_MEMBER_REMOVE, { workspaceId }),
   );
+  const makeOwnerAct = useConfirmAct(transferring, {
+    send: () => sendWorkspaceTransfer({ workspaceId, userId }),
+    answered,
+    failed: refusedWith,
+  });
   const makeOwner = useConfirmDialog(
     { subject: may.transfer, surfaceOpen: true },
-    () => sendWorkspaceTransfer({ workspaceId, userId }).then(answered, refusedWith),
+    makeOwnerAct,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_TRANSFER, { workspaceId }),
   );
   const giveRole = (role: WorkspaceInvitation["role"]) => {
@@ -634,15 +637,18 @@ function MemberLeave({
   ownName: string | undefined;
   onLeft: () => void;
 }): React.JSX.Element {
-  const { mutateAsync: sendWorkspaceLeave } = useMutation(actMutation(ACT_KIND.WORKSPACE_LEAVE));
+  const { mutateAsync: sendWorkspaceLeave, ...leaving } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_LEAVE),
+  );
   const workspaceId = workspace.id;
+  const leaveAct = useConfirmAct(leaving, {
+    send: () => sendWorkspaceLeave({ workspaceId }).then(onLeft),
+    answered: () => ACCEPTED,
+    failed: refusedWith,
+  });
   const leave = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    () =>
-      sendWorkspaceLeave({ workspaceId }).then(() => {
-        onLeft();
-        return ACCEPTED;
-      }, refusedWith),
+    leaveAct,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_LEAVE),
   );
   const ownAutomations = useOwnAutomations(workspaceId, leave.stage !== CONFIRM_STAGE.RESTING);
@@ -776,7 +782,7 @@ function OwnerLeave({
   workspace: Workspace;
   members: ListRead<WorkspaceMember>;
 }): React.JSX.Element {
-  const { mutateAsync: sendWorkspaceTransfer } = useMutation(
+  const { mutateAsync: sendWorkspaceTransfer, ...transferring } = useMutation(
     actMutation(ACT_KIND.WORKSPACE_TRANSFER),
   );
   // Note that the admins stand in the order the menu lists them, so the first offered is the first listed.
@@ -788,15 +794,17 @@ function OwnerLeave({
   ).map((row) => row.member);
   const [chosenId, setChosenId] = useState<string>();
   const heir = admins.find((each) => each.userId === chosenId) ?? admins[0];
+  const transferAct = useConfirmAct(transferring, {
+    send: () =>
+      heir === undefined
+        ? Promise.resolve()
+        : sendWorkspaceTransfer({ workspaceId: workspace.id, userId: heir.userId }),
+    answered: () => ACCEPTED,
+    failed: refusedWith,
+  });
   const transfer = useConfirmDialog(
     { subject: heir !== undefined, surfaceOpen: true },
-    () =>
-      heir === undefined
-        ? Promise.resolve(ACCEPTED)
-        : sendWorkspaceTransfer({ workspaceId: workspace.id, userId: heir.userId }).then(
-            () => ACCEPTED,
-            refusedWith,
-          ),
+    transferAct,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_TRANSFER),
   );
   return (
@@ -1000,10 +1008,9 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
       subject: canceling !== undefined && (pending ?? []).some((one) => one.id === canceling.id),
       surfaceOpen: true,
     },
-    () => {
+    neverBusyAct(() => {
       if (canceling !== undefined) cancel(canceling.id);
-      return Promise.resolve(ACCEPTED);
-    },
+    }),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_INVITATION_CANCEL),
   );
 
@@ -1264,7 +1271,7 @@ function ManagedSentry({
   const { mutateAsync: sendWorkspaceSentryInstall } = useMutation(
     actMutation(ACT_KIND.WORKSPACE_SENTRY_INSTALL),
   );
-  const { mutateAsync: sendWorkspaceSentryDisconnect } = useMutation(
+  const { mutateAsync: sendWorkspaceSentryDisconnect, ...sentryLeaving } = useMutation(
     actMutation(ACT_KIND.WORKSPACE_SENTRY_DISCONNECT),
   );
   const workspaceId = workspace.id;
@@ -1288,15 +1295,17 @@ function ManagedSentry({
   const stillListed =
     leaving !== undefined &&
     sentry.installations.some((one) => one.installationId === leaving.installationId);
+  const disconnectAct = useConfirmAct(sentryLeaving, {
+    send: () =>
+      leaving === undefined
+        ? Promise.resolve()
+        : sendWorkspaceSentryDisconnect({ workspaceId, installationId: leaving.installationId }),
+    answered: () => ACCEPTED,
+    failed: refusedWith,
+  });
   const disconnect = useConfirmDialog(
     { subject: stillListed, surfaceOpen: true },
-    () =>
-      leaving === undefined
-        ? Promise.resolve(ACCEPTED)
-        : sendWorkspaceSentryDisconnect({
-            workspaceId,
-            installationId: leaving.installationId,
-          }).then(() => ACCEPTED, refusedWith),
+    disconnectAct,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_SENTRY_DISCONNECT),
   );
   const actions = [
@@ -1420,7 +1429,7 @@ function ManagedSlackBot({
   const { mutateAsync: sendWorkspaceSlackBotConnect } = useMutation(
     actMutation(ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT),
   );
-  const { mutateAsync: sendWorkspaceSlackBotDisconnect } = useMutation(
+  const { mutateAsync: sendWorkspaceSlackBotDisconnect, ...slackLeaving } = useMutation(
     actMutation(ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT),
   );
   const workspaceId = workspace.id;
@@ -1440,9 +1449,14 @@ function ManagedSlackBot({
         setConnecting(false);
       });
   };
+  const disconnectAct = useConfirmAct(slackLeaving, {
+    send: () => sendWorkspaceSlackBotDisconnect({ workspaceId }),
+    answered: () => ACCEPTED,
+    failed: refusedWith,
+  });
   const disconnect = useConfirmDialog(
     { subject: slack.team !== undefined, surfaceOpen: true },
-    () => sendWorkspaceSlackBotDisconnect({ workspaceId }).then(() => ACCEPTED, refusedWith),
+    disconnectAct,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_SLACK_BOT_DISCONNECT),
   );
   const actions =
@@ -1682,10 +1696,7 @@ function useSlugDialog(workspace: Workspace): SlugAsk {
   const shown = problem === undefined ? undefined : WORKSPACE_SLUG_REFUSAL[problem];
   const confirm = useConfirmDialog(
     { subject: workspace.role === WORKSPACE_ROLE.OWNER, surfaceOpen: true },
-    () => {
-      sendWorkspaceSlugSet({ workspaceId, slug });
-      return Promise.resolve(ACCEPTED);
-    },
+    neverBusyAct(() => sendWorkspaceSlugSet({ workspaceId, slug })),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_WRITE, { workspaceId }),
   );
   const form = useFormDialog(confirm, problem === undefined && slug !== standing);
@@ -1774,9 +1785,15 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   const [refusal, setRefusal] = useState<string>();
   const button = useRef<HTMLButtonElement | null>(null);
   const set = workspace.photoVersion !== undefined;
+  const photoRemoving = useMutation(actMutation(ACT_KIND.WORKSPACE_PHOTO_SET));
+  const removeAct = useConfirmAct(photoRemoving, {
+    send: () => photoRemoving.mutateAsync({ workspaceId, photo: null }),
+    answered: () => ACCEPTED,
+    failed: refusedWith,
+  });
   const remove = useConfirmDialog(
     { subject: manages && set, surfaceOpen: true },
-    () => sendWorkspacePhotoSet({ workspaceId, photo: null }).then(() => ACCEPTED, refusedWith),
+    removeAct,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_WRITE),
   );
   // Note that focus goes back to Rename once the edit ends, since the host draws the new name on the press.

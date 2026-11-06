@@ -73,6 +73,7 @@ import { actMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { workspaceIntegrationsQuery, workspaceIntegrationsRetryMutation } from "../live-reads.js";
@@ -504,21 +505,21 @@ function useRowDeletion(
     groups.some((group) => group.automations.some((each) => each.id === asking.id))
       ? asking
       : undefined;
-  const confirm = useConfirmDialog(
-    { subject: asked !== undefined, surfaceOpen: true },
-    () => {
-      if (asked === undefined) return Promise.resolve(ACCEPTED);
-      return removing.mutateAsync(asked.id).then((answer): ActionResult => {
-        if ("failure" in answer) {
-          return {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: DELETE_REFUSAL_WORDS[answer.failure],
-          };
-        }
-        onDeleted(asked.id);
-        return ACCEPTED;
+  const confirmAct = useConfirmAct(removing, {
+    send: () => {
+      if (asked === undefined) return Promise.resolve();
+      return removing.mutateAsync(asked.id).then((answer) => {
+        if (!("failure" in answer)) onDeleted(asked.id);
       });
     },
+    answered: (answer): ActionResult =>
+      "failure" in answer
+        ? { status: ACTION_RESULT_STATUS.REJECTED, reason: DELETE_REFUSAL_WORDS[answer.failure] }
+        : ACCEPTED,
+  });
+  const confirm = useConfirmDialog(
+    { subject: asked !== undefined, surfaceOpen: true },
+    confirmAct,
     confirmFailure(FAILURE_SURFACE.AUTOMATION_DELETE, { automationId: asked?.id }),
   );
   const { ask: askConfirm } = confirm;

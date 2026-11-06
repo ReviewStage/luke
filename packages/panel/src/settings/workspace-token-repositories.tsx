@@ -17,8 +17,8 @@ import {
   SettingsLine,
   useConfirmDialog,
 } from "@repo/ui";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
-import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import { actMutation, pressMutation } from "../act-mutations.js";
@@ -390,10 +390,9 @@ function TokenOwnerRow({
     owner.repositories.some((one) => one.fullName === asked.fullName && one.removable);
   const removal = useConfirmDialog(
     { subject: standing, surfaceOpen: true },
-    () => {
+    neverBusyAct(() => {
       if (asked !== undefined) onRemove(asked.fullName);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    }),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_REPOSITORY_REMOVE),
   );
   const actions = owner.repositories

@@ -12,8 +12,8 @@ import {
   STATUS_TONE,
   useConfirmDialog,
 } from "@repo/ui";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
-import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useMutation } from "@tanstack/react-query";
 import { Equal } from "effect";
 import { useCallback, useRef, useState } from "react";
@@ -233,10 +233,9 @@ export function useInboxCloseAsk(
     now !== undefined && now.status === INBOX_STATUS.OPEN && now.revision === asked?.revision;
   const confirm = useConfirmDialog(
     { subject: standing, surfaceOpen },
-    () => {
+    neverBusyAct(() => {
       if (now !== undefined) void closer?.(now);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    }),
     confirmFailure(FAILURE_SURFACE.INBOX_CLOSE),
   );
   const { ask: confirmAsk } = confirm;

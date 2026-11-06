@@ -22,8 +22,9 @@ import {
   STATUS_TONE,
   useConfirmDialog,
 } from "@repo/ui";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import type { ActionResult } from "@repo/wire";
 import { useState } from "react";
 import { useRowDrag } from "../desktop/use-row-drag.js";
 import { confirmFailure } from "../failure-report.js";
@@ -137,10 +138,9 @@ export function AgentQueueDock({
   const asked = doomed !== undefined && messages.some((message) => message.id === doomed.id);
   const confirm = useConfirmDialog(
     { subject: asked, surfaceOpen: true },
-    () =>
-      doomed === undefined
-        ? Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED })
-        : onDelete(doomed),
+    neverBusyAct(() => {
+      if (doomed !== undefined) void onDelete(doomed);
+    }),
     confirmFailure(FAILURE_SURFACE.AGENT_QUEUE_DELETE),
   );
   if (messages.length === 0) return null;

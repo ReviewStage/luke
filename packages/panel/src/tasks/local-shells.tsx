@@ -24,9 +24,11 @@ import {
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
+import { useMutation } from "@tanstack/react-query";
 import type { ReactNode, RefObject } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { rowMenu } from "../desktop/action-menu.js";
 import { confirmFailure } from "../failure-report.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
@@ -125,9 +127,14 @@ function ShellRow({
   const coarse = useCoarsePointer();
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
+  const closing = useMutation({ mutationFn: () => session.onKill(shell.terminalId) });
+  const endingAct = useConfirmAct(closing, {
+    send: () => closing.mutateAsync(),
+    answered: sameAnswer,
+  });
   const ending = useConfirmDialog(
     { subject: true, surfaceOpen },
-    () => session.onKill(shell.terminalId),
+    endingAct,
     confirmFailure(FAILURE_SURFACE.TERMINAL_STOP),
   );
   return (

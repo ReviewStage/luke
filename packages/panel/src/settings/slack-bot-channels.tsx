@@ -22,6 +22,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { actMutation } from "../act-mutations.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";
 import {
   repositoryListsQuery,
@@ -222,13 +223,18 @@ function ChannelRow({
   const repositories = useRepositoryRows(workspaceId);
   const [refusal, setRefusal] = useState<string>();
   const name = channelName(channel);
+  const leaving = useMutation(actMutation(ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL));
+  const removeAct = useConfirmAct(leaving, {
+    send: () => leaving.mutateAsync({ workspaceId, channelId, member: false }),
+    answered: () => ACCEPTED,
+    failed: (refused): ActionResult => ({
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: refused.message,
+    }),
+  });
   const remove = useConfirmDialog(
     { subject: channel.member, surfaceOpen: true },
-    () =>
-      sendWorkspaceSlackBotChannel({ workspaceId, channelId, member: false }).then(
-        () => ACCEPTED,
-        (refused: Error) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: refused.message }),
-      ),
+    removeAct,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL),
   );
   const pick = (id: string) => {

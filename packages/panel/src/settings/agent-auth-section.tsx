@@ -81,6 +81,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
@@ -293,6 +294,23 @@ const WORDS = {
   CHATGPT_DISCONNECT_FAILED: "Couldn't disconnect your ChatGPT plan. Try again.",
   DEFAULT_FAILED: "Couldn't change the default. Try again.",
 } as const;
+
+/** What a confirmed removal answers where it went. */
+const ACCEPTED_KEY: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+
+/** What a confirmed removal answers where it did not go, by what it removed. */
+const CLAUDE_DISCONNECT_REFUSED: ActionResult = {
+  status: ACTION_RESULT_STATUS.REJECTED,
+  reason: WORDS.CLAUDE_DISCONNECT_FAILED,
+};
+const CHATGPT_DISCONNECT_REFUSED: ActionResult = {
+  status: ACTION_RESULT_STATUS.REJECTED,
+  reason: WORDS.CHATGPT_DISCONNECT_FAILED,
+};
+const KEY_REMOVE_REFUSED: ActionResult = {
+  status: ACTION_RESULT_STATUS.REJECTED,
+  reason: WORDS.REMOVE_KEY_FAILED,
+};
 
 /* ----- Reading the credentials ----- */
 
@@ -814,7 +832,7 @@ function useClaudePlan(
   plan: SubscriptionKeySummary | undefined,
   field: React.RefObject<HTMLInputElement | null>,
 ): { secret: PastedSecret; removal: DialogConfirm } {
-  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+  const { mutateAsync: sendProviderKeysRemove, ...keyRemoving } = useMutation(
     actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
   );
   const secret = usePastedSecret({
@@ -848,9 +866,15 @@ function useClaudePlan(
         }),
     [sendProviderKeysRemove, cancel],
   );
+  const removalAct = useConfirmAct(keyRemoving, {
+    send: disconnect,
+    answered: (removed): ActionResult =>
+      "failure" in removed ? CLAUDE_DISCONNECT_REFUSED : ACCEPTED_KEY,
+    failed: () => CLAUDE_DISCONNECT_REFUSED,
+  });
   const removal = useConfirmDialog(
     { subject: plan !== undefined, surfaceOpen: true },
-    disconnect,
+    removalAct,
     confirmFailure(FAILURE_SURFACE.AGENT_KEY_REMOVE),
   );
   return { secret, removal };
@@ -1009,7 +1033,7 @@ interface ChatGptPlan {
  * says so.
  */
 function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
-  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+  const { mutateAsync: sendProviderKeysRemove, ...keyRemoving } = useMutation(
     actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
   );
   const [connecting, setConnecting] = useState(false);
@@ -1045,9 +1069,15 @@ function useChatGptPlan(plan: SubscriptionKeySummary | undefined): ChatGptPlan {
         }),
     [sendProviderKeysRemove],
   );
+  const removalAct = useConfirmAct(keyRemoving, {
+    send: disconnect,
+    answered: (removed): ActionResult =>
+      "failure" in removed ? CHATGPT_DISCONNECT_REFUSED : ACCEPTED_KEY,
+    failed: () => CHATGPT_DISCONNECT_REFUSED,
+  });
   const removal = useConfirmDialog(
     { subject: plan !== undefined, surfaceOpen: true },
-    disconnect,
+    removalAct,
     confirmFailure(FAILURE_SURFACE.AGENT_KEY_REMOVE),
   );
   const dismissNotice = useCallback(() => {
@@ -1237,7 +1267,7 @@ function useApiKey(
   stored: ProviderKeySummary | undefined,
   field: React.RefObject<HTMLInputElement | null>,
 ): { secret: PastedSecret; removal: DialogConfirm } {
-  const { mutateAsync: sendProviderKeysRemove } = useMutation(
+  const { mutateAsync: sendProviderKeysRemove, ...keyRemoving } = useMutation(
     actMutation(ACT_KIND.PROVIDER_KEYS_REMOVE),
   );
   const secret = usePastedSecret({
@@ -1259,9 +1289,14 @@ function useApiKey(
         }),
     [sendProviderKeysRemove, provider],
   );
+  const removalAct = useConfirmAct(keyRemoving, {
+    send: remove,
+    answered: (answer): ActionResult => ("failure" in answer ? KEY_REMOVE_REFUSED : ACCEPTED_KEY),
+    failed: () => KEY_REMOVE_REFUSED,
+  });
   const removal = useConfirmDialog(
     { subject: stored !== undefined, surfaceOpen: true },
-    remove,
+    removalAct,
     confirmFailure(FAILURE_SURFACE.AGENT_KEY_REMOVE),
   );
   return { secret, removal };

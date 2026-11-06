@@ -27,6 +27,7 @@ import { Schema } from "effect";
 import { useState } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { confirmFailure } from "../failure-report.js";
 import { useBusyPress } from "../settings/busy-press.js";
 import { agentName, agentStillWriting, teammateStarter } from "../tasks/agent-model.js";
@@ -169,9 +170,14 @@ export function useAgentArchive(
     about: { agentId: agent.id },
   });
   const archiving = useMutation(agents.archiveAgent);
+  const confirmAct = useConfirmAct(archiving, {
+    send: () =>
+      archiving.mutateAsync({ agentId: agent.id, archived: true, asked: true }).then(heard),
+    answered: sameAnswer,
+  });
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: shown },
-    () => archiving.mutateAsync({ agentId: agent.id, archived: true, asked: true }).then(heard),
+    confirmAct,
     confirmFailure(FAILURE_SURFACE.AGENT_ARCHIVE, { agentId: agent.id }),
   );
   const [reading, setReading] = useState(false);

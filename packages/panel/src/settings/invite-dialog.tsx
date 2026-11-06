@@ -21,6 +21,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { sendAct } from "../act.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { confirmFailure } from "../failure-report.js";
 import { useInvitees, useSignedIn } from "../invitees.js";
@@ -105,9 +106,13 @@ export function useInviteDialog({
     return flight.current;
   };
 
+  const confirmAct = useConfirmAct(inviting, {
+    send: send,
+    answered: sameAnswer,
+  });
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    send,
+    confirmAct,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_INVITE),
   );
   const form = useFormDialog(confirm, invitees.pending.length > 0);

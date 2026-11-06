@@ -77,6 +77,7 @@ import {
   type PanelCommand,
 } from "../command-items.js";
 import { useDescriptionDrafted } from "../composer-drafts.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChordLinks } from "../copy-link-item.js";
 import { leftMark } from "../draft-mark.js";
@@ -84,9 +85,9 @@ import { confirmFailure } from "../failure-report.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { renameWrite } from "../rename-write.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
+import { lastEditOf } from "../tasks/description-body.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { useTaskSendFailed } from "../tasks/failed-lines.js";
-import { lastEditOf } from "../tasks/description-body.js";
 import { CHOOSE_LABEL } from "../tasks/repository-chip.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
 import {
@@ -837,9 +838,13 @@ export function useTaskMenuItems(
     about: { taskId },
   });
   const deleting = useMutation(tasks.deleteTask);
+  const deletionAct = useConfirmAct(deleting, {
+    send: () => deleting.mutateAsync(taskId).then(heard),
+    answered: sameAnswer,
+  });
   const deletion = useConfirmDialog(
     { subject: task !== undefined, surfaceOpen: tasks.shown },
-    () => deleting.mutateAsync(taskId).then(heard),
+    deletionAct,
     confirmFailure(FAILURE_SURFACE.TASK_DELETE, { taskId }),
   );
   // Mark done as the chord runs it: on a task not already done, and nothing otherwise.

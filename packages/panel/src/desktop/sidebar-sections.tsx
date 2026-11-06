@@ -69,8 +69,10 @@ import {
 } from "@repo/ui/task-sections-model";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { confirmFailure } from "../failure-report.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -264,9 +266,8 @@ export function useSectionDialogs(
   const toast = useToast();
   const latest = useRef(tasks);
   latest.current = tasks;
-  const confirm: DialogConfirm = useConfirmDialog(
-    { subject: tasks.signedIn, surfaceOpen },
-    (): Promise<ActionResult> => {
+  const writing = useMutation({
+    mutationFn: (): Promise<ActionResult> => {
       const trimmed = title.trim();
       if (trimmed === "" || ask === undefined) {
         return Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: TITLE_ASKED });
@@ -274,6 +275,14 @@ export function useSectionDialogs(
       tasks.onWriteSections(answerWrites(ask, trimmed, icon));
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
+  });
+  const confirmAct = useConfirmAct(writing, {
+    send: () => writing.mutateAsync(),
+    answered: sameAnswer,
+  });
+  const confirm: DialogConfirm = useConfirmDialog(
+    { subject: tasks.signedIn, surfaceOpen },
+    confirmAct,
     confirmFailure(FAILURE_SURFACE.SECTION_WRITE),
   );
   const blank = title.trim() === "";

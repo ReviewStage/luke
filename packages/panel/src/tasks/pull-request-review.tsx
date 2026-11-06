@@ -23,7 +23,6 @@ import {
 import { CONFIRM_STAGE } from "@repo/ui/confirm-state";
 import { GLYPH, MessageSquarePlusIcon } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { confirmFailure } from "../failure-report.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
@@ -246,15 +245,7 @@ export function PullRequestReview({
   // Note that the question stands, busy, until GitHub answers the discard, says its refusal in GitHub's words, and holds the panel open meanwhile as a review on its way does.
   const discarding = useConfirmDialog(
     { subject: pending != null, surfaceOpen: open },
-    () =>
-      writes
-        .write({ action: PULL_REQUEST_ACTION.DISCARD_REVIEW })
-        .then(
-          (outcome): ActionResult =>
-            outcome.done
-              ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-              : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
-        ),
+    writes.confirmAct({ action: PULL_REQUEST_ACTION.DISCARD_REVIEW }),
     confirmFailure(FAILURE_SURFACE.PULL_REQUEST_REVIEW_DISCARD),
   );
   const sending = writes.pending !== undefined || discarding.stage !== CONFIRM_STAGE.RESTING;

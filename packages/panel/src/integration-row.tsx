@@ -64,7 +64,9 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation } from "@tanstack/react-query";
 import { useCallback, useId, useRef, useState } from "react";
 import type { ActResult, ActVariables } from "./act.js";
+import { sendAct } from "./act.js";
 import { actMutation } from "./act-mutations.js";
+import { sameAnswer, useConfirmAct } from "./confirm-act.js";
 import { confirmFailure, refusedShown } from "./failure-report.js";
 import { type GitHubConnectControl, useGitHubConnection } from "./github-connect.js";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "./integration-grant.js";
@@ -476,9 +478,6 @@ export function IntegrationRow({
   const { mutateAsync: sendIntegrationsRename } = useMutation(
     actMutation(ACT_KIND.INTEGRATIONS_RENAME),
   );
-  const { mutateAsync: disconnectIntegration } = useMutation(
-    actMutation(ACT_KIND.INTEGRATIONS_DISCONNECT),
-  );
   const tokens = tools?.tokens ?? NO_TOKENS;
   const { provider, connection, name, account, accountName } = row;
   const { cancelSignIn } = statuses;
@@ -540,9 +539,22 @@ export function IntegrationRow({
   };
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
+  const disconnecting = useMutation({
+    mutationKey: [ACT_KIND.INTEGRATIONS_DISCONNECT],
+    mutationFn: () =>
+      disconnectAccount(
+        (variables) => sendAct(ACT_KIND.INTEGRATIONS_DISCONNECT, variables),
+        github,
+        row,
+      ),
+  });
+  const disconnectAct = useConfirmAct(disconnecting, {
+    send: () => disconnecting.mutateAsync(),
+    answered: sameAnswer,
+  });
   const disconnect = useConfirmDialog(
     { subject: connected, surfaceOpen: true },
-    () => disconnectAccount(disconnectIntegration, github, row),
+    disconnectAct,
     confirmFailure(FAILURE_SURFACE.INTEGRATION_DISCONNECT),
   );
 
