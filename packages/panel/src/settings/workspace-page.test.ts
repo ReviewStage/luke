@@ -79,7 +79,7 @@ import {
   holdRepositoryLists,
   type RepositoriesRead,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, startQueriesAfresh } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { stubCanvas, webpBytes } from "../testing/photo-canvas.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -641,11 +641,13 @@ async function mount(
   registries.push(registry);
   render(workspace.id);
   await settle();
+  await peopleLanded(container);
   /** Stands the page again over another workspace, as the sidebar listing it does. */
   const relist = async (next: Workspace) => {
     workspaces.push(next);
     render(next.id);
     await settle();
+    await peopleLanded(container);
   };
   /** Stands the page again over the workspace as the window's list now says it, as a list read after a change elsewhere does. */
   const restand = async (next: Workspace) => {
@@ -656,6 +658,7 @@ async function mount(
     );
     render(next.id);
     await settle();
+    await peopleLanded(container);
   };
   return { page: container, pressed, relist, restand };
 }
@@ -769,6 +772,15 @@ const busy = (container: HTMLElement) => container.querySelector('[aria-busy="tr
 const section = (page: HTMLElement, anchor: string) =>
   page.querySelector<HTMLElement>(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${anchor}"]`) ??
   assert.fail(`no ${anchor} group`);
+
+/** Waits until the members the host laid, or their refusal, reach their query, as the page draws them a tick after they land. */
+const peopleLanded = (page: HTMLElement) =>
+  vi.waitFor(() => {
+    const members = page.querySelector(
+      `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.MEMBERS}"]`,
+    );
+    assert.equal(members === null || placeholderOf(members) === undefined, true);
+  });
 
 /** The placeholder standing for a read still out, what it says it reads, and how many rows it stands. */
 const placeholderOf = (within: Element) => {
@@ -1047,9 +1059,13 @@ test("a member's address and an invited one, where the row cuts them short, are 
   stored = [OWNER, { ...MEMBER, email: LONG }];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await invite(page, LONG, WORKSPACE_ROLE.MEMBER);
+  // Note that the invitation is listed once the invitations the host lays reach their query.
+  const invited = await vi.waitFor(
+    () => invitationRows(page)[0] ?? assert.fail("no pending invitation"),
+  );
   const addresses = [
     memberNamed(page, "Sam").querySelector("p .ui-one-line"),
-    addressOf(invitationRows(page)[0] ?? assert.fail("no pending invitation")),
+    addressOf(invited),
   ].map((words) => words ?? assert.fail("an address is not drawn"));
 
   assert.deepEqual(addresses.map(pillOver), [undefined, undefined], "drawn whole, no pill");
@@ -1112,14 +1128,16 @@ test("while the members are being read the rest of the page stands, a placeholde
   await settle();
 
   assert.deepEqual(whileReading, { members: ["Reading the members", 3], identityHeld: false });
-  assert.equal(
-    container.querySelector('[role="alert"]')?.textContent,
-    "The members could not be read.Retry",
+  await vi.waitFor(() =>
+    assert.equal(
+      container.querySelector('[role="alert"]')?.textContent,
+      "The members could not be read.Retry",
+    ),
   );
   refuseMembersRead = false;
   act(() => button(container, "Retry").click());
   await settle();
-  assert.ok(memberNamed(container, "Sam"));
+  await vi.waitFor(() => memberNamed(container, "Sam"));
   assert.equal(busy(container), false);
   // A member's placeholder stood in the boxes of the row that landed: its face, its email, its role.
   assert.deepEqual(placeholderBoxes, rowBoxes(section(container, SETTINGS_SECTION.MEMBERS)));
@@ -1177,9 +1195,11 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
       .map((request) => request.payload),
     [{ workspaceId: ACME.id, userId: MEMBER.userId }],
   );
-  assert.equal(
-    [...page.querySelectorAll(".menu-row")].some((each) => each.textContent?.includes("Sam")),
-    false,
+  await vi.waitFor(() =>
+    assert.equal(
+      [...page.querySelectorAll(".menu-row")].some((each) => each.textContent?.includes("Sam")),
+      false,
+    ),
   );
 });
 
@@ -1244,9 +1264,11 @@ test("the owner makes a member an admin from the member's ⋯ at once, and the r
       { workspaceId: ACME.id, userId: MEMBER.userId, role: WORKSPACE_ROLE.ADMIN },
     ],
   ]);
-  assert.equal(
-    memberNamed(page, "Sam").querySelector(".ui-settings-row-value")?.textContent,
-    "Admin",
+  await vi.waitFor(() =>
+    assert.equal(
+      memberNamed(page, "Sam").querySelector(".ui-settings-row-value")?.textContent,
+      "Admin",
+    ),
   );
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing asked first");
 });
@@ -1274,9 +1296,11 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
   assert.deepEqual(roleSent(), [
     [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
   ]);
-  assert.equal(
-    memberNamed(page, "Ola").querySelector(".ui-settings-row-value")?.textContent,
-    "Owner",
+  await vi.waitFor(() =>
+    assert.equal(
+      memberNamed(page, "Ola").querySelector(".ui-settings-row-value")?.textContent,
+      "Owner",
+    ),
   );
 });
 
@@ -1408,7 +1432,11 @@ test("the members the host lays on the document are drawn with nothing asked aga
   ).length;
   act(() => deliverPeople({ [ACME.id]: { rows: { members: [OWNER, ADMIN_OLA, MEMBER] } } }));
   await settle();
-  act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Transfer ownership").click());
+  // Note that Transfer ownership is offered once the members laid reach their query.
+  const transfer = await vi.waitFor(() =>
+    button(leaveGroup(page) ?? assert.fail("no leave"), "Transfer ownership"),
+  );
+  act(() => transfer.click());
   await settle();
 
   assert.equal(offeredBefore, 0);
@@ -1704,14 +1732,18 @@ test("while the repositories are read each account's line says so, and a read th
   const { page } = await mount(SEVERAL);
   unfold(page, FOLD.GITHUB);
   const group = githubGroup(page);
-  assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", undefined]]);
+  await vi.waitFor(() =>
+    assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", undefined]]),
+  );
   assert.equal(group.textContent?.includes("Repositories could not be read."), true);
 
   repositoriesReadFails = false;
   githubRepositories = ["acme-org/relay"];
   act(() => button(group, "Retry").click());
   await settle();
-  assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", "1 repository"]]);
+  await vi.waitFor(() =>
+    assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", "1 repository"]]),
+  );
   assert.equal(group.textContent?.includes("Repositories could not be read."), false);
 });
 
@@ -1850,10 +1882,12 @@ test("the repositories members added on their tokens stand by owner after the Ap
       .map((one) => one.payload),
     [{ workspaceId: SEVERAL.id, repository: "acme/relay", added: false }],
   );
-  assert.deepEqual(integrationRows(page).slice(2), [
-    ["ACME", "1 repository"],
-    ["octo-member", "1 repository"],
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(integrationRows(page).slice(2), [
+      ["ACME", "1 repository"],
+      ["octo-member", "1 repository"],
+    ]),
+  );
 });
 
 test("Add repository offers the repositories the reader's own token may push to that the workspace lists nowhere yet, and a pick adds one", async () => {
@@ -1880,7 +1914,9 @@ test("Add repository offers the repositories the reader's own token may push to 
   );
   unfold(page, FOLD.GITHUB);
   act(() => foldOn(rowNamed(githubGroup(page), "octo-member")).click());
-  assert.deepEqual(foldLines(rowNamed(githubGroup(page), "octo-member")), ["side", "notes"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(foldLines(rowNamed(githubGroup(page), "octo-member")), ["side", "notes"]),
+  );
 });
 
 test("Add repository offers the token's repositories from a service older than addable, which lists them among the picker's own", async () => {
@@ -1968,6 +2004,10 @@ test("the token repositories say Reading while they are read, and a refused read
   const reading = page.textContent?.includes("Reading token repositories");
   release();
   await settle();
+  // Note that the refusal is said once it reaches the read's query.
+  await vi.waitFor(() =>
+    assert.equal(page.textContent?.includes("The token repositories could not be read."), true),
+  );
   const failed = page.textContent?.includes("The token repositories could not be read.");
   tokenReadFails = false;
   act(() => button(page, "Retry").click());
@@ -1975,7 +2015,9 @@ test("the token repositories say Reading while they are read, and a refused read
 
   assert.equal(reading, true, "a read still out says Reading");
   assert.equal(failed, true, "a refused read says so");
-  assert.doesNotMatch(page.textContent ?? "", /Reading token|token repositories could not/u);
+  await vi.waitFor(() =>
+    assert.doesNotMatch(page.textContent ?? "", /Reading token|token repositories could not/u),
+  );
   assert.deepEqual(
     integrationRows(page).map(([name]) => name),
     ["GitHub", "acme-org"],
@@ -2118,9 +2160,11 @@ test("several addresses typed at once are invited in turn, each once", async () 
   await settle();
 
   assert.deepEqual(invitedAddresses(), ["alan@example.com", "ada@example.com"]);
-  assert.deepEqual(
-    invitationRows(page).map((row) => addressOf(row)?.textContent),
-    ["alan@example.com", "ada@example.com"],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      invitationRows(page).map((row) => addressOf(row)?.textContent),
+      ["alan@example.com", "ada@example.com"],
+    ),
   );
 });
 
@@ -2136,9 +2180,11 @@ test("an address refused partway stops the run there, saying why, and leaves it 
     inviteDialog().querySelector('[data-slot="field-error"]')?.textContent,
     ALREADY_INVITED_REFUSAL,
   );
-  assert.deepEqual(
-    invitationRows(page).map((row) => addressOf(row)?.textContent),
-    ["alan@example.com"],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      invitationRows(page).map((row) => addressOf(row)?.textContent),
+      ["alan@example.com"],
+    ),
   );
 });
 
@@ -2148,7 +2194,9 @@ test("the owner invites an address as a role, sees it pending with its link to c
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
-  const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
+  const row = await vi.waitFor(
+    () => invitationRows(page)[0] ?? assert.fail("no pending invitation"),
+  );
   const face = row.querySelector<HTMLElement>(".actor-mark")?.dataset.kind;
   const listed = [addressOf(row)?.textContent, row.querySelector("p")?.textContent];
   act(() => button(row, "Copy link").click());
@@ -2234,7 +2282,9 @@ test("an admin's Invite card offers no role, since only the owner invites admins
 test("Canceling an invitation asks first, in the accent rather than red, and sends nothing until it is answered", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
-  const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
+  const row = await vi.waitFor(
+    () => invitationRows(page)[0] ?? assert.fail("no pending invitation"),
+  );
   const cancels = () =>
     sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATION_CANCEL).length;
 
@@ -2286,17 +2336,18 @@ test("an address already invited is said in the Invite card, and a member is off
   const said = inviteDialog().querySelector('[data-slot="field-error"]')?.textContent;
   act(() => button(inviteDialog(), "Cancel").click());
   await settle();
+  assert.equal(said, ALREADY_INVITED_REFUSAL);
+  assert.deepEqual(invitationRows(admin.page), []);
+  // Note that the admin's page goes before the member's is drawn, since a second page's subscription would follow the admin's invitations again.
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  const follows = () =>
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW).length;
+  const held = follows();
   const member = await mount(ACME);
   await settle();
 
-  assert.equal(said, ALREADY_INVITED_REFUSAL);
-  assert.deepEqual(invitationRows(admin.page), []);
   assert.deepEqual(buttons(member.page, "Invite"), []);
-  assert.equal(
-    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW).length,
-    1,
-    "a member holds no invitations",
-  );
+  assert.equal(follows(), held, "a member holds no invitations");
 });
 
 test("a row's menu left open on one workspace closes when another is listed in its place", async () => {
@@ -2374,9 +2425,11 @@ test("an invitations read that failed says so with Retry in the list's place, wh
   act(() => retries[0]?.click());
   await settle();
 
-  assert.deepEqual(
-    invitationRows(page).map((row) => addressOf(row)?.textContent),
-    ["sam@example.com"],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      invitationRows(page).map((row) => addressOf(row)?.textContent),
+      ["sam@example.com"],
+    ),
   );
 });
 
@@ -2404,14 +2457,18 @@ test("a Disconnect still being asked is dismissed once the read finds its instal
   sentry = SENTRY_INSTALLED;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  await chooseAction(rowNamed(githubGroup(page), "Sentry"), "Disconnect");
+  // Note that the Sentry row stands once the workspace's integrations reach their query.
+  const row = await vi.waitFor(() => rowNamed(githubGroup(page), "Sentry"));
+  await chooseAction(row, "Disconnect");
   const asked = document.querySelector('[role="alertdialog"]') !== null;
   sentry = { configured: true, installations: [] };
   act(() => layIntegrations(ACME.id));
   await settle();
 
   assert.equal(asked, true);
-  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector('[role="alertdialog"]') === null, true),
+  );
   assert.deepEqual(sentrySent(), []);
 });
 
@@ -2433,7 +2490,8 @@ test("a Sentry read that failed says so with Retry, for a member too, and Retry 
   await settle();
 
   assert.equal(failed, true);
-  assert.equal(sentryFailure(page), undefined);
+  // Note that the failure is checked as a yes or no, because a failure's diff of an element would print the whole document.
+  await vi.waitFor(() => assert.equal(sentryFailure(page) === undefined, true));
   assert.deepEqual(rowWords(rowNamed(githubGroup(page), "Sentry")), ["Sentry", "Connected"]);
 });
 
@@ -2454,16 +2512,25 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
 test("an installed workspace's Sentry says Connected, its ⋯ holds Disconnect, which asks first, and a member sees it read only", async () => {
   sentry = SENTRY_INSTALLED;
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const row = rowNamed(githubGroup(admin.page), "Sentry");
+  // Note that each row stands, and moves, once the workspace's integrations reach their query.
+  const row = await vi.waitFor(() => rowNamed(githubGroup(admin.page), "Sentry"));
   const words = rowWords(row);
 
   await chooseAction(row, "Disconnect");
   await confirm("Disconnect Sentry");
+  await vi.waitFor(() =>
+    assert.deepEqual(rowWords(rowNamed(githubGroup(admin.page), "Sentry")), [
+      "Sentry",
+      "Not connected.",
+    ]),
+  );
   const after = rowWords(rowNamed(githubGroup(admin.page), "Sentry"));
   for (const root of roots.splice(0)) act(() => root.unmount());
+  // Note that the member's page reads its own world, never the integrations the admin's page left cached.
+  startQueriesAfresh();
   sentry = SENTRY_INSTALLED;
   const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
-  const memberRow = rowNamed(githubGroup(member.page), "Sentry");
+  const memberRow = await vi.waitFor(() => rowNamed(githubGroup(member.page), "Sentry"));
 
   assert.deepEqual(words, ["Sentry", "Connected"]);
   assert.deepEqual(sentrySent(), [
@@ -2482,18 +2549,24 @@ const SLACK_TEAM = { id: "T0001", name: "Acme Slack" };
 test("an admin connects the Slack bot, which then says Connected, and disconnects it after asking; a member sees it read only", async () => {
   slackBot = { configured: true };
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const before = rowWords(rowNamed(githubGroup(admin.page), "Slack"));
+  const slackRow = () => rowNamed(githubGroup(admin.page), "Slack");
+  // Note that the row stands, and moves, once the workspace's integrations reach their query.
+  const before = rowWords(await vi.waitFor(slackRow));
 
-  act(() => button(rowNamed(githubGroup(admin.page), "Slack"), "Connect").click());
+  act(() => button(slackRow(), "Connect").click());
   await settle();
-  const connected = rowWords(rowNamed(githubGroup(admin.page), "Slack"));
-  await chooseAction(rowNamed(githubGroup(admin.page), "Slack"), "Disconnect");
+  await vi.waitFor(() => assert.deepEqual(rowWords(slackRow()), ["Slack", "Connected"]));
+  const connected = rowWords(slackRow());
+  await chooseAction(slackRow(), "Disconnect");
   await confirm("Disconnect Slack bot");
-  const after = rowWords(rowNamed(githubGroup(admin.page), "Slack"));
+  await vi.waitFor(() => assert.deepEqual(rowWords(slackRow()), before));
+  const after = rowWords(slackRow());
   for (const root of roots.splice(0)) act(() => root.unmount());
+  // Note that the member's page reads its own world, never the integrations the admin's page left cached.
+  startQueriesAfresh();
   slackBot = { configured: true, team: SLACK_TEAM };
   const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
-  const memberRow = rowNamed(githubGroup(member.page), "Slack");
+  const memberRow = await vi.waitFor(() => rowNamed(githubGroup(member.page), "Slack"));
 
   assert.deepEqual(before, ["Slack", "Not connected."]);
   assert.deepEqual(connected, ["Slack", "Connected"]);

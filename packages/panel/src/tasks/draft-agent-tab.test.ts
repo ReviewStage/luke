@@ -29,7 +29,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -449,10 +449,12 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
   slack = INTEGRATION_STATUS.DISCONNECTED;
   act(() => integrations.lay());
   await settle();
-  assert.deepEqual(slackRow(), {
-    words: "Slack could not be connected: the sign-in came back without access.",
-    buttons: ["Retry"],
-  });
+  await vi.waitFor(() =>
+    assert.deepEqual(slackRow(), {
+      words: "Slack could not be connected: the sign-in came back without access.",
+      buttons: ["Retry"],
+    }),
+  );
 
   await pressRow("Retry");
   await pressRow("Cancel");

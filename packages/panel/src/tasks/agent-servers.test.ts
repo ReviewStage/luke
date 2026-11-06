@@ -19,13 +19,13 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { IntegrationStatuses } from "../integration-statuses.js";
+import type { IntegrationServer } from "../live-reads.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, holdIntegrations, holdIntegrationTools } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { playListMotions } from "../testing/pane-motion.js";
-import type { IntegrationServer } from "../use-host-read.js";
 import { AgentServersButton } from "./agent-servers.js";
 
 /**
@@ -159,10 +159,18 @@ async function opened(standing: IntegrationStatuses = statuses) {
       .querySelector<HTMLButtonElement>('.agent-servers button[aria-haspopup="dialog"]')
       ?.click(),
   );
-  // Note that the servers' tools land on the document once their holds are taken, a few turns after the draw.
+  // Note that the servers' tools land on the document once their holds are taken, and each connected row says how its server answered once they reach its query.
   await act(async () => {
     for (let tick = 0; tick < 20; tick += 1) await Promise.resolve();
   });
+  await vi.waitFor(() =>
+    assert.equal(
+      [...container.querySelectorAll('.agent-servers-list ul[aria-label="Connected"] > li')].every(
+        (row) => row.querySelector(".ui-list-row-meta, .agent-servers-problem") !== null,
+      ),
+      true,
+    ),
+  );
   const field = () =>
     container.querySelector<HTMLInputElement>('.agent-servers-menu input[type="text"]') ??
     assert.fail("no field");

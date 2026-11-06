@@ -19,13 +19,13 @@ import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { tabCard } from "../desktop/tab-card.js";
-import { MemberDirectory } from "../member-directory.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import { answeringChanges, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
 import { ChangesTabReading } from "../testing/changes-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { useChangesPeople } from "./changes-people.js";
@@ -114,17 +114,14 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(MemberDirectory, {
-          workspace: WORKSPACE,
-          readerId: "user-dana",
-          children: element,
-        }),
+        withPeopleRead({ workspace: WORKSPACE, readerId: "user-dana" }, element),
       ),
     ),
   );
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await peopleRead();
   return container;
 }
 
