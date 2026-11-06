@@ -10,7 +10,7 @@
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { ErrorBoundary } from "./error-boundary.js";
+import { ErrorBoundary, RELOAD_ROOM } from "./error-boundary.js";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -82,6 +82,18 @@ test("a place that names no failure says the boundary's own sentence", () => {
   expect(page.querySelector('[role="alert"]')?.textContent).toBe(
     alertSaying("This page could not be shown."),
   );
+});
+
+test("a boundary over the whole window heads its failure as the window's one heading", () => {
+  const Place = placeThatThrows({ now: true });
+  const page = mount(
+    createElement(
+      ErrorBoundary,
+      { failure: FAILURE, room: RELOAD_ROOM.WINDOW },
+      createElement(Place),
+    ),
+  );
+  expect(page.querySelector("h1")?.textContent).toBe("Something went wrong");
 });
 
 test("Reload runs what it is handed, then draws the place again", () => {
