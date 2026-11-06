@@ -13,7 +13,7 @@ import {
   SkeletonRegion,
   type StatusTone,
 } from "@repo/ui";
-import type { ReactNode, RefObject } from "react";
+import { type ReactNode, useRef } from "react";
 
 /**
  * person-frame.tsx -- a person's page's boxes, which the page and its placeholders both draw.
@@ -99,15 +99,13 @@ export function PersonTop({ children }: { children?: ReactNode }): React.JSX.Ele
  * than slides in after the last.
  */
 export function PersonBody({
-  root,
   reading,
   children,
 }: {
-  /** The box, whose resizing moves the runs of rows below what grew or shrank (`VirtualRows`' `shiftedBy`). */
-  root: RefObject<HTMLDivElement | null>;
   reading: boolean;
   children: ReactNode;
 }): React.JSX.Element {
+  const root = useRef<HTMLDivElement | null>(null);
   return (
     <div ref={root}>
       <ListMotion root={root} reading={reading}>
