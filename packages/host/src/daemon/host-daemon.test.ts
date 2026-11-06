@@ -460,6 +460,21 @@ describe("a host waiting on its record", () => {
         yield* untilEnded(waiting);
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
+
+  it.effect(
+    "a box whose state folder is removed while it waits watches the folder made again",
+    () =>
+      Effect.gen(function* () {
+        const { stateRoot } = yield* box;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const waiting = yield* hostDeviceWhen(stateRoot, Option.isSome).pipe(Effect.forkScoped);
+        yield* elapsed(Duration.seconds(30));
+        yield* fileSystem.remove(stateRoot, { recursive: true });
+        yield* elapsed(Duration.seconds(30));
+        yield* writeHostDevice(stateRoot, DEVICE);
+        yield* untilEnded(waiting);
+      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+  );
 });
 
 describe("a host's connect with a code", () => {
