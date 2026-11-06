@@ -111,7 +111,7 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
   installScrollIntoView();
-  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.PLANS));
+  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.DESCRIPTIONS));
 });
 
 afterEach(() => {
@@ -191,7 +191,7 @@ async function mount(
   act(() =>
     root.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(
           ChipCards,
           { value: chipCards },

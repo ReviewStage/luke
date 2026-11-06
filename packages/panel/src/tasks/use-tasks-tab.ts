@@ -1867,7 +1867,7 @@ export function useTasksTab(input: {
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
   // The version history is the task's, so another task, or none, leaves it, and so does Plans turned off, whose it is.
-  const plansOn = experimentOn(experiments, EXPERIMENT.PLANS);
+  const plansOn = experimentOn(experiments, EXPERIMENT.DESCRIPTIONS);
   if (historyFor !== undefined && (historyFor.taskId !== boundFor || !plansOn)) {
     setHistoryFor(undefined);
   }

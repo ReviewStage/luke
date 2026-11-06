@@ -22,7 +22,7 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * add-to-plan.test.ts -- a picture an agent showed, added to its plan from

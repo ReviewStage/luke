@@ -113,7 +113,10 @@ async function drawn(node: ReactElement): Promise<HTMLElement> {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), onSideBundles(bundles, node)),
+      onRegistry(
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        onSideBundles(bundles, node),
+      ),
     ),
   );
   await settle();
@@ -218,7 +221,7 @@ test("while an edited diagram is drawn again, the picture kept is still named fo
     act(() =>
       root.render(
         onRegistry(
-          registryWith(experimentsOn(EXPERIMENT.PLANS)),
+          registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
           onSideBundles(bundles, createElement(DiagramPreview, { code, previous })),
         ),
       ),
@@ -274,7 +277,7 @@ test("a diagram bundle that failed to load says so with Retry, which imports it 
   act(() =>
     root.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         onSideBundles(unloaded, createElement(PlanBody, { task: taskWith(mermaidFence(code)) })),
       ),
     ),

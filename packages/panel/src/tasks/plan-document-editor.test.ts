@@ -229,7 +229,7 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   registries.push(registry);
   const saved: TasksEditAnswer = { saved: true };
   const onEdit = (request: PlanEditRequest) => {

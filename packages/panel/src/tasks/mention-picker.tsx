@@ -1780,7 +1780,7 @@ export function useMentionPicker({
     (source === undefined ? undefined : workspaceOfSlug(listed.workspaces, source.workspace))?.id;
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
   // While Plans is off there is no plan to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
-  const plansOn = useExperiment(EXPERIMENT.PLANS);
+  const plansOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const taskRowsOffered = open
     ? workspaceTaskRows(plansOn ? taskId : undefined, tasksWorkspace, listed.tasks)
     : [];

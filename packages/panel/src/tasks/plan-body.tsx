@@ -1043,7 +1043,7 @@ export const PlanBody = memo(function PlanBody({
 }): React.JSX.Element {
   const { views, sections: textSections } = useDrawnUnits(task);
   // While Plans is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
-  const documented = useExperiment(EXPERIMENT.PLANS);
+  const documented = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const editable = onEdit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);

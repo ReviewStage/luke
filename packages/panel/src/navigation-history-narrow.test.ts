@@ -326,7 +326,9 @@ function mount(
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Probe))),
+    root.render(
+      onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(Probe)),
+    ),
   );
   return {
     history: () => history ?? assert.fail("the window's history stands"),

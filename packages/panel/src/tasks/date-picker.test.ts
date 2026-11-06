@@ -50,7 +50,7 @@ const registries: AtomRegistry.AtomRegistry[] = [];
 
 /** A registry of the test's own, as the window's root provides one, so words a plan left unsaved in one test are not the next one's. */
 function ownRegistry(): AtomRegistry.AtomRegistry {
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   registries.push(registry);
   return registry;
 }

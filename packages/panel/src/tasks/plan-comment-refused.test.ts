@@ -105,7 +105,7 @@ function SignedIn({ account }: { account: Identity }): null {
 function drawn(
   landing: () => Promise<boolean>,
   asked: PlanCommentActionRequest[] = [],
-  registry: AtomRegistry.AtomRegistry = registryWith(experimentsOn(EXPERIMENT.PLANS)),
+  registry: AtomRegistry.AtomRegistry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   account: Identity = DEAN,
 ): HTMLElement {
   const control: PlanCommentsControl = {
@@ -223,7 +223,7 @@ test("a refused reply's files go back before the files pasted while it was out",
 async function refusedBesideNewer(refused: string, newer: string, account: Identity = DEAN) {
   const answer = Promise.withResolvers<boolean>();
   const asked: PlanCommentActionRequest[] = [];
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
   const card = drawn(landing, asked, registry, account);
   const field = card.querySelector("textarea") ?? assert.fail("no textarea");
@@ -314,7 +314,7 @@ test("a reply refused while only the reader's address was known stands with its 
   const answer = Promise.withResolvers<boolean>();
   const asked: PlanCommentActionRequest[] = [];
   const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
-  const card = drawn(landing, asked, registryWith(experimentsOn(EXPERIMENT.PLANS)), {
+  const card = drawn(landing, asked, registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), {
     email: DEAN.email,
   });
   const field = card.querySelector("textarea") ?? assert.fail("no textarea");

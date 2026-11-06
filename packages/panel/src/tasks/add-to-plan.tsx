@@ -126,7 +126,7 @@ async function edited(
  * account has Plans off.
  */
 export function useAddToPlan(): ViewerAction | undefined {
-  const plansOn = useExperiment(EXPERIMENT.PLANS);
+  const plansOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const page = useTaskMentions();
   const { act } = useAct();
   const toast = useToast();

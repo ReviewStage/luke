@@ -87,7 +87,7 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   registries.push(registry);
   const body = createElement(PlanBody, {
     task: task,
@@ -367,7 +367,7 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
 });
 
 test("a section's address naming its task by its number, pasted whole into the plan, is laid in as the chip its id lays in, found among the window's tasks", async () => {
-  handState(experimentsOn(EXPERIMENT.PLANS), {
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     tasks: {
       ...IDLE_TASKS_VIEW,
       workspaces: [

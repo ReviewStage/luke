@@ -18,7 +18,7 @@ import { editorBundleLanded, installEditorLayout } from "../testing/composer.js"
 import { MarkdownEditor, type MarkdownEditorProps } from "./markdown-editor.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * markdown-editor.test.ts -- the plan's editor mounted by a document that

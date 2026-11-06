@@ -78,7 +78,7 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.PLANS));
+  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.DESCRIPTIONS));
 });
 
 afterEach(() => {
@@ -167,7 +167,7 @@ async function mountEveryTab(
   act(() =>
     root.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         // Only the tabs' bars are asked about, so no bundle lands under them.
         onSideBundles(
           unlandedBundles(),

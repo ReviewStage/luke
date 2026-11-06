@@ -33,9 +33,9 @@ import { PlanBody } from "./plan-body.js";
 import type { TaskLooks } from "./use-task-looks.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 // Note that each case starts with the document handing Plans on, whatever an earlier case handed.
-beforeEach(() => handState(experimentsOn(EXPERIMENT.PLANS)));
+beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * plan-body.test.ts -- the open task's document says who created it and who last wrote it,
@@ -128,7 +128,7 @@ interface Drawn {
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   fakeAppBridge({});
   fakeActPort({});
-  const experiments = drawn.experiments ?? experimentsOn(EXPERIMENT.PLANS);
+  const experiments = drawn.experiments ?? experimentsOn(EXPERIMENT.DESCRIPTIONS);
   handState(
     experiments,
     drawn.account === undefined ? {} : { account: signedInAs(drawn.account).account },
@@ -474,11 +474,11 @@ test("a save that writes a section above the one the keyboard stands on leaves T
   };
   fakeAppBridge({});
   fakeActPort({});
-  handState(experimentsOn(EXPERIMENT.PLANS));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   handMembers(() => ({ rows: { members: MEMBERS } }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = mountRoot(container);
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const drawPlan = (task: Task) =>
     act(() =>
       root.render(

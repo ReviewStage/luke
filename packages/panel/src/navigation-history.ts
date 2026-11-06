@@ -1491,7 +1491,10 @@ export function useWindowHistory(input: {
     // A Settings page an experiment holds, such as Memory, stands only while the account has it on.
     if (to.kind === PLACE_KIND.SETTINGS) return settingsPageExperimentStands(to.view, experiments);
     // A task's version history is the plan's, which stands only while the account has Plans on.
-    if (to.kind === PLACE_KIND.VERSION_HISTORY && !experimentOn(experiments, EXPERIMENT.PLANS)) {
+    if (
+      to.kind === PLACE_KIND.VERSION_HISTORY &&
+      !experimentOn(experiments, EXPERIMENT.DESCRIPTIONS)
+    ) {
       return false;
     }
     // The Board is a workspace's tasks, so Back passes over it once another is listed.

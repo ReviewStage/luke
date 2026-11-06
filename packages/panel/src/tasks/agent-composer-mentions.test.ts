@@ -317,7 +317,7 @@ beforeEach(() => {
   fakeActs({
     act: answer,
     requestAppState: () =>
-      Promise.resolve(stateWith(experimentsOn(EXPERIMENT.PLANS), { tasks: tasksView() })),
+      Promise.resolve(stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), { tasks: tasksView() })),
   });
   // Every connected server lists the same tools, three of them under names a mention cannot carry.
   const reads = handHostReads({});
@@ -398,7 +398,7 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
 function drawing(
   node: ReactNode,
   page: TaskMentionsValue | undefined,
-  registry = registryWith(experimentsOn(EXPERIMENT.PLANS)),
+  registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
 ) {
   const container = document.createElement("div");
   document.body.append(container);

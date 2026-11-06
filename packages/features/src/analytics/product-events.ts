@@ -272,7 +272,7 @@ export const PRODUCT_EXPERIMENT = {
   SKILLS: "skills",
   BRING_YOUR_OWN_HOST: "bring-your-own-host",
   SEVERAL_REPOSITORIES: "several-repositories",
-  PLANS: "plans",
+  DESCRIPTIONS: "descriptions",
   /** Removed with Chat on the right, so no build sends it now; kept because an older build's batch still may, and one unread value refuses the batch. */
   CHAT_ON_THE_RIGHT: "chat-on-the-right",
 } as const;
