@@ -25,6 +25,7 @@
 import { type CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { failureKind } from "@repo/runtime/effect";
+import type { WorkspaceExperiment } from "@repo/settings";
 import { Cause, type Context, Effect, Exit, Schema } from "effect";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import { AdmittedMember, type AdmittedMemberValues } from "./admission.js";
@@ -76,13 +77,15 @@ async function throughDoor(
   return exit.value;
 }
 
-/** The server for one request: every tool of `MEMBER_MCP_TOOLS`, each run as the admitted member on the handed services. */
+/** The server for one request: every tool of `MEMBER_MCP_TOOLS` but those of a workspace experiment none of the member's workspaces has on, each run as the admitted member on the handed services. */
 export function memberMcpServer(
   services: Context.Context<MemberMcpRequestServices>,
   member: AdmittedMemberValues,
+  experimentsOn: ReadonlySet<WorkspaceExperiment>,
 ): McpServer {
   const server = new McpServer(SERVER_INFO);
   for (const tool of MEMBER_MCP_TOOLS) {
+    if (tool.experiment !== undefined && !experimentsOn.has(tool.experiment)) continue;
     server.registerTool(
       tool.name,
       {

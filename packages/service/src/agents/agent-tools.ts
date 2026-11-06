@@ -21,8 +21,8 @@ import {
   type StoredMessageRecord,
   turnStoppedUnderReached,
 } from "@repo/database/models/message-reads";
-import { readPageById } from "@repo/database/models/task-pages";
 import { lockTasksForBlocks } from "@repo/database/models/task-block-store";
+import { readPageById } from "@repo/database/models/task-pages";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
   deleteTask,
@@ -1453,6 +1453,11 @@ export function callerAgent(caller: AgentCaller): Agent | undefined {
 /** The member a call acts for: the starter of the coding agent calling, or the member calling. */
 export function callerUserId(caller: AgentCaller): string {
   return caller.kind === AGENT_CALLER.AGENT ? caller.agent.userId : caller.userId;
+}
+
+/** The workspace a call is in, whose experiments it reads: the coding agent's own, or the one the member's call is about. */
+export function callerWorkspaceId(caller: AgentCaller): string {
+  return caller.kind === AGENT_CALLER.AGENT ? caller.agent.organizationId : caller.workspaceId;
 }
 
 /** The task the caller works on: the coding agent's own, which may be none; none for a member. */

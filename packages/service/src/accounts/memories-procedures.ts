@@ -1,5 +1,6 @@
+import { EXPERIMENT } from "@repo/settings";
 import { Effect } from "effect";
-import { memoryOnFor } from "../agents/memory-tools.js";
+import { experimentOnIn } from "../agents/workspace-experiment-on.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
@@ -35,10 +36,10 @@ import {
  *
  * A member's own client keeps a memory in their words and searches them
  * (`saveMemory`, `searchMemories`), the member MCP server's `save_memory`
- * and `search_memory`, and as those tools are, only while the member has
- * Memory on (`memoryOnFor`), refused as off otherwise. A keep that looks
- * like it holds a credential is refused, as is one past the workspace's
- * bound, and a correction of a memory gone is answered not found.
+ * and `search_memory`, and as those tools are, only while the workspace
+ * named has Memory on (`experimentOnIn`), refused as off otherwise. A keep
+ * that looks like it holds a credential is refused, as is one past the
+ * workspace's bound, and a correction of a memory gone is answered not found.
  */
 
 /** What the memories' procedures reach beyond the store: who the bearer is. */
@@ -76,9 +77,9 @@ function saveAnswer(answer: WorkspaceMemorySaveAnswer) {
   }
 }
 
-/** Refused as off unless the member has Memory on, as the member MCP server's memory tools are. */
-const memoryOn = (userId: string) =>
-  Effect.flatMap(memoryOnFor(userId), (on) =>
+/** Refused as off unless the workspace has Memory on, as the member MCP server's memory tools are. */
+const memoryOn = (workspaceId: string) =>
+  Effect.flatMap(experimentOnIn(workspaceId, EXPERIMENT.MEMORY), (on) =>
     on ? Effect.void : Effect.fail(HOSTED_REFUSAL.MEMORY_OFF),
   );
 
@@ -108,8 +109,8 @@ export function memoriesProcedures(seams: MemoriesProcedureSeams) {
     }),
 
     saveMemory: signedIn.saveMemory.effect(function* ({ context, input }) {
-      yield* memoryOn(context.userId);
       const { workspaceId, text, replaces } = input;
+      yield* memoryOn(workspaceId);
       return yield* saveAnswer(
         yield* hostedStoreOrUnavailable(
           saveWorkspaceMemory(context.userId, workspaceId, text, replaces),
@@ -118,7 +119,7 @@ export function memoriesProcedures(seams: MemoriesProcedureSeams) {
     }),
 
     searchMemories: signedIn.searchMemories.effect(function* ({ context, input }) {
-      yield* memoryOn(context.userId);
+      yield* memoryOn(input.workspaceId);
       const answer = yield* hostedStoreOrUnavailable(
         searchWorkspaceMemories(context.userId, input.workspaceId, input.query),
       );

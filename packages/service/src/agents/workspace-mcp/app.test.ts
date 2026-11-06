@@ -5,7 +5,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Database } from "@repo/database/core/query";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { listAgentBrowserTabs } from "@repo/database/models/agent-browser-tabs";
 import { createAgent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
 import {
@@ -16,7 +15,12 @@ import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
-import { getTestDB, openWorkspace, startTask } from "@repo/database/testing";
+import {
+  experimentInTestWorkspace,
+  getTestDB,
+  openWorkspace,
+  startTask,
+} from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@repo/features/browser-agent-actions";
 import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
@@ -322,9 +326,9 @@ function post(
   });
 }
 
-/** Turns Task descriptions on for an agent's starter, whose agents are offered the description's tools only then. */
+/** Turns Task descriptions on for the workspace an agent's starter starts its tasks in, whose agents are offered the description's tools only then. */
 const descriptionsOn = (userId: string) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
+  experimentInTestWorkspace(userId, EXPERIMENT.DESCRIPTIONS);
 
 /** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
 const SERVED_TOOLS = [
@@ -605,9 +609,8 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       Effect.gen(function* () {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
-        yield* writeAccountPreferences(agent.userId, {
-          experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.DESCRIPTIONS]: true },
-        });
+        yield* experimentInTestWorkspace(agent.userId, EXPERIMENT.MEMORY);
+        yield* descriptionsOn(agent.userId);
         const client = yield* connected(fetch, agent.bearer);
 
         const listed = yield* Effect.promise(() => client.listTools());

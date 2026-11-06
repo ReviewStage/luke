@@ -29,7 +29,7 @@ export interface WorkspaceToolsOfferedTo {
   readonly native: boolean;
   /** Whether the agent's starter has Memory on. */
   readonly memoryOn: boolean;
-  /** Whether the agent's starter has Descriptions on, or Pilot for a pilot (`descriptionsOnFor`). */
+  /** Whether the agent's workspace has Task descriptions on (`experimentOnIn`). */
   readonly descriptionsOn: boolean;
 }
 

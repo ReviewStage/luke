@@ -63,6 +63,7 @@ import {
 } from "@repo/features/agent-wire";
 import { AGENT_START_STATUS } from "@repo/features/contract";
 import { SANDBOX_STATE } from "@repo/features/terminal-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { Clock, Duration, Effect, type Layer, Option, type Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
@@ -124,14 +125,13 @@ import {
   summaryOf,
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { descriptionsOnFor } from "./descriptions-on.js";
 import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
-import { memoryOnFor } from "./memory-tools.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import type { SandboxStopReach } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
 import { reachedAgentSession, sandboxOrUpstream } from "./terminal/sandbox-reach.js";
 import { listedPage } from "./workspace-agents.js";
+import { experimentOnIn } from "./workspace-experiment-on.js";
 import { offeredWorkspaceTools, runOnMacStanding } from "./workspace-tools.js";
 
 export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
@@ -311,8 +311,8 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const runtimes = yield* hostedStoreOrUnavailable(
         nativeRuntimesOfReached([agent.conversationId]),
       );
-      const memoryOn = yield* memoryOnFor(agent.userId);
-      const descriptionsOn = yield* descriptionsOnFor(agent.userId, agent.kind);
+      const memoryOn = yield* experimentOnIn(agent.organizationId, EXPERIMENT.MEMORY);
+      const descriptionsOn = yield* experimentOnIn(agent.organizationId, EXPERIMENT.DESCRIPTIONS);
       return {
         tools: offeredWorkspaceTools({
           agent,

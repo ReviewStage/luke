@@ -106,15 +106,15 @@ import {
   runAgentTools,
 } from "../coder-host/agent-doors.js";
 import { MESSAGE_AGENT_TOOL } from "../coder-host/agent-message.js";
+import {
+  DESCRIPTION_EDIT_REFUSAL,
+  descriptionEditRejected,
+  EDIT_DESCRIPTION_TOOL,
+  requestedNotes,
+} from "../coder-host/description-edit.js";
 import { INBOX_TOOLS } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
-import {
-  EDIT_DESCRIPTION_TOOL,
-  DESCRIPTION_EDIT_REFUSAL,
-  descriptionEditRejected,
-  requestedNotes,
-} from "../coder-host/description-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
 import {
@@ -412,7 +412,7 @@ export type WorkspaceMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 /** The workspace's shared memory, offered only where the agent's starter turned Memory on. */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
 
-/** The description's notes and pictures, offered only where the agent's starter has Task descriptions on (`descriptionsOnFor`). */
+/** The description's notes and pictures, offered only where the agent's workspace has Task descriptions on (`experimentOnIn`). */
 const DESCRIPTION_TOOLS: readonly string[] = [
   CODER_TOOL.EDIT_DESCRIPTION,
   CODER_TOOL.LOOK_AT_PICTURE,

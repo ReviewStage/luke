@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
-import { type Agent, type AgentBriefText, createAgent } from "@repo/database/models/agent-store";
 import {
-  keepDescriptionAttachment,
+  type Agent,
+  type AgentBriefText,
+  createAgent,
+  type NewAgent,
+} from "@repo/database/models/agent-store";
+import {
   DESCRIPTION_ATTACHMENT_KEEP,
+  keepDescriptionAttachment,
 } from "@repo/database/models/description-attachments";
 import {
   readDescriptionCommentThreads,
@@ -17,10 +21,10 @@ import {
   saveDescriptionText,
   updateTask,
 } from "@repo/database/models/task-store";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
-import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import { descriptionAttachmentAddress } from "@repo/features/description-attachment-link";
 import {
   DESCRIPTION_COMMENT_ACTOR,
@@ -28,6 +32,7 @@ import {
   DESCRIPTION_COMMENT_STATUS,
 } from "@repo/features/description-comment-wire";
 import { descriptionSections } from "@repo/features/description-document";
+import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { Clock, Effect, Option } from "effect";
 import { ACTION_RESULT_STATUS, unparsedWire } from "../../core.js";
@@ -46,8 +51,8 @@ import {
   runAgentOpenPullRequest,
 } from "./agent-doors.js";
 import { CODER_REFUSAL } from "./bounds.js";
-import type { InboxSandboxDoor } from "./inbox-image.js";
 import { DESCRIPTION_EDIT_REFUSAL } from "./description-edit.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /**
@@ -86,47 +91,48 @@ const ON_CLAUDE_CODE = {
   payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
 } as const;
 
-/** The member's Descriptions turned on or off, which their agents' description tools stand on. */
-const descriptionsFor = (userId: string, on: boolean) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
+/** Task descriptions turned on or off for everyone in the agent's workspace, which its description tools stand on. */
+const descriptionsIn = (agent: Pick<Agent, "userId" | "organizationId">, on: boolean) =>
+  setWorkspaceExperiment({
+    organizationId: agent.organizationId,
+    experiment: EXPERIMENT.DESCRIPTIONS,
+    on,
+    by: agent.userId,
+  });
 
-/** An agent of the member's on the task named, with the brief given, its member's Descriptions on. */
+/** An agent started as the member, its workspace's Task descriptions on. */
+const describingAgent = (userId: string, started: NewAgent) =>
+  Effect.gen(function* () {
+    const { agent } = Option.getOrThrow(yield* createAgent(userId, started));
+    yield* descriptionsIn(agent, true);
+    return agent;
+  });
+
+/** An agent of the member's on the task named, with the brief given, its workspace's Task descriptions on. */
 const agentOn = (
   userId: string,
   taskId: string,
   brief: AgentBriefText = { descriptionSnapshot: DESCRIPTION_TEXT, prompt: null },
 ) =>
-  Effect.map(
-    Effect.andThen(
-      descriptionsFor(userId, true),
-      createAgent(userId, {
-        ...ON_CLAUDE_CODE,
-        ...brief,
-        taskId,
-        repository: "acme/relay",
-        idempotencyKey: randomUUID(),
-      }),
-    ),
-    (started) => Option.getOrThrow(started).agent,
-  );
+  describingAgent(userId, {
+    ...ON_CLAUDE_CODE,
+    ...brief,
+    taskId,
+    repository: "acme/relay",
+    idempotencyKey: randomUUID(),
+  });
 
-/** An agent of the member's in the workspace on no task and no repository, handed the prompt given, its member's Descriptions on. */
+/** An agent of the member's in the workspace on no task and no repository, handed the prompt given, its workspace's Task descriptions on. */
 const tasklessAgentOn = (userId: string, workspaceId: string) =>
-  Effect.map(
-    Effect.andThen(
-      descriptionsFor(userId, true),
-      createAgent(userId, {
-        ...ON_CLAUDE_CODE,
-        taskId: null,
-        organizationId: workspaceId,
-        descriptionSnapshot: null,
-        prompt: "Answer the open comments.",
-        repository: null,
-        idempotencyKey: randomUUID(),
-      }),
-    ),
-    (started) => Option.getOrThrow(started).agent,
-  );
+  describingAgent(userId, {
+    ...ON_CLAUDE_CODE,
+    taskId: null,
+    organizationId: workspaceId,
+    descriptionSnapshot: null,
+    prompt: "Answer the open comments.",
+    repository: null,
+    idempotencyKey: randomUUID(),
+  });
 
 /** An account with one agent on a task of its workspace, with the brief given. */
 const openAgent = (brief?: AgentBriefText) =>
@@ -286,10 +292,10 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent's notes naming no task, or a task of another workspace its member is also in, or made once its member turned Descriptions off, are refused and save nothing, as is its look at a description's picture",
+    "an agent's notes naming no task, or a task of another workspace its member is also in, or made once its workspace turned Task descriptions off, are refused and save nothing, as is its look at a description's picture",
     () =>
       Effect.gen(function* () {
-        const { userId, admitted } = yield* openAgent();
+        const { userId, agent, admitted } = yield* openAgent();
         const elsewhere = yield* openWorkspace(userId);
         const other = yield* createTask(userId, {
           name: "Side project",
@@ -323,7 +329,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         assert.equal(after.text, before.text);
 
         // Note that a harness may call a tool it was not listed, so the door refuses it on its own.
-        yield* descriptionsFor(userId, false);
+        yield* descriptionsIn(agent, false);
         const off = yield* runAgentEditDescription(
           admitted,
           unparsedWire({ taskId: other.id, notes }),

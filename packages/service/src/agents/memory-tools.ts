@@ -1,5 +1,4 @@
 import type { DatabaseServices } from "@repo/database/core/query";
-import { accountExperimentOn } from "@repo/database/models/account-store";
 import type { Agent } from "@repo/database/models/agent-store";
 import { MEMORY_BOUNDS, type MemorySummary, memoryIdSchema } from "@repo/features/memory-wire";
 import { EXPERIMENT } from "@repo/settings";
@@ -14,8 +13,15 @@ import {
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../core.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { type AgentCall, callerAgent, callerUserId, callerWorkspace } from "./agent-tools.js";
+import {
+  type AgentCall,
+  callerAgent,
+  callerUserId,
+  callerWorkspace,
+  callerWorkspaceId,
+} from "./agent-tools.js";
 import { rememberRefusal } from "./memory-provenance.js";
+import { experimentOnIn } from "./workspace-experiment-on.js";
 
 /**
  * memory-tools.ts -- a coding agent's `save_memory` and `search_memory`: the workspace's shared memory of settled facts, kept and searched as the agent works.
@@ -123,18 +129,6 @@ export const SEARCH_MEMORY_TOOL = {
   inputSchema: RECALL_INPUT,
 } as const;
 
-/**
- * Whether the member turned Memory on (`EXPERIMENT.MEMORY`): what decides
- * whether their agents are offered `save_memory` and `search_memory` and told of the
- * memory. Where it cannot be read, it is off, logged for the operator.
- */
-export function memoryOnFor(userId: string): Effect.Effect<boolean, never, DatabaseServices> {
-  return accountExperimentOn(userId, EXPERIMENT.MEMORY).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.orElseSucceed(() => false),
-  );
-}
-
 function rejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
@@ -214,7 +208,7 @@ export function runRecall(
  * its starter, read from the service's record of the agent as every agent
  * tool reads them (`callerWorkspace`), then the call itself. An agent whose
  * workspace cannot be read for its starter now keeps and recalls nothing, and
- * neither does one whose starter has Memory off (`EXPERIMENT.MEMORY`): eve
+ * neither does one whose workspace has Memory off (`EXPERIMENT.MEMORY`): eve
  * and our MCP server (`workspace-mcp/tools.ts`) list neither tool to such an
  * agent, but a harness may still call a tool it was not listed, or Memory
  * may go off mid-run, so the refusal stands here as well.
@@ -226,8 +220,10 @@ function agentMemory(
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return orUnavailable(
     Effect.gen(function* () {
+      if (!(yield* experimentOnIn(callerWorkspaceId(call.caller), EXPERIMENT.MEMORY))) {
+        return rejected(MEMORY_REFUSAL.OFF);
+      }
       const userId = callerUserId(call.caller);
-      if (!(yield* memoryOnFor(userId))) return rejected(MEMORY_REFUSAL.OFF);
       // A refusal reads the calling agent's turn; a member's call is their own words, and has none.
       const agent = callerAgent(call.caller);
       const refused =

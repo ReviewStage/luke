@@ -16,17 +16,18 @@ import {
   readNativeHanded,
   recordNativeHanded,
 } from "@repo/database/models/agent-store";
-import { turnsBefore } from "@repo/database/models/message-reads";
 import { readDescriptionCommentThreads } from "@repo/database/models/description-comments";
 import { listRevisions } from "@repo/database/models/description-revisions";
+import { turnsBefore } from "@repo/database/models/message-reads";
 import { readTask } from "@repo/database/models/task-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
+import { EXPERIMENT } from "@repo/settings";
 import { Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
+import { experimentOnIn } from "../workspace-experiment-on.js";
 import {
   handedAfterCompaction,
   savedByAnotherSince,
@@ -96,11 +97,11 @@ const taskOf = (
   Effect.gen(function* () {
     const { taskId } = agent;
     if (taskId === null) return undefined;
-    const descriptionsOn = yield* descriptionsOnFor(agent.userId, agent.kind);
+    const descriptionsOn = yield* experimentOnIn(agent.organizationId, EXPERIMENT.DESCRIPTIONS);
     const [stored, comments, since] = yield* Effect.all(
       [
         readTask(admitted.caller, taskId),
-        // Note that the description's threads are neither read nor handed where its starter has Descriptions off.
+        // Note that the description's threads are neither read nor handed where its workspace has Task descriptions off.
         descriptionsOn
           ? readDescriptionCommentThreads(admitted.caller, taskId)
           : Effect.succeedNone,

@@ -20,8 +20,9 @@ import {
 } from "@repo/database/models/agent-store";
 import { readTaskHeader } from "@repo/database/models/task-store";
 import type { StoreWriter } from "@repo/database/models/writer";
-import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
 import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
+import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
@@ -67,19 +68,19 @@ import {
 } from "../automation-tools.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
+import { experimentOnIn } from "../workspace-experiment-on.js";
 import { runMessageAgent } from "./agent-message.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
-import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
-  editedTaskOf,
   DESCRIPTION_EDIT_REFUSAL,
   type DescriptionEditResult,
   descriptionEditRejected,
+  editedTaskOf,
   recordDescriptionEdit,
 } from "./description-edit.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
   openPullRequest,
   PULL_REQUEST_UNAVAILABLE,
@@ -204,8 +205,8 @@ export function runAgentEditDescription(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return descriptionEditRejected(found.failure);
-    // Note that no agent whose starter has Descriptions off is listed the tool; a harness may call it anyway, and this refuses it.
-    if (!(yield* descriptionsOnFor(found.success.userId, found.success.kind))) {
+    // Note that no agent whose workspace has Task descriptions off is listed the tool; a harness may call it anyway, and this refuses it.
+    if (!(yield* experimentOnIn(found.success.organizationId, EXPERIMENT.DESCRIPTIONS))) {
       return descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.OFF);
     }
     const taskId = editedTaskOf(input);
@@ -233,7 +234,7 @@ export function runAgentLookAtPicture(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return pictureNotLooked(found.failure);
-    if (!(yield* descriptionsOnFor(found.success.userId, found.success.kind))) {
+    if (!(yield* experimentOnIn(found.success.organizationId, EXPERIMENT.DESCRIPTIONS))) {
       return pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF);
     }
     const taskId = lookedTaskOf(input);
@@ -274,7 +275,7 @@ export function runAgentOpenPullRequest(
  * Runs one call of a comment tool (`tasks/comment-tools.ts`) on the description of
  * the task it names, or one of its pages, in the agent's workspace, as the
  * member whose turn it is, written under the agent; the description's threads only
- * where the agent's starter has Descriptions on (`descriptionsOnFor`).
+ * where the agent's workspace has Task descriptions on (`experimentOnIn`).
  */
 export function runAgentComment(
   admitted: AdmittedConversation,
@@ -295,8 +296,11 @@ export function runAgentComment(
       userId: admitted.caller,
       agentId,
     } as const;
-    // A page's threads stand whatever the starter's Descriptions setting; the description's are left out while it is off.
-    const descriptionsOn = yield* descriptionsOnFor(found.success.userId, found.success.kind);
+    // A page's threads stand whatever the workspace's Task descriptions; the description's are left out while it is off.
+    const descriptionsOn = yield* experimentOnIn(
+      found.success.organizationId,
+      EXPERIMENT.DESCRIPTIONS,
+    );
     return yield* runCommentTool(name, { taskId, writer, descriptionsOn }, input);
   }).pipe(
     Effect.tapError(logStoreFailure),

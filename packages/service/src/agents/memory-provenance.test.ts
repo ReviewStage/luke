@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { type Agent, createAgent } from "@repo/database/models/agent-store";
 import { listMemories, MEMORY_OUTCOME } from "@repo/database/models/memory-store";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import type { StoredAutomationOrigin } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { messages, turns } from "@repo/database/schemas/storage";
@@ -43,14 +43,19 @@ import { runAgentRemember } from "./memory-tools.js";
 
 const FACT = "The web server's store tests run on PGlite through test:store.";
 
-/** A member with Memory on, in a workspace of their own, and an agent there. */
+/** A member in a workspace of their own with Memory on, and an agent there. */
 const openAgent = (automationOrigin?: StoredAutomationOrigin) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
-    yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
     const workspaceId = yield* openWorkspace(userId);
+    yield* setWorkspaceExperiment({
+      organizationId: workspaceId,
+      experiment: EXPERIMENT.MEMORY,
+      on: true,
+      by: userId,
+    });
     const started = yield* createAgent(userId, {
       taskId: null,
       organizationId: workspaceId,

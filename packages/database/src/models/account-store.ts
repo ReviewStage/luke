@@ -8,13 +8,13 @@ import {
 import { LINK_OPEN_LIST, type LinkOpen } from "@repo/features/link-open";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
+  type AccountExperiment,
   type AccountPreferences,
   AGENT_ENTER_LIST,
   type AgentEnter,
   accountPreferencesFromStored,
   COMMIT_AUTHOR_LIST,
   type CommitAuthor,
-  type Experiment,
   type ExperimentChoices,
   experimentChoicesFrom,
   experimentOn,
@@ -253,12 +253,15 @@ export function readAccountPreferences(
 
 /**
  * Whether the account has turned the experiment on: what a server-side gate
- * asks before it offers an experimental feature to the account. An account
- * that stored no snapshot, or never chose the experiment, reads as off.
+ * of an account's own experiment asks before it offers the feature to the
+ * account. An account that stored no snapshot, or never chose the
+ * experiment, reads as off. A workspace experiment is never read here, but
+ * for the workspace the work is in (`workspaceExperimentOn`), which is why
+ * this takes an `AccountExperiment` alone.
  */
 export function accountExperimentOn(
   userId: string,
-  experiment: Experiment,
+  experiment: AccountExperiment,
 ): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
   return Effect.map(
     readAccountPreferences(userId),

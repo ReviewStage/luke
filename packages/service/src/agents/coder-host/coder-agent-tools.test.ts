@@ -23,16 +23,16 @@ import {
   recordAutomationRun,
 } from "@repo/database/models/automation-store";
 import { keepConversationPicture } from "@repo/database/models/conversation-pictures";
+import { listRevisions } from "@repo/database/models/description-revisions";
 import { deviceAgentLinesWaiting } from "@repo/database/models/device-agent-store";
 import { registerDevice } from "@repo/database/models/device-store";
 import { linkIntegrationInstallation } from "@repo/database/models/integration-installation-store";
 import { listMemories } from "@repo/database/models/memory-store";
-import { writePage } from "@repo/database/models/task-pages";
-import { listRevisions } from "@repo/database/models/description-revisions";
 import {
   listProviderKeyRows,
   setProviderKeyFastAccess,
 } from "@repo/database/models/provider-key-store";
+import { writePage } from "@repo/database/models/task-pages";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
   createTask,
@@ -42,6 +42,7 @@ import {
   saveDescriptionText,
   updateTask,
 } from "@repo/database/models/task-store";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
 import { agentPin } from "@repo/database/schemas";
 import { agentTable } from "@repo/database/schemas/agent";
@@ -1162,7 +1163,7 @@ function forwardedPng(attachmentId: string, bytes: Uint8Array) {
 test("start_agent on the description with a note hands the agent the pictures images names, kept beside the caller's own conversation, as file parts of its first message", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
-  await turnDescriptions(caller.userId, true);
+  await turnDescriptions(workspaceId, caller.userId, true);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
   const shown = pngOf(64, 1);
@@ -1347,7 +1348,7 @@ test("start_agent with a title names the agent by it from the start, and a title
   }
 });
 
-test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot as the caller's starter has it rather than the task's owner, and refused saying why where it is off", async () => {
+test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot as the task's workspace has it, and refused saying why where it is off", async () => {
   const { workspaceId, agents, plans } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -1357,8 +1358,6 @@ test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot 
       db.update(task).set({ mode: TASK_MODE.PILOT }).where(eq(task.id, plans.billing)),
     ),
   );
-  const pilotOn = { experiments: { [EXPERIMENT.PILOT]: true } };
-  await database.run(writeAccountPreferences(teammates.userId, pilotOn));
   const start = { taskId: plans.billing, prompt: "Bill by seat." };
 
   assert.deepEqual(await call(CODER_TOOL.START_AGENT, start, "call-pilot-off"), {
@@ -1366,7 +1365,14 @@ test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot 
     reason: START_AGENT_REFUSAL.PILOT_OFF,
   });
   assert.equal(eve.sent.length, 0, "a refused pilot starts nothing");
-  await database.run(writeAccountPreferences(caller.userId, pilotOn));
+  await database.run(
+    setWorkspaceExperiment({
+      organizationId: workspaceId,
+      experiment: EXPERIMENT.PILOT,
+      on: true,
+      by: teammates.userId,
+    }),
+  );
   const started = await call(CODER_TOOL.START_AGENT, start, "call-pilot-on");
 
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
@@ -2087,7 +2093,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   const { workspaceId, elsewhere, plans: tasks, agents } = await openWorkspaces();
   // Bob's agent on Alice's task: the task it makes is Bob's, not the owner's of the task it works on.
   const bob = agents.teammates.userId;
-  await turnDescriptions(bob, true);
+  await turnDescriptions(workspaceId, bob, true);
   const caller = await agentOn(bob, tasks.invitations);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
@@ -2221,8 +2227,8 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Old way"), []);
   assert.equal(eve.sent.length, 1, "a refused start starts nothing");
 
-  // With Descriptions off a description given is not written, and a start with no prompt hands the brief in the description's place.
-  await turnDescriptions(bob, false);
+  // With Task descriptions off a description given is not written, and a start with no prompt hands the brief in the description's place.
+  await turnDescriptions(workspaceId, bob, false);
   const planless = await call(
     CODER_TOOL.CREATE_TASK,
     { name: "Seat audit", brief: "Audit seat counts.", description: "## Goal\n\nCount seats." },
@@ -3858,10 +3864,10 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
   );
 });
 
-test("read_task reads a teammate's task of the caller's workspace with its description as saved, cuts a long description on a line, reads no description once the caller's starter turned Descriptions off, and reads no task of another workspace", async () => {
+test("read_task reads a teammate's task of the caller's workspace with its description as saved, cuts a long description on a line, reads no description once the caller's workspace turned Task descriptions off, and reads no task of another workspace", async () => {
   const { workspaceId, plans: taskIds, numbers, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
-  await turnDescriptions(caller.userId, true);
+  await turnDescriptions(workspaceId, caller.userId, true);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
   const description = "# Billing\n\nCharge by seat.";
@@ -3895,8 +3901,8 @@ test("read_task reads a teammate's task of the caller's workspace with its descr
   assert.equal(cut.description.text, line.repeat(40).slice(0, -1));
   assert.equal(cut.description.leftOutChars, long.length - (line.length * 40 - 1));
 
-  // With Descriptions off the task is read all the same, without its description.
-  await turnDescriptions(caller.userId, false);
+  // With Task descriptions off the task is read all the same, without its description.
+  await turnDescriptions(workspaceId, caller.userId, false);
   const planless = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.equal(planless.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(planless));
   assert.deepEqual([isRecord(planless.task), "description" in planless], [true, false]);
@@ -4433,20 +4439,24 @@ test("create_automation and update_automation take a Sentry trigger once the wor
   );
 });
 
-/** Turns the Descriptions experiment on or off for a member, whose agents read and write no description while it is off. */
-async function turnDescriptions(userId: string, on: boolean): Promise<void> {
-  await database.run(
-    writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } }),
-  );
+/** Turns the experiment on or off for everyone in the workspace, as the admin named would; its agents read and write no description, or keep no memory, while it is off. */
+async function turnExperiment(
+  organizationId: string,
+  by: string,
+  experiment: typeof EXPERIMENT.DESCRIPTIONS | typeof EXPERIMENT.MEMORY,
+  on: boolean,
+): Promise<void> {
+  await database.run(setWorkspaceExperiment({ organizationId, experiment, on, by }));
 }
 
-/** Turns the Memory experiment on for each member, whose agents are refused memory otherwise. */
-async function turnMemoryOn(...userIds: readonly string[]): Promise<void> {
-  for (const userId of userIds) {
-    await database.run(
-      writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } }),
-    );
-  }
+/** Turns Task descriptions on or off for everyone in the workspace. */
+async function turnDescriptions(organizationId: string, by: string, on: boolean): Promise<void> {
+  await turnExperiment(organizationId, by, EXPERIMENT.DESCRIPTIONS, on);
+}
+
+/** Turns Memory on for everyone in the workspace, whose agents are refused memory otherwise. */
+async function turnMemoryOn(organizationId: string, by: string): Promise<void> {
+  await turnExperiment(organizationId, by, EXPERIMENT.MEMORY, true);
 }
 
 /** The words of the memories a recall answered. */
@@ -4461,7 +4471,8 @@ test("a coding agent remembers for its workspace, as its starter's words: a team
   const eve = await fakeCoderEve(workspaceId);
   const host = hostOf();
   const fact = "Every hosted route is an oRPC procedure declared in the features contract.";
-  await turnMemoryOn(agents.caller.userId, agents.teammates.userId, agents.otherWorkspaces.userId);
+  await turnMemoryOn(workspaceId, agents.caller.userId);
+  await turnMemoryOn(elsewhere, agents.otherWorkspaces.userId);
   const asCaller = await peerCaller(host, agents.caller, eve.services);
 
   const kept = await asCaller(CODER_TOOL.SAVE_MEMORY, {
@@ -4489,7 +4500,7 @@ test("a teammate's agent corrects a memory in place as its own starter's words, 
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const host = hostOf();
-  await turnMemoryOn(agents.caller.userId, agents.teammates.userId);
+  await turnMemoryOn(workspaceId, agents.caller.userId);
   const asCaller = await peerCaller(host, agents.caller, eve.services);
   const asTeammate = await peerCaller(host, agents.teammates, eve.services);
   const kept = await asCaller(CODER_TOOL.SAVE_MEMORY, { text: "Deploys go out from main." });
@@ -4511,14 +4522,15 @@ test("a teammate's agent corrects a memory in place as its own starter's words, 
   );
 });
 
-test("while its starter has Memory off, a coding agent's remember and recall are refused and nothing is kept", async () => {
+test("while its workspace has Memory off, a coding agent's remember and recall are refused and nothing is kept", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const host = hostOf();
-  await turnMemoryOn(agents.teammates.userId);
+  await turnMemoryOn(workspaceId, agents.teammates.userId);
   const asCaller = await peerCaller(host, agents.caller, eve.services);
   const asTeammate = await peerCaller(host, agents.teammates, eve.services);
   await asTeammate(CODER_TOOL.SAVE_MEMORY, { text: "Deploys go out from main." });
+  await turnExperiment(workspaceId, agents.teammates.userId, EXPERIMENT.MEMORY, false);
 
   const kept = await asCaller(CODER_TOOL.SAVE_MEMORY, {
     text: "Every route is an oRPC procedure.",

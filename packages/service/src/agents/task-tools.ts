@@ -19,6 +19,7 @@ import {
   taskPrioritySchema,
   taskStatusSchema,
 } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import {
@@ -45,6 +46,7 @@ import {
   callerTask,
   callerUserId,
   callerWorkspace,
+  callerWorkspaceId,
   cutOnLine,
   orStoreRefusal,
   repositoryRefusalWords,
@@ -53,9 +55,9 @@ import {
   workedRepository,
 } from "./agent-tools.js";
 import { calledId } from "./called-id.js";
-import { descriptionsOnFor } from "./descriptions-on.js";
 import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
 import { taskBlockReadings } from "./task-block-changes.js";
+import { experimentOnIn } from "./workspace-experiment-on.js";
 import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
 
 /**
@@ -117,9 +119,9 @@ export const READ_TASK_TOOL = {
   inputSchema: READ_TASK_INPUT,
 } as const;
 
-/** Whether the caller reaches tasks' descriptions: the coding agent's starter's Task descriptions, or a pilot's Pilot, or the member's own Task descriptions (`descriptionsOnFor`). */
+/** Whether the caller reaches tasks' descriptions: whether the workspace it calls in has Task descriptions on (`experimentOnIn`). */
 function callerDescriptionsOn(caller: AgentCall["caller"]) {
-  return descriptionsOnFor(callerUserId(caller), callerAgent(caller)?.kind);
+  return experimentOnIn(callerWorkspaceId(caller), EXPERIMENT.DESCRIPTIONS);
 }
 
 /** One call of `read_task`: a task of the caller's workspace, its description cut to the bound, or why there is none; no description where the caller has Task descriptions off. */

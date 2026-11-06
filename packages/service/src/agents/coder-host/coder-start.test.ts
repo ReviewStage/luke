@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
 import {
   readAgentRepositories,
   recordAgentRepositoryHead,
@@ -11,6 +10,7 @@ import { listAgents, readAgent, readAgentByKey } from "@repo/database/models/age
 import { registerDevice } from "@repo/database/models/device-store";
 import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
 import { createTask, readTask } from "@repo/database/models/task-store";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { messages } from "@repo/database/schemas/storage";
 import { task } from "@repo/database/schemas/task";
@@ -464,7 +464,12 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
-        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.PILOT]: true } });
+        yield* setWorkspaceExperiment({
+          organizationId: workspaceId,
+          experiment: EXPERIMENT.PILOT,
+          on: true,
+          by: owner,
+        });
         const piloted = yield* pilotTask(owner, workspaceId);
         const { eve } = fakeEve();
 

@@ -43,6 +43,7 @@ import { integrationConnectionOf } from "@repo/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@repo/features/mac-command-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { failureKind } from "@repo/runtime/effect";
+import { EXPERIMENT } from "@repo/settings";
 import {
   EXCESS_KEYS,
   HTTP_METHOD,
@@ -74,8 +75,7 @@ import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
 import { CODER_TOOL, type OfferedBeside } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { memoryOnFor } from "../memory-tools.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
+import { experimentOnIn } from "../workspace-experiment-on.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { workspaceMcpCallKey } from "./call-key.js";
 import { workspaceMcpDoorSeams } from "./door-seams.js";
@@ -373,7 +373,7 @@ function callWorkspaceTool(
 
 /**
  * The tools listed to the admitted agent: those eve offers it, by its
- * repository, where it runs, and its starter's Memory and Task descriptions (`offeredWorkspaceMcpTool`); those eve offers
+ * repository, where it runs, and its workspace's Memory and Task descriptions (`offeredWorkspaceMcpTool`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.
  */
@@ -386,8 +386,8 @@ function listWorkspaceTools(
       Effect.map(
         Option.isSome(found)
           ? Effect.all({
-              memoryOn: memoryOnFor(found.value.userId),
-              descriptionsOn: descriptionsOnFor(found.value.userId, found.value.kind),
+              memoryOn: experimentOnIn(found.value.organizationId, EXPERIMENT.MEMORY),
+              descriptionsOn: experimentOnIn(found.value.organizationId, EXPERIMENT.DESCRIPTIONS),
             })
           : Effect.succeed(NO_AGENT_BESIDE),
         (beside) =>

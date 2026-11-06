@@ -32,6 +32,7 @@ import { AGENT_MACHINE, AGENT_STATUS, type AgentAttachment } from "@repo/feature
 import { MENTION_KIND, withoutMemberLinks } from "@repo/features/mention-link";
 import { agentName } from "@repo/features/model-label";
 import { causeKind } from "@repo/runtime/effect";
+import { EXPERIMENT } from "@repo/settings";
 import { sentLineId } from "@repo/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -62,7 +63,7 @@ import {
 } from "../eve-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
+import { experimentOnIn } from "../workspace-experiment-on.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { harnessOf } from "./native-runtime.js";
@@ -433,7 +434,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
         task,
         reads,
         agent.id,
-        yield* descriptionsOnFor(agent.userId, agent.kind),
+        yield* experimentOnIn(agent.organizationId, EXPERIMENT.DESCRIPTIONS),
       );
   const running = yield* Effect.fromResult(read.running);
   const label = yield* Effect.fromResult(read.label);

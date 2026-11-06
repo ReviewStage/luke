@@ -66,6 +66,15 @@ import {
 } from "@repo/features/agent-wire";
 import { automationCreateRequestSchema } from "@repo/features/automation-wire";
 import {
+  DESCRIPTION_COMMENT_ACTION,
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_BOUNDS,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+  descriptionCommentWordsSchema,
+} from "@repo/features/description-comment-wire";
+import { descriptionNotesSchema, locatedPhrase } from "@repo/features/description-notes";
+import {
   githubPullRequestNumberSchema,
   githubRepositoryFullNameSchema,
 } from "@repo/features/github-repositories-wire";
@@ -79,15 +88,6 @@ import {
 import { MEMORY_BOUNDS, memoryIdSchema } from "@repo/features/memory-wire";
 import { agentName } from "@repo/features/model-label";
 import { PAGE_OWNER } from "@repo/features/page-wire";
-import {
-  DESCRIPTION_COMMENT_ACTION,
-  DESCRIPTION_COMMENT_ACTOR,
-  DESCRIPTION_COMMENT_BOUNDS,
-  DESCRIPTION_COMMENT_SCOPE,
-  DESCRIPTION_COMMENT_STATUS,
-  descriptionCommentWordsSchema,
-} from "@repo/features/description-comment-wire";
-import { locatedPhrase, descriptionNotesSchema } from "@repo/features/description-notes";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PULL_REQUEST_ACTION,
@@ -97,6 +97,12 @@ import {
 } from "@repo/features/pull-request-write-wire";
 import { TASK_STATUS } from "@repo/features/task-wire";
 import { WORKSPACE_BOUNDS, workspaceOfSlug } from "@repo/features/workspace-wire";
+import {
+  EXPERIMENT,
+  isExperiment,
+  isWorkspaceExperiment,
+  type WorkspaceExperiment,
+} from "@repo/settings";
 import { describeWire, type StandardSchemaWithJson, standardSchemaOf } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
@@ -117,6 +123,7 @@ import {
   agentToolRejected,
   CODER_READ_AGENT_TOOL,
   callerUserId,
+  callerWorkspaceId,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
   orStoreRefusal,
@@ -164,13 +171,11 @@ import { steerMemberWords } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   type MemoryCall,
-  memoryOnFor,
   runRecall,
   runRemember,
   SAVE_MEMORY_TOOL,
   SEARCH_MEMORY_TOOL,
 } from "../agents/memory-tools.js";
-import { descriptionsOnFor } from "../agents/descriptions-on.js";
 import {
   CREATE_SECTION_TOOL,
   DELETE_SECTION_TOOL,
@@ -187,6 +192,7 @@ import {
   runReadTask,
 } from "../agents/task-tools.js";
 import { WORKSPACE_AGENTS_LIST_LIMIT } from "../agents/workspace-agents.js";
+import { experimentOnIn } from "../agents/workspace-experiment-on.js";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
@@ -252,6 +258,8 @@ export interface MemberMcpTool<Input extends MemberMcpToolInput = MemberMcpToolI
   readonly inputSchema: StandardSchemaWithJson<Input>;
   /** The tool's work, on the arguments the SDK checked against `input`. */
   run(input: Input["Type"]): Effect.Effect<MemberMcpToolResult, StoreFailure, MemberMcpServices>;
+  /** The workspace experiment the tool is of, which lists it only to a member with that experiment on in one of their workspaces at least; none for a tool every member is listed. */
+  readonly experiment?: WorkspaceExperiment;
 }
 
 /** The tools by name, each the name a model calls it by. */
@@ -800,15 +808,19 @@ const MEMBER_EDIT_DESCRIPTION_TOOL = memberMcpTool({
     readAsMember(
       (userId) => readTaskWorkspace(userId, asked.taskId),
       DESCRIPTION_EDIT_REFUSAL.NO_TASK,
-      ({ caller }) => {
-        const userId = callerUserId(caller);
-        return Effect.flatMap(descriptionsOnFor(userId), (descriptionsOn) =>
-          descriptionsOn
-            ? recordMemberDescriptionNotes({ userId, taskId: asked.taskId }, asked)
-            : Effect.succeed(agentToolRejected(MEMBER_NOTE_REFUSAL.DESCRIPTIONS_OFF)),
-        );
-      },
+      ({ caller }) =>
+        Effect.flatMap(
+          experimentOnIn(callerWorkspaceId(caller), EXPERIMENT.DESCRIPTIONS),
+          (descriptionsOn) =>
+            descriptionsOn
+              ? recordMemberDescriptionNotes(
+                  { userId: callerUserId(caller), taskId: asked.taskId },
+                  asked,
+                )
+              : Effect.succeed(agentToolRejected(MEMBER_NOTE_REFUSAL.DESCRIPTIONS_OFF)),
+        ),
     ),
+  experiment: EXPERIMENT.DESCRIPTIONS,
 });
 
 /** A section the member makes names the workspace it is made in, its title, and its emoji. */
@@ -1385,8 +1397,8 @@ const AGENT_PULL_REQUEST_ACTION_TOOL = memberMcpTool({
  * (`memberCommentAnswer`), so it hands its thread to the agents in it, and to
  * each one its words mention, as one typed in the window does. The
  * workspace's shared memory is searched, kept, and forgotten as the member,
- * in the workspace a slug names or their only one, only while they have
- * Memory on (`memoryOnFor`), as Settings › Memory stands only then, and is
+ * in the workspace a slug names or their only one, only while that workspace
+ * has Memory on (`experimentOnIn`), as Settings › Memory stands only then, and is
  * held to what the desktop holds the member to: the workspace's bound of
  * memories, and a forget of another member's words only for one who owns or
  * administers the workspace.
@@ -1398,11 +1410,11 @@ const MEMBER_NOTE_REFUSAL = {
     "Not posted: the description does not hold those words exactly once; copy them, or more of them, " +
     `from the description as ${MEMBER_MCP_TOOL.READ_TASK} reads it.`,
   MEMORY_OFF:
-    "Not run: the member you act for has Memory off; they turn it on in Settings › " +
+    "Not run: that workspace has Memory off; an admin of it turns it on in Settings › " +
     "Experimental. Carry on without it.",
   DESCRIPTIONS_OFF:
-    "Not run: the member you act for has Task descriptions off, so tasks have no description to write or comment " +
-    "on; they turn it on in Settings › Experimental.",
+    "Not run: that workspace has Task descriptions off, so its tasks have no description to write or comment " +
+    "on; an admin of it turns it on in Settings › Experimental.",
   NOT_MEMBER: "Not forgotten: the member no longer belongs to that workspace.",
   NOT_FORGETTABLE:
     "Not forgotten: the member may forget a memory in their own words alone, unless they own " +
@@ -1415,7 +1427,7 @@ type MemberCommentWriter = Extract<
   { readonly actor: typeof DESCRIPTION_COMMENT_ACTOR.MEMBER }
 >;
 
-/** A comment call run as the member, on the task it names as the member reaches it, told whether they have Task descriptions on, which the description's own threads stand on and a page's do not; refused where they reach no task. */
+/** A comment call run as the member, on the task it names as the member reaches it, told whether its workspace has Task descriptions on, which the description's own threads stand on and a page's do not; refused where they reach no task. */
 const commentAsMember = <R>(
   taskId: string,
   act: (
@@ -1426,12 +1438,15 @@ const commentAsMember = <R>(
   readAsMember(
     (userId) => readTaskWorkspace(userId, taskId),
     COMMENT_TOOL_REFUSAL.NO_TASK,
-    ({ caller }) => {
-      const userId = callerUserId(caller);
-      return Effect.flatMap(descriptionsOnFor(userId), (descriptionsOn) =>
-        act({ actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId }, descriptionsOn),
-      );
-    },
+    ({ caller }) =>
+      Effect.flatMap(
+        experimentOnIn(callerWorkspaceId(caller), EXPERIMENT.DESCRIPTIONS),
+        (descriptionsOn) =>
+          act(
+            { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: callerUserId(caller) },
+            descriptionsOn,
+          ),
+      ),
   );
 
 /** A member's comment as the store came to it, answered as the window's own is, its thread handed to the agents it reaches; a task or thread not reached refused. */
@@ -1568,6 +1583,7 @@ const MEMBER_COMMENT_ON_DESCRIPTION_TOOL = memberMcpTool({
         ? memberDescriptionComment(writer, asked)
         : Effect.succeed(commentToolRejected(MEMBER_NOTE_REFUSAL.DESCRIPTIONS_OFF)),
     ),
+  experiment: EXPERIMENT.DESCRIPTIONS,
 });
 
 /** A reply names the task, the thread, and the member's words. */
@@ -1671,18 +1687,18 @@ const MEMORY_WORKSPACE_INPUT = Schema.optionalKey(
   ),
 );
 
-/** A memory call run as the member, in the workspace its slug names or their only one, while they have Memory on; refused otherwise. */
+/** A memory call run as the member, in the workspace its slug names or their only one, while that workspace has Memory on; refused otherwise. */
 const memoryAsMember = <R>(
   slug: string | undefined,
   run: (memory: MemoryCall) => Effect.Effect<WireRecord, StoreFailure, R>,
 ) =>
   Effect.gen(function* () {
     const member = yield* AdmittedMember;
-    if (!(yield* memoryOnFor(member.userId))) {
-      return agentToolRejected(MEMBER_NOTE_REFUSAL.MEMORY_OFF);
-    }
     const workspace = yield* listedWorkspace(member.userId, slug);
     if (Result.isFailure(workspace)) return agentToolRejected(workspace.failure);
+    if (!(yield* experimentOnIn(workspace.success, EXPERIMENT.MEMORY))) {
+      return agentToolRejected(MEMBER_NOTE_REFUSAL.MEMORY_OFF);
+    }
     return yield* run({ workspaceId: workspace.success, userId: member.userId });
   });
 
@@ -1706,6 +1722,7 @@ const MEMBER_SEARCH_MEMORY_TOOL = memberMcpTool({
   input: SearchMemoryInputSchema,
   annotations: READ_ONLY,
   run: ({ workspace, ...asked }) => memoryAsMember(workspace, (memory) => runRecall(memory, asked)),
+  experiment: EXPERIMENT.MEMORY,
 });
 
 /** A memory kept names the workspace, its words, and, at most, the memory it corrects. */
@@ -1732,6 +1749,7 @@ const MEMBER_SAVE_MEMORY_TOOL = memberMcpTool({
   annotations: IDEMPOTENT_CHANGE,
   run: ({ workspace, ...asked }) =>
     memoryAsMember(workspace, (memory) => runRemember(memory, asked)),
+  experiment: EXPERIMENT.MEMORY,
 });
 
 /** A forget names the workspace and the memory. */
@@ -1780,6 +1798,7 @@ const MEMBER_FORGET_MEMORY_TOOL = memberMcpTool({
   annotations: DESTRUCTIVE,
   run: ({ workspace, memoryId }) =>
     memoryAsMember(workspace, (memory) => memberForget(memory, memoryId)),
+  experiment: EXPERIMENT.MEMORY,
 });
 
 /*
@@ -1966,6 +1985,28 @@ const MEMBER_DELETE_AUTOMATION_TOOL = memberMcpTool({
 });
 
 /** Every tool the server offers, listed in the order an agent reads them. */
+/**
+ * The workspace experiments on in one of the member's workspaces at least,
+ * whose tools the member is listed (`MemberMcpTool.experiment`): this server
+ * spans the member's workspaces, so a tool of one stands while any of them
+ * has it on, and each call into a workspace with it off is refused at the
+ * tool's door.
+ */
+export const memberExperimentsOn = (
+  userId: string,
+): Effect.Effect<ReadonlySet<WorkspaceExperiment>, StoreFailure, DatabaseServices> =>
+  Effect.map(
+    listWorkspaces(userId),
+    (workspaces) =>
+      new Set(
+        workspaces.flatMap((workspace) =>
+          (workspace.experiments ?? []).flatMap(({ experiment, on }) =>
+            on && isExperiment(experiment) && isWorkspaceExperiment(experiment) ? [experiment] : [],
+          ),
+        ),
+      ),
+  );
+
 export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   LIST_WORKSPACES_TOOL,
   MEMBER_LIST_TASKS_TOOL,

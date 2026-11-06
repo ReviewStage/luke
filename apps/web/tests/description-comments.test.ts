@@ -2,22 +2,21 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { archiveAgent, createAgent } from "@repo/database/models/agent-store";
-import { writePage } from "@repo/database/models/task-pages";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { writePage } from "@repo/database/models/task-pages";
 import { createTask, saveDescriptionText } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { messages } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
+  experimentInTestWorkspace,
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
   openWorkspace,
 } from "@repo/database/testing";
 import { AGENT_PAYER, MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@repo/features/agent-wire";
-import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -34,6 +33,7 @@ import {
   descriptionCommentThreadAnswerSchema,
 } from "@repo/features/description-comment-wire";
 import type { DescriptionEditRequest } from "@repo/features/description-edit";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { CODER } from "@repo/service/agents/coder-host/bounds";
 import {
   type AgentSessions,
@@ -95,17 +95,16 @@ interface Answered {
   readonly body: string;
 }
 
-/** The account's Descriptions turned on or off, which its agents are handed a description's comment threads by. */
-const descriptionsFor = (userId: string, on: boolean) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
+/** Task descriptions turned on or off for everyone in the owner's workspace, whose agents are handed a description's comment threads only while it is on. */
+const descriptionsFor = (owner: string, on: boolean) =>
+  experimentInTestWorkspace(owner, EXPERIMENT.DESCRIPTIONS, on);
 
-/** An account with Descriptions on, whose agents are handed a description's comment threads only then. */
+/** An account of the name given. */
 const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
-    yield* descriptionsFor(id, true);
     return id;
   });
 
@@ -247,7 +246,7 @@ function threadIn(answered: Answered): DescriptionCommentThread {
   return read.success.thread;
 }
 
-/** A plan with the text above, in a workspace the owner made and the teammate joined, and an account in neither. */
+/** A plan with the text above, in a workspace the owner made with Task descriptions on and the teammate joined, and an account in neither. */
 const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount("Dean Stratakos");
   // Our key pays for no coding agent, so the owner's agent takes the thread on the owner's own keys.
@@ -256,6 +255,7 @@ const openSharedTask = Effect.gen(function* () {
   const outsider = yield* openAccount("Someone Else");
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
+  yield* descriptionsFor(owner, true);
   const { id: taskId } = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
   yield* saveDescriptionText(owner, taskId, DESCRIPTION_TEXT);
   return { owner, teammate, outsider, taskId };
@@ -528,7 +528,7 @@ it.layer(getTestDB())("a description's comment thread sent to an agent", (it) =>
         assert.ok(message, "the agent in the thread was handed the reply");
         assert.ok(JSON.stringify(message.message).includes("And withdrawing by email?"));
 
-        // An agent whose starter has Descriptions off is told nothing of the description's comments.
+        // An agent whose workspace has Task descriptions off is told nothing of the description's comments.
         yield* descriptionsFor(owner, false);
         const planless = readEither(descriptionCommentThreadAnswerSchema)(
           unparsedWire(JSON.parse((yield* reply("And by link?")).body)),
@@ -540,7 +540,7 @@ it.layer(getTestDB())("a description's comment thread sent to an agent", (it) =>
         assert.equal(
           opened.length,
           before + 1,
-          "the agent with Descriptions off was handed nothing",
+          "the agent with Task descriptions off was handed nothing",
         );
         yield* descriptionsFor(owner, true);
 
@@ -556,7 +556,7 @@ it.layer(getTestDB())("a description's comment thread sent to an agent", (it) =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
         const agentId = yield* startAgent(owner, taskId);
-        // Note that a page's threads are no description's, so its starter's Descriptions off keeps none of them from the agent.
+        // Note that a page's threads are no description's, so its workspace's Task descriptions off keeps none of them from the agent.
         yield* descriptionsFor(owner, false);
         const page = Option.getOrThrow(
           yield* writePage(

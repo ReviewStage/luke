@@ -5,10 +5,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@repo/database/core/query";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { readAgent } from "@repo/database/models/agent-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { saveDescriptionText } from "@repo/database/models/task-store";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, messages } from "@repo/database/schemas/storage";
@@ -684,10 +684,13 @@ export const openTask = (
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
     yield* saveDescriptionText(owner, task.id, SAVED);
-    // Both accounts have Descriptions on, so an agent started on the task is handed its description.
-    for (const account of [owner, other]) {
-      yield* writeAccountPreferences(account, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
-    }
+    // The task's workspace has Task descriptions on, so an agent started on the task is handed its description.
+    yield* setWorkspaceExperiment({
+      organizationId: task.workspaceId,
+      experiment: EXPERIMENT.DESCRIPTIONS,
+      on: true,
+      by: owner,
+    });
     const installation = freshInstallation();
     assert.equal(
       yield* connectWorkspaceGitHub(task.workspaceId, installation),
