@@ -76,10 +76,12 @@ import {
 } from "../find-in-tab.js";
 import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
+import { type HeldComment, PageReview, usePageReview } from "./page-review.js";
 import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import {
   COMMENTS_FILTER,
   type CommentsFilter,
+  CommentWords,
   ownWordsIn,
   PAGE_COMMENT_WORDS,
   PageCommentLayer,
@@ -695,11 +697,22 @@ function pageReserve(row: HTMLElement): number {
   return row.getBoundingClientRect().width * (1 - COMMENTS_SHARE);
 }
 
-/** The elements holding open threads, each once, in the order their threads were started, with the words the first quotes where it was started on words selected. */
-function threadMarks(threads: readonly PlanCommentThread[]): readonly PageMark[] {
-  return [...threadsByElement(threads)].map(([path, [first]]) =>
+/** The elements holding open threads, each once, in the order their threads were started, with the words the first quotes where it was started on words selected; then those holding only comments held in the reader's review. */
+function threadMarks(
+  threads: readonly PlanCommentThread[],
+  held: readonly HeldComment[],
+): readonly PageMark[] {
+  const posted = [...threadsByElement(threads)].map(([path, [first]]) =>
     first?.scope === PLAN_COMMENT_SCOPE.WORDS ? { path, words: first.quote } : { path },
   );
+  const marked = new Set(posted.map((mark) => mark.path));
+  const heldMarks = held.flatMap((comment) => {
+    const on = comment.element;
+    if (on === undefined || marked.has(on.path)) return [];
+    marked.add(on.path);
+    return [on.words === true ? { path: on.path, words: on.quote } : { path: on.path }];
+  });
+  return [...posted, ...heldMarks];
 }
 
 /**
@@ -742,7 +755,9 @@ export function PagePane({
   const frame = useRef<HTMLIFrameElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const threads = comments?.control.threads;
-  const marks = useMemo(() => threadMarks(threads ?? []), [threads]);
+  const review = usePageReview(comments?.control, page.id);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const marks = useMemo(() => threadMarks(threads ?? [], review.held), [threads, review.held]);
   const [hinted, setHinted] = useState<string | undefined>(undefined);
   const shown = threads?.find((thread) => commenting.open?.includes(thread.id) === true)?.page
     ?.element;
@@ -923,6 +938,12 @@ export function PagePane({
                 ) : null}
                 {comments === undefined ? null : (
                   <>
+                    <PageReview
+                      review={review}
+                      open={reviewOpen}
+                      onOpen={setReviewOpen}
+                      wordsOf={(held) => <CommentWords words={held.words} />}
+                    />
                     <Tooltip label={PAGE_COMMENT_WORDS.COMMENT}>
                       <IconButton
                         icon={<MessageSquarePlusIcon aria-hidden="true" />}
@@ -984,6 +1005,10 @@ export function PagePane({
                   onStopPick={commenting.stopPick}
                   onStarted={commenting.started}
                   onCancel={commenting.dismiss}
+                  // Note that a phone draws no bar for the review's press, so its comments post at once.
+                  review={
+                    phone ? undefined : { control: review, onOpen: () => setReviewOpen(true) }
+                  }
                 />
               )}
             </PageFrame>

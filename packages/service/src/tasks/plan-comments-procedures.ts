@@ -4,6 +4,7 @@ import {
   PLAN_COMMENT_OUTCOME,
   type PlanCommentOutcome,
   planCommentStamps,
+  readPlanCommentThread,
   readPlanCommentThreads,
   startPlanCommentThread,
   withdrawPlanCommentAsk,
@@ -19,10 +20,12 @@ import {
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENTS_CURSOR_START,
   type PlanCommentAsked,
+  type PlanCommentStart,
   type PlanCommentsAnswer,
   type PlanCommentThread,
   type PlanCommentThreadAnswer,
 } from "@repo/features/plan-comment-wire";
+import { COMMENT_LINE_BOUNDS } from "@repo/wire";
 import { Effect, Option } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
@@ -43,6 +46,7 @@ import {
   type CommentRecipient,
   commentAskMessage,
   handCommentAskOver,
+  reviewAskMessage,
 } from "./comment-ask.js";
 
 /**
@@ -70,7 +74,10 @@ import {
  * version, its writer, is in every thread on the page from the start, so a
  * comment reaches whoever revises the page; one in a thread that cannot
  * take it, an archived agent say, is said back as not sent, the comment
- * posted all the same.
+ * posted all the same. A member's review of a page hands nothing over until
+ * it is sent: each thread of it is started held, and the start that sends
+ * it names them along, so each agent in any of them hears them all at once
+ * (`reviewHandedOver`).
  *
  * The read stays a long-held JSON answer: the hold is the route's own,
  * `heldUntilMoved` under the coding agents' hold, and nothing the handler
@@ -139,6 +146,10 @@ export interface MentioningComment {
   readonly clientKey: string;
   /** Whether it replied on a thread, or started one. */
   readonly isReply: boolean;
+  /** Whether it started a thread held in a review, which hands it to no one yet. */
+  readonly held?: boolean;
+  /** The threads held in the review it sends, by their ids, handed over together with its own. */
+  readonly along?: readonly string[];
 }
 
 /** A write the store took, with what it answers. */
@@ -174,14 +185,18 @@ export const memberCommentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
     );
   }
   const { thread } = answer;
-  const unsent = thread.entries.some(
+  const own = thread.entries.some(
     (entry) =>
       entry.kind === PLAN_COMMENT_ENTRY.COMMENT &&
       entry.writer.by?.userId === comment.userId &&
       entry.words === comment.words,
-  )
-    ? yield* mentionsHandedOver(thread, comment)
-    : [];
+  );
+  const unsent =
+    !own || comment.held === true
+      ? []
+      : comment.along === undefined || comment.along.length === 0
+        ? yield* mentionsHandedOver(thread, comment)
+        : yield* reviewHandedOver(thread, comment, comment.along);
   return unsent.length === 0 ? answer : { thread, unsent };
 });
 
@@ -410,6 +425,210 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (input: {
   );
 });
 
+/** Where a start stands in a review: held in one, sending one with the threads it names along, or in none. */
+function reviewOf(start: PlanCommentStart): Pick<MentioningComment, "held" | "along"> {
+  if (!("page" in start)) return {};
+  if (start.held === true) return { held: true };
+  return start.along === undefined ? {} : { along: start.along };
+}
+
+/** The member's own first comment in a thread, whose words say whom its thread is handed to. */
+function firstWordsOf(thread: PlanCommentThread, userId: string): string | undefined {
+  return thread.entries.find(
+    (entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT && entry.writer.by?.userId === userId,
+  )?.words;
+}
+
+/**
+ * The threads a review sends, in the order they were started: each named
+ * along that is the task's, on the same page as the one sending it, and
+ * started by the same member, then the one sending it. A thread named that
+ * is not one of these is left out, so a review hands over no one else's.
+ */
+const reviewThreads = /* @__PURE__ */ Effect.fnUntraced(function* (
+  thread: PlanCommentThread,
+  comment: MentioningComment,
+  along: readonly string[],
+) {
+  const pageId = thread.page?.id;
+  const held: PlanCommentThread[] = [];
+  for (const id of new Set(along)) {
+    if (id === thread.id) continue;
+    // Note that a thread that could not be read is left out, as one not the review's is.
+    const read = yield* hostedStoreOrUnavailable(
+      readPlanCommentThread(comment.userId, comment.taskId, id),
+    ).pipe(Effect.catch(() => Effect.succeed(Option.none<PlanCommentThread>())));
+    const found = Option.getOrUndefined(read);
+    if (found?.page === undefined || found.page.id !== pageId) continue;
+    if (firstWordsOf(found, comment.userId) === undefined) continue;
+    held.push(found);
+  }
+  return [...held, thread];
+});
+
+/**
+ * A review handed to each agent in any of its threads (`handedTo`, by each
+ * thread's first comment), once with every thread of it that agent is in,
+ * rather than once a comment; one in a thread that cannot take it is said
+ * back as not sent, as a lone comment's is. A review of one thread is that
+ * thread's comment handed over as any other.
+ */
+const reviewHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
+  thread: PlanCommentThread,
+  comment: MentioningComment,
+  along: readonly string[],
+) {
+  const { userId, taskId } = comment;
+  const threads = yield* reviewThreads(thread, comment, along);
+  if (threads.length === 1) return yield* mentionsHandedOver(thread, comment);
+  const writer = yield* pageWriterOf(userId, thread).pipe(
+    Effect.catch(() => Effect.succeed(undefined)),
+  );
+  // Each one asked, with whether a hand-over that cannot land is said back and the threads they are in, by agent.
+  const asked = new Map<
+    string | undefined,
+    { readonly to: PlanCommentAsked; owed: boolean; readonly threads: PlanCommentThread[] }
+  >();
+  for (const each of threads) {
+    const words = each.id === thread.id ? comment.words : (firstWordsOf(each, userId) ?? "");
+    for (const { to, owed } of handedTo(each, words, writer)) {
+      const was = asked.get(to.agentId);
+      if (was === undefined) asked.set(to.agentId, { to, owed, threads: [each] });
+      else {
+        was.owed ||= owed;
+        was.threads.push(each);
+      }
+    }
+  }
+  const unsent: PlanCommentAsked[] = [];
+  const taking: {
+    readonly to: PlanCommentAsked;
+    readonly agent: CommentRecipient;
+    readonly threads: readonly PlanCommentThread[];
+  }[] = [];
+  for (const { to, owed, threads: theirs } of asked.values()) {
+    const agent = yield* askableAgent(userId, taskId, to).pipe(
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+    if (agent !== undefined) taking.push({ to, agent, threads: theirs });
+    else if (owed) unsent.push(to);
+  }
+  yield* afterResponse(
+    "a review's hand-over",
+    Effect.forEach(
+      taking,
+      ({ to, agent, threads: theirs }) =>
+        reviewAsked(theirs, comment, to, agent).pipe(
+          Effect.catch((refusal) =>
+            Effect.logWarning(`a review's hand-over was not taken: ${String(refusal)}`),
+          ),
+        ),
+      { discard: true },
+    ),
+  );
+  return unsent;
+});
+
+/**
+ * The key a review's ask in one of its threads is written under: the key
+ * of the comment sending the review, the thread, and whom it asks, each kept
+ * whole in one encoded record, so the review sent again asks no one twice.
+ */
+function reviewKey(clientKey: string, threadId: string | undefined, to: PlanCommentAsked): string {
+  return JSON.stringify({
+    review: clientKey,
+    thread: threadId ?? null,
+    actor: to.actor,
+    agent: to.agentId ?? null,
+  });
+}
+
+/** A Markdown blockquote of words, every line of it quoted, as a transcript draws a quote. */
+function quoted(words: string): string {
+  return words
+    .split("\n")
+    .map((line) => (line === "" ? ">" : `> ${line}`))
+    .join("\n");
+}
+
+/** A review's words as its line in the transcript draws them: each thread's element quoted over the member's words in it, cut to the line's bound. */
+function reviewLineWords(threads: readonly PlanCommentThread[], userId: string): string {
+  const words = threads
+    .map((thread) => {
+      const own = firstWordsOf(thread, userId) ?? "";
+      return thread.page?.element === undefined ? own : `${quoted(thread.quote)}\n\n${own}`;
+    })
+    .join("\n\n");
+  return words.length > COMMENT_LINE_BOUNDS.WORDS_CHARS
+    ? `${words.slice(0, COMMENT_LINE_BOUNDS.WORDS_CHARS - 1)}…`
+    : words;
+}
+
+/**
+ * An ask written in each thread of a review the agent is in, and the
+ * threads handed to it in one message, as the member's; every ask is taken
+ * back where the hand-over fails, so no thread says someone was asked who
+ * was not.
+ */
+const reviewAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
+  threads: readonly PlanCommentThread[],
+  comment: MentioningComment,
+  to: PlanCommentAsked,
+  agent: CommentRecipient,
+) {
+  const { userId, taskId } = comment;
+  const keys: string[] = [];
+  const asked: PlanCommentThread[] = [];
+  for (const thread of threads) {
+    const ask = {
+      action: PLAN_COMMENT_ACTION.ASK,
+      clientKey: reviewKey(comment.clientKey, thread.id, to),
+      to,
+    };
+    const outcome = yield* hostedStoreOrUnavailable(
+      actOnPlanCommentThread({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId }, taskId, thread.id, ask),
+    );
+    if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) continue;
+    keys.push(ask.clientKey);
+    asked.push(outcome.answer.thread);
+  }
+  const last = asked.at(-1);
+  if (last?.page === undefined) return;
+  const takeBack = Effect.forEach(
+    keys,
+    (key) =>
+      withdrawPlanCommentAsk(taskId, key).pipe(Effect.tapError(logStoreFailure), Effect.ignore),
+    { discard: true },
+  );
+  const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
+  const page = yield* hostedStoreOrUnavailable(readPageById(userId, last.page.id, undefined));
+  if (Option.isNone(task) || Option.isNone(page)) {
+    yield* takeBack;
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  const shown = page.value.page;
+  const sender = last.entries.findLast(
+    (entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED && entry.writer.by?.userId === userId,
+  )?.writer.by?.name;
+  const text = reviewAskMessage({
+    taskId,
+    taskName: task.value.name,
+    threads: asked,
+    sender: sender ?? "A member",
+    page: { id: last.page.id, title: shown.title, newestVersion: page.value.newestVersion },
+  });
+  const words = reviewLineWords(asked, userId);
+  yield* handCommentAskOver({
+    userId,
+    to: agent,
+    clientKey: reviewKey(comment.clientKey, undefined, to),
+    text,
+    threadId: last.id,
+    words,
+    line: { taskId, quote: undefined, page: { id: last.page.id, title: shown.title } },
+  }).pipe(Effect.onError(() => takeBack));
+});
+
 /** The plan comments resource: its held read, a start, and one thing done to a thread, each to a signed-in member. */
 export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
   const member = hosted.planComments.use(accountMiddleware(seams.resolveUserId));
@@ -440,6 +659,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
         words: start.words,
         clientKey: start.clientKey,
         isReply: false,
+        ...reviewOf(start),
       });
       return {
         status: "thread" in body ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,

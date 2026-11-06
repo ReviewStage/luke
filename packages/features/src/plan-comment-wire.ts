@@ -58,6 +58,8 @@ export const PLAN_COMMENT_BOUNDS = {
   MAX_ELEMENT_PATH_CHARS: 1_000,
   /** The longest heading a page thread keeps of the section its element stands in. */
   MAX_SECTION_CHARS: 200,
+  /** The most threads one review hands over together, the one that sends it among them. */
+  MAX_REVIEW_THREADS: 50,
 } as const;
 
 /** What a thread is anchored to: words a member selected or a whole block they commented beside, on the plan; an element they picked or the whole of a page, on a page. */
@@ -259,6 +261,12 @@ const planCommentPlanStartSchema = EffectSchema.Struct({
  * of the section it stands in. The service takes the page's
  * title as the quote of a thread on the whole page. It may name the
  * thread's id as a start on the plan does.
+ *
+ * A member may gather several comments on a page into a review before any
+ * agent hears them: each but the last is started held, posted for every
+ * member to read but handed to no one, and the last names the held ones
+ * along with it, so each agent in any of them is handed them all in one
+ * message rather than one message a comment.
  */
 const planCommentPageStartSchema = EffectSchema.Struct({
   id: EffectSchema.optionalKey(chosenIdSchema),
@@ -277,6 +285,14 @@ const planCommentPageStartSchema = EffectSchema.Struct({
   ),
   words: planCommentWordsSchema,
   attachments: planCommentFilesSchema,
+  /** Whether the thread is held in a review: posted, but handed to no agent until the start that sends the review names it along. */
+  held: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /** The threads of the same page this member started held in the review this start sends, by their ids, handed over together with this one. */
+  along: EffectSchema.optionalKey(
+    EffectSchema.Array(wireUuidSchema).check(
+      EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_REVIEW_THREADS - 1),
+    ),
+  ),
 });
 
 /** A thread started on the plan's words. */
