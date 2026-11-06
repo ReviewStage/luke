@@ -14,7 +14,7 @@ import { MainTabBars } from "./main-tabs.js";
 
 /**
  * agent-history.test.ts -- the task's agents' tab bar: its "+" opens a New
- * agent at once, with no menu between, and its History lists the task's
+ * agent at once, with no menu between, as ⌘T's ask does, and its History lists the task's
  * agents whose tabs are closed and those archived, never one whose tab is
  * open, a press on a row opening that agent. Synthetic throughout.
  */
@@ -46,8 +46,8 @@ const OPEN = agent("agent-open", "Invite flow");
 const CLOSED = agent("agent-closed", "Expiry job");
 const ARCHIVED = agent("agent-archived", "Old onboarding copy");
 
-/** The bar of a task holding the three agents, only `OPEN`'s tab open; every tab chosen and agent opened recorded. */
-async function mount(): Promise<{ chosen: MainTab[]; opened: string[] }> {
+/** The bar of a task holding the three agents, only `OPEN`'s tab open, ⌘T asking where `asked` says; every tab chosen and agent opened recorded. */
+async function mount(asked = false): Promise<{ chosen: MainTab[]; opened: string[] }> {
   const chosen: MainTab[] = [];
   const opened: string[] = [];
   const base = tasksControl();
@@ -63,6 +63,7 @@ async function mount(): Promise<{ chosen: MainTab[]; opened: string[] }> {
     tab: { agent: OPEN.id },
     openAgents: [OPEN.id],
     onChoose: (tab: MainTab) => chosen.push(tab),
+    newTabAsked: asked,
   };
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -84,7 +85,7 @@ async function mount(): Promise<{ chosen: MainTab[]; opened: string[] }> {
             onWorkerStatus: ignore,
           },
           pins: { pinned: () => false, onPin: ignore },
-          keys: false,
+          keys: asked,
           shown: true,
           onOpenAgent: (agentId: string) => opened.push(agentId),
         }),
@@ -108,6 +109,12 @@ test("the column's + opens a New agent at once, with no menu between", async () 
 
   assert.deepEqual(chosen, [{ draft: "draft-1" }]);
   assert.equal(document.querySelector('[role="listbox"], [role="menu"]'), null);
+});
+
+test("⌘T's ask opens a New agent as the + does, once the column has the keys", async () => {
+  const { chosen } = await mount(true);
+
+  assert.deepEqual(chosen, [{ draft: "draft-1" }]);
 });
 
 test("History lists the closed and the archived agents but not one whose tab is open, and a row's press opens its agent", async () => {
