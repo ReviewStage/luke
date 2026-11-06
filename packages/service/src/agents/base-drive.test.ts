@@ -78,9 +78,21 @@ it.effect(
     Effect.gen(function* () {
       const { fake, api } = yield* fixture;
 
-      yield* filled(api);
+      const installedAtFork: boolean[] = [];
+      const forking: VercelSandboxApi = {
+        ...api,
+        forkDrive: (source, target) =>
+          Effect.andThen(
+            Effect.sync(() => installedAtFork.push(fake.runs.some((run) => isInstall(run.args)))),
+            api.forkDrive(source, target),
+          ),
+      };
+
+      yield* fillBaseDrive(forking, RELAY, IMAGE, CREDENTIAL, opener(api));
 
       const name = baseDriveName(RELAY);
+      // The base drive is forked once, from a staging drive already installed.
+      assert.deepEqual(installedAtFork, [true]);
       assert.deepEqual([...fake.drives], [name]);
       const [sandbox] = fake.sandboxes;
       assert.ok(sandbox !== undefined);

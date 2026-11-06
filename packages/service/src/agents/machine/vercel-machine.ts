@@ -276,6 +276,9 @@ const NOT_SHARED = "the checkouts cloned beside the agent's could not be shared 
 /** What a place holds where it holds the agent's own checkout: its repository's git folder. */
 const CHECKOUT_GIT_PATH = `${CODER.CHECKOUT_PATH}/.git`;
 
+/** Where a finished checkout's commit identity stands (`finishCheckoutWith`): its repository's own config, read as a file so no ownership check stands in the way. */
+const CHECKOUT_CONFIG_PATH = `${CHECKOUT_GIT_PATH}/config`;
+
 /** Why a checkout cloned before a relaunch was not finished: the store did not answer for its commit identity. */
 const RESTORE_PLAN_UNREAD = "the restored checkout's commit identity could not be read";
 
@@ -852,12 +855,14 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     });
 
   /**
-   * The agent's own checkout cloned into a place about to be relaunched that
-   * holds none, and finished as an opening finishes it (`finishCheckoutWith`);
-   * nothing where it holds one. Note that a place can stand without one,
-   * because a launch whose checkout failed leaves its sandbox and its drive
-   * for the next message, which resumes them as kept and checks nothing out,
-   * so its runner would start in a folder that is not there.
+   * The agent's own checkout made whole in a place about to be relaunched:
+   * cloned where the place holds none, and finished as an opening finishes
+   * it (`finishCheckoutWith`) where it holds no commit identity, as after a
+   * restore whose finish failed; nothing where it holds a finished one. Note
+   * that a place can stand without one, because a launch whose checkout
+   * failed leaves its sandbox and its drive for the next message, which
+   * resumes them as kept and checks nothing out, so its runner would start
+   * in a folder that is not there.
    */
   const ownCheckoutRestored = (
     place: OpenedPlace,
@@ -866,8 +871,12 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
   ) =>
     Effect.gen(function* () {
       const session = yield* api.session(sessionOfPlace(place));
-      const probed = yield* session.run({ command: "test", args: ["-d", CHECKOUT_GIT_PATH] });
-      if (probed.exitCode === 0) return;
+      const finished = yield* session.run({
+        command: "git",
+        args: ["config", "--file", CHECKOUT_CONFIG_PATH, "--get", "user.email"],
+      });
+      if (finished.exitCode === 0) return;
+      const holds = yield* session.run({ command: "test", args: ["-d", CHECKOUT_GIT_PATH] });
       const [read, plan] = yield* Effect.all(
         [
           agentRepositoryRead(target, agent),
@@ -882,10 +891,12 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         { concurrency: "unbounded" },
       );
       const sandbox = yield* checkoutIn(place, agent.userId);
-      yield* cloneAgentRepository(agent, sandbox, read);
+      if (holds.exitCode !== 0) yield* cloneAgentRepository(agent, sandbox, read);
       yield* finishCheckoutWith(sandbox, plan);
       yield* Effect.logWarning(
-        "A relaunch found no checkout of its agent's repository and cloned it",
+        holds.exitCode === 0
+          ? "A relaunch found its agent's checkout unfinished and finished it"
+          : "A relaunch found no checkout of its agent's repository and cloned it",
       );
     });
 

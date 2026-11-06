@@ -2659,7 +2659,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // The fake runs no git, so the checkout stands once a clone has gone through.
         const checkout = { refused: true, stands: false };
         api.hooks.runExit = (args) => {
-          if (args[0] === "-d") return checkout.stands ? 0 : 1;
+          if (args[0] === "-d" || args[0] === "config") return checkout.stands ? 0 : 1;
           if (!args.some((arg) => arg.includes("git clone"))) return 0;
           if (checkout.refused) return 1;
           checkout.stands = true;
