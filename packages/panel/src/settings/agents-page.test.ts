@@ -208,6 +208,7 @@ async function mount(): Promise<HTMLElement> {
     ),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(placeholders(container).length, 0));
   return container;
 }
 
@@ -267,7 +268,7 @@ test("while the default and the keys are read, placeholder rows stand in each gr
     ["Reading your default", 3],
   ]);
   await settle();
-  assert.deepEqual(placeholders(page), []);
+  await vi.waitFor(() => assert.equal(placeholders(page).length, 0));
   assert.ok(fastSwitch(page));
 });
 

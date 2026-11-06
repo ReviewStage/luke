@@ -15,7 +15,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { handBeats, handState } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
@@ -139,11 +139,12 @@ async function mount(draft: AgentDraft, agents: readonly AgentSummary[] = AGENTS
   roots.push(root);
   act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Tab))));
   await settle();
+  const chip = () => container.querySelector<HTMLButtonElement>('button[aria-label^="Runs on"]');
   return {
     container,
     starts,
     forks,
-    chip: () => container.querySelector<HTMLButtonElement>('button[aria-label^="Runs on"]'),
+    chip,
     pick: async (name: string) => {
       act(() =>
         container.querySelector<HTMLButtonElement>('button[aria-label^="Runs on"]')?.click(),
@@ -165,7 +166,7 @@ async function mount(draft: AgentDraft, agents: readonly AgentSummary[] = AGENTS
 
 test("a draft's Runs on starts where the member's newest agent on the task runs, a teammate's newer one aside, and a send left on it names no place", async () => {
   const tab = await mount(DRAFT);
-  assert.equal(tab.chip()?.getAttribute("aria-label"), "Runs on: Studio");
+  await vi.waitFor(() => assert.equal(tab.chip()?.getAttribute("aria-label"), "Runs on: Studio"));
 
   await tab.send();
   assert.deepEqual(tab.starts, [undefined]);

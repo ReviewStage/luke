@@ -12,7 +12,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { useExpiredServerToasts } from "./expired-server-toasts.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
@@ -109,13 +109,14 @@ function said(): string[] {
 
 /** Presses `label` on the standing toast that says `words`. */
 async function press(words: string, label: string): Promise<void> {
-  const card = [...document.querySelectorAll(".ui-toast:not([data-leaving])")].find(
-    (each) => each.querySelector(".ui-toast-words")?.textContent === words,
-  );
-  const button = [...(card?.querySelectorAll("button") ?? [])].find(
-    (each) => each.textContent === label,
-  );
-  assert.ok(button, `"${words}" offers ${label}`);
+  const offered = () => {
+    const card = [...document.querySelectorAll(".ui-toast:not([data-leaving])")].find(
+      (each) => each.querySelector(".ui-toast-words")?.textContent === words,
+    );
+    return [...(card?.querySelectorAll("button") ?? [])].find((each) => each.textContent === label);
+  };
+  await vi.waitFor(() => assert.equal(offered() !== undefined, true));
+  const button = offered() ?? assert.fail(`"${words}" offers ${label}`);
   act(() => button.click());
   await settle();
 }
@@ -127,7 +128,9 @@ test("each expired server stands in a toast of its own until its Reconnect has i
     [INTEGRATION_PROVIDER.NOTION]: INTEGRATION_STATUS.CONNECTED,
   };
   await mount();
-  assert.deepEqual(said().toSorted(), ["Linear's sign-in expired", "Slack's sign-in expired"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(said().toSorted(), ["Linear's sign-in expired", "Slack's sign-in expired"]),
+  );
 
   await press("Slack's sign-in expired", "Reconnect");
   assert.deepEqual(connects, [INTEGRATION_PROVIDER.SLACK]);

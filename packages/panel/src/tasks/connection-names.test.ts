@@ -12,7 +12,7 @@ import {
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { holdIntegrations } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -49,12 +49,18 @@ function statuses(): Record<IntegrationProvider, IntegrationStatus> {
   ) as Record<IntegrationProvider, IntegrationStatus>;
 }
 
-/** What the row of a call of a provider's tool on a connection says it ran on, once the accounts are read. */
-async function serverSaid(
+/**
+ * Waits for the row of a call of a provider's tool on a connection to say it
+ * ran on `said`, once the accounts are read. Note that one Query client holds
+ * a test's document across its mounts, so a test asks first for a name only
+ * the read gives, and every later mount draws on the account from its first frame.
+ */
+async function serverSays(
   connection: string,
   accounts: readonly { connection: string; label?: string }[],
+  said: string,
   provider: IntegrationProvider = NOTION,
-): Promise<string | undefined> {
+): Promise<void> {
   holdIntegrations(() => ({
     rows: {
       integrations: statuses(),
@@ -86,7 +92,7 @@ async function serverSaid(
     );
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  return container.textContent ?? undefined;
+  await vi.waitFor(() => assert.equal(container.textContent, said));
 }
 
 test("a call on one of two labeled accounts says the account's name as its card does", async () => {
@@ -94,17 +100,14 @@ test("a call on one of two labeled accounts says the account's name as its card 
     { connection: "notion", label: "Personal" },
     { connection: "notion-2", label: "Work" },
   ];
-  assert.equal(await serverSaid("notion-2", accounts), "Notion · Work");
-  assert.equal(await serverSaid("notion", accounts), "Notion · Personal");
+  await serverSays("notion-2", accounts, "Notion · Work");
+  await serverSays("notion", accounts, "Notion · Personal");
 });
 
 test("a call on a provider's only account says its label where it carries one and the provider where not, and one the accounts do not hold says what its id gives", async () => {
-  assert.equal(
-    await serverSaid("notion", [{ connection: "notion", label: "Personal" }]),
-    "Notion · Personal",
-  );
-  assert.equal(await serverSaid("notion", [{ connection: "notion" }]), "Notion");
-  assert.equal(await serverSaid("notion-2", []), "Notion 2");
+  await serverSays("notion", [{ connection: "notion", label: "Personal" }], "Notion · Personal");
+  await serverSays("notion", [{ connection: "notion" }], "Notion");
+  await serverSays("notion-2", [], "Notion 2");
 });
 
 test("a call on a bare linear connection says Linear, since a workspace's own Linear runs under it, while a later account says its name", async () => {
@@ -113,6 +116,6 @@ test("a call on a bare linear connection says Linear, since a workspace's own Li
     { connection: "linear-2", label: "Side" },
   ];
   const linear = INTEGRATION_PROVIDER.LINEAR;
-  assert.equal(await serverSaid("linear", accounts, linear), "Linear");
-  assert.equal(await serverSaid("linear-2", accounts, linear), "Linear · Side");
+  await serverSays("linear-2", accounts, "Linear · Side", linear);
+  await serverSays("linear", accounts, "Linear", linear);
 });

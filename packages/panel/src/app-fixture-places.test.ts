@@ -24,7 +24,7 @@ import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { stateWith } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
 import { appStateFirstRead } from "./use-app-state.js";
 
@@ -111,8 +111,10 @@ async function settle(): Promise<void> {
 function drawWindow(profile: string): Effect.Effect<void> {
   return Effect.gen(function* () {
     handFixtureRun(profile);
-    yield* Effect.orDie(appStateFirstRead);
+    const state = yield* Effect.orDie(appStateFirstRead);
     yield* Effect.promise(loadTasksFixture);
+    // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
+    writeAppState(state);
     root = createRoot(document.body.appendChild(document.createElement("div")));
     act(() =>
       root?.render(windowRouter().provide(onRegistry(rendererRegistry, createElement(App)))),

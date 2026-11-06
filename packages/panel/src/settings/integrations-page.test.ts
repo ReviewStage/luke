@@ -280,7 +280,14 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
   );
   act(() => root.render(onRegistry(registry ?? ownRegistry(), page)));
   await settle();
+  // Note that a test holding the read back reads its placeholder, so only a read let through is waited on.
+  if (!holdReads) await vi.waitFor(() => assert.equal(readSettled(container), true));
   return container;
+}
+
+/** Whether the page has drawn where the providers stand, or that it could not read it, rather than its placeholder. */
+function readSettled(page: HTMLElement): boolean {
+  return !(page.textContent ?? "").includes("Reading the integrations");
 }
 
 /** A registry of the page's own, as the window's root provides, so nothing one test's page shared reaches the next. */
@@ -1051,6 +1058,7 @@ test("while where the providers stand is read, the search stands usable above pl
   holdReads = false;
   await readMoves();
 
+  await vi.waitFor(() => assert.equal(readSettled(page), true));
   assert.equal(page.querySelector('[role="status"]'), null);
   assert.deepEqual(rowNames(page), ["Linear"]);
 });
