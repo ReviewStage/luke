@@ -95,6 +95,7 @@ import {
 import { onRegistry } from "./copy-feedback.js";
 import { sidebarProps } from "./desktop-sidebar.js";
 import { holdFrames, settleFrames } from "./frames.js";
+import { heardWords } from "./heard-words.js";
 import { restOn } from "./hint-rest.js";
 import { relayout } from "./resize-observer.js";
 import { installScrollIntoView } from "./scroll-into-view.js";
@@ -925,14 +926,9 @@ export function heardOf(ids: string | null): string {
     .split(" ")
     .filter((id) => id !== "")
     .map((id) => {
-      const copy = document.getElementById(id)?.cloneNode(true);
-      assert.ok(copy instanceof Element, `nothing is drawn as ${id}`);
-      for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
-      for (const apart of copy.querySelectorAll(".ui-visually-hidden")) {
-        apart.before(" ");
-        apart.after(" ");
-      }
-      return (copy.textContent ?? "").replace(/\s+/gu, " ").trim();
+      const named = document.getElementById(id);
+      assert.ok(named !== null, `nothing is drawn as ${id}`);
+      return heardWords(named);
     })
     .join(" ");
 }
