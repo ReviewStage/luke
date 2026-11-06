@@ -13,7 +13,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { KEPT } from "../act.js";
 import {
   DRAFT_PLACE,
@@ -174,9 +174,17 @@ test("a close taken keeps the words of a message begun on the item while it was 
   act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
   act(() => write?.("Use 90%"));
 
-  act(() => closer?.(ITEM));
+  let closed: Promise<unknown> | undefined;
+  act(() => {
+    closed = closer?.(ITEM);
+  });
   act(() => write?.("One more detail"));
-  await act(async () => land?.());
+  // Note that the close reaches the act port a few steps after it is sent, as its mutation sends it.
+  await vi.waitFor(() => assert.ok(land !== undefined, "the close is out"));
+  await act(async () => {
+    land?.();
+    assert.deepEqual(await closed, KEPT, "the close is taken");
+  });
 
   assert.deepEqual(kept, ["One more detail"]);
 });
