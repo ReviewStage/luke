@@ -555,7 +555,7 @@ test("a failed end line's row ends on Try again where a message carries the agen
   );
 });
 
-test("a turn failed on its sandbox ends on Try again, which sends the agent the line in place of Continue", async () => {
+test("a turn failed on its sandbox ends on Try again, which sends the agent one line in place of Continue however often pressed", async () => {
   const sent: string[] = [];
   const tab = await drawnTab({
     status: AGENT_STATUS.FAILED,
@@ -571,7 +571,10 @@ test("a turn failed on its sandbox ends on Try again, which sends the agent the 
     [...line.querySelectorAll("button")].find((each) => each.textContent === "Try again") ??
     assert.fail("the line offers Try again");
 
-  act(() => press.click());
+  act(() => {
+    press.click();
+    press.click();
+  });
   await settle();
 
   assert.deepEqual(sent, ["Try again"]);
@@ -619,7 +622,7 @@ test("a failed turn's end line ends on Continue in new agent, which continues th
   assert.match(line.textContent ?? "", /The agent could not be started\./);
 });
 
-test("no Continue stands on a turn failed on a refused API key, on an archived agent, or on a turn that did not fail", async () => {
+test("no Continue stands on a turn failed on a refused API key, on an archived agent, or on a turn that did not fail, nor Try again on an archived one", async () => {
   const key = await drawnTab({
     status: AGENT_STATUS.FAILED,
     failure: AGENT_FAILURE.PROVIDER_KEY,
@@ -635,6 +638,12 @@ test("no Continue stands on a turn failed on a refused API key, on an archived a
   });
   assert.ok(archived.endLine(), "the turn still ends on its line");
   assert.equal(archived.buttons(archived.container).length, 0);
+  const archivedRetry = await drawnTab({
+    status: AGENT_STATUS.FAILED,
+    failure: AGENT_FAILURE.SANDBOX,
+    onUnarchive: () => undefined,
+  });
+  assert.equal(archivedRetry.named(archivedRetry.container, "Try again"), undefined);
 
   for (const status of [AGENT_STATUS.CANCELED, AGENT_STATUS.COMPLETED]) {
     const settled = await drawnTab({ status });

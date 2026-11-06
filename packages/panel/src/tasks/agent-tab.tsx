@@ -3205,6 +3205,33 @@ export function StartingAgentTab({
 }
 
 /**
+ * Try again on a failed end line (`endLineOffersTryAgain`), pressed once:
+ * the line it sends takes the end line's place, and a line that did not go
+ * draws the end line, and so a fresh press, again.
+ */
+function TryAgainPress({ onPress }: { onPress: () => void }): React.JSX.Element {
+  // Note that the press is kept in a ref as well as drawn, so a second press before the draw sends nothing.
+  const pressed = useRef(false);
+  const [sent, setSent] = useState(false);
+  const press = () => {
+    if (pressed.current) return;
+    pressed.current = true;
+    setSent(true);
+    onPress();
+  };
+  return (
+    <Button
+      variant={BUTTON_VARIANT.OUTLINE}
+      icon={<RotateCcwIcon aria-hidden="true" />}
+      disabled={sent}
+      onClick={press}
+    >
+      {TRY_AGAIN_LABEL}
+    </Button>
+  );
+}
+
+/**
  * An agent's tab, by the agent's id alone: its transcript is followed from
  * the moment the tab stands, while the agent itself may still be on its way with the task's list of agents. What needs
  * the agent, its composer, its model, its pull request, and how its log is
@@ -3433,13 +3460,7 @@ function AgentTabBody({
               label={continued.length > 0 ? CONTINUE_AGAIN_LABEL : CONTINUE_LABEL}
             />
           ) : triesAgain ? (
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              icon={<RotateCcwIcon aria-hidden="true" />}
-              onClick={() => composer.sendWords(RETRY_LINE)}
-            >
-              {TRY_AGAIN_LABEL}
-            </Button>
+            <TryAgainPress onPress={() => composer.sendWords(RETRY_LINE)} />
           ) : undefined
         }
         continuable={continued.length > 0 || (continues && control.continueAgent !== undefined)}
