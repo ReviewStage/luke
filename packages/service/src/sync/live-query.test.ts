@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { getOpenAPIMeta } from "@orpc/openapi";
 import type { LiveStatement } from "@repo/database/core/live-statement";
 import { TOPIC } from "@repo/database/sync/notification";
 import { defineSyncTable, type SyncTable } from "@repo/database/sync/sync-table";
 import { SYNC_TABLES } from "@repo/database/sync/tables";
 import { getTestDB, installSyncTables } from "@repo/database/testing";
+import { hostedContract } from "@repo/features/contract";
+import { LIVE_MODE } from "@repo/features/live-read";
 import { liveDigestOf } from "@repo/features/live-wire";
 import { pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Queue } from "effect";
@@ -15,8 +18,8 @@ import { liveQueryParts } from "../live/live-procedures.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { syncHub } from "./hub.js";
-import { LIVE_QUERIES } from "./live-queries.js";
-import { defineLiveQuery, LIVE_MODE, type LiveQuery, type SyncMoved } from "./live-query.js";
+import { BOUND_READS, LIVE_QUERIES } from "./live-queries.js";
+import { defineLiveQuery, type LiveQuery, type SyncMoved } from "./live-query.js";
 import { Sync } from "./watch.js";
 
 /**
@@ -276,6 +279,16 @@ const onHub = <A, E, R>(
       Effect.provideService(Clock.Clock, clock),
     );
   });
+
+it("every live procedure answers one registered read, and a bound read's procedure is its declaration's", () => {
+  assert.deepEqual(
+    [...LIVE_QUERIES.keys()].toSorted(),
+    Object.keys(hostedContract.live).toSorted(),
+  );
+  for (const read of BOUND_READS) {
+    assert.equal(getOpenAPIMeta(hostedContract.live[read.name])?.path, read.declaration.path);
+  }
+});
 
 it.layer(probeDB)("live reads Vespin Sync wakes", (it) => {
   it.effect(

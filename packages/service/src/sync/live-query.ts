@@ -46,13 +46,9 @@ import type { SyncWindowRow } from "@repo/database/models/sync-log";
 import type { SyncTopic, TopicKind } from "@repo/database/sync/notification";
 import type { SyncTable } from "@repo/database/sync/sync-table";
 import type { hostedContract } from "@repo/features/contract";
+import { LIVE_MODE, type LiveMode } from "@repo/features/live-read";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { Effect, Option } from "effect";
-
-/** How a live read answers a wake: run again and answered whole where its rows moved, or its cursor parts answered past the reader's cursor. */
-export const LIVE_MODE = { SNAPSHOT: "snapshot", CURSOR: "cursor" } as const;
-
-type LiveMode = (typeof LIVE_MODE)[keyof typeof LIVE_MODE];
 
 /** A live read's name: the procedure that answers it. */
 export type LiveReadName = keyof (typeof hostedContract)["live"];

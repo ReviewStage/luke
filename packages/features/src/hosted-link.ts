@@ -520,7 +520,7 @@ export function askLive<Input extends LivePollInput, Output>(
 }
 
 /** What a live read's input may name of a poll. */
-interface LivePollInput {
+export interface LivePollInput {
   readonly [LIVE_POLL.QUERY]?: typeof LIVE_POLL.ON;
   readonly [LIVE_POLL.AFTER]?: string;
 }

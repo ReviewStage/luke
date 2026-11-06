@@ -99,14 +99,13 @@ import {
 import { dictationRequestSchema } from "./dictation-wire.js";
 import type { FailureFacts } from "./failure-facts.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
-import type { HostsLiveAnswer } from "./host-live.js";
 import {
   HOST_PAIRING_RENAMES,
   type HostPairingApproveView,
   type HostPairingDenyView,
   type HostPairingView,
 } from "./host-pairing-view.js";
-import { hostedCall } from "./hosted-call.js";
+import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
 import {
   askHosted,
   askLive,
@@ -131,6 +130,7 @@ import {
   inboxReadAllRequestSchema,
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
+import type { AnyLiveRead, LiveReadParams } from "./live-read.js";
 import {
   type AccountInboxItemsLiveAnswer,
   type AccountInboxLiveAnswer,
@@ -525,27 +525,9 @@ export class HostedAgentClient {
     return hostedCall(this.#hosted.hosts.presence, undefined);
   }
 
-  /**
-   * The account's hosts sealed for following over Neon Realtime, with the
-   * install script's address, or with their rows inline where `poll` asks for
-   * them; signed out where the session is another account's, or why not.
-   */
-  hostsLive(
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    HostsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = { [LIVE_USER_QUERY]: userId };
-    return Effect.catchIf(
-      askLive(this.#hosted.live.hosts, read, poll, after),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
+  /** A declared live read sealed for following, or polled where `poll` asks (`askLiveRead`). */
+  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadParams<Read>, poll?: HostedPoll) {
+    return askLiveRead(this.#hosted.live, read, params, poll);
   }
 
   /** One of the account's hosts removed, its secret refused at once, answering the transaction it was removed in. */

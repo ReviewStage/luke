@@ -31,6 +31,7 @@ import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { FAILURE_FACT, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_TYPE } from "@repo/features/github-image";
 import { GITHUB_TOKEN_STATUS, type GitHubTokenSummary } from "@repo/features/github-token-wire";
+import { HOSTS_READ } from "@repo/features/host-live";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -365,11 +366,18 @@ function fakeService() {
         asked.push(`default:${choice.model}:${choice.effort}`);
         return { choice };
       }),
-    hostsLive: (_userId, poll, after) =>
-      Effect.map(
-        poll === true ? live.hosts.poll(after) : Effect.succeed(live.hosts.first()),
+    // SAFETY: the hosts' read is the one live read the client is asked for by its declaration.
+    liveRead: ((
+      read: { readonly name: string },
+      _params: unknown,
+      poll?: { readonly after?: string | undefined },
+    ) => {
+      assert.equal(read.name, HOSTS_READ.name);
+      return Effect.map(
+        poll === undefined ? Effect.succeed(live.hosts.first()) : live.hosts.poll(poll.after),
         (answer) => ({ ...answer, installScriptUrl: INSTALL_SCRIPT }),
-      ),
+      );
+    }) as AgentClient["liveRead"],
     devicePresence: () =>
       Effect.suspend(() => {
         asked.push("presence");
