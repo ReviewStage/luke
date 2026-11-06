@@ -12,13 +12,22 @@
  * now" answers 201 for the run it made and 200 for one its key already
  * made, so its output is detailed.
  *
+ * Each declares the refusals its handler answers
+ * (`packages/service/src/automations/automations-procedures.ts`) beyond any
+ * procedure's: an automation the account does not read is not found, and
+ * one it reads but may not change, delete or run is not permitted; a write
+ * is refused where its task names no repository, where a repository is one
+ * its workspace's installation does not reach, or where GitHub did not say.
+ * A write the service will not take is refused as an invalid request, which
+ * any procedure may answer.
+ *
  * Note that the webhook address (`/api/automations/{id}/webhook`) is no
  * procedure here: its caller is a third party's sender, and it stays the
  * route group it is (`automation-webhook-app.ts`).
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   AUTOMATION_BOUNDS,
@@ -33,7 +42,8 @@ import {
   automationRunsAnswerSchema,
 } from "../automation-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
+import { bodyCap, declaredProcedure, exactBodyInput, exactInput, refuses } from "./base.js";
 
 /**
  * A body past this is no automation: the prompt's bound at six bytes a
@@ -54,6 +64,13 @@ const pathId = { id: EffectSchema.String };
 /** The statuses a success answers with: a read or a write that made nothing, and one that made a row. */
 const SUCCESS_STATUS = { OK: 200, CREATED: 201 } as const;
 
+/** The refusals a write answers where a repository it names is out of reach. */
+const REPOSITORY_REFUSALS = [
+  HOSTED_API_ERROR.NO_REPOSITORY,
+  HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+  HOSTED_API_ERROR.GITHUB_UNANSWERED,
+] as const;
+
 /** The list's query: one task's or one workspace's automations, or every one the account reads. */
 const automationListQuerySchema = EffectSchema.Struct({
   [AUTOMATION_LIST_QUERY.TASK_ID]: EffectSchema.optionalKey(
@@ -63,11 +80,12 @@ const automationListQuerySchema = EffectSchema.Struct({
 });
 
 export const automationsContract = {
-  list: hostedProcedure
+  list: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.AUTOMATIONS }))
     .input(automationListQuerySchema)
     .output(EffectSchema.flip(automationListAnswerSchema)),
-  create: hostedProcedure
+  create: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, ...REPOSITORY_REFUSALS))
     .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({
@@ -78,21 +96,27 @@ export const automationsContract = {
     )
     .input(exactInput(automationCreateRequestSchema))
     .output(EffectSchema.flip(automationAnswerSchema)),
-  read: hostedProcedure
+  read: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: AUTOMATION_PATH }))
     .input(EffectSchema.Struct(pathId))
     .output(EffectSchema.flip(automationAnswerSchema)),
-  change: hostedProcedure
+  change: declaredProcedure
+    .errors(
+      refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED, ...REPOSITORY_REFUSALS),
+    )
     .meta(bodyCap(BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: AUTOMATION_PATH, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(pathId), automationChangeRequestSchema))
     .output(EffectSchema.flip(automationAnswerSchema)),
-  remove: hostedProcedure
+  remove: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(bodyCap(BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: AUTOMATION_PATH }))
     .input(EffectSchema.Struct(pathId))
     .output(EffectSchema.flip(automationDeletedAnswerSchema)),
-  run: hostedProcedure
+  run: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(bodyCap(RUN_BODY_BYTES))
     .meta(
       openapi({
@@ -112,7 +136,8 @@ export const automationsContract = {
         }),
       ),
     ),
-  runs: hostedProcedure
+  runs: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AUTOMATION_PATH}/runs` as const }))
     .input(EffectSchema.Struct(pathId))
     .output(EffectSchema.flip(automationRunsAnswerSchema)),
