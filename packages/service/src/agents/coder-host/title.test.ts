@@ -63,6 +63,7 @@ const DEPLOYMENT_ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 afterEach(() => {

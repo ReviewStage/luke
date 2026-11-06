@@ -61,3 +61,24 @@ test("a blank secret, empty or spaces alone, reads as unset", async () => {
     assert.equal(environment.cronSecret, undefined, JSON.stringify(blank));
   }
 });
+
+test("a Preview's stand-in API keys are read on a Preview alone, and production and a local run read none, set or not", async () => {
+  const standIns = {
+    PREVIEW_ANTHROPIC_API_KEY: "sk-ant-preview-stand-in-1111",
+    PREVIEW_OPENAI_API_KEY: "sk-proj-preview-stand-in-1111",
+  };
+  const preview = await environmentOver({ ...standIns, VERCEL_ENV: "preview" });
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(preview.previewApiKeys).map(([provider, key]) => [
+        provider,
+        Redacted.value(key),
+      ]),
+    ),
+    { anthropic: standIns.PREVIEW_ANTHROPIC_API_KEY, openai: standIns.PREVIEW_OPENAI_API_KEY },
+  );
+  for (const deployment of ["production", "development", undefined]) {
+    const elsewhere = await environmentOver({ ...standIns, VERCEL_ENV: deployment });
+    assert.deepEqual(elsewhere.previewApiKeys, {}, String(deployment));
+  }
+});

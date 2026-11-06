@@ -109,6 +109,7 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** The protocol revisions the server serves, as the SDK's client is told to speak each. */

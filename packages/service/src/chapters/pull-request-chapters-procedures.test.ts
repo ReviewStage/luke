@@ -95,6 +95,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 /** The one file the pull request changes, one hunk starting at old line 1. */

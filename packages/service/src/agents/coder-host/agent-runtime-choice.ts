@@ -22,7 +22,9 @@
  * pays for no coding agent: an account with neither is refused by name
  * (`AgentCredentialMissing`, which names the provider), and connects one in
  * Settings › Agents. A brand-new account starts no coding agent until it
- * connects a subscription or saves an API key.
+ * connects a subscription or saves an API key. On a Preview, the Preview's
+ * stand-in key for the provider stands in for an API key the account has
+ * not saved or the Preview cannot open (`accounts/own-api-key.ts`).
  *
  * The choice is written on the agent as it is made and never changes: a
  * plan that later runs out or is disconnected pauses the agent, and never
@@ -68,7 +70,7 @@ import {
   PROVIDER_KEY_STATUS,
 } from "@repo/features/provider-key-wire";
 import { Clock, Data, Duration, Effect, Option, type Redacted, Result } from "effect";
-import { HostedEnvironment } from "../../environment.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { type AccountFastOffer, providerModelOf } from "../../providers/model-catalog.js";
 import type { NativeRuntime } from "./native-runtime.js";
@@ -187,8 +189,18 @@ function keptPlan(
 const onPlanOf = (provider: string): AgentRuntimeChoice =>
   provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE : ON_CODEX;
 
-/** Whether the account saved its own API key for the provider among `rows`, which pays for its agents on the provider's harness. */
-function keepsApiKey(provider: ModelProvider, rows: AccountKeyRows): boolean {
+/**
+ * Whether an API key pays for the account's agents on the provider's
+ * harness: its own, saved among `rows`, or on a Preview, the Preview's
+ * stand-in for the provider, which its launch spends where its own is
+ * missing or unreadable (`accounts/own-api-key.ts`).
+ */
+function keepsApiKey(
+  provider: ModelProvider,
+  rows: AccountKeyRows,
+  environment: HostedEnvironmentValues | undefined,
+): boolean {
+  if (environment?.previewApiKeys[provider] !== undefined) return true;
   return rows.some((row) => row.kind === PROVIDER_KEY_KIND.API_KEY && row.provider === provider);
 }
 
@@ -200,10 +212,10 @@ const providerOfModel = (model: string): Effect.Effect<ModelProvider> => {
     : Effect.succeed(named.provider);
 };
 
-/** The deployment's key ring a sealed sign-in opens under, where it has one. */
-const deploymentRing = Effect.map(
+/** The deployment's environment, where it has one: the key ring a sealed sign-in opens under, and a Preview's stand-in keys. */
+const deploymentEnvironment = Effect.map(
   Effect.serviceOption(HostedEnvironment),
-  (environment) => Option.getOrUndefined(environment)?.providerKeyEncryptionKeys,
+  Option.getOrUndefined,
 );
 
 /** The runtime and payer of a new agent of the account's on a model of the provider's, by Settings' choice among `rows`, or refused where no credential of the account's pays, as above. */
@@ -212,10 +224,11 @@ const providerRuntimeChoice = Effect.fnUntraced(function* (
   provider: ModelProvider,
   rows: AccountKeyRows,
 ): Effect.fn.Return<AgentRuntimeChoice, AgentCredentialMissing> {
-  const plan = keptPlan(userId, provider, yield* deploymentRing, rows);
+  const environment = yield* deploymentEnvironment;
+  const plan = keptPlan(userId, provider, environment?.providerKeyEncryptionKeys, rows);
   if (plan?.forAgents === true) return onPlanOf(provider);
   // Our key pays for no coding agent, so an account with no API key of the provider's is refused by name.
-  if (!keepsApiKey(provider, rows))
+  if (!keepsApiKey(provider, rows, environment))
     return yield* Effect.fail(new AgentCredentialMissing({ provider }));
   return provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE_API_KEY : ON_CODEX_API_KEY;
 });
@@ -387,7 +400,7 @@ export const messageCredentialMissing = /* @__PURE__ */ Effect.fnUntraced(functi
   if (routing.payer !== AGENT_PAYER.API_KEY) return undefined;
   const provider = yield* providerOfModel(agent.model);
   const rows = yield* keyRowsOf(agent.userId, undefined);
-  return keepsApiKey(provider, rows) ? undefined : provider;
+  return keepsApiKey(provider, rows, yield* deploymentEnvironment) ? undefined : provider;
 });
 
 /**
@@ -444,6 +457,7 @@ export const accountFastOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
     (row) =>
       row.kind === PROVIDER_KEY_KIND.API_KEY && row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC,
   )?.fastAccess;
-  const plan = keptPlan(userId, MODEL_PROVIDER.OPENAI, yield* deploymentRing, rows);
+  const ring = (yield* deploymentEnvironment)?.providerKeyEncryptionKeys;
+  const plan = keptPlan(userId, MODEL_PROVIDER.OPENAI, ring, rows);
   return { anthropic: anthropic ?? undefined, chatGptPlan: plan?.forAgents === true };
 });

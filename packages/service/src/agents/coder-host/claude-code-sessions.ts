@@ -31,7 +31,11 @@ import {
   RUNNER_HARNESS,
 } from "@repo/agent-runner/protocol";
 import { type Agent, readAgentRouting } from "@repo/database/models/agent-store";
-import { openProviderKey, parseKeyRing } from "@repo/database/models/provider-key-seal";
+import {
+  openProviderKey,
+  PROVIDER_KEY_UNREADABLE,
+  parseKeyRing,
+} from "@repo/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
@@ -43,6 +47,7 @@ import {
   planLimitResetsAt,
 } from "@repo/features/provider-key-wire";
 import { Clock, Effect, Option, Redacted, Result } from "effect";
+import { ownApiKeyOf } from "../../accounts/own-api-key.js";
 import { HostedEnvironment } from "../../environment.js";
 import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
@@ -200,29 +205,24 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
   /**
    * The account's Anthropic API key opened, as the CLI's documented
    * `ANTHROPIC_API_KEY` (https://code.claude.com/docs/en/agent-sdk/quickstart),
-   * for an agent its starter's key pays for; refused where the key is gone
-   * or unreadable, and never turned to the plan.
+   * for an agent its starter's key pays for, or a Preview's stand-in where
+   * that key is gone or unreadable (`accounts/own-api-key.ts`); refused
+   * where neither is, and never turned to the plan.
    */
   const apiKeyCredential = (agent: Agent) =>
     Effect.gen(function* () {
-      const ring = yield* keyRing;
-      const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
-      const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
-      if (row === undefined) {
+      const environment = yield* HostedEnvironment;
+      const key = yield* ownApiKeyOf(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, environment);
+      if (key === undefined) {
         return yield* new LaunchRefused({ reason: "no API key", keyRefusal: KEY_REFUSAL.MISSING });
       }
-      const opened = openProviderKey(
-        ring,
-        { userId, provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, kind: PROVIDER_KEY_KIND.API_KEY },
-        row,
-      );
-      if (Result.isFailure(opened)) {
+      if (key === PROVIDER_KEY_UNREADABLE) {
         return yield* new LaunchRefused({
           reason: "API key unreadable",
           keyRefusal: KEY_REFUSAL.UNREADABLE,
         });
       }
-      return launchCredential(agent, CLI_CREDENTIAL.API_KEY, opened.success);
+      return launchCredential(agent, CLI_CREDENTIAL.API_KEY, key);
     });
 
   /** The CLI's credential and the variable it is read from: the account's plan token opened. */

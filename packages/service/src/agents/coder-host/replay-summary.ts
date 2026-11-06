@@ -446,7 +446,7 @@ export const productionSummaryModel = (
     const named = providerModelOf(choice.model);
     if (named === undefined) return undefined;
     const environment = yield* HostedEnvironment;
-    const own = yield* ownKeyOf(userId, named.provider, environment.providerKeyEncryptionKeys).pipe(
+    const own = yield* ownKeyOf(userId, named.provider, environment).pipe(
       Effect.catch((failure) =>
         Effect.as(
           Effect.logWarning(`a replay summary's key could not be read: ${failureKind(failure)}`),

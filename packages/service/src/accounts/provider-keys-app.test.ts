@@ -34,6 +34,7 @@ function environment(cronSecret: string | undefined): HostedEnvironmentValues {
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: Redacted.make(KEYS),
     titleAnthropicApiKey: undefined,
+    previewApiKeys: {},
   };
 }
 

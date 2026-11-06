@@ -650,6 +650,26 @@ vercel env add PROVIDER_KEY_ENCRYPTION_KEYS production   # value: 1:<key>
 vercel env add PROVIDER_KEY_ENCRYPTION_KEYS preview      # value: 1:<another key>
 ```
 
+A Preview's database is copied from production's, so every key in it is
+sealed under production's ring and reads `unreadable` there. A Preview may
+hold a stand-in API key per provider, `PREVIEW_ANTHROPIC_API_KEY` and
+`PREVIEW_OPENAI_API_KEY`, read through `HostedEnvironment`'s
+`previewApiKeys` only where `VERCEL_ENV` is `preview`, so production and a
+local run never spend one, set or not. Wherever an account's own API key
+for that provider is missing or does not open, the stand-in pays instead
+(`src/accounts/own-api-key.ts`): Start counts it as an API key, a Claude
+Code or Codex agent on an API key launches on it, held at its sandbox's
+firewall as an account's key is or handed to a Mac's runner, and the calls
+beside an agent (chapters, a replay's summary, dictation) spend it. The
+account's own key still wins wherever it opens, and a plan is untouched.
+Every member who can sign in to a Preview spends it, so give it a key of
+its own with a low spending limit, never a member's:
+
+```
+vercel env add PREVIEW_ANTHROPIC_API_KEY preview
+vercel env add PREVIEW_OPENAI_API_KEY preview
+```
+
 A rotation is two steps. First put a new version at the head of the list,
 `2:<new key>,1:<old key>`, and redeploy: new saves wrap under version 2, and
 rows on version 1 still open. Then ask that deployment for the rewrap:
@@ -1417,7 +1437,8 @@ holding none titles each from the first words of its opening's first line,
 with no model call, and never falls back to the account's key. The other
 calls beside an account's agents run on its own key, through `ownKeyOf`
 (`src/agents/coder-host/account-keys.ts`), the provider they prefer first and
-the other where it saved only that, and never on Vespin's: a pull request's
+the other where it saved only that, and never on Vespin's but for a
+Preview's stand-in where no key of the account's opens: a pull request's
 chapters on the key of the member who asks for them, whatever the agent
 runs on: Haiku at Anthropic on their Anthropic key, or OpenAI's `gpt-6-luna`
 at OpenAI where they saved only an OpenAI key; and a Continue's or Fork's

@@ -61,6 +61,7 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   titleAnthropicApiKey: undefined,
+  previewApiKeys: {},
 };
 
 interface Answer {
