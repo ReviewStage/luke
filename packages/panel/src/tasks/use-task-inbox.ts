@@ -14,6 +14,7 @@ import {
 import type { AgentAttachment } from "@repo/features/agent-wire";
 import { INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
 import type { AppInboxItems } from "@repo/host/app-state";
+import { useMinute } from "@repo/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -802,7 +803,9 @@ export function useHeldTaskInbox(input: {
     latest.current.onRetryList();
   }, [held.items, ids]);
 
-  const board = useMemo(() => inboxBoard(held.items, readerId), [held.items, readerId]);
+  // Note that the clock moves with the minute, so a thread whose reminder comes due counts again without a read.
+  const now = useMinute();
+  const board = useMemo(() => inboxBoard(held.items, readerId, now), [held.items, readerId, now]);
 
   return {
     board,
