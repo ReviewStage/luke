@@ -28,6 +28,7 @@ import {
   Time,
   VisuallyHidden,
 } from "@repo/ui";
+import { FIND_SKIP_ATTRIBUTE } from "@repo/ui/find-skip";
 import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import {
   type ChildTaskCount,
@@ -39,7 +40,6 @@ import { RENAME_FAILED_NOTE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { type ReactNode, useRef } from "react";
-import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { PullRequestCard } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
