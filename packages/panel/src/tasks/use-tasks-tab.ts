@@ -1568,6 +1568,7 @@ export function useTasksTab(input: {
     agents.agentIds,
     named,
     agents.draft?.id,
+    input.room === SHELL_ROOM.NARROW,
   );
   mainRef.current = mainTabs;
   // A task opens on its agents, so one with no agent's tab standing, once its agents are read,

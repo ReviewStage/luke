@@ -30,8 +30,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * and never closes nor moves; the agents' tabs stand one per agent in the
  * order started, and a draft agent's, opened from the column's "+", after
  * them while the open task holds the draft. A task none of whose tabs viewed
- * still stands shows its agents' last tab, and one with no agent's tab
- * standing shows none, which its column opens a draft on (`use-tasks-tab.ts`);
+ * still stands shows its agents' last tab, or on a phone its details, and
+ * one with no agent's tab standing shows none, which its column opens a
+ * draft on (`use-tasks-tab.ts`);
  * a draft left holding nothing closes.
  *
  * An agent's tab closes as an editor's does, which closes the view and
@@ -313,6 +314,8 @@ interface DrawnTabs {
   agents: readonly string[] | undefined;
   named: NamedAgents | undefined;
   draft: string | undefined;
+  /** Whether a task none of whose tabs viewed stands opens on its details rather than its agents: a phone's, whose details list its agents as its first screen. */
+  detailsFirst: boolean;
 }
 
 /** The task's choices. */
@@ -378,7 +381,10 @@ function shownIn(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
   if (drawn.taskId === undefined) return undefined;
   if (drawn.agents === undefined) return shownBeforeList(held, drawn);
   const recent = choicesOn(held, drawn.taskId).recent ?? NO_TABS;
-  return recent.findLast((tab) => stands(held, drawn, tab)) ?? movableOf(held, drawn).at(-1);
+  return (
+    recent.findLast((tab) => stands(held, drawn, tab)) ??
+    (drawn.detailsFirst ? MAIN_TAB.OVERVIEW : movableOf(held, drawn).at(-1))
+  );
 }
 
 /**
@@ -425,8 +431,8 @@ function shownBeforeList(held: HeldState, drawn: DrawnTabs): MainTab | undefined
     // An agent the row does not name may stand where the row names only some of the agents.
     if (!all) return undefined;
   }
-  // Note that a task none of whose tabs viewed stands waits on its agents, since it opens on them.
-  return undefined;
+  // Note that a task none of whose tabs viewed stands waits on its agents, since it opens on them, but on a phone's, its details.
+  return drawn.detailsFirst ? MAIN_TAB.OVERVIEW : undefined;
 }
 
 /** The state with the tabs viewed on the task, in the order given, as its latest. */
@@ -666,7 +672,8 @@ function stagedOn(
  * The column's tabs over the open task: `taskId`, none while no task is
  * open, `agents` its agents by id in the order started, or nothing while
  * unread, `named` what its row names of them meanwhile, and `draft` its
- * draft agent's key, if it holds one. A fixture run's column keeps nothing,
+ * draft agent's key, if it holds one; `detailsFirst` where a task none of
+ * whose tabs viewed stands opens on its details, as a phone's does. A fixture run's column keeps nothing,
  * and starts from the tab the run names (`fixture`), its Overview where it
  * names none.
  */
@@ -676,6 +683,7 @@ export function useMainTabs(
   agents: readonly string[] | undefined,
   named: NamedAgents | undefined,
   draft: string | undefined,
+  detailsFirst = false,
 ): MainTabsControl {
   // Note that a fixture run's column is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -695,7 +703,10 @@ export function useMainTabs(
       staging ? setStaged((held) => change(stagedOn(held, taskId, fixtureTab))) : setKept(change),
     [staging, taskId, fixtureTab],
   );
-  const drawn = useMemo(() => ({ taskId, agents, named, draft }), [taskId, agents, named, draft]);
+  const drawn = useMemo(
+    () => ({ taskId, agents, named, draft, detailsFirst }),
+    [taskId, agents, named, draft, detailsFirst],
+  );
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
   useEffect(() => {
