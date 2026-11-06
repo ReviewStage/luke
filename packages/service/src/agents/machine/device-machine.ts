@@ -293,6 +293,8 @@ function deviceMachineOver(
         sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
+        // Note that a Mac's Codex keeps its threads at its default under the agent's own home.
+        codexHome: undefined,
         // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
         linesRead: false,
         transcriptsKept: false,

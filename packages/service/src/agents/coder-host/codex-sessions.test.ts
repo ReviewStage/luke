@@ -10,6 +10,7 @@ import {
   RUNNER_HARNESS,
 } from "@repo/agent-runner/protocol";
 import { Database } from "@repo/database/core/query";
+import { readAgentRunnerRecord } from "@repo/database/models/agent-runner-record";
 import {
   type Agent,
   createAgent,
@@ -384,6 +385,116 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           assert.equal(plan.stored.includes(secret), false, "a secret in the row in the clear");
         }
         assert.equal(JSON.stringify(plan.secrets).includes("access-0"), false);
+      }),
+  );
+
+  it.effect(
+    "a launch's fingerprint digests the credential its machine handed it as it did before the machine decided: the key itself where it is held at a sandbox's firewall or handed to a Mac, and the plan's slot alone in a sandbox",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const apiKey = "sk-proj-fixture-account-key";
+        const userId = `user-${randomUUID()}`;
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
+        );
+        yield* signIn(userId, 60);
+        const owner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.OPENAI,
+          kind: PROVIDER_KEY_KIND.API_KEY,
+        };
+        yield* saveProviderKey(
+          userId,
+          owner.provider,
+          owner.kind,
+          sealProviderKey(ring(), owner, Redacted.make(apiKey)),
+          "sk-proj…-key",
+          null,
+          new Date(0),
+        );
+        const deviceId = randomUUID();
+        yield* registerDevice(userId, {
+          id: deviceId,
+          name: "Studio",
+          ...DEVICE_LAYOUT,
+          codexExecutable: "/Users/fixture/Library/Application Support/Vespin/codex/bin/codex",
+        });
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const agentOn = (
+          payer: (typeof AGENT_PAYER)[keyof typeof AGENT_PAYER],
+          machine: (typeof AGENT_MACHINE)[keyof typeof AGENT_MACHINE],
+        ) =>
+          Effect.map(
+            createAgent(userId, {
+              taskId: task.id,
+              idempotencyKey: randomUUID(),
+              model: "openai/gpt-6.1-sol",
+              effort: "xhigh",
+              descriptionSnapshot: "# Teammate invitations\n",
+              prompt: null,
+              repository: null,
+              runtime: CONVERSATION_RUNTIME.CODEX,
+              payer,
+              machine,
+              ...(machine === AGENT_MACHINE.DEVICE ? { deviceId } : undefined),
+            }),
+            (started) => Option.getOrThrow(started).agent,
+          );
+        const machines = agentMachinesLayer({
+          readToken: deploymentOidcToken,
+          run: (effect) => Effect.runPromise(effect),
+        }).pipe(
+          Layer.provide(
+            fakeHttpClientLayer(() => assert.fail("a local launch reaches no network")),
+          ),
+        );
+        /** The fingerprint the agent's first launch recorded: in its sandbox's runner record, or in its Mac's launch line. */
+        const fingerprintOf = (agent: Agent) =>
+          Effect.gen(function* () {
+            const local = agent.machine === AGENT_MACHINE.DEVICE;
+            const sessions = yield* sessionsFor(userId).pipe(
+              local ? Effect.provide(machines) : (effect) => effect,
+              Effect.provide(services(runnerSandboxApi())),
+            );
+            const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+            assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+            const db = yield* Database;
+            if (local) {
+              const [line] = yield* db
+                .select({ payload: deviceAgentLine.payload })
+                .from(deviceAgentLine)
+                .where(eq(deviceAgentLine.agentId, agent.id));
+              return (line?.payload as { readonly fingerprint?: string } | undefined)?.fingerprint;
+            }
+            const record = yield* readAgentRunnerRecord(userId, opened.sessionId);
+            return Option.getOrUndefined(record)?.fingerprint;
+          });
+
+        // Each digest is the one a launch recorded before its machine handed its credential over, so
+        // a warm runner launched then is not relaunched for it: the first 32 hex characters of the
+        // SHA-256 of `{"env":[…sorted entries],"names":["linear"],"held":{"slot":…,"credential":…}}`,
+        // worked by hand, `held` absent on a Mac and the plan's slot with no credential.
+        assert.deepEqual(
+          {
+            sandboxKey: yield* fingerprintOf(
+              yield* agentOn(AGENT_PAYER.API_KEY, AGENT_MACHINE.VERCEL),
+            ),
+            sandboxPlan: yield* fingerprintOf(
+              yield* agentOn(AGENT_PAYER.CHATGPT_SUBSCRIPTION, AGENT_MACHINE.VERCEL),
+            ),
+            macKey: yield* fingerprintOf(yield* agentOn(AGENT_PAYER.API_KEY, AGENT_MACHINE.DEVICE)),
+            macPlan: yield* fingerprintOf(
+              yield* agentOn(AGENT_PAYER.CHATGPT_SUBSCRIPTION, AGENT_MACHINE.DEVICE),
+            ),
+          },
+          {
+            sandboxKey: "6b61996f589fd234bed48d87b442c8b9",
+            sandboxPlan: "9dbd69e61630ce632697372e196f967e",
+            macKey: "3f16ad6f5312b44aa95199a2436df31f",
+            macPlan: "70d33426f2bcfa677ec90b7a985a3e46",
+          },
+        );
       }),
   );
 

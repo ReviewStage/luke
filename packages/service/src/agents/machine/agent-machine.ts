@@ -74,8 +74,9 @@ export interface MachinePlace {
  * a launch names them before the machine is asked anything: its checkout,
  * where the harness starts and the instructions name, where the member's
  * installed skills are installed and where they are written for that, the
- * folder a message's files are written under, and the Claude Code CLI and
- * the Codex a launch runs, none where the harness's own default stands.
+ * folder a message's files are written under, the Claude Code CLI and the
+ * Codex a launch runs, none where the harness's own default stands, and the
+ * home Codex keeps its threads in.
  */
 export interface MachineLayout {
   readonly checkoutPath: string;
@@ -85,8 +86,10 @@ export interface MachineLayout {
   /** Where the agent saves a file the service reads back, a screenshot it shows or a page it posts: a folder the service's reads reach on that machine. */
   readonly sharedFiles: string;
   readonly claudeExecutable: string | undefined;
-  /** None on a Mac that checked no Codex yet, which runs no Codex agent, as on a sandbox, which runs the image's. */
+  /** The image's Codex in a sandbox, and on a Mac the one it checked against the pin; none on a Mac that checked none yet, which runs no Codex agent. */
   readonly codexExecutable: string | undefined;
+  /** Where Codex keeps its threads (`CODEX_HOME`): a sandbox's home on its persisted disk; none on a Mac, whose Codex keeps its default under the agent's own home. */
+  readonly codexHome: string | undefined;
   /**
    * Whether the runner reads its lines past its config from the service
    * (`@repo/agent-runner`'s `RUNNER_LINES`), as a sandbox's does, rather than
