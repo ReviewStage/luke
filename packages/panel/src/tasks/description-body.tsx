@@ -112,12 +112,12 @@ import {
  * Every document the host hands over for the open task is drawn whole, each
  * section keeping its place while its heading stands, so a save redraws the
  * sections it changed and leaves the scroll where it was. Under the title
- * one muted line says who created the task and how long ago, and, for a plan
+ * one muted line says who created the task and how long ago, and, for a description
  * anyone has written, who last did: a member, the app (the notetaker), or a
  * coding agent, each on their own face hanging their card (`edit-ref.tsx`),
  * whose call it was on where the app wrote it on one, and how long ago, moved
  * on once a minute, as a GitHub issue's page says it under its title. The edit's
- * time opens the plan's version history, where each earlier version is. Each section says the
+ * time opens the description's version history, where each earlier version is. Each section says the
  * same of the save that last changed it in fewer letters, quietly, while the
  * pointer or the keyboard is on it: the writer's face, whose card names them,
  * and the time, "2h", at the end of a heading that always keeps room for
@@ -125,7 +125,7 @@ import {
  * history on the revision that save made. The words before the
  * first heading have no heading's line for it to stand at, so they carry no
  * line in the text, where it would stand over their words or a picture; a
- * picture of the plan, opened over the window, says who last changed its
+ * picture of the description, opened over the window, says who last changed its
  * section in the viewer's header instead. The sections changed since
  * the developer last looked at the task on this Mac wear a still tint,
  * counted under that line beside a face for each who changed them, until
@@ -138,15 +138,15 @@ import {
  * On a task's own page each section has a link: its ⋯, shown while the
  * pointer or the keyboard is on it, copies the section's address, naming
  * the task by its number where it has one (`taskLinkStep`), which a
- * transcript or the plan draws as the section's chip wherever it is
+ * transcript or the description draws as the section's chip wherever it is
  * pasted, and a mention in the
- * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
+ * description's words is drawn as its chip (`mention-chip.tsx`), which opens the
  * section it names. The title has a ⋯ of its own, drawn as a section's is,
  * which copies the task's link and offers Rename, where the title can be
  * edited, and Version history, where the window opens it
  * (`task-menu-items.tsx`). Asked to show a section, the document scrolls
  * its own scroller to it, never `scrollIntoView`, which would scroll every box
- * around it too; a section the plan no longer holds leaves it at its top.
+ * around it too; a section the description no longer holds leaves it at its top.
  */
 
 /** What a task's own page does with its sections' links and its mentions: the slug of the workspace its links are written under, what opens the task or a section a mention names, or a file's tab, and the section it was last asked to show. */
@@ -162,7 +162,7 @@ export interface SectionLinks {
   readonly pullRequestOf?: MentionDoors["pullRequestOf"];
 }
 
-/** One ask to show a section by its anchor, or the plan's top where it names none; each ask is its own, so the same section asked twice scrolls twice. */
+/** One ask to show a section by its anchor, or the description's top where it names none; each ask is its own, so the same section asked twice scrolls twice. */
 export interface SectionReveal {
   readonly anchor: string | undefined;
   readonly ask: number;
@@ -203,7 +203,7 @@ interface DrawnUnits {
 }
 
 /**
- * The plan's last edit: its newest revision, or, from a service before
+ * The description's last edit: its newest revision, or, from a service before
  * history, the newest save a coding agent made, which was all it could name.
  */
 export function lastEditOf(task: Task): DescriptionLastEdit | undefined {
@@ -220,10 +220,10 @@ export function lastEditOf(task: Task): DescriptionLastEdit | undefined {
   };
 }
 
-/** Nobody, as a capture or a test draws the plan, who reads no edit as theirs. */
+/** Nobody, as a capture or a test draws the description, who reads no edit as theirs. */
 const NO_READER: TaskReader = { readerId: undefined };
 
-/** Opens the plan's version history on the revision that made the save at a moment, or on the plan as it stands. */
+/** Opens the description's version history on the revision that made the save at a moment, or on the description as it stands. */
 type ShowHistory = (save: number | undefined) => void;
 
 /**
@@ -274,7 +274,7 @@ function EditTime({
 }
 
 /**
- * What an editable plan with no text says at rest, the editor's own
+ * What an editable description with no text says at rest, the editor's own
  * placeholder in a quieter ink, so the room does not read as blank; its
  * press opens the editor, and the pointer or the keyboard reaching it reads
  * the editor's bundle ahead, as a section's block does.
@@ -294,7 +294,7 @@ function EmptyDescriptionLine({ onOpen }: { onOpen: () => void }): React.JSX.Ele
   );
 }
 
-/** The press that opens the history from a plan's last edit, by how long ago it was. */
+/** The press that opens the history from a description's last edit, by how long ago it was. */
 const editedLabel = (ago: string): string => `Edited ${ago}. Show version history`;
 
 /** How long ago a moment was, in words, drawn again as the minute turns. */
@@ -303,12 +303,12 @@ function Ago({ at }: { at: number }): React.JSX.Element {
 }
 
 /**
- * Who started the task and when, and when its plan was last edited, under
+ * Who started the task and when, and when its description was last edited, under
  * its title, in the line every document draws there (`DocumentByline`):
  * "Created by [Charles] Charles Pan · 3d ago" and "Edited 2h ago", each
  * phrase wrapping whole. The creator hangs their card, and the edit's time
- * opens the plan's version history where the window offers it. Who last
- * edited it is the task's ⋯ menu's to say, in its footer. A plan nobody has
+ * opens the description's version history where the window offers it. Who last
+ * edited it is the task's ⋯ menu's to say, in its footer. A description nobody has
  * edited says only who created it.
  */
 function DescriptionByline({
@@ -320,13 +320,13 @@ function DescriptionByline({
   comments,
 }: {
   task: Task;
-  /** The plan's last edit, said after who created the task; none while nothing changed, or while Plans is off and there is no plan to have edited. */
+  /** The description's last edit, said after who created the task; none while nothing changed, or while Descriptions is off and there is no description to have edited. */
   edit: DescriptionLastEdit | undefined;
   place: EditPlace;
-  /** How many of the reader's saves of this plan landed, which its Saved tick confirms; none while Plans is off, which saves nothing. */
+  /** How many of the reader's saves of this description landed, which its Saved tick confirms; none while Descriptions is off, which saves nothing. */
   saves: number | undefined;
   onShowHistory: ShowHistory | undefined;
-  /** Whether the plan's comments are drawn here, whose toggle ends the line. */
+  /** Whether the description's comments are drawn here, whose toggle ends the line. */
   comments: boolean;
 }): React.JSX.Element {
   // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
@@ -447,7 +447,7 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
 }
 
 /**
- * What the picture viewer says of a picture of the plan: who last changed
+ * What the picture viewer says of a picture of the description: who last changed
  * the section under `heading` it stands in, and when, "Edited by [Charles]
  * Charles Pan · 2h ago"; none where no save has. Note that the time is
  * words rather than the history's door, which would open behind the viewer.
@@ -553,7 +553,7 @@ function drawnUnits(task: Task, held: DrawnUnits | undefined): DrawnUnits {
   return { taskId: task.id, body, sections, views, nextId };
 }
 
-/** The sections of the plan handed in, cut again as each newer document arrives. */
+/** The sections of the description handed in, cut again as each newer document arrives. */
 function useDrawnUnits(task: Task): DrawnUnits {
   const [held, setHeld] = useState(() => drawnUnits(task, undefined));
   let current = held;
@@ -569,9 +569,9 @@ function unitClass(changed: boolean): string {
 }
 
 /**
- * What draws the plan's mentions as chips, on a task's own page: a link
+ * What draws the description's mentions as chips, on a task's own page: a link
  * whose destination names a mention, whoever wrote it (`linkMention`),
- * drawn against the anchors of the plan's headings as they stand; nothing
+ * drawn against the anchors of the description's headings as they stand; nothing
  * off a task's page, where mentions stay words. Note that it is made again
  * only when a heading changes, since every unit's words are drawn again
  * when it is, and that what opening one does is read as it is pressed.
@@ -642,23 +642,23 @@ function taskSet(text: string, at: number, line: string, ticked: boolean): strin
 }
 
 /**
- * A plan's writes from its words at rest, ticks and dates, in the order they
+ * A description's writes from its words at rest, ticks and dates, in the order they
  * were made: the last one out, which the next waits on, and the text the last
  * one saved left, with the task and the drawn text it was written over, which
- * stands until the saved plan is drawn.
+ * stands until the saved description is drawn.
  */
 interface DescriptionWrites {
   last: Promise<Kept>;
   saved: { readonly taskId: string; readonly over: string; readonly text: string } | undefined;
 }
 
-/** The plan as drawn when a write is sent: its task and its text. */
+/** The description as drawn when a write is sent: its task and its text. */
 interface DrawnDescription {
   readonly id: string;
   readonly body: string;
 }
 
-/** The plan's text as it stands: the text a write saved while its task's plan drawn is still the one it was written over, or the plan drawn. */
+/** The description's text as it stands: the text a write saved while its task's description drawn is still the one it was written over, or the description drawn. */
 function descriptionTextNow(writes: DescriptionWrites, drawn: DrawnDescription): string {
   const saved = writes.saved;
   return saved !== undefined && saved.taskId === drawn.id && saved.over === drawn.body
@@ -674,10 +674,10 @@ function queuedWrite(writes: DescriptionWrites, write: () => Promise<Kept> | Kep
 }
 
 /**
- * The plan saved from `base` to `value` while `drawn` stands, answering
+ * The description saved from `base` to `value` while `drawn` stands, answering
  * whether it saved, with the answer or error that refused it where it did
- * not; once saved, `kept` stands as the plan's text until the
- * plan drawn moves, or nothing does where it is not known.
+ * not; once saved, `kept` stands as the description's text until the
+ * description drawn moves, or nothing does where it is not known.
  */
 function savedOver(
   writes: DescriptionWrites,
@@ -694,13 +694,13 @@ function savedOver(
   }, notKept);
 }
 
-/** What a toast says where a tick or a date written from the plan at rest was not saved. */
+/** What a toast says where a tick or a date written from the description at rest was not saved. */
 const DESCRIPTION_NOT_SAVED = "The description could not be saved.";
 
 /** A list item with a box, as anywhere in a unit's words it may stand: under a quote's marker, say. */
 const TASK_ITEM_ANYWHERE = /(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ \txX]\]/u;
 
-/** No section's save named, as a plan from a service before sections were named has. */
+/** No section's save named, as a description from a service before sections were named has. */
 const NO_SECTION_EDITS: readonly DescriptionSectionEdit[] = [];
 
 /** A unit drawn with its section's byline, where a save has changed the section, and its ⋯, where it has a link. */
@@ -737,7 +737,7 @@ function UnitLinkButton({
 }: {
   /** The unit's bare address, as every Copy link copies, so it pastes into Slack or a pull request as a link rather than as markdown. */
   link: string;
-  /** Its accessible name, which says whose link it copies where the plan holds several. */
+  /** Its accessible name, which says whose link it copies where the description holds several. */
   label: string;
   /** Whether it is a Tab stop: only beside the document's one, its unit's block. */
   tabbable: boolean;
@@ -761,7 +761,7 @@ function UnitLinkButton({
   );
 }
 
-/** A section's Copy link button, named for its heading, so a reader listing the plan's buttons tells one section's from the next. */
+/** A section's Copy link button, named for its heading, so a reader listing the description's buttons tells one section's from the next. */
 function SectionLink({
   linked,
   anchor,
@@ -795,7 +795,7 @@ function TitleLink({
 }
 
 /**
- * A unit's words with the plan's open comments on them marked, the open one
+ * A unit's words with the description's open comments on them marked, the open one
  * and the one being started among them, the same marks while none of them
  * changes, so the unit's words are not parsed again for nothing.
  */
@@ -826,7 +826,7 @@ function sameView(left: UnitView, right: UnitView): boolean {
   return left.id === right.id && left.heading === right.heading && left.words === right.words;
 }
 
-/** Whether two places of a unit's words in the plan's text are one, as the text cut again on each save makes each afresh. */
+/** Whether two places of a unit's words in the description's text are one, as the text cut again on each save makes each afresh. */
 function sameSection(
   left: DescriptionSection | undefined,
   right: DescriptionSection | undefined,
@@ -844,10 +844,10 @@ function sameSection(
 /** What one section of the text is drawn from. */
 interface DocumentUnitProps {
   view: UnitView;
-  /** Where the unit's words stand in the plan's text, which marks the comments on them; none off a page that draws comments. */
+  /** Where the unit's words stand in the description's text, which marks the comments on them; none off a page that draws comments. */
   section: DescriptionSection | undefined;
   marks: SectionMarks;
-  /** Draws the plan's mentions as chips; links are drawn as words without it. */
+  /** Draws the description's mentions as chips; links are drawn as words without it. */
   link: LinkDrawer | undefined;
   /** The task whose sections have links, which each section's ⋯ copies; none off a task's own page. */
   linked: LinkedTask | undefined;
@@ -857,9 +857,9 @@ interface DocumentUnitProps {
   entry: boolean;
   /** Ticks or clears a task item pressed, offsets in the unit's words; every checkbox is read-only without it. */
   onTask?: MarkdownTaskToggler | undefined;
-  /** The plan's comment threads, which mark its words; none off a page that reads them. */
+  /** The description's comment threads, which mark its words; none off a page that reads them. */
   threads: readonly DescriptionCommentThread[] | undefined;
-  /** The plan's text as saved, which a thread being started is laid over; none while no thread is being started. */
+  /** The description's text as saved, which a thread being started is laid over; none while no thread is being started. */
   descriptionText: string | undefined;
 }
 
@@ -925,11 +925,11 @@ const DocumentUnit = memo(function DocumentUnit({
   return attributed(drawn, bylineOf(marks, view.heading), menu);
 }, sameUnit);
 
-/** How the plan's sections at rest change a date written in them: the plan's text, where a section's words stand in it, and the save of the text written anew. */
+/** How the description's sections at rest change a date written in them: the description's text, where a section's words stand in it, and the save of the text written anew. */
 interface DescriptionDates {
   /** The task the page draws now, which a page handed another task without remounting changes. */
   readonly taskId: () => string;
-  /** The plan's text as it stands. */
+  /** The description's text as it stands. */
   readonly text: () => string;
   /** Where a section's words start in the text; none while the editor is open. */
   readonly from: (section: number) => number | undefined;
@@ -938,8 +938,8 @@ interface DescriptionDates {
 
 /**
  * A section's words at rest, whose date chips open the picker of the
- * plan's room (`words-dates.tsx`) and save the plan with the date written
- * anew, where the plan takes a change; their chips open nothing elsewhere.
+ * description's room (`words-dates.tsx`) and save the description with the date written
+ * anew, where the description takes a change; their chips open nothing elsewhere.
  * Note that the door stands across draws, so a section is not drawn again
  * for a new one.
  */
@@ -957,11 +957,11 @@ function SectionDates({
     if (open === undefined || dates === undefined) return undefined;
     return {
       pick: (written, chip) => {
-        // Note that the chip's link is placed in its section's words, which start where the section does in the plan's text.
+        // Note that the chip's link is placed in its section's words, which start where the section does in the description's text.
         const from = dates.from(section);
         if (from === undefined) return;
         const at = { from: from + written.at.from, to: from + written.at.to };
-        // Note that the date is written only into the plan it was picked on, so a page handed another task while the picker stands writes nothing.
+        // Note that the date is written only into the description it was picked on, so a page handed another task while the picker stands writes nothing.
         const picked = dates.taskId();
         const text = () => (dates.taskId() === picked ? dates.text() : undefined);
         wordsDatesDoor(open, text, dates.write).pick({ ...written, at }, chip);
@@ -971,7 +971,7 @@ function SectionDates({
   return <WordsDatesContext.Provider value={door}>{children}</WordsDatesContext.Provider>;
 }
 
-/** A plan's body, in the plan's type at its page's measure: the column its head and its blocks stand in. */
+/** A description's body, in the description's type at its page's measure: the column its head and its blocks stand in. */
 function DescriptionBodyColumn({
   ref,
   children,
@@ -999,16 +999,16 @@ export interface TitleRename {
 }
 
 /**
- * The task's document: its name as the title over its text. `onShowHistory` opens the plan's version history from the
- * byline's "Edited", on the plan as it stands, and from a section's, on the
+ * The task's document: its name as the title over its text. `onShowHistory` opens the description's version history from the
+ * byline's "Edited", on the description as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
  * name through `onDraftName` as they are typed, and with `rename` the title's ⋯
  * offers Rename through the open task's door; without them the document is
- * drawn read-only. A date chip in an editable plan's words at rest opens
- * its picker where it stands, and a date changed there saves the plan
+ * drawn read-only. A date chip in an editable description's words at rest opens
+ * its picker where it stands, and a date changed there saves the description
  * through `onEdit` with the date written anew (`SectionDates`), as a task
- * item's box ticks it. An editable plan opens its text from a press on the
+ * item's box ticks it. An editable description opens its text from a press on the
  * panel's empty room, as a document editor's page does (`useTextRoom`): at
  * the end under its last line, or anywhere where it has no text yet, and on
  * the nearest line beside it. `looks` are the sections changed since the developer last
@@ -1017,7 +1017,7 @@ export interface TitleRename {
  *
  * A memo boundary: the task's page drawn again over the same task and the
  * same doors, as its column's focus, its side panel's width, and the
- * minute's clock draw it, leaves the plan as it was.
+ * minute's clock draw it, leaves the description as it was.
  */
 export const DescriptionBody = memo(function DescriptionBody({
   task,
@@ -1057,11 +1057,11 @@ export const DescriptionBody = memo(function DescriptionBody({
   head?: React.ReactNode;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
-  /** Whether the plan is the tab its column shows, rather than kept hidden behind another; shown unless said. */
+  /** Whether the description is the tab its column shows, rather than kept hidden behind another; shown unless said. */
   shown?: boolean;
 }): React.JSX.Element {
   const { views, sections: textSections } = useDrawnUnits(task);
-  // While Plans is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
+  // While Descriptions is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
   const documented = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const editable = onEdit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
@@ -1093,7 +1093,7 @@ export const DescriptionBody = memo(function DescriptionBody({
   );
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
-  // A link in the plan's words being edited opens, from its right-click, where the plan stands.
+  // A link in the description's words being edited opens, from its right-click, where the description stands.
   const editedLinks = useEditedLinksHost();
   const bodyHost = useCallback(
     (element: HTMLDivElement | null) => {
@@ -1106,7 +1106,7 @@ export const DescriptionBody = memo(function DescriptionBody({
   const editorHandle = useRef<DescriptionEditorHandle | undefined>(undefined);
   const closedOn = useWordsKeptOnClose(task.id, editing.editor !== undefined, body, scroller);
   // A press on the document's empty room opens its text there, at its end
-  // where it lands under the last line, or anywhere on a plan with no text
+  // where it lands under the last line, or anywhere on a description with no text
   // yet, which has no section to click into; the open editor's own room
   // moves its caret (`DescriptionDocumentEditor`).
   useTextRoom({
@@ -1160,7 +1160,7 @@ export const DescriptionBody = memo(function DescriptionBody({
   }, [editable]);
 
   // An ask to show a section scrolls the document's own scroller to it, or
-  // to the top where the plan no longer holds it.
+  // to the top where the description no longer holds it.
   const revealed = useRef<number | undefined>(undefined);
   useEffect(() => {
     const reveal = sectionLinks?.reveal;
@@ -1180,16 +1180,16 @@ export const DescriptionBody = memo(function DescriptionBody({
     sectionLinks?.onRevealed?.(reveal.ask);
   });
 
-  // The sections as the plan's text holds them, which is where comments are marked and measured.
-  // Note that comments are the plan's own page's alone, never a version of it.
+  // The sections as the description's text holds them, which is where comments are marked and measured.
+  // Note that comments are the description's own page's alone, never a version of it.
   const comments = useDescriptionCommentsControl();
   const commentsHere =
     comments !== undefined && comments.planId === task.id && sectionLinks !== undefined;
   const drawnSections = commentsHere ? textSections : undefined;
-  // The toolbar over the editor's words selected starts a thread on them where the plan's comments are drawn.
+  // The toolbar over the editor's words selected starts a thread on them where the description's comments are drawn.
   const commentOnWords = useEditorComment(editorHandle);
   const edited = lastEditOf(task);
-  // A task item is ticked from the drawn plan while no editor is open, and
+  // A task item is ticked from the drawn description while no editor is open, and
   // saved through the editor's own door.
   const cut = editable && editing.editor === undefined ? textSections : [];
   const tickable = (section: number): boolean => cut[section] !== undefined;
@@ -1210,11 +1210,11 @@ export const DescriptionBody = memo(function DescriptionBody({
       }),
     [toast],
   );
-  // The plan as drawn last, which a tick waiting its turn and a date read as the picker closes are written over.
+  // The description as drawn last, which a tick waiting its turn and a date read as the picker closes are written over.
   const latestDescription = useRef({ cut, id: task.id, body: task.document.body, onEdit });
   latestDescription.current = { cut, id: task.id, body: task.document.body, onEdit };
   // Note that ticks are sent one at a time, in the order pressed, each over
-  // the text the one before it saved, since that plan may not be drawn yet.
+  // the text the one before it saved, since that description may not be drawn yet.
   // A tick is placed by its item's offset and line as drawn at the press, and
   // writes nothing where the text no longer holds that line.
   const tick = (section: number, at: number, ticked: boolean): Promise<boolean> => {
@@ -1241,7 +1241,7 @@ export const DescriptionBody = memo(function DescriptionBody({
   };
   const latestTick = useRef(tick);
   latestTick.current = tick;
-  // A date changed from the plan at rest is written over the text as it then stands, read as the picker closes.
+  // A date changed from the description at rest is written over the text as it then stands, read as the picker closes.
   const descriptionDates = useMemo<DescriptionDates | undefined>(
     () =>
       editable
@@ -1254,7 +1254,7 @@ export const DescriptionBody = memo(function DescriptionBody({
               if (save === undefined) return;
               const queue = writes.current;
               // Note that a date waits its turn behind the ticks out, and that
-              // one saved since the picker read the plan is not under its text,
+              // one saved since the picker read the description is not under its text,
               // so nothing after it is written over that text. A save not
               // taken leaves the date as it was, as an unticked box flips back, and says so.
               const sent = queuedWrite(queue, () => {
@@ -1271,7 +1271,7 @@ export const DescriptionBody = memo(function DescriptionBody({
         : undefined,
     [editable, sayNotSaved],
   );
-  // Each section's toggler stands across draws and ticks from the plan as drawn last, so a section is not drawn again for a new one.
+  // Each section's toggler stands across draws and ticks from the description as drawn last, so a section is not drawn again for a new one.
   const togglers = useRef(new Map<number, MarkdownTaskToggler>());
   const taskToggler = (section: number): MarkdownTaskToggler | undefined => {
     // Note that a unit with no box has none, so the editor opening and closing leaves it as drawn.

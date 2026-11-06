@@ -25,13 +25,13 @@ import { HISTORY_READ } from "./use-description-history.js";
 import { VersionView } from "./version-view.js";
 
 /**
- * description-pictures.test.ts -- a plan's pictures where its words are drawn: each
+ * description-pictures.test.ts -- a description's pictures where its words are drawn: each
  * read through the host and drawn from its bytes with its caption, one this
  * reader cannot reach drawn as its words, one from outside the app a link that
- * reads nothing, a press opening the plan's pictures over the window, and a
+ * reads nothing, a press opening the description's pictures over the window, and a
  * version drawing a picture it struck and the one it wrote in, each marked,
- * and the plan's card in an agent's transcript drawing the plan's pictures.
- * Synthetic plans and pictures.
+ * and the description's card in an agent's transcript drawing the description's pictures.
+ * Synthetic descriptions and pictures.
  */
 
 /** A PNG's signature in base64: all the window draws of a picture here. */
@@ -41,7 +41,7 @@ const MOCK = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 const SECOND = "3c9e1a77-58b2-4d0f-8e6a-1b2c3d4e5f02";
 const GONE = "d1e2f3a4-5b6c-4d7e-8f90-a1b2c3d4e506";
 
-/** Who edits a plan here, as the service names a member. */
+/** Who edits a description here, as the service names a member. */
 const LEE = { userId: "user-lee", name: "Lee Park" };
 
 const HOUR = 60 * 60 * 1000;
@@ -98,7 +98,7 @@ function taskOf(id: string, body: string): Task {
 const picture = (taskId: string, id: string) =>
   descriptionAttachmentAddress({ taskId, attachmentId: id }, "acme");
 
-test("a plan's picture is drawn from its bytes under its caption, and one this reader cannot reach as its words", async () => {
+test("a description's picture is drawn from its bytes under its caption, and one this reader cannot reach as its words", async () => {
   const taskId = "7a1d4e90-0c3f-4b6a-9d2e-5f6a7b8c9d03";
   standHost(new Set([MOCK]), []);
   const body = [
@@ -137,7 +137,7 @@ test("a picture that is not available is read as words, with or without alt text
   assert.ok(blocks.every((block) => block.querySelector('[role="img"]') === null));
 });
 
-test("a press on a picture opens the plan's pictures over the window, named by their alt text", async () => {
+test("a press on a picture opens the description's pictures over the window, named by their alt text", async () => {
   const taskId = "9e2f5c11-6d4a-4c8b-b1e3-2a3b4c5d6e04";
   standHost(new Set([MOCK, SECOND]), []);
   const body = [
@@ -271,7 +271,7 @@ test("a version draws the picture it struck and the one it wrote in, each in its
   );
 });
 
-test("another plan's picture is drawn as itself, with no press that would open nothing", async () => {
+test("another description's picture is drawn as itself, with no press that would open nothing", async () => {
   const taskId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
   const otherTaskId = "6f5e4d3c-2b1a-4c9d-8e7f-a0b1c2d3e4f5";
   standHost(new Set([MOCK]), []);
@@ -310,7 +310,7 @@ test("a picture whose read went unanswered says it could not be read, with Retry
   );
   assert.equal(failed?.querySelector("button")?.textContent, "Retry");
 
-  // A plan drawn again asks whether motion is held still, which a page with no stylesheet cannot say.
+  // A description drawn again asks whether motion is held still, which a page with no stylesheet cannot say.
   holdMotion();
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -334,18 +334,22 @@ test("a picture whose read went unanswered says it could not be read, with Retry
   assert.equal(view.querySelector(".picture-block img")?.getAttribute("alt"), "Second mock");
 });
 
-test("an agent's plan card draws the plan's pictures once opened, while the agent's own words keep one a link", async () => {
+test("an agent's description card draws the description's pictures once opened, while the agent's own words keep one a link", async () => {
   const taskId = "5b8c2d34-7e1f-4a9b-8c6d-0e1f2a3b4c07";
   const asked: string[] = [];
   standHost(new Set([MOCK, SECOND]), asked);
   const address = picture(taskId, MOCK);
-  const plan = [
+  const description = [
     "# Invites",
     `![Invite email](${address} "The mock Lee shared")`,
     "![Members page][members]",
     `[members]: ${picture(taskId, SECOND)} "The page today"`,
   ].join("\n\n");
-  const handed = { id: "plan", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: plan }] };
+  const handed = {
+    id: "plan",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: description }],
+  };
   const turn = {
     id: "turn",
     role: MESSAGE_ROLE.ASSISTANT,
@@ -358,8 +362,8 @@ test("an agent's plan card draws the plan's pictures once opened, while the agen
     createElement(
       Fragment,
       null,
-      createElement(AgentMessage, { ...shared, message: handed, plan: true, taskId }),
-      createElement(AgentMessage, { ...shared, message: turn, plan: false }),
+      createElement(AgentMessage, { ...shared, message: handed, description: true, taskId }),
+      createElement(AgentMessage, { ...shared, message: turn, description: false }),
     ),
   );
   assert.deepEqual(asked, [], "a closed card reads nothing");

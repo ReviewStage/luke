@@ -18,12 +18,12 @@ import { editorBundleLanded, installEditorLayout } from "../testing/composer.js"
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { MarkdownEditor, type MarkdownEditorProps } from "./markdown-editor.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
- * markdown-editor.test.ts -- the plan's editor mounted by a document that
- * takes none of the plan's options, as a pull request's description or a
+ * markdown-editor.test.ts -- the description's editor mounted by a document that
+ * takes none of the description's options, as a pull request's description or a
  * review's comment mounts it: a GitHub-flavored body handed back byte for
  * byte, and changed only where it is edited; the whole format toolbar over
  * selected words; and the `/` menu offering the document's own block, less
@@ -31,7 +31,7 @@ beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
  * Synthetic body.
  */
 
-/** A pull request's description as GitHub holds it, every construct its Markdown has that the plan's text has not among it. */
+/** A pull request's description as GitHub holds it, every construct its Markdown has that the description's text has not among it. */
 const BODY = [
   "## Summary",
   "",
@@ -97,7 +97,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on `markdown` with none of the plan's options but those given, each draft it hands over kept. */
+/** The editor mounted on `markdown` with none of the description's options but those given, each draft it hands over kept. */
 function mounted(markdown: string, options: Partial<MarkdownEditorProps> = {}) {
   const drafts: string[] = [];
   const handle: RefObject<DescriptionEditorHandle | undefined> = { current: undefined };
@@ -155,7 +155,7 @@ function offered(container: HTMLElement): string[] {
   );
 }
 
-test("a document with none of the plan's options hands a GitHub body back byte for byte, and a word changed in one paragraph changes that paragraph's source alone", () => {
+test("a document with none of the description's options hands a GitHub body back byte for byte, and a word changed in one paragraph changes that paragraph's source alone", () => {
   const { editor, handle, last } = mounted(BODY);
 
   assert.equal(handle.markdown(), BODY);
@@ -180,7 +180,7 @@ test("a task item's box in the editor is the shared checkbox the read view draws
   assert.equal(last(), BODY.replace("- [ ] A description", "- [x] A description"));
 });
 
-test("words selected in a document with none of the plan's options raise the whole format toolbar, Turn into among it, and no Comment", () => {
+test("words selected in a document with none of the description's options raise the whole format toolbar, Turn into among it, and no Comment", () => {
   const { container, editor } = mounted(BODY);
 
   act(() => {
@@ -348,7 +348,7 @@ test("while the / menu stands the text is a combobox naming the menu and its hig
   assert.deepEqual(named(editor), TEXTBOX);
 });
 
-test("while the @ list stands over a plan's text the text is a combobox naming the list and its highlighted row, and a textbox again once the list closes", () => {
+test("while the @ list stands over a description's text the text is a combobox naming the list and its highlighted row, and a textbox again once the list closes", () => {
   const { container, editor } = mounted("## Rollout\n\nIntro.\n", {
     mentions: {
       doors: {

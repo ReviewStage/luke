@@ -30,14 +30,14 @@ import {
 } from "./pull-request-writes.js";
 
 /**
- * pull-request-description.tsx -- a pull request's description edited in place: GitHub's rendering as it reads, the plan's editor on its Markdown once pressed, and the edit written to GitHub as it finishes or is left.
+ * pull-request-description.tsx -- a pull request's description edited in place: GitHub's rendering as it reads, the description's editor on its Markdown once pressed, and the edit written to GitHub as it finishes or is left.
  *
  * Where the member may edit the description, its words are drawn as GitHub
- * renders them, and nothing on them marks them editable, as a plan's
+ * renders them, and nothing on them marks them editable, as a description's
  * sections are drawn; a click on the words opens the editor in their place,
  * the caret where the click landed, and so does Return on the description
  * selected. The editor is every Markdown document's (`./markdown-editor.tsx`),
- * on the description as written, with the plan's toolbar, `/` menu and
+ * on the description as written, with the description's toolbar, `/` menu and
  * chords; until its bundle has loaded, GitHub's rendering stands. Esc or ⌘↩
  * finishes it, and so does focus leaving it: words left as they opened
  * write nothing, and changed ones are written to GitHub on the member's

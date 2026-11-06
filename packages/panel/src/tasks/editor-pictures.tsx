@@ -53,23 +53,23 @@ import {
 import { documentScrollerOf } from "./document-frame.js";
 
 /**
- * editor-pictures.tsx -- a plan's pictures in its editor: laid in from a paste, a drop, or Insert image, kept on the service as they wait, and drawn in each picture's node with its tools.
+ * editor-pictures.tsx -- a description's pictures in its editor: laid in from a paste, a drop, or Insert image, kept on the service as they wait, and drawn in each picture's node with its tools.
  *
  * A picture laid in waits on its upload: the Mac re-encodes it to at most
  * `PICTURE_BOUNDS.MAX_BYTES` (`encodeImage`), shows it at once from those
  * bytes at half strength with the window's spinner and "Uploading" where
- * its caption will stand, and keeps it on the plan (`planning.pictureKeep`).
+ * its caption will stand, and keeps it on the description (`planning.pictureKeep`).
  * Kept, the picture takes its address and the text writes its line; until
  * then the text writes nothing of it. A keep that fails says so in the same
  * place, as every failure is said (`@repo/ui`'s `ErrorState`): its sentence, then
- * Retry and Remove. A picture of another plan pasted in is read as that
- * plan's and kept again on this one, so this plan's readers can see it; a
+ * Retry and Remove. A picture of another description pasted in is read as that
+ * description's and kept again on this one, so this description's readers can see it; a
  * video an agent recorded is carried across as it is, and waits as a quiet
  * box, since its bytes draw no picture.
  * Selected, a picture offers its tools: Alt text and Caption, each a field
  * under it, Enlarge, and Delete. They hang above the picture from its left
  * edge, as wide as their own names, so a skinny picture neither squeezes
- * them nor sits under them, unless the plan's scroller would cut them off
+ * them nor sits under them, unless the description's scroller would cut them off
  * there, when they stand inside its top edge; in a column too narrow for
  * their names each is its glyph, named by its tooltip. Insert image (⌥⌘I, ⌘K, the Edit menu)
  * chooses files while the text is edited.
@@ -104,7 +104,7 @@ type Describing = (typeof DESCRIBING)[keyof typeof DESCRIBING];
 /** The narrowest column a selected picture's tools say their names in; narrower, each is its glyph. */
 const TOOLS_WORDED_PX = 360;
 
-/** The room above a picture, inside the plan's scroller, its tools need to stand above it: their height and their gap. */
+/** The room above a picture, inside the description's scroller, its tools need to stand above it: their height and their gap. */
 const TOOLS_ROOM_PX = 44;
 
 /** One of a selected picture's tools: its name, its glyph, what a press does, and whether it destroys. */
@@ -261,7 +261,7 @@ interface ToolsLayout {
 /**
  * How a selected picture's tools stand, as the window lays the column out:
  * named where the column has room for their names, and above the picture
- * unless the plan's scroller would cut them off there, as it would a
+ * unless the description's scroller would cut them off there, as it would a
  * picture scrolled to its top. A column not laid out measures nothing and
  * keeps them named and above.
  */
@@ -405,7 +405,7 @@ export interface EditorPictures {
 }
 
 /**
- * The plan's pictures in its editor: drawn into each node, kept as they are
+ * The description's pictures in its editor: drawn into each node, kept as they are
  * laid in, and chosen by Insert image while the text is edited. None where
  * the place names no workspace to address them under, as the template does.
  */
@@ -448,7 +448,7 @@ export function useEditorPictures(
     },
     [act, handle, taskId, settled, workspace],
   );
-  // Note that a picture of another plan is read as that plan's before it is kept again.
+  // Note that a picture of another description is read as that description's before it is kept again.
   const begin = useCallback(
     async (taken: PictureTaken) => {
       settled(taken.upload, { kind: UPLOAD.SENDING });

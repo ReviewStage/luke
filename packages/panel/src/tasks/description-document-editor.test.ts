@@ -110,7 +110,7 @@ const STAND_IN: DescriptionEditorModule = {
       },
     };
   },
-  mountComposer: () => assert.fail("the plan document mounts no message box"),
+  mountComposer: () => assert.fail("the description document mounts no message box"),
 };
 
 /** The diagram bundle's stand-in: a picture named by the code and the appearance it was asked to draw. */
@@ -123,7 +123,7 @@ const DIAGRAM_STAND_IN: DiagramModule = {
 
 let bundles: SideBundles;
 
-// Landed before any document renders, as both are once a plan has been shown in this window.
+// Landed before any document renders, as both are once a description has been shown in this window.
 beforeAll(async () => {
   bundles = await Effect.runPromise(
     landedBundles({
@@ -153,7 +153,7 @@ afterEach(async () => {
   caretOn = undefined;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the saves a plan left as it went answer before its atoms go.
+  // Note that the saves a description left as it went answer before its atoms go.
   for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
@@ -169,10 +169,10 @@ async function settle(): Promise<void> {
 /**
  * The document with an edit door that records each edit and answers from the
  * script, and the names it renamed to, beside the window's toasts and over
- * atoms of its own, as the window holds them; `render` draws another plan,
+ * atoms of its own, as the window holds them; `render` draws another description,
  * through its own door where given.
  */
-/** A plan comment thread on the plan's first words, open or not. */
+/** A description comment thread on the description's first words, open or not. */
 function threadOn(
   id: string,
   status: DescriptionCommentThread["status"],
@@ -212,12 +212,12 @@ function commentsOver(threads: readonly DescriptionCommentThread[]): Description
   };
 }
 
-/** What the window tells its shell of the plans' words, drawn beside the plan as a shell would read it. */
+/** What the window tells its shell of the descriptions' words, drawn beside the description as a shell would read it. */
 function UnsavedWords(): ReactElement {
   return createElement("output", { "data-unsaved-words": String(useDescriptionWordsUnsaved()) });
 }
 
-/** Whether the window says a plan holds words not saved. */
+/** Whether the window says a description holds words not saved. */
 function unsavedWords(container: HTMLElement): boolean {
   return (
     container.querySelector("[data-unsaved-words]")?.getAttribute("data-unsaved-words") === "true"
@@ -246,7 +246,7 @@ function mount(
     renamed.push(name);
     return Promise.resolve(true);
   };
-  // Note that a plan with no comments control draws none, as a template does.
+  // Note that a description with no comments control draws none, as a template does.
   const commented = (page: ReactElement) =>
     threads === undefined
       ? page
@@ -271,7 +271,7 @@ function mount(
     );
   const render = (task: Task, door: typeof onEdit = onEdit) =>
     draw(createElement(DescriptionBody, { task, onEdit: door, onRename }));
-  /** The plan as a task's page draws it, saving through `edit` by the task's id. */
+  /** The description as a task's page draws it, saving through `edit` by the task's id. */
   const renderPage = (task: Task, edit: TaskEdit) =>
     draw(createElement(TaskPage, { task, edit, onRename }));
   render(first);
@@ -282,10 +282,10 @@ function mount(
   return { container, sent, renamed, render, renderPage, unmount };
 }
 
-/** How a task's page saves a plan's edit: by the task's id. */
+/** How a task's page saves a description's edit: by the task's id. */
 type TaskEdit = (taskId: string, request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 
-/** The plan as a task's page draws it, its edits saved through `edit` with the open task's id. */
+/** The description as a task's page draws it, its edits saved through `edit` with the open task's id. */
 function TaskPage({
   task,
   edit,
@@ -535,7 +535,7 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
     await settle();
   }
 
-  // Note that the plan is not drawn again here, so each tick is written over the text the one before it saved.
+  // Note that the description is not drawn again here, so each tick is written over the text the one before it saved.
   const written = body.replace("  - [ ] Write", "  - [x] Write");
   assert.deepEqual(
     sent.map((request) => request.document),
@@ -618,7 +618,7 @@ test("a press while a tick is out waits its turn, and both land, the second over
   assert.equal(newestToastSays(), undefined, "nothing is said of ticks that saved");
 });
 
-test("a tick saved on one task is not carried into another whose plan reads the same", async () => {
+test("a tick saved on one task is not carried into another whose description reads the same", async () => {
   const body = "## Steps\n- [ ] One\n- [ ] Two\n";
   const { container, sent, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
@@ -642,7 +642,7 @@ test("a tick saved on one task is not carried into another whose plan reads the 
   });
 });
 
-test("a plan drawn anew while a tick is out is what the next tick is written over", async () => {
+test("a description drawn anew while a tick is out is what the next tick is written over", async () => {
   const body = "## Steps\n- [ ] One\n- [ ] Two\n";
   const appText = `${body}\nLuke's line.\n`;
   const first = Promise.withResolvers<TasksEditAnswer>();
@@ -673,7 +673,7 @@ test("a plan drawn anew while a tick is out is what the next tick is written ove
   });
 });
 
-test("a tick the service did not answer goes back and says the plan could not be saved", async () => {
+test("a tick the service did not answer goes back and says the description could not be saved", async () => {
   const body = "## Steps\n- [ ] One\n";
   const { container, sent, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
@@ -708,7 +708,11 @@ test("a box pressed twice while its first tick is out, whose first is refused, s
   first.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
   await settle();
 
-  assert.equal(sent.length, 1, "the second asks for what the plan already holds, so sends nothing");
+  assert.equal(
+    sent.length,
+    1,
+    "the second asks for what the description already holds, so sends nothing",
+  );
   assert.equal(box.getAttribute("aria-checked"), "false");
   assert.equal(newestToastSays(), "The description could not be saved.");
 });
@@ -765,7 +769,7 @@ function scrollerOf(container: HTMLElement): HTMLElement {
   );
 }
 
-test("a press anywhere on an empty plan's room opens its text with the caret in it, leaving the press to the page", () => {
+test("a press anywhere on an empty description's room opens its text with the caret in it, leaving the press to the page", () => {
   layTextOut();
   const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
@@ -781,13 +785,13 @@ test("a press anywhere on an empty plan's room opens its text with the caret in 
   assert.ok(body.contains(container.querySelector(".description-document-editor")));
 });
 
-test("an empty plan at rest says to write it, a button whose press opens its text with the caret in it", () => {
+test("an empty description at rest says to write it, a button whose press opens its text with the caret in it", () => {
   const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
   const line = [...container.querySelectorAll("button")].find(
     (each) => each.textContent === "Write the description",
   );
-  assert.ok(line, "the empty plan's line");
+  assert.ok(line, "the empty description's line");
 
   act(() => line.focus());
   assert.equal(document.activeElement, line, "the keyboard reaches it");
@@ -803,7 +807,7 @@ test("an empty plan at rest says to write it, a button whose press opens its tex
   );
 });
 
-test("a press on a plan's room under its text opens it at the end, beside it on the nearest line, and above it nowhere", () => {
+test("a press on a description's room under its text opens it at the end, beside it on the nearest line, and above it nowhere", () => {
   layTextOut();
   const under = mount();
   pressAt(scrollerOf(under.container), 300, 500);
@@ -874,7 +878,7 @@ test("a press on the room while the text is open moves its caret there and keeps
   assert.ok(!editor.destroyed, "the editor stays open");
 });
 
-test("words handed over and not yet saved are sent when the developer leaves the plan", async () => {
+test("words handed over and not yet saved are sent when the developer leaves the description", async () => {
   const { container, sent, unmount } = mount();
   act(() => block(container, "Goal").click());
   act(() => open().onDraft(`${BODY}Mine.\n`));
@@ -885,7 +889,7 @@ test("words handed over and not yet saved are sent when the developer leaves the
   assert.deepEqual(sent, [{ document: { base: BODY, value: `${BODY}Mine.\n` } }]);
 });
 
-test("words typed in one plan are saved to that plan when another opens", async () => {
+test("words typed in one description are saved to that description when another opens", async () => {
   const { container, render } = mount();
   const doors: string[] = [];
   const door = (taskId: string) => () => {
@@ -904,7 +908,7 @@ test("words typed in one plan are saved to that plan when another opens", async 
   assert.equal(container.querySelector(".description-document-editor"), null);
 });
 
-test("words whose save is refused as the developer leaves the plan are kept, said in a toast that stands, and open again when they come back", async () => {
+test("words whose save is refused as the developer leaves the description are kept, said in a toast that stands, and open again when they come back", async () => {
   const { container, sent, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
   act(() => block(container, "Goal").click());
@@ -913,7 +917,7 @@ test("words whose save is refused as the developer leaves the plan are kept, sai
   render(other);
   await settle();
 
-  assert.equal(sent.length, 1, "the save went as the plan was left");
+  assert.equal(sent.length, 1, "the save went as the description was left");
   assert.equal(newestToastSays(), "Your description edits could not be saved.Retry");
 
   render(DOCUMENT_TASK);
@@ -928,7 +932,11 @@ test("words whose save is refused as the developer leaves the plan are kept, sai
 test("words typed and not yet saved are unsaved work, and once they save they are not", async () => {
   const { container } = mount();
   act(() => block(container, "Goal").click());
-  assert.equal(unsavedWords(container), false, "an editor open on the plan's own words holds none");
+  assert.equal(
+    unsavedWords(container),
+    false,
+    "an editor open on the description's own words holds none",
+  );
 
   act(() => open().onDraft(`${BODY}Mine.\n`));
   assert.equal(unsavedWords(container), true);
@@ -938,7 +946,7 @@ test("words typed and not yet saved are unsaved work, and once they save they ar
   assert.equal(unsavedWords(container), false);
 });
 
-test("words a plan was left with that its save refused stay unsaved work, there and back", async () => {
+test("words a description was left with that its save refused stay unsaved work, there and back", async () => {
   const { container, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
   act(() => block(container, "Goal").click());
@@ -946,14 +954,14 @@ test("words a plan was left with that its save refused stay unsaved work, there 
 
   render(other);
   await settle();
-  assert.equal(unsavedWords(container), true, "kept while another plan is open");
+  assert.equal(unsavedWords(container), true, "kept while another description is open");
 
   render(DOCUMENT_TASK);
   await settle();
   assert.equal(unsavedWords(container), true, "and in the editor they open in again");
 });
 
-test("words a plan was left with stay unsaved work while their save is out, and not once it lands", async () => {
+test("words a description was left with stay unsaved work while their save is out, and not once it lands", async () => {
   let answer: (saved: TasksEditAnswer) => void = () => assert.fail("no save went");
   const { container, render } = mount();
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
@@ -974,7 +982,7 @@ test("words a plan was left with stay unsaved work while their save is out, and 
   assert.equal(unsavedWords(container), false);
 });
 
-test("a plan left twice while its first save is out stays unsaved work until both saves answer", async () => {
+test("a description left twice while its first save is out stays unsaved work until both saves answer", async () => {
   const answers: ((saved: TasksEditAnswer) => void)[] = [];
   const { container, render } = mount();
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
@@ -1024,7 +1032,7 @@ test("the plan's title is the page's one h1, and editing it in place still renam
   const { container, renamed } = mount();
 
   const headings = container.querySelectorAll("h1");
-  assert.equal(headings.length, 1, "the plan page names itself once");
+  assert.equal(headings.length, 1, "the description names itself once");
   assert.equal(headings[0]?.textContent, DOCUMENT_NAME);
   assert.ok(headings[0]?.contains(title(container)), "the title edited is the h1's own words");
 
@@ -1103,7 +1111,7 @@ test("words left waiting on a conflict are kept and said, and the toast's Keep m
   render(other);
   await settle();
 
-  assert.equal(sent.length, 1, "a conflict sends nothing more as the plan is left");
+  assert.equal(sent.length, 1, "a conflict sends nothing more as the description is left");
   assert.equal(newestToastSays(), `Your description edits could not be saved.${appNote}Keep mine`);
 
   act(() => newestToastAction()?.click());
@@ -1120,7 +1128,7 @@ test("words left waiting on a conflict are kept and said, and the toast's Keep m
   );
 });
 
-test("the toast's Retry over words a refused save left saves them to the plan they were typed in, though the page has opened another since", async () => {
+test("the toast's Retry over words a refused save left saves them to the description they were typed in, though the page has opened another since", async () => {
   const { container, renderPage } = mount();
   const doors: [string, DescriptionEditRequest][] = [];
   const answers: TasksEditAnswer[] = [{ failure: TASK_CALL_FAILURE.UNANSWERED }, { saved: true }];
@@ -1338,7 +1346,7 @@ test("an editor closing with its caret on no words scrolls nothing", async () =>
   assert.equal(scroller.scrollTop, 500);
 });
 
-test("words left by an editor closed as another plan opens move nothing in it", async () => {
+test("words left by an editor closed as another description opens move nothing in it", async () => {
   const { container, render } = mount();
   act(() => block(container, "Goal").click());
   const scroller = scrollerOf(container);
@@ -1355,7 +1363,7 @@ test("words left by an editor closed as another plan opens move nothing in it", 
     DOMRect.fromRect({ x: 0, y: 57, width: 300, height: 20 }),
   );
 
-  // Another plan with the same words opens in its place.
+  // Another description with the same words opens in its place.
   render({ ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" });
   await settle();
 
@@ -1363,7 +1371,7 @@ test("words left by an editor closed as another plan opens move nothing in it", 
   assert.equal(scroller.scrollTop, 500);
 });
 
-/** The plan as a teammate's save left it: their text, saved after the one the page opened on, by them. */
+/** The description as a teammate's save left it: their text, saved after the one the page opened on, by them. */
 function savedBy(body: string, updatedAt: number, by = CHARLES): Task {
   return {
     ...DOCUMENT_TASK,
@@ -1419,7 +1427,7 @@ test("an open editor holding unsaved words keeps them as a teammate saves, saves
     await settle();
     assert.deepEqual(sent, [{ document: { base: BODY, value: mine } }]);
 
-    // The host draws the plan the save answered, the developer's last, before the save's answer arrives.
+    // The host draws the description the save answered, the developer's last, before the save's answer arrives.
     render(savedBy(merged, 4, { userId: "user-me", name: "Me" }), door);
     answer({ saved: true });
     await settle();

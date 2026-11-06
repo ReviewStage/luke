@@ -21,7 +21,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 /**
  * task-key-chips.test.ts -- a listed task's key written among words
  * (`STAG-422`) is drawn as that task's chip, saying the key as written,
- * wherever words are drawn with chips: a transcript's, an Inbox item's, and a plan's or a comment's. A key in code or a link, a
+ * wherever words are drawn with chips: a transcript's, an Inbox item's, and a description's or a comment's. A key in code or a link, a
  * word shaped like a key that names no task, and a key two tasks share
  * stay words. Synthetic workspaces and tasks.
  */
@@ -189,7 +189,7 @@ test("a key alone on its line of an Inbox item's document is its chip in the par
   );
 });
 
-test("in a plan's or a comment's words a listed task's key is its chip, and a place that draws no chips leaves it as words", async () => {
+test("in a description's or a comment's words a listed task's key is its chip, and a place that draws no chips leaves it as words", async () => {
   const doors = planPage([]).doors;
   const words = "See STAG-421, not `STAG-422` nor STAG-422/notes.";
   const chipped = await drawn(

@@ -297,7 +297,7 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * over `../ai-elements/`), from the agent's stored `UIMessage`s as they
  * are, and reads as a devtool's agent pane: what it was handed opens it as a message sent to it, at a sent
  * message's measure under the line naming who sent it, a card folded under
- * its title: the plan, sent by its task, which opens the plan, beside the
+ * its title: the description, sent by its task, which opens the description, beside the
  * teammate who started the agent; an automation's prompt alone, sent by the
  * automation, which opens its page where the window can, with the pull
  * request its event named, who ran it now, and a webhook's body folded
@@ -311,13 +311,13 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * and the model and effort the worker runs on, the whole line the one
  * button that opens the worker's own tab in the side panel (`AgentSubagentTab`),
  * each call about something the window draws in a tab of its own, a page,
- * an agent, code shown, the plan, or the Inbox, the one
+ * an agent, code shown, the description, or the Inbox, the one
  * button that opens that tab (`toolTarget`), each write
  * of its to-do list the list on a row of its own where it landed, open
  * while it is the newest and folded once a newer one stands, the newest
  * docked over the composer instead while the agent works through it, and its
  * runs of calls and its finished lead folded (`turn-rows.ts`); a message
- * the developer sent it after the plan is the developer's bubble, each skill it
+ * the developer sent it after the description is the developer's bubble, each skill it
  * names the chip that opens the skill's file (`skill-chip.tsx`), as a
  * "Loaded skill" row opens it too, hanging the same card; and while
  * the agent may still write, a shimmering line stands at the end saying
@@ -336,7 +336,7 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * where the pull request the agent opened lives; every other address is
  * drawn and goes nowhere. No line here names a price: a price in the
  * window is the whole run's, said only on the model menu's last line
- * (`agentPayerLine`). Every word here is the agent's or the plan's, so the
+ * (`agentPayerLine`). Every word here is the agent's or the description's, so the
  * root is left out of the screen recording (`ph-no-capture`) as a second
  * line behind the recording's text masking. Under the transcript stands
  * the composer (`agent-composer.tsx`), with no head above either: where
@@ -348,7 +348,7 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * once as theirs and is read back from the service's own row, and the
  * Stop is the composer's, the one the tab has. A worker's tab draws the
  * worker's transcript the same way, under the agent and the call that
- * started it, with the task it was handed in the plan card's place and no
+ * started it, with the task it was handed in the description card's place and no
  * composer, since nothing is sent to a worker. Either tab says what it
  * holds to the task's page each time it moves (`onHeld`), which its tab's hover
  * card previews (`agent-tab-card.tsx`).
@@ -359,21 +359,21 @@ interface TranscriptLead {
   /** The word before the card's title. */
   label: string;
   icon: ReactNode;
-  /** Whether the card is its task's plan, which wears the task's status's mark in place of `icon` where the window lists the task. */
-  plan?: true;
+  /** Whether the card is its task's description, which wears the task's status's mark in place of `icon` where the window lists the task. */
+  description?: true;
   /** What the tab says before the first message lands; a turn that ended before one says how instead. */
   startingLine: string;
 }
 
-/** An agent's transcript: the plan it was handed, and the agent starting. */
+/** An agent's transcript: the description it was handed, and the agent starting. */
 export const AGENT_LEAD: TranscriptLead = {
   label: "Description",
   icon: <DocumentIcon />,
-  plan: true,
+  description: true,
   startingLine: "The agent is starting.",
 };
 
-/** The plan's own tab, which a task's name over its plan's card opens. */
+/** The description's own tab, which a task's name over its description's card opens. */
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 
 /** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's, with the log's step before it (`--ui-space-12`), which a row holds itself (tasks.css's `.agent-log-row-next`). */
@@ -431,7 +431,7 @@ export interface TranscriptOrigin {
   readonly body?: string | undefined;
 }
 
-/** The task an agent's plan is the plan of, as its card's sender line names it: its name, its status, whose mark it wears, and the card its sidebar row hangs. */
+/** The task an agent's description is the description of, as its card's sender line names it: its name, its status, whose mark it wears, and the card its sidebar row hangs. */
 export interface BriefTask {
   readonly name: string;
   readonly status: TaskStatus | undefined;
@@ -457,9 +457,9 @@ export interface TranscriptCards {
   readonly worker: (worker: DelegatedWorker) => ReactNode;
   /** One of the place's agents as its tab wears it, which a call about the agent names it by (`calledAgentActor`); none where the place does not list it. */
   readonly agent?: ((agentId: string) => Actor | undefined) | undefined;
-  /** The task whose plan an agent was handed, which its card's sender line names; none where the place knows no task. */
+  /** The task whose description an agent was handed, which its card's sender line names; none where the place knows no task. */
   readonly task?: BriefTask | undefined;
-  /** What the transcript stands on, its task or its agent on no task, under which the plan and a page a call made are linked where the place's mentions hold neither, as an agent's own page does not hold its task; none where the place does not say. */
+  /** What the transcript stands on, its task or its agent on no task, under which the description and a page a call made are linked where the place's mentions hold neither, as an agent's own page does not hold its task; none where the place does not say. */
   readonly standsOn?: MentionHolder | undefined;
 }
 
@@ -918,7 +918,7 @@ const UNTITLED_PAGE = "Page";
 /**
  * What the chip of what a call made is labeled with until the window
  * holds its name: the call's own title, a page's or a thread's or a task's;
- * and the link bare for the plan and a pull request, which the chip then
+ * and the link bare for the description and a pull request, which the chip then
  * calls by the plan's name and the pull request's number.
  */
 function madeLabel(target: ToolTarget, subject: string | undefined, href: string): string {
@@ -927,7 +927,7 @@ function madeLabel(target: ToolTarget, subject: string | undefined, href: string
 }
 
 /**
- * A call's row, naming what the call made or is about, a page, the plan, a
+ * A call's row, naming what the call made or is about, a page, the description, a
  * thread, a task, or a pull request, after its verb by the chip and hover
  * card the window draws for its link anywhere, whose press alone opens it;
  * and under the row of a `show_page`, the page itself at the version the
@@ -1126,14 +1126,14 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
 }
 
 /**
- * What the transcript opens on: the plan the agent was handed, an
+ * What the transcript opens on: the description the agent was handed, an
  * automation's prompt, or the task a worker was, as a message sent to the
  * agent, at a sent message's measure over the line naming who sent it and
  * when, as a sent message's bubble stands over its own: a card folded under
  * its title, and a webhook's body folded again inside it. A title that is
  * the text's own first line gives way to the card's label while the text
- * is drawn under it, so an opened plan never says that line twice. Where the agent
- * works on a task, the plan's own pictures are drawn in the card as its
+ * is drawn under it, so an opened description never says that line twice. Where the agent
+ * works on a task, the description's own pictures are drawn in the card as its
  * page draws them (`description-pictures.tsx`), read only once the card is opened.
  */
 function PlanCard({
@@ -1158,15 +1158,15 @@ function PlanCard({
   sentAt?: number | undefined;
   /** A webhook call's body, which rode in with an automation's prompt. */
   body?: string | undefined;
-  /** The task the agent works on, whose plan's pictures the card draws; none where it works on none. */
+  /** The task the agent works on, whose description's pictures the card draws; none where it works on none. */
   taskId?: string | undefined;
 }): ReactNode {
   const named = sender != null;
   const words = <TranscriptWords text={text} />;
   // The task's status as the list holds it, else as the window hands the open task live (`LiveDoors`), as its sender reads it.
-  const listed = useTaskStatus(lead.plan ? taskId : undefined);
+  const listed = useTaskStatus(lead.description ? taskId : undefined);
   const handed = useContext(LiveDoors)?.cards?.task?.status;
-  const status = lead.plan ? (listed ?? handed) : undefined;
+  const status = lead.description ? (listed ?? handed) : undefined;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
       <Plan data-origin-description="" aria-label={lead.label}>
@@ -1199,7 +1199,7 @@ function PlanCard({
   );
 }
 
-/** A task named as the sender of its plan: its status's mark and its name as one target, hanging its card and opening its plan where the place can. */
+/** A task named as the sender of its description: its status's mark and its name as one target, hanging its card and opening its description where the place can. */
 function TaskRef({ task, onOpen }: { task: BriefTask; onOpen?: (() => void) | undefined }) {
   return (
     <InlineRef
@@ -1217,7 +1217,7 @@ function TaskRef({ task, onOpen }: { task: BriefTask; onOpen?: (() => void) | un
   );
 }
 
-/** Who sent a task's agent its plan: the task, then the teammate who started the agent, never the reader. */
+/** Who sent a task's agent its description: the task, then the teammate who started the agent, never the reader. */
 function TaskSender({
   task,
   onOpen,
@@ -1227,7 +1227,7 @@ function TaskSender({
   onOpen: (() => void) | undefined;
   starter: Actor | undefined;
 }): React.JSX.Element {
-  // The window hands the task anew on every draw, so a transcript's sender reads it live (`LiveDoors`), and the plan's card is not drawn again for it.
+  // The window hands the task anew on every draw, so a transcript's sender reads it live (`LiveDoors`), and the description's card is not drawn again for it.
   const live = useContext(LiveDoors);
   const named = live === undefined ? task : live.cards?.task;
   return (
@@ -1340,8 +1340,8 @@ function AutomationSender({
 
 /**
  * What an agent's transcript opens on: an automation's prompt, from the
- * automation, where an automation's run started it; the plan, from its task
- * and the teammate who started the agent, where it was handed the plan; and
+ * automation, where an automation's run started it; the description, from its task
+ * and the teammate who started the agent, where it was handed the description; and
  * nothing for an agent handed a prompt by hand, whose prompt is the
  * developer's message as any other.
  */
@@ -1440,7 +1440,7 @@ function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }
 }
 
 /**
- * One message: the plan the agent was handed, as a card; a message the
+ * One message: the description the agent was handed, as a card; a message the
  * developer sent it since, as a bubble at the right where it is the
  * reader's own, else at the left under who sent it, with a quiet line under
  * it holding when and its Copy and Copy link; or one of the agent's own turns, ending once it has
@@ -1478,7 +1478,7 @@ function turnStretchesOf(
 
 export function AgentMessage({
   message,
-  plan,
+  description,
   lead,
   moving,
   delegation,
@@ -1500,13 +1500,13 @@ export function AgentMessage({
   forkable?: boolean;
   /** Where a fork cuts it, where it is the reply a running turn is still writing (`forkCutOf`), which offers no fork before its first step; none for a settled message, kept whole. */
   forkCut?: ForkCut | undefined;
-  /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
-  plan: boolean;
-  /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
+  /** Whether this is the description the agent was handed, which is the first of the developer's messages. */
+  description: boolean;
+  /** The task the agent works on, whose description's pictures its description's card draws; none where it works on none. */
   taskId?: string | undefined;
-  /** Who handed the agent the plan or the prompt it opens on, and the card's words where they are not the message's own. */
+  /** Who handed the agent the description or the prompt it opens on, and the card's words where they are not the message's own. */
   origin?: TranscriptOrigin | undefined;
-  /** The plan's or task's card line, where the transcript names it otherwise than by its first line. */
+  /** The description's or task's card line, where the transcript names it otherwise than by its first line. */
   briefTitle?: string | undefined;
   lead: TranscriptLead;
   /** Whether the agent may still write to this message: it is the last, and the agent still works. */
@@ -1540,7 +1540,7 @@ export function AgentMessage({
     ),
     [doors, todosKept, moving],
   );
-  if (plan) {
+  if (description) {
     return (
       <PlanCard
         text={origin?.text ?? words}
@@ -1562,7 +1562,7 @@ export function AgentMessage({
   if (github !== undefined) return <GitHubLineRow message={message} line={github} sender={named} />;
   if (message.role === MESSAGE_ROLE.USER) {
     const sentAt = message.sentAt;
-    // A thread's line is headed by what the member did and the thread's chip, its words without the header that names the item to the agent; a comment's by the plan or page it is on, its member's words under what it is on; a Slack message's by Slack's chip, its member's words alone; never the instructions the agent was handed.
+    // A thread's line is headed by what the member did and the thread's chip, its words without the header that names the item to the agent; a comment's by the description or page it is on, its member's words under what it is on; a Slack message's by Slack's chip, its member's words alone; never the instructions the agent was handed.
     const thread = threadLineOf(message);
     const comment = commentLineOf(message);
     const slack = slackLineOf(message);
@@ -1691,7 +1691,7 @@ export function AgentMessage({
         <SteadyAgentMessage
           key={line.id}
           message={line}
-          plan={false}
+          description={false}
           lead={lead}
           moving={false}
           delegation={delegation}
@@ -2292,9 +2292,9 @@ function AgentTranscriptView({
   holding?: boolean;
   /** Where the transcript hands the door that brings a message whose row is not drawn into view, which a link to the message asks through; none where nothing asks. */
   bringIn?: RefObject<MessageBringer | undefined> | undefined;
-  /** What the agent was handed first: the plan, drawn as the plan's card, a prompt, drawn as the developer's message, or nothing, for one started blank, whose first line is drawn as any other; unsaid reads as the plan. */
+  /** What the agent was handed first: the description, drawn as the description's card, a prompt, drawn as the developer's message, or nothing, for one started blank, whose first line is drawn as any other; unsaid reads as the description. */
   brief?: AgentBrief | undefined;
-  /** Whose transcript this is: an agent's, with its plan, unless said otherwise. */
+  /** Whose transcript this is: an agent's, with its description, unless said otherwise. */
   lead?: TranscriptLead;
   /** What a delegation's row draws from; with none, a row says the pair its part carries and opens no tab. */
   delegation?: DelegationDoors | undefined;
@@ -2331,17 +2331,17 @@ function AgentTranscriptView({
   overComposer?: boolean;
   /** Whether older steps than these were left out, which a note says after the card. */
   earlierOmitted?: boolean;
-  /** The plan's or task's card line, where it is named otherwise than by its first line, as a brain's worker is by its job. */
+  /** The description's or task's card line, where it is named otherwise than by its first line, as a brain's worker is by its job. */
   briefTitle?: string | undefined;
   /** The teammate who handed the agent its task, named over the task's message; none for the reader's own agent. */
   briefSender?: Actor | undefined;
-  /** Who handed the agent what it opens on, which is then its card under their line, a prompt among them; none where only a plan is, whose card names nobody. */
+  /** Who handed the agent what it opens on, which is then its card under their line, a prompt among them; none where only a description is, whose card names nobody. */
   origin?: TranscriptOrigin | undefined;
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
   readerId?: string | undefined;
   /** The agent whose transcript this is, whose threads its thread lines are on; none on a worker's, or before the agent stands. */
   agentId?: string | undefined;
-  /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
+  /** The task the agent works on, whose description's pictures its description's card draws; none where it works on none. */
   taskId?: string | undefined;
   /** What a failed turn's report names, where it is not the agent and task above, as a worker's names its agent's. */
   failureAbout?: FailureAbout | undefined;
@@ -2428,7 +2428,7 @@ function AgentTranscriptView({
   });
   if (!holding && messages.length > 0) {
     const { todos, first, opening, placed, open } = placing;
-    // The plan is the first of the developer's messages, unless the agent
+    // The description is the first of the developer's messages, unless the agent
     // was handed a prompt in its place, which is the developer's message as
     // any other is, but where something sent it, an automation, when it is
     // that sender's card; the rest the developer sent since. An agent
@@ -2436,7 +2436,7 @@ function AgentTranscriptView({
     // is a line as any other is, under whoever sent it.
     const blank = brief === AGENT_BRIEF.BLANK && origin === undefined;
     const carded = !blank && (brief !== AGENT_BRIEF.PROMPT || origin !== undefined);
-    const plan = carded ? first : undefined;
+    const description = carded ? first : undefined;
     const task = carded || blank ? undefined : first;
     return (
       <TranscriptAgent value={agentId}>
@@ -2456,7 +2456,7 @@ function AgentTranscriptView({
                   </ErrorState>
                 </div>
               ) : null}
-              {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
+              {/* The description's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
               <ConversationContent
                 className={overComposer ? LOG_OVER_COMPOSER_CLASS : undefined}
                 streams
@@ -2480,15 +2480,15 @@ function AgentTranscriptView({
                           message={
                             message === first && opening !== undefined ? opening.brief : message
                           }
-                          plan={message === plan}
-                          taskId={message === plan ? taskId : undefined}
+                          description={message === description}
+                          taskId={message === description ? taskId : undefined}
                           lead={lead}
                           moving={working && index === placed.length - 1}
                           forkCut={forkCutOf(message, open)}
                           delegation={delegation}
                           todos={todos}
                           briefTitle={briefTitle}
-                          origin={message === plan ? origin : undefined}
+                          origin={message === description ? origin : undefined}
                           sender={
                             message === task
                               ? briefSender
@@ -2515,7 +2515,7 @@ function AgentTranscriptView({
                             {opening.note === undefined ? null : (
                               <SteadyAgentMessage
                                 message={opening.note}
-                                plan={false}
+                                description={false}
                                 lead={lead}
                                 moving={false}
                                 delegation={delegation}
@@ -2524,7 +2524,7 @@ function AgentTranscriptView({
                             )}
                           </>
                         ) : null}
-                        {earlierOmitted && message === plan ? (
+                        {earlierOmitted && message === description ? (
                           <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
                         ) : null}
                       </>
@@ -2893,7 +2893,7 @@ function AgentTabView({
   const briefTask = cards?.task;
   const tasked = briefTask !== undefined;
   const originStarter = useKept(starter === undefined ? undefined : starterActor, sameFields);
-  // The plan's card is drawn again only when who handed it, or what, changed, not with each page.
+  // The description's card is drawn again only when who handed it, or what, changed, not with each page.
   const origin = useMemo(
     () =>
       agentOrigin({
@@ -3062,7 +3062,7 @@ function AgentTabView({
               </>
             )}
             onStop={onStop}
-            // Note that a started agent's conversation always opens on its plan or
+            // Note that a started agent's conversation always opens on its description or
             // task, so the box takes a follow up even before the transcript is read.
             followsUp
             keywords={keywords}
@@ -3131,7 +3131,7 @@ const NO_RETRY = () => undefined;
  * working line saying it is starting, over the composer's card, which the
  * agent's own tab takes the place of once the start answers, its first line
  * drawn in the same place, and its model's chip where the start named the
- * model. One started on no words is briefed on the plan.
+ * model. One started on no words is briefed on the description.
  */
 export function StartingAgentTab({
   line,
@@ -3431,7 +3431,7 @@ function AgentTabBody({
  * One of an agent's workers in a tab of the side panel's own: its transcript,
  * read under the agent and the call that started it and followed while
  * the worker runs, drawn as the agent's is with the task it was handed in
- * the plan's place, a working line at its end while it runs, counting
+ * the description's place, a working line at its end while it runs, counting
  * from the start its pages say, and no head and no composer, since the
  * tab's own label names the task and nothing is sent to a worker. Its
  * rows open and hang what an agent's rows do, through the task's own doors

@@ -20,9 +20,9 @@ import { TranscriptTodosDock, TranscriptTool } from "./transcript-blocks.js";
  * fold-preview.test.ts -- a fold whose closed line previews what its body
  * says drops that preview while the body is drawn, opened or drawn hidden
  * by a find, and says it again once the body is gone: a read's path, a
- * search's pattern, a command, the plan card's first line, and the to-do
+ * search's pattern, a command, the description card's first line, and the to-do
  * dock's item. Words the body does not say, a command's description and a
- * written file's path, stay. Synthetic calls and a synthetic plan.
+ * written file's path, stay. Synthetic calls and a synthetic description.
  */
 
 const roots: Root[] = [];
@@ -145,18 +145,18 @@ test("an open row whose body says its subject drops its verb's colon, which its 
 
 const PLAN_LINE = "Refuse a withdrawn invite link the way a used one is refused";
 
-/** The plan an agent was handed, as its transcript opens on it. */
+/** The description an agent was handed, as its transcript opens on it. */
 function handedDescription(text: string) {
   return createElement(AgentMessage, {
     message: { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text }] },
-    plan: true,
+    description: true,
     lead: AGENT_LEAD,
     moving: false,
     delegation: { models: [] },
   });
 }
 
-test("the plan card's head previews the plan's first line while closed, reads Plan alone while open, and previews it again once closed", () => {
+test("the description card's head previews the description's first line while closed, reads Description alone while open, and previews it again once closed", () => {
   const drawing = drawn(handedDescription(`# ${PLAN_LINE}\n\nSay so on the page.`));
   assert.equal(line(drawing).trim(), `Description · ${PLAN_LINE}`);
 
@@ -171,7 +171,7 @@ test("the plan card's head previews the plan's first line while closed, reads Pl
   assert.equal(line(drawing).trim(), `Description · ${PLAN_LINE}`);
 });
 
-test("the plan card's head reads Plan alone while a find draws the plan hidden", () => {
+test("the description card's head reads Description alone while a find draws the description hidden", () => {
   const drawing = drawn(handedDescription(`${PLAN_LINE}\n\nSay so on the page.`), true);
   assert.equal(line(drawing).trim(), "Description");
 });

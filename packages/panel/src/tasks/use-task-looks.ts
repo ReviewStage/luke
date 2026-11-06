@@ -14,7 +14,7 @@ import { pressAct, tellAct } from "../act.js";
 import { APP_SLICE } from "../use-app-state.js";
 
 /**
- * use-task-looks.ts -- what changed since the developer last looked at a task: the open plan's sections, and the sidebar's unread tasks and agents.
+ * use-task-looks.ts -- what changed since the developer last looked at a task: the open description's sections, and the sidebar's unread tasks and agents.
  *
  * A look is the plan opened, whichever of its column's tabs it opens on. Its
  * mark is kept on the account by the service (`@repo/features/read-mark`),
@@ -58,7 +58,7 @@ interface Visit {
   readonly changed: ReadonlySet<string>;
 }
 
-/** The open plan's sections changed since the last look, each by its heading, and the dismissal that clears them. */
+/** The open description's sections changed since the last look, each by its heading, and the dismissal that clears them. */
 export interface TaskLooks {
   readonly changed: ReadonlySet<string>;
   readonly dismiss: () => void;
@@ -98,7 +98,7 @@ function lookAtAgent(agentId: string, readMark: ReadMark): void {
   tellAct(ACT_KIND.AGENTS_MARK_READ, { agentId, readMark });
 }
 
-/** The save that last changed each of the plan's sections, each by its heading. */
+/** The save that last changed each of the description's sections, each by its heading. */
 function sectionSavesOf(task: Task): readonly DescriptionSectionEdit[] {
   return task.sectionEdits ?? [];
 }
@@ -179,7 +179,7 @@ function revisited(
 }
 
 /**
- * The drawn plan's sections changed since the developer last looked at it,
+ * The drawn description's sections changed since the developer last looked at it,
  * and the plan read: as it opens, which takes back a mark of it as unread,
  * as its agents' activity moves while it stays open, and as it is left,
  * neither of which does. Note that the visit reads the mark `row` carries as

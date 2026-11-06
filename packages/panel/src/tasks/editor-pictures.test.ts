@@ -24,19 +24,19 @@ import { relayout } from "../testing/resize-observer.js";
 import { DescriptionBody } from "./description-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
- * editor-pictures.test.ts -- a picture laid into the plan's editor is drawn
+ * editor-pictures.test.ts -- a picture laid into the description's editor is drawn
  * at once from the Mac's own bytes, dimmed, with "Uploading" where its
  * caption will stand, and as the kept picture once the service kept it; a
  * keep that failed says why with Retry and Remove, and Remove takes it out;
- * a video of another plan pasted in is kept on this one as it is, waiting
+ * a video of another description pasted in is kept on this one as it is, waiting
  * as a quiet box rather than a picture its bytes cannot draw; and Insert
  * image is offered while the text is edited, and only then; and
  * a selected picture's tools are each still named in a narrow column.
- * Synthetic plan and pictures.
+ * Synthetic description and pictures.
  */
 
 const TASK_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
@@ -213,7 +213,7 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
   assert.equal(container.querySelector(".editor-picture"), null);
 });
 
-test("a video of another plan pasted in is kept on this plan as it is, waiting as a quiet box", async () => {
+test("a video of another description pasted in is kept on this description as it is, waiting as a quiet box", async () => {
   const OTHER_TASK = "6e2f4a8b-1c3d-4e5f-9a0b-2c4d6e8f0a1b";
   const video = `data:${CONVERSATION_MEDIA_TYPE.WEBM};base64,GkXfow==`;
   const kept: string[] = [];
@@ -259,7 +259,7 @@ test("a video of another plan pasted in is kept on this plan as it is, waiting a
   assert.equal(uploading?.querySelector("img"), null);
 });
 
-test("Insert image is offered while the plan's text is edited, and lays in the files chosen", async () => {
+test("Insert image is offered while the description's text is edited, and lays in the files chosen", async () => {
   const reading = drawn(
     createElement(DescriptionBody, { task: TASK, sectionLinks: SECTION_LINKS }),
   );
@@ -340,7 +340,7 @@ function selectPicture(container: HTMLElement): HTMLElement {
 
 /**
  * The column the picture stands in laid out at `width`, its picture 200
- * pixels under the top of the plan's scroller, as the window would report it.
+ * pixels under the top of the description's scroller, as the window would report it.
  */
 function layOutColumn(container: HTMLElement, width: number): void {
   const column =

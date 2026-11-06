@@ -294,7 +294,7 @@ test("a command's answer that is not a terminal's envelope falls back to its JSO
   assert.match(view.output?.text ?? "", /"reason": "The turn ended/u);
 });
 
-test("a plan's card is titled by its first heading, or its first line of words", () => {
+test("a description's card is titled by its first heading, or its first line of words", () => {
   assert.equal(cardTitle("# Teammate invitations\n\nInvite by email."), "Teammate invitations");
   assert.equal(cardTitle("\n\nInvite by email.\n# Later"), "Invite by email.");
   assert.equal(cardTitle("   "), "");
@@ -344,7 +344,7 @@ test("a message's preview says its words without the marks a message box writes,
   assert.equal(plainWords("A **a\\]b** and *foo\\\\* said"), "A a]b and foo\\ said");
 });
 
-test("a plan edit's row sums its notes by what each did, and shows them as JSON", () => {
+test("a description edit's row sums its notes by what each did, and shows them as JSON", () => {
   const notes = [
     {
       kind: "add",
@@ -535,7 +535,7 @@ test("an agent's task calls draw from their parts", () => {
   assert.deepEqual([stopped.kind, stopped.subject], [CALL_KIND.WORKER_CANCEL, "delegate-7k2m9q"]);
 });
 
-test("a plan edit or a comment call opens the task it named, and one made before such calls named a task opens the plan", () => {
+test("a description edit or a comment call opens the task it named, and one made before such calls named a task opens the description", () => {
   const edited = {
     tool: "edit_description",
     callId: "call-1",
@@ -556,7 +556,7 @@ test("a plan edit or a comment call opens the task it named, and one made before
   });
 });
 
-test("a look at a plan's picture says it looked and opens the task its address names, and one refused shows why and opens nothing", () => {
+test("a look at a description's picture says it looked and opens the task its address names, and one refused shows why and opens nothing", () => {
   const input = {
     address:
       "https://vespin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13",
@@ -854,7 +854,7 @@ test("the issue calls read as theirs, an issue by the identifier and title its a
   ]);
 });
 
-test("what a start or a message sent another agent is read whole: a message's words, a start's prompt or its earlier task and its note, and nothing for a start on the plan or another call", () => {
+test("what a start or a message sent another agent is read whole: a message's words, a start's prompt or its earlier task and its note, and nothing for a start on the description or another call", () => {
   const long = "Add the refund export.\n\nKeep the CSV columns as they are.";
   assert.deepEqual(sentWords("message_agent", { agentId: "a", text: long }), {
     words: long,

@@ -50,7 +50,7 @@ function rowOf(tool: string, input: WireRecord, output: WireRecord) {
     root.render(
       createElement(AgentMessage, {
         message,
-        plan: false,
+        description: false,
         lead: AGENT_LEAD,
         moving: false,
         delegation: { models: [], onOpenTarget: () => undefined },

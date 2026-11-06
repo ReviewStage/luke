@@ -71,7 +71,7 @@ function saidOf(at: number) {
   };
 }
 
-test("a plan's Edited line says its age as its sidebar row does, a month old as a date", () => {
+test("a description's Edited line says its age as its sidebar row does, a month old as a date", () => {
   // Note that only the date is fixed, so the task's minute reads `NOW` and nothing waits on a timer.
   vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
 

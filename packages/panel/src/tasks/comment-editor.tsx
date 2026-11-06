@@ -24,7 +24,7 @@ import { MarkdownEditor } from "./markdown-editor.js";
 import { fencedBlock } from "./markdown-fence.js";
 
 /**
- * comment-editor.tsx -- words a member sends to GitHub as Markdown, written on the plan's editor: a pull request's comment, a review's, a line's, a thread's reply, and a pending comment's edit.
+ * comment-editor.tsx -- words a member sends to GitHub as Markdown, written on the description's editor: a pull request's comment, a review's, a line's, a thread's reply, and a pending comment's edit.
  *
  * The words are written where they are drawn (`markdown-editor.tsx`), so
  * no Preview stands beside them: the format toolbar over selected words,
@@ -100,7 +100,7 @@ function useOpened(value: string): { opened: Opened; said: (markdown: string) =>
 }
 
 /**
- * The words, named `label` to a reader, on the plan's editor in a text
+ * The words, named `label` to a reader, on the description's editor in a text
  * field's frame; Enter is `onSubmit` and Esc `onCancel` where given,
  * `suggestion`, the lines a comment is on as they read at the head, offers
  * a suggestion where given, and `foot` stands under the words inside the

@@ -44,7 +44,7 @@ import { useNumberedTaskIdOf } from "./use-link-standing.js";
 /**
  * markdown-editor.tsx -- a Markdown document edited in place: the editor bundle's editor on its text, the format toolbar over its selection, the `/` menu under a `/`, and what each document opts into beside them.
  *
- * Every Markdown document the panel edits mounts this one editor: a plan's
+ * Every Markdown document the panel edits mounts this one editor: a description's
  * text (`description-document-editor.tsx`), and a pull request's description or a
  * review's comment alike. The editor is TipTap, from the editor bundle
  * (`../bundle-loader.ts`); until it has loaded, the document's own drawing

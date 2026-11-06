@@ -6,10 +6,10 @@ import { useAct } from "../act.js";
 import { AttachedFileChips } from "./attached-file-chips.js";
 
 /**
- * description-comment-files.tsx -- the files a plan's comment carries, drawn over its words.
+ * description-comment-files.tsx -- the files a description's comment carries, drawn over its words.
  *
  * A comment's files are kept by the service beside the comment and named
- * on its entry by id; the window reads each one's bytes through the plan's
+ * on its entry by id; the window reads each one's bytes through the description's
  * own attachment read, the one its pictures take, under the account, and
  * draws them as the agent box draws a sent message's files: a row of chips,
  * a picture by its thumbnail and any other file by its type's icon, each

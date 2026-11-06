@@ -42,7 +42,7 @@ import {
 } from "./use-description-editing.js";
 
 /**
- * description-document-editor.tsx -- the open plan, edited in place: its title, its sections as blocks, and its whole text in one editor.
+ * description-document-editor.tsx -- the open description, edited in place: its title, its sections as blocks, and its whole text in one editor.
  *
  * The text is drawn as its sections, and nothing on them marks them
  * editable. A click into a section's words opens the whole text in place,
@@ -67,7 +67,7 @@ import {
  * what the app writes.
  * A save's merged answer is taken into the open editor block by block, and
  * the notetaker's drafts never redraw it. The editor is every Markdown
- * document's (`./markdown-editor.tsx`), with every option a plan takes: its
+ * document's (`./markdown-editor.tsx`), with every option a description takes: its
  * mentions, its pictures, its comment threads and Comment on the format
  * toolbar, in place of the read view's Comment bubble, its sections'
  * placement and the title above, and a Mermaid block's preview.
@@ -488,7 +488,7 @@ function boundTitle(element: HTMLElement): void {
  * were typed since it was asked for, which are the newest and are kept for
  * the next pause to ask for again. Each Rename chosen from the title's ⋯
  * puts the caret at its end, as ↑ from the text's first line does. Over
- * no text, as while Plans is off, Return and ↓ save it and select it as Esc
+ * no text, as while Descriptions is off, Return and ↓ save it and select it as Esc
  * does, since there is no text to go into.
  */
 export function EditableTitle({
@@ -669,7 +669,7 @@ interface DraftDoors {
  * Note that it is held back, because each hand-over draws the document
  * around the editor again, and the editor holds the text meanwhile; a
  * finish, a leaving, or the editor going hands over the last first, and the
- * document hands over what is held before it saves what is left as a plan
+ * document hands over what is held before it saves what is left as a description
  * goes.
  */
 function useDraftHandOver(
@@ -728,8 +728,8 @@ function useDraftHandOver(
  * Text the open editor did not type taken into it, the caret kept where it
  * stood, since the editor mounts once on its words and never follows them.
  * Three kinds reach it. A save's merged answer: a save that landed shows as
- * the model's base moving to the text it sent; the host draws the plan the
- * service answered before the save's answer arrives, so the plan whose last
+ * the model's base moving to the text it sent; the host draws the description the
+ * service answered before the save's answer arrives, so the description whose last
  * save is the developer's, and newer than the one last taken, holds the
  * merged text, whose other part is laid in and the model's base becomes
  * what the service holds. A save someone else made, a teammate's, an
@@ -806,7 +806,7 @@ interface HandedThreads {
  * The open threads handed to the open editor whenever they change, a thread
  * opened or closed while it stands, or its words found or lost: `open`
  * names every one, and `anchors` the words of those that have them, in
- * offsets of `text`, the plan as saved. Note that nothing is handed while
+ * offsets of `text`, the description as saved. Note that nothing is handed while
  * the same threads stay open on the same words, since the editor's marks
  * already follow them, so a render while typing costs a comparison of the
  * threads alone; and that an editor mounted anew is handed them once, since
@@ -872,7 +872,7 @@ function DocumentNote({
 
 /**
  * The whole text in its editor (`./markdown-editor.tsx`), with every option
- * a plan takes, in place of its drawn sections, which stand as `drawn` until
+ * a description takes, in place of its drawn sections, which stand as `drawn` until
  * the editor's bundle has loaded. `hostOf` names the block of a section,
  * which the keyboard goes back to as the editor finishes. Focus leaving the
  * editor closes it, unless it moved to its own buttons or to the menu its
@@ -895,7 +895,7 @@ export function DescriptionDocumentEditor({
   editing: DescriptionEditing;
   drawn: ReactNode;
   hostOf: (section: number) => EditorHost;
-  /** What the plan's mentions open, drawn as their chips in the editor, with `@` picking new ones; none where the text takes no mentions. */
+  /** What the description's mentions open, drawn as their chips in the editor, with `@` picking new ones; none where the text takes no mentions. */
   mentions?: MentionDoors | undefined;
   /** The column the document scrolls in, whose empty room moves the caret (`useTextRoom`). */
   scroller?: React.RefObject<HTMLElement | null> | undefined;
@@ -903,7 +903,7 @@ export function DescriptionDocumentEditor({
   handle: React.RefObject<DescriptionEditorHandle | undefined>;
   /** Where the words the caret stood on are left as the editor closes, for the drawn text to keep them where they stood (`useWordsKeptOnClose`). */
   closedOn?: React.RefObject<PlacedWords | undefined> | undefined;
-  /** Starts a thread on the words selected, as the toolbar's Comment over them does; none where the plan takes no comments here. */
+  /** Starts a thread on the words selected, as the toolbar's Comment over them does; none where the description takes no comments here. */
   onComment?: (() => void) | undefined;
 }): React.JSX.Element {
   // The words the editor last handed over, or was laid with, which it holds unless the model moved them.
@@ -916,7 +916,7 @@ export function DescriptionDocumentEditor({
     },
     [],
   );
-  // The open threads' words, in offsets of the plan as saved, which the editor opens with where it opens on that text, and is handed again as threads open and close.
+  // The open threads' words, in offsets of the description as saved, which the editor opens with where it opens on that text, and is handed again as threads open and close.
   // Note that none is handed over while no open thread has words, since an empty list would still map every marked word on each keystroke for nothing.
   const comments = useDescriptionCommentsControl();
   const openThreads = comments === undefined ? [] : comments.threads.filter(openThread);

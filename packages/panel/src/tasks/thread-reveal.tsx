@@ -34,7 +34,7 @@ export const THREAD_REVEAL_WORDS = {
   FILE_GONE: "That comment's file is no longer in this pull request's changes.",
   VIEW_FILES: "View in Files changed",
   VIEW_CONVERSATION: "View in Conversation",
-  /** The name of a thread's ⋯, told from a plan comment's own ("Comment actions"). */
+  /** The name of a thread's ⋯, told from a description comment's own ("Comment actions"). */
   THING: "Review thread",
 } as const;
 

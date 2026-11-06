@@ -26,7 +26,7 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { type CommentSubject, HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
- * use-description-comments.ts -- a plan's comment threads, or one of its task's pages', as one control: held by the host while the surface shows them, and each write on its way back.
+ * use-description-comments.ts -- a description's comment threads, or one of its task's pages', as one control: held by the host while the surface shows them, and each write on its way back.
  *
  * The host follows the subject's threads while a surface holds them
  * (`LIVE_READ.DESCRIPTION_COMMENTS`) and lays them on app state, so a teammate's
@@ -103,7 +103,7 @@ function refusalWords(refusal: DescriptionCommentRefusal): string {
 }
 
 /**
- * The plan's comments, or one of its task's pages' where the subject names
+ * The description's comments, or one of its task's pages' where the subject names
  * one, held while a subject is named: the threads, and the doors that write
  * them, each answered as the service holds the thread after it.
  */

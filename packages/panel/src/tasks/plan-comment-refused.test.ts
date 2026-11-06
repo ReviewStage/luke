@@ -31,7 +31,7 @@ import { DescriptionBody } from "./description-body.js";
 import { CommentFocusScope } from "./description-comments.js";
 
 /**
- * A plan comment the service refuses goes back to its box above whatever
+ * A description comment the service refuses goes back to its box above whatever
  * was typed or pasted while it was out, so neither the refused words and
  * files nor the newer ones are dropped; where the two together are more
  * than one comment carries, the refused one stands apart, marked as not
@@ -129,7 +129,7 @@ function drawn(
   const root = createRoot(container);
   roots.push(root);
   const draw = (reader: Identity) => {
-    // Note that the thread is drawn whole, its reply field open, in the plan's comments list.
+    // Note that the thread is drawn whole, its reply field open, in the description's comments list.
     const tab = createElement(DescriptionBody, {
       task: PLAN,
       reader: { readerId: reader.id },

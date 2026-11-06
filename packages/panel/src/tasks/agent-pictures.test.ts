@@ -119,7 +119,7 @@ async function drawn(
         { value: door },
         createElement(AgentMessage, {
           message,
-          plan: false,
+          description: false,
           lead: AGENT_LEAD,
           moving,
           delegation: { models: [] },

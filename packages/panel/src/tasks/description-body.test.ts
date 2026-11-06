@@ -32,9 +32,9 @@ import { DescriptionBody } from "./description-body.js";
 import type { EditAgents } from "./edit-ref.js";
 import type { TaskLooks } from "./use-task-looks.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-// Note that each case starts with the document handing Plans on, whatever an earlier case handed.
+// Note that each case starts with the document handing Descriptions on, whatever an earlier case handed.
 beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
@@ -110,7 +110,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** What the document is drawn with beyond the plan: who reads it, its looks, its agents, and the history's door. */
+/** What the document is drawn with beyond the description: who reads it, its looks, its agents, and the history's door. */
 interface Drawn {
   readonly readerId?: string;
   readonly looks?: TaskLooks;
@@ -120,11 +120,11 @@ interface Drawn {
   readonly account?: { readonly id: string; readonly email: string; readonly name: string };
   /** The task's own page, where each section and the title carry a ⋯. */
   readonly sectionLinks?: NonNullable<React.ComponentProps<typeof DescriptionBody>["sectionLinks"]>;
-  /** The account's experiments, Plans alone on where none are named. */
+  /** The account's experiments, Descriptions alone on where none are named. */
   readonly experiments?: ExperimentChoices;
 }
 
-/** The plan drawn in a workspace whose people the host holds as `MEMBERS` and `FORMER`, as `drawn` says. */
+/** The description drawn in a workspace whose people the host holds as `MEMBERS` and `FORMER`, as `drawn` says. */
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   fakeAppBridge({});
   fakeActPort({});
@@ -154,7 +154,7 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   return container;
 }
 
-/** `PLAN` as last edited as `edit` says, now, over the document and on its Goal section. */
+/** `TASK` as last edited as `edit` says, now, over the document and on its Goal section. */
 function editedAs(edit: Omit<DescriptionLastEdit, "at">, at = Date.now()): Task {
   return { ...TASK, lastEdit: { ...edit, at }, sectionEdits: [{ section: "Goal", ...edit, at }] };
 }
@@ -194,8 +194,8 @@ test("the saved body is drawn as Markdown", () => {
   assert.match(markup, /Invite a teammate by email\./u);
 });
 
-test("under its title the plan says who created the task and when, then when it was last edited, and a plan nobody edited says only who created it", async () => {
-  // Note that only the date is fixed, so the plan's minute reads `now` and nothing waits on a timer.
+test("under its title the description says who created the task and when, then when it was last edited, and a description nobody edited says only who created it", async () => {
+  // Note that only the date is fixed, so the description's minute reads `now` and nothing waits on a timer.
   const now = Date.UTC(2026, 9, 14, 12);
   vi.useFakeTimers({ now, toFake: ["Date"] });
   const day = 24 * 60 * 60 * 1000;
@@ -233,7 +233,7 @@ test("under its title the plan says who created the task and when, then when it 
   );
 });
 
-test("while Plans is off the task's title stands with who created it and none of the plan: no edit, no section, no changed line", async () => {
+test("while Descriptions is off the task's title stands with who created it and none of the description: no edit, no section, no changed line", async () => {
   const day = 24 * 60 * 60 * 1000;
   const now = Date.now();
   const edit = { actor: DESCRIPTION_ACTOR.DEVELOPER, duringCall: false, by: DEAN, at: now };
@@ -292,7 +292,7 @@ test("an edit the service names no member for, or read without an account id, is
   assert.equal(mark?.querySelector("img")?.getAttribute("src"), LEE_PICTURE);
 });
 
-test("the time opens the version history, on the plan as it stands or on the section's last save, and the writer opens nothing", async () => {
+test("the time opens the version history, on the description as it stands or on the section's last save, and the writer opens nothing", async () => {
   const shown: (number | undefined)[] = [];
   const at = Date.now() - 2 * 60 * 60 * 1000;
   const view = await draw(
@@ -336,7 +336,7 @@ test("a section's byline shows only the writer's face and a few letters of time,
   );
 });
 
-test("a teammate's card says who they are and what they last changed in the plan", async () => {
+test("a teammate's card says who they are and what they last changed in the description", async () => {
   const at = Date.now();
   const task: Task = {
     ...TASK,
@@ -441,7 +441,7 @@ test("the sections changed since the last look are counted beside a face for eac
   assert.equal(dismissed, 1);
 });
 
-test("a plan read and not edited names itself by one h1, its title, with its Copy link button at the end of its line", async () => {
+test("a description read and not edited names itself by one h1, its title, with its Copy link button at the end of its line", async () => {
   const view = await draw(TASK, {
     sectionLinks: {
       workspace: "acme",
@@ -454,7 +454,7 @@ test("a plan read and not edited names itself by one h1, its title, with its Cop
   const headings = view.querySelectorAll("h1");
   const more = view.querySelector('.ui-page-header-actions [aria-label="Copy link"]');
 
-  assert.equal(headings.length, 1, "the plan page names itself once");
+  assert.equal(headings.length, 1, "the description names itself once");
   assert.equal(headings[0]?.textContent, TASK.name);
   assert.ok(
     more?.closest(".ui-page-header-actions"),
@@ -463,7 +463,7 @@ test("a plan read and not edited names itself by one h1, its title, with its Cop
   assert.equal(more?.closest("header")?.contains(headings[0] ?? null), true);
 });
 
-test("an empty plan that cannot be edited draws no line saying to write it", async () => {
+test("an empty description that cannot be edited draws no line saying to write it", async () => {
   const view = await draw({ ...TASK, document: { body: "", assumptions: [] } });
 
   assert.ok(!view.textContent?.includes("Write the description"), "no line under the byline");

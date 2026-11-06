@@ -25,17 +25,17 @@ import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message.js";
 import { providerOf } from "./agent-model.js";
 
 /**
- * description-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
+ * description-history-model.ts -- the version history's words for each revision, and a version of the description drawn against another with its changes marked.
  *
  * A revision is drawn under its writer the way the rest of the window draws
  * them (`@repo/ui/actor-model`): the app's face for the notetaker, the reader by their
  * account's picture as You, a teammate as the workspace's members list them,
- * a coding agent by its harness and title, and Earlier for the plan as it
+ * a coding agent by its harness and title, and Earlier for the description as it
  * stood before its history began. Its line says
  * what it did: how many changes its saves made, or which version a restore
  * brought back. A version is drawn whole, a unit to each section of its
- * body (`descriptionSections`, as the open plan cuts it in `description-body.tsx`), each
- * unit beside the unit under the same heading in the plan it is compared
+ * body (`descriptionSections`, as the open description cuts it in `description-body.tsx`), each
+ * unit beside the unit under the same heading in the description it is compared
  * with: a unit only one of them holds is drawn added or struck whole, and a
  * unit both hold that differs is drawn with its words written in and struck
  * out where they changed, word by word (`description-diff.ts`). A section's
@@ -46,7 +46,7 @@ import { providerOf } from "./agent-model.js";
 /** A section as a version compares it: its heading and its words, wherever they stood. */
 type SectionWords = Pick<DescriptionSection, "heading" | "text">;
 
-/** How a unit of a version stands against the plan it is compared with. */
+/** How a unit of a version stands against the description it is compared with. */
 export const VERSION_CHANGE = {
   SAME: "same",
   ADDED: "added",
@@ -107,7 +107,7 @@ function personOf(by: DescriptionEditor | undefined, reader: HistoryReader): Act
  * Who wrote a revision: a member, the reader as You only where the revision
  * names them; the app; a coding agent by the title its row has now, wearing
  * the harness of the agent the line names among the task's `agents`, or no
- * harness where the agent is not among them; or the plan before history.
+ * harness where the agent is not among them; or the description before history.
  */
 export function revisionAuthorOf(
   line: Pick<DescriptionRevisionLine, "lastEdit" | "agentId">,
@@ -134,7 +134,7 @@ export function revisionAuthorOf(
   }
 }
 
-/** What a revision did, in a few words: the version a restore brought back, the plan before history, or how many changes its saves made. */
+/** What a revision did, in a few words: the version a restore brought back, the description before history, or how many changes its saves made. */
 export function revisionSummary(line: DescriptionRevisionLine): string {
   if (line.restoredFrom !== undefined) {
     return `Restored the version from ${dayAndTimeText(line.restoredFrom.at)}`;
@@ -231,7 +231,7 @@ function readerRuns(changes: readonly WordChange[]): readonly WordChange[] {
 }
 
 /**
- * One unit both plans hold: the same, or its words merged, struck words
+ * One unit both descriptions hold: the same, or its words merged, struck words
  * before the words that replace them, each stretch marked.
  */
 function pairedUnit(base: string, shown: SectionWords): VersionUnit {
@@ -251,7 +251,7 @@ function pairedUnit(base: string, shown: SectionWords): VersionUnit {
   return { key, words, change, marks };
 }
 
-/** A unit only one plan holds, drawn whole as added or struck. */
+/** A unit only one description holds, drawn whole as added or struck. */
 function loneUnit(
   section: SectionWords,
   change: typeof VERSION_CHANGE.ADDED | typeof VERSION_CHANGE.REMOVED,
@@ -308,7 +308,7 @@ function unitsAgainst(
 }
 
 /**
- * A version of the plan drawn against another, or drawn as it is against
+ * A version of the description drawn against another, or drawn as it is against
  * nothing, as the first version is: every unit of either, each marked by
  * how it stands.
  */
@@ -336,7 +336,7 @@ export interface ChangedSection {
 /**
  * The sections a revision changed, in reading order: each unit of its diff
  * that is not the same as before, so the list names what the page marks. A
- * revision with nothing before it, the plan's first, wrote every section it
+ * revision with nothing before it, the description's first, wrote every section it
  * holds. Note that a revision is one writer's saves joined, and
  * the store keeps only the text they left, so a section is the finest step
  * a revision can be read in.
@@ -349,7 +349,7 @@ export function changedSections(diff: VersionDiff, first: boolean): readonly Cha
   });
 }
 
-/** Whether a revision's row opens the sections it changed: one whose saves made more than one change, never a restore or the plan before history. */
+/** Whether a revision's row opens the sections it changed: one whose saves made more than one change, never a restore or the description before history. */
 export function opensSections(line: DescriptionRevisionLine): boolean {
   return (
     line.changes > 1 &&
@@ -377,7 +377,7 @@ export type RevisionSource = {
 /**
  * Where a revision's Open goes: an agent's tab where the line names the
  * agent, and nowhere for the developer's own, a restore, the app's own saves,
- * whose work no tab draws, or the plan before history.
+ * whose work no tab draws, or the description before history.
  */
 export function revisionSource(
   line: Pick<DescriptionRevisionLine, "lastEdit" | "agentId">,

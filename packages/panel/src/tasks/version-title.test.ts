@@ -14,8 +14,8 @@ import { HISTORY_READ } from "./use-description-history.js";
 import { VersionView } from "./version-view.js";
 
 /**
- * version-title.test.ts -- a version of a plan names its task in the page
- * title's role, as the plan's header does, and not as a `#` heading of its
+ * version-title.test.ts -- a version of a description names its task in the page
+ * title's role, as the description's header does, and not as a `#` heading of its
  * text, so the page keeps the one `h1` its bar gives it.
  */
 

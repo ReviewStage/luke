@@ -22,14 +22,14 @@ import { ToastHost } from "../toast.js";
 import { DescriptionBody } from "./description-body.js";
 
 /**
- * A date chip in the plan's editor, pressed, opens its picker over the real
+ * A date chip in the description's editor, pressed, opens its picker over the real
  * editor bundle: a day picked, an end date, a time, typed words, or Clear
  * change the chip in place once the picker closes, and the `@` list narrowed
  * to dates opens the same picker to write a new one. A date chip in the
- * plan's words at rest opens the same picker with no editor opened, and a
- * date changed there saves the plan with it written anew, or says it could
+ * description's words at rest opens the same picker with no editor opened, and a
+ * date changed there saves the description with it written anew, or says it could
  * not where the save is refused. A date in words
- * that take no change opens nothing. Synthetic plan; day-only dates
+ * that take no change opens nothing. Synthetic description; day-only dates
  * wherever the reader's zone would otherwise change what is written.
  */
 
@@ -48,7 +48,7 @@ const TASK: Task = {
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
-/** A registry of the test's own, as the window's root provides one, so words a plan left unsaved in one test are not the next one's. */
+/** A registry of the test's own, as the window's root provides one, so words a description left unsaved in one test are not the next one's. */
 function ownRegistry(): AtomRegistry.AtomRegistry {
   const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   registries.push(registry);
@@ -65,7 +65,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the saves a plan left as it went answer before its atoms go.
+  // Note that the saves a description left as it went answer before its atoms go.
   for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
@@ -98,7 +98,7 @@ function drawn(): HTMLElement {
   return container;
 }
 
-/** The plan's page drawn at rest beside the window's toasts, every save asked kept and refused, or saved where `saving`, and drawn again over a plan written anew. */
+/** The plan's page drawn at rest beside the window's toasts, every save asked kept and refused, or saved where `saving`, and drawn again over a description written anew. */
 function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
   const saves: DescriptionEditRequest[] = [];
   const container = document.createElement("div");
@@ -140,14 +140,14 @@ function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
   return { container, saves, draw };
 }
 
-/** The date chip in the plan's words at rest. */
+/** The date chip in the description's words at rest. */
 function chipAtRest(container: HTMLElement): HTMLElement {
   const chip = container.querySelector<HTMLElement>('.description-unit [data-kind="date"]');
-  assert.ok(chip, "the plan's words hold a date chip");
+  assert.ok(chip, "the description's words hold a date chip");
   return chip;
 }
 
-/** The plan's editor, opened on Rollout by Enter on its block. */
+/** The description's editor, opened on Rollout by Enter on its block. */
 async function opened(): Promise<{ container: HTMLElement; editor: Editor }> {
   const container = drawn();
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
@@ -157,7 +157,7 @@ async function opened(): Promise<{ container: HTMLElement; editor: Editor }> {
   const editor = container.querySelector<TiptapEditorHTMLElement>(
     ".description-document-text",
   )?.editor;
-  assert.ok(editor, "the plan's editor is open");
+  assert.ok(editor, "the description's editor is open");
   return { container, editor };
 }
 
@@ -264,7 +264,7 @@ function readerOffset(at: number): string {
   return offset === "" ? "+00:00" : offset;
 }
 
-test("a date chip pressed in the plan's editor opens its picker on the date, its words and its month", async () => {
+test("a date chip pressed in the description's editor opens its picker on the date, its words and its month", async () => {
   const { container } = await opened();
 
   const dialog = await pressChip(container);
@@ -631,7 +631,7 @@ test("the picker closed with nothing changed leaves the chip as it was", async (
   ]);
 });
 
-test("a date chip in the plan's words at rest opens its picker on the date where it stands, with no editor opened", async () => {
+test("a date chip in the description's words at rest opens its picker on the date where it stands, with no editor opened", async () => {
   const { container } = drawnAtRest();
 
   act(() => chipAtRest(container).click());
@@ -643,7 +643,7 @@ test("a date chip in the plan's words at rest opens its picker on the date where
   assert.equal(container.querySelector(".description-document-text"), null);
 });
 
-test("a day picked from the plan at rest saves the plan with the date named anew in its place", async () => {
+test("a day picked from the description at rest saves the description with the date named anew in its place", async () => {
   const { container, saves } = drawnAtRest();
 
   act(() => chipAtRest(container).click());
@@ -667,7 +667,7 @@ test("a day picked from the plan at rest saves the plan with the date named anew
   ]);
 });
 
-test("a day picked from the plan at rest whose save is refused leaves the date as it was and says the plan could not be saved", async () => {
+test("a day picked from the description at rest whose save is refused leaves the date as it was and says the description could not be saved", async () => {
   const { container, saves } = drawnAtRest();
   const before = chipAtRest(container).querySelector(".ui-inline-ref-label")?.textContent;
 
@@ -690,7 +690,7 @@ test("a day picked from the plan at rest whose save is refused leaves the date a
   assert.equal(newestToastSays(), "The description could not be saved.");
 });
 
-test("a tick, a date and a tick from the plan at rest, before it is drawn anew, are each written over the one before", async () => {
+test("a tick, a date and a tick from the description at rest, before it is drawn anew, are each written over the one before", async () => {
   const body =
     "## Rollout\n\n- [ ] One\n- [ ] Two\n\nShip by [@Oct 23, 2026](mention://date/2026-10-23).";
   const { container, saves } = drawnAtRest(
@@ -735,7 +735,7 @@ test("a tick, a date and a tick from the plan at rest, before it is drawn anew, 
   );
 });
 
-test("Clear from the plan at rest saves the plan with the date taken out", async () => {
+test("Clear from the description at rest saves the description with the date taken out", async () => {
   const { container, saves } = drawnAtRest();
 
   act(() => chipAtRest(container).click());
@@ -755,7 +755,7 @@ test("Clear from the plan at rest saves the plan with the date taken out", async
   );
 });
 
-test("the picker opened from the plan at rest and closed with nothing changed saves nothing", async () => {
+test("the picker opened from the description at rest and closed with nothing changed saves nothing", async () => {
   const { container, saves } = drawnAtRest();
 
   act(() => chipAtRest(container).click());
@@ -815,7 +815,7 @@ test("a page handed another task while a date's picker stands writes nothing int
   assert.deepEqual(saves, []);
 });
 
-test("a date chip in a plan that takes no change opens no picker", () => {
+test("a date chip in a description that takes no change opens no picker", () => {
   const { container } = drawnAtRest(TASK, false);
 
   const chip = chipAtRest(container);
