@@ -1,10 +1,10 @@
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "@repo/features/pull-request-chapters-view";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { pullRequestChaptersQuery, pullRequestChaptersRetryMutation } from "../live-reads.js";
 import type { PullRequestSource } from "./pull-request-source.js";
 
 /**
@@ -43,7 +43,7 @@ export interface ChaptersRead {
  * The agent's pull request's chapters, held while the Pull request tab is
  * shown once its own read of the pull request has found one, by the number
  * it found, so their tab says where they stand. The host follows them over
- * the service's live read (`useHostRead`), so any member's claim, finish,
+ * the service's live read (`pullRequestChaptersQuery`), so any member's claim, finish,
  * or failure draws on every open view within a moment, with no Refresh. A
  * Generate reads the whole tab again once it lands, so its files catch up
  * with the head the chapters were told for. A Generate's own answer is
@@ -58,12 +58,17 @@ export function useChaptersRead(
   /** Reads the tab again, the chapters' files among them, which a Generate does once it lands, since it tells them for the head GitHub holds then. */
   refresh: () => void,
 ): ChaptersRead {
-  const read = useHostRead(
-    LIVE_READ.PULL_REQUEST_CHAPTERS,
-    shown && held !== undefined ? { agentId, number: held.number } : undefined,
+  const number = shown ? held?.number : undefined;
+  const read = useQuery(
+    pullRequestChaptersQuery(number === undefined ? undefined : { agentId, number }),
   );
-  const readAnswer: PullRequestChaptersAnswerView | undefined =
-    read.status === HOST_READ_STATUS.FAILED ? UNANSWERED : read.rows;
+  const { mutate: retryChapters } = useMutation(pullRequestChaptersRetryMutation());
+  const retry = useCallback(() => {
+    if (number !== undefined) retryChapters({ agentId, number });
+  }, [retryChapters, agentId, number]);
+  const readAnswer: PullRequestChaptersAnswerView | undefined = read.isError
+    ? UNANSWERED
+    : read.data;
   const [generated, setGenerated] = useState<
     { readonly of: unknown; readonly answer: PullRequestChaptersAnswerView } | undefined
   >(undefined);
@@ -88,5 +93,5 @@ export function useChaptersRead(
   }, []);
   const answer =
     generated !== undefined && generated.of === readAnswer ? generated.answer : readAnswer;
-  return { answer, head: held?.head, retry: read.retry, generate, generating };
+  return { answer, head: held?.head, retry, generate, generating };
 }

@@ -1310,7 +1310,8 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   assert.equal(tab.control().agentView.agentId, AGENT_ID);
   // Note that the open task's pages stay held beneath the agent's page.
   assert.deepEqual(asked, [{ taskId: TASK.id }, { agentId: AGENT_ID }]);
-  assert.deepEqual(tab.control().agentView.pages, [page]);
+  // Note that the agent's pages stand once they reach their query.
+  await vi.waitFor(() => assert.deepEqual(tab.control().agentView.pages, [page]));
   assert.deepEqual(panelOf(tab), { open: true, tab: { page: page.id } });
 });
 
@@ -1942,6 +1943,8 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   );
   await settle();
   assert.deepEqual(asked, [{ taskId: TASK.id }]);
+  // Note that each read of the pages reaches their query one notify tick later, which lands before the tabs move.
+  await vi.waitFor(() => assert.equal(tab.control().pages?.length, 1));
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(PULLS));
   act(() => panel().onClose(PULLS));
@@ -1952,6 +1955,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
     reads.deliverPages({ [PAGE_OWNER.TASK]: { [TASK.id]: { rows: [] } }, [PAGE_OWNER.AGENT]: {} }),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(tab.control().pages?.length, 0));
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panelOf(tab), { open: true, tab: PULLS });
@@ -2550,14 +2554,20 @@ test("the repository chip's list for a workspace with GitHub connected is its re
       installationUrl: "https://github.com/apps/luke/installations/new",
     },
   };
-  const tab = mount({
-    shown: true,
-    tasks: {
-      ...TWO_WORKSPACES,
-      workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
-    },
-  });
+  // Note that the tab and the chip stand on one registry over the document the lists are laid on, so the document each writes into the test's client is the same one.
   holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => listed);
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  const tab = mount(
+    {
+      shown: true,
+      tasks: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
+      },
+    },
+    {},
+    registry,
+  );
   installScrollIntoView();
   const chip = document.body.appendChild(document.createElement("div"));
   const chipRoot = createRoot(chip);
@@ -2565,7 +2575,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   act(() =>
     chipRoot.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        registry,
         createElement(RepositoryChip, {
           value: null,
           chooser: tab.control().newTask.repositoriesIn(ACME.id),
@@ -2580,17 +2590,21 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   await settle();
 
   const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
-  assert.deepEqual(
-    [
-      // A row names the repository, then its owner after it.
-      [...menu.querySelectorAll('[role="option"]')].map((row) =>
-        [".ui-combobox-option-detail", ".ui-combobox-option-label"]
-          .map((part) => row.querySelector(part)?.textContent)
-          .join("/"),
-      ),
-      [...menu.querySelectorAll('[role="group"]')].map((group) => group.getAttribute("aria-label")),
-    ],
-    [["acme/relay"], []],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      [
+        // A row names the repository, then its owner after it.
+        [...menu.querySelectorAll('[role="option"]')].map((row) =>
+          [".ui-combobox-option-detail", ".ui-combobox-option-label"]
+            .map((part) => row.querySelector(part)?.textContent)
+            .join("/"),
+        ),
+        [...menu.querySelectorAll('[role="group"]')].map((group) =>
+          group.getAttribute("aria-label"),
+        ),
+      ],
+      [["acme/relay"], []],
+    ),
   );
 });
 
@@ -2706,9 +2720,10 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   );
 
   const moved = tab.control().onMoveTask("billing", ACME.id);
+  // Note that the move is sent a step after the press, as its mutation sends it, and the workspaces land and one is chosen while it is out.
+  await vi.waitFor(() => assert.equal(answers.length, 1));
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));
-  await vi.waitFor(() => assert.equal(answers.length, 1));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
 
@@ -2789,7 +2804,10 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   );
   assert.deepEqual(file.control().sidePanel.tab, { file: "src/members/invite.ts" });
   assert.deepEqual(terminal.control().sidePanel.tab, { terminal: FIXTURE_AGENT_ID });
-  assert.deepEqual(page.control().sidePanel.tab, { page: FIXTURE_IDS.PAGE });
+  // Note that the page is held on the task's pages, whose read reaches its query a moment after the document.
+  await vi.waitFor(() =>
+    assert.deepEqual(page.control().sidePanel.tab, { page: FIXTURE_IDS.PAGE }),
+  );
 });
 
 /** The task as the list names it. */

@@ -58,7 +58,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient, writeHandedAppState } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
@@ -157,6 +157,7 @@ async function mount(
 ) {
   const { list, ...chose } = chooser;
   if (list !== undefined) holdRepositoryLists(handHostReads({}).deliverRepositoryLists, list);
+  await writeHandedAppState();
   const starts: [string, string | null][] = [];
   const agents: (NewTaskAgent | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];
@@ -309,7 +310,7 @@ test("the card, named New task, holds the composer with its words focused, the r
   const head = card.dialog()?.querySelector(".new-task-head");
   const foot = card.dialog()?.querySelector(".ui-composer-foot");
 
-  assert.equal(document.activeElement, card.field());
+  assert.equal(document.activeElement === card.field(), true);
   assert.equal(card.placeholder(), "Describe the task");
   assert.equal(controls.includes("Plan with Vespin first"), false, "no Plan toggle stands");
   for (const each of ["Add files and more", "acme/web", "Start a task with no agent"]) {
@@ -318,16 +319,22 @@ test("the card, named New task, holds the composer with its words focused, the r
   const name = card.dialog()?.getAttribute("aria-labelledby") ?? assert.fail("the card is named");
   assert.equal(document.getElementById(name)?.textContent, "New task");
   assert.equal(head?.querySelector(".repository-chip")?.textContent, "acme/web");
-  assert.equal(foot?.querySelector(".repository-chip"), null, "the foot holds no repository chip");
   assert.equal(
-    document.querySelector('[aria-label^="Workspace"]'),
-    null,
-    "the card offers no workspace picker",
+    foot?.querySelector(".repository-chip") === null,
+    true,
+    "the foot holds no repository chip",
   );
   assert.equal(
-    document.querySelector(".agent-model-chip")?.textContent?.includes("Opus"),
+    document.querySelector('[aria-label^="Workspace"]') === null,
     true,
-    "the model chip names the account's default",
+    "the card offers no workspace picker",
+  );
+  await vi.waitFor(() =>
+    assert.equal(
+      document.querySelector(".agent-model-chip")?.textContent?.includes("Opus"),
+      true,
+      "the model chip names the account's default",
+    ),
   );
 });
 
@@ -679,7 +686,7 @@ test("Escape puts the card away with nothing started, and focus goes back to wha
   const card = await mount();
   await card.key("Escape");
   assert.equal(card.dialog(), null);
-  assert.equal(document.activeElement, card.opener);
+  assert.equal(document.activeElement === card.opener, true);
   assert.deepEqual(card.starts, []);
 });
 
@@ -748,7 +755,7 @@ test("Escape in the repository menu closes the menu and leaves the dialog standi
   );
   assert.ok(search, "the chip's menu opens");
   await card.press("Escape", search);
-  assert.equal(document.querySelector('input[aria-label="Search repositories"]'), null);
+  assert.equal(document.querySelector('input[aria-label="Search repositories"]') === null, true);
   assert.ok(card.dialog(), "the dialog still stands");
 });
 
@@ -929,7 +936,7 @@ test("a member of a workspace whose GitHub reaches no repository is told which o
   const buttons = await openChip();
   await settle();
 
-  assert.equal(githubWay(), "Ask Dean or Charles to choose repositories");
+  await vi.waitFor(() => assert.equal(githubWay(), "Ask Dean or Charles to choose repositories"));
   assert.equal(
     buttons.some((button) => button.textContent === "Choose repositories"),
     false,

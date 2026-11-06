@@ -287,7 +287,7 @@ test("an edit the service names no member for, or read without an account id, is
     "Dean Stratakos now",
   );
   const former = await draw(editedAs({ ...unnamed, by: LEE }), { readerId: DEAN.userId });
-  assert.equal(editedLines(former)[1], "Lee Park (former member) now");
+  await vi.waitFor(() => assert.equal(editedLines(former)[1], "Lee Park (former member) now"));
   const mark = former.querySelector(".plan-unit-byline .actor-mark");
   assert.equal(mark?.querySelector("img")?.getAttribute("src"), LEE_PICTURE);
 });
@@ -350,7 +350,9 @@ test("a teammate's card says who they are and what they last changed in the plan
   const card = cardOf(await draw(task, { readerId: DEAN.userId }));
 
   assert.ok(card.querySelector('[data-actor-card="person"]'), "a person's card hangs");
-  assert.match(card.textContent ?? "", /Charles Pancharles@example\.com · Member/u);
+  await vi.waitFor(() =>
+    assert.match(card.textContent ?? "", /Charles Pancharles@example\.com · Member/u),
+  );
   assert.match(card.textContent ?? "", /Edited Goal and Risks · now$/u);
 });
 

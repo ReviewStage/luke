@@ -2,9 +2,9 @@ import { ACT_KIND } from "@repo/host/acts";
 import type { MacCommandAsk } from "@repo/host/app-state";
 import { MAC_COMMAND_DECISION, type MacCommandDecision } from "@repo/host/contract";
 import { CommandAsk } from "@repo/ui";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { pressMutation } from "./act-mutations.js";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { appStateQuery, selectMacCommands } from "./use-app-state.js";
 import { useHeldThroughExit } from "./use-held-through-exit.js";
 
 /**
@@ -25,7 +25,7 @@ function firstAsk(asks: readonly MacCommandAsk[] | undefined): MacCommandAsk | u
 }
 
 export function MacCommandAskDialog(): React.JSX.Element | null {
-  const waiting = firstAsk(useAppSlice(APP_SLICE.MAC_COMMANDS)?.asks);
+  const waiting = firstAsk(useQuery({ ...appStateQuery, select: selectMacCommands }).data?.asks);
   const { mutate: answerAsk } = useMutation(pressMutation(ACT_KIND.MAC_COMMAND_ANSWER));
   // Note that the card is drawn for the ask it was opened over until its fade has run, so its words do not change under its own exit.
   const { held: ask, onExited } = useHeldThroughExit(waiting);

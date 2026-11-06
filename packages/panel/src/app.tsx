@@ -11,6 +11,7 @@ import {
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
+  type AppStateSnapshot,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import {
@@ -32,9 +33,7 @@ import { isComposingKey } from "@repo/ui/composing-key";
 import { useLinkOpener } from "@repo/ui/held-link";
 import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actMutation } from "./act-mutations.js";
 import { appBridge } from "./app-bridge.js";
@@ -87,15 +86,18 @@ import { ToastHost } from "./toast.js";
 import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
 import { useUpdatedToast } from "./update-toast.js";
 import {
-  APP_SETTINGS_VIEW,
-  APP_SLICE,
   appStateQuery,
-  SETTINGS_HELD,
+  selectAccount,
   selectAdminAccess,
   selectAdminAccessPending,
+  selectAppSettingsView,
   selectExperiment,
   selectExperimentChoices,
-  useAppSlice,
+  selectInbox,
+  selectRun,
+  selectSessionReplay,
+  selectSettingsHeld,
+  selectTasks,
 } from "./use-app-state.js";
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
@@ -126,22 +128,16 @@ const NO_CAPABILITIES: readonly HostCapability[] = [];
 const IDLE_RUN = { fixtureMode: false, profile: RUN_PROFILE.IDLE } as const;
 
 /** Whether this is a fixture run, which the window waits on its synthetic tasks for. */
-const FIXTURE_MODE: Atom.Atom<boolean> = Atom.map(
-  APP_SLICE.RUN,
-  (run) => run?.fixtureMode === true,
-);
+const selectFixtureMode = (state: AppStateSnapshot): boolean => state.run.fixtureMode === true;
 
 /** The agents main says ended unseen. */
-const UNSEEN_AGENTS: Atom.Atom<readonly string[]> = Atom.map(
-  APP_SLICE.AGENTS,
-  (agents) => agents?.unseen ?? NO_UNSEEN_AGENTS,
-);
+const selectUnseenAgents = (state: AppStateSnapshot): readonly string[] => state.agents.unseen;
 
 /** Whether this window stands in full screen. */
-const FULL_SCREEN = Atom.map(APP_SLICE.WINDOW, (facts) => facts?.fullScreen);
+const selectFullScreen = (state: AppStateSnapshot): boolean => state.window.fullScreen;
 
 /** The stored zoom, which the zoom keys step from. */
-const ZOOM = Atom.map(APP_SETTINGS_VIEW, (settings) => settings?.zoom);
+const selectZoom = (state: AppStateSnapshot) => selectAppSettingsView(state)?.zoom;
 
 /** Tells the shell the ask standing while a page holds unsaved work, or nothing once none does. */
 const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
@@ -215,9 +211,9 @@ function ExpiredServerToasts(): null {
  * writes, never see the tasks arrive after the rest.
  */
 export function App(): React.JSX.Element {
-  const fixtureMode = useAppSlice(FIXTURE_MODE);
+  const fixtureMode = useQuery({ ...appStateQuery, select: selectFixtureMode }).data === true;
   const landed = useTasksFixtureLanded(fixtureMode);
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
   // Note that the account's key is read above the window, because every message box's Dictate reads it.
@@ -229,7 +225,6 @@ export function App(): React.JSX.Element {
 function AppWindow(): React.JSX.Element {
   const { mutateAsync: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
   const { mutateAsync: sendSignOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
-  const { mutateAsync: sendDeleteAccount } = useMutation(actMutation(ACT_KIND.ACCOUNT_DELETE));
   const { mutateAsync: requestMicrophoneAccess } = useMutation(
     actMutation(ACT_KIND.MICROPHONE_REQUEST),
   );
@@ -237,12 +232,13 @@ function AppWindow(): React.JSX.Element {
   // for a slice it draws from and for no other: a setting that moves draws
   // Settings and ⌘K, which read their own (`app-settings.ts`), and leaves the
   // window, and the tasks it holds, as they were.
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
-  const run = useAppSlice(APP_SLICE.RUN);
-  const planning = useAppSlice(APP_SLICE.TASKS);
-  const inbox = useAppSlice(APP_SLICE.INBOX);
-  const unseenAgents = useAppSlice(UNSEEN_AGENTS);
-  const settingsHeld = useAppSlice(SETTINGS_HELD);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
+  const run = useQuery({ ...appStateQuery, select: selectRun }).data;
+  const planning = useQuery({ ...appStateQuery, select: selectTasks }).data;
+  const inbox = useQuery({ ...appStateQuery, select: selectInbox }).data;
+  const unseenAgents =
+    useQuery({ ...appStateQuery, select: selectUnseenAgents }).data ?? NO_UNSEEN_AGENTS;
+  const settingsHeld = useQuery({ ...appStateQuery, select: selectSettingsHeld }).data === true;
   // A picture is read as the account signed in, so the window lets go of every one it read once that account changes, and of every write it would undo, which is its presser's own.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
@@ -370,28 +366,15 @@ function AppWindow(): React.JSX.Element {
   useAppCommand(APP_COMMAND.REDO, undo.redoes ? () => void redoLast() : undefined);
 
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
-  useWindowZoom(useAppSlice(ZOOM), (zoom) =>
+  useWindowZoom(useQuery({ ...appStateQuery, select: selectZoom }).data, (zoom) =>
     updateSetting({ field: APP_SETTING_SCHEMA.zoom.field, value: zoom }),
   );
   // In full screen the sidebar's toggle stands where the hidden traffic lights were.
-  useWindowFullScreen(useAppSlice(FULL_SCREEN));
+  useWindowFullScreen(useQuery({ ...appStateQuery, select: selectFullScreen }).data);
 
   const signOut = useCallback(async () => {
     await sendSignOut();
   }, [sendSignOut]);
-  // The delete happens at the service before anything local moves,
-  // so a failure resolves to why and the account is still standing.
-  const deleteAccount = useCallback(async (): Promise<ActionResult> => {
-    try {
-      await sendDeleteAccount();
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-    } catch {
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: "The account could not be deleted. Try again.",
-      };
-    }
-  }, [sendDeleteAccount]);
 
   // The room the stage's width gives, on the desktop the window's: whether
   // the panel stands as one pane (`shell-room.ts`), and whether the sidebar
@@ -434,7 +417,11 @@ function AppWindow(): React.JSX.Element {
     });
   }, [accountKey, passLeave, setTab, enterSettings, onGoHome]);
   // Session replay starts once the renderer is idle, filed under the workspace the sidebar lists.
-  useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY), tasks.workspace?.id);
+  useSessionReplay(
+    run,
+    useQuery({ ...appStateQuery, select: selectSessionReplay }).data,
+    tasks.workspace?.id,
+  );
   // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
   const settingsWorkspace = useSettingsWorkspace({
     listedId: tasks.workspace?.id,
@@ -633,11 +620,10 @@ function AppWindow(): React.JSX.Element {
       view: shownView,
       onViewChange: chooseSettingsView,
       onSignOut: signOut,
-      onDeleteAccount: deleteAccount,
       onRequestMicrophone: requestMicrophone,
       workspace,
     }),
-    [shownView, chooseSettingsView, signOut, deleteAccount, requestMicrophone, workspace],
+    [shownView, chooseSettingsView, signOut, requestMicrophone, workspace],
   );
 
   // A remedy under a refused start or message mends the task's repository through the Tasks tab's doors.

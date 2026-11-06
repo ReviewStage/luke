@@ -8,6 +8,7 @@
  */
 
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import type {
   MicrophoneControl,
   NotificationsControl,
@@ -15,14 +16,19 @@ import type {
 } from "@repo/settings/settings-controls";
 import type { SettingsView } from "@repo/settings/settings-views";
 import { fixtureUpdate } from "@repo/settings/update-row";
-import type { ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { actMutation, pressMutation } from "./act-mutations.js";
 import type { SettingsPanelProps } from "./settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "./settings/workspace-page.js";
-import { APP_SETTINGS_VIEW, APP_SLICE, useAppSlice } from "./use-app-state.js";
+import {
+  appStateQuery,
+  selectAccount,
+  selectAppSettingsView,
+  selectAudio,
+  selectNotifications,
+  selectRun,
+} from "./use-app-state.js";
 
 /** What the window hands Settings: the page it shows, and the doors it answers through. */
 export interface SettingsDoors {
@@ -30,21 +36,16 @@ export interface SettingsDoors {
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
   onSignOut: () => Promise<void>;
-  onDeleteAccount: () => Promise<ActionResult>;
   onRequestMicrophone: () => void | Promise<void>;
   workspace: WorkspaceSettingsControl;
 }
 
-/** The update the window shows: the document's, or a fixture run's staged one, made once per change to either slice. */
-const SHOWN_UPDATE = Atom.make((get) => {
-  const run = get(APP_SLICE.RUN);
-  const update = get(APP_SLICE.UPDATE);
-  return run === undefined || update === undefined ? undefined : fixtureUpdate(run, update);
-});
+/** The update the window shows: the document's, or a fixture run's staged one. */
+const selectShownUpdate = (state: AppStateSnapshot) => fixtureUpdate(state.run, state.update);
 
 /** The update the window shows, redrawn only as the update or the run moves. */
 export function useShownUpdate(): UpdateControl["update"] | undefined {
-  return useAppSlice(SHOWN_UPDATE);
+  return useQuery({ ...appStateQuery, select: selectShownUpdate }).data;
 }
 
 /**
@@ -66,11 +67,12 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
   const { mutate: openNotificationsSettings } = useMutation(
     pressMutation(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
   );
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
-  const run = useAppSlice(APP_SLICE.RUN);
-  const settings = useAppSlice(APP_SETTINGS_VIEW);
-  const audio = useAppSlice(APP_SLICE.AUDIO);
-  const notificationsStatus = useAppSlice(APP_SLICE.NOTIFICATIONS)?.status;
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
+  const run = useQuery({ ...appStateQuery, select: selectRun }).data;
+  const settings = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data;
+  const audio = useQuery({ ...appStateQuery, select: selectAudio }).data;
+  const notificationsStatus = useQuery({ ...appStateQuery, select: selectNotifications }).data
+    ?.status;
   const update = useShownUpdate();
   const packaged = run?.packaged;
   const commit = run?.commit;
@@ -110,7 +112,6 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
     return {
       account,
       onSignOut: doors.onSignOut,
-      onDeleteAccount: doors.onDeleteAccount,
       view: doors.view,
       onViewChange: doors.onViewChange,
       microphone,

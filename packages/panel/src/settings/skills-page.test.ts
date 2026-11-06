@@ -320,6 +320,10 @@ async function mountPage(shown = workspace()): Promise<void> {
     ),
   );
   await settle();
+  // Note that the page stands read once the skills the host holds reach their query.
+  await vi.waitFor(() =>
+    assert.equal(document.body.textContent?.includes("Reading your skills"), false),
+  );
 }
 
 async function mountDialog(
@@ -496,7 +500,9 @@ test("Delete asks first, red for a personal skill whose files go, then takes it 
   act(() => button("Delete skill", question).click());
   await settle();
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_REMOVE), [{ skillId: PR_STYLE.id }]);
-  assert.ok(!(document.body.textContent ?? "").includes("pr-style described"));
+  await vi.waitFor(() =>
+    assert.ok(!(document.body.textContent ?? "").includes("pr-style described")),
+  );
 });
 
 test("Deleting a workspace skill says everyone in the workspace loses it, in the accent", async () => {

@@ -27,7 +27,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { FAKE_ANSWER, type FakeActAnswer, fakeActs, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers, handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, listedAgent, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
@@ -226,6 +226,7 @@ async function drawnFor(
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   const drawn = [...container.querySelectorAll(".is-user, .is-received")];
   assert.equal(drawn.length, messages.length);
   return drawn;
@@ -342,6 +343,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   const card = document.querySelector(".ui-tooltip-card")?.textContent ?? "";
   act(() => {
     sender.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));

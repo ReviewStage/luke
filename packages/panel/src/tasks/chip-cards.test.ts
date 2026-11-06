@@ -427,6 +427,10 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the place is drawn as its chip");
   restOn(chip);
   await settle();
+  // Note that a card reading what it names draws its skeleton until the read reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector('.ui-tooltip-card [class*="skeleton"]') === null, true),
+  );
   const card = [...document.querySelectorAll(".ui-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
@@ -708,6 +712,10 @@ test("an Inbox item's chip whose feed could not be read keeps the card main's br
 
 test("a member's chip hangs their card", async () => {
   const container = await drawn(`Ask [Sam](${HOME}/person/${SAM}).`);
+  // Note that the chip names the member once the workspace's members reach their query.
+  await vi.waitFor(() =>
+    assert.equal(chipsOf(container)[0]?.textContent?.includes("Sam Okafor"), true),
+  );
 
   const member = await cardOf(chipsOf(container)[0]);
 
@@ -720,6 +728,10 @@ test("an automation's chip is called by its name now, its workspace's automation
   vi.useFakeTimers({ now: CARDS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(`Run by [the sweep](${HOME}/automation/${SWEEP.id}).`);
   const reads = () => automationHolds.length;
+  // Note that the chip says the automation's name once the workspace's automations reach their query.
+  await vi.waitFor(() =>
+    assert.equal(chipsOf(container)[0]?.textContent?.includes("Nightly sweep"), true),
+  );
   const [chip] = chipsOf(container);
   const drawnReads = reads();
   const called = chip?.textContent;

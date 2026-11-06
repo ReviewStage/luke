@@ -9,7 +9,7 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { App } from "./app.js";
 import { runAppCommand } from "./app-commands.js";
 // Note that Settings is loaded as the window loads it, on first use
@@ -19,7 +19,7 @@ import "./desktop/desktop-settings.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, signedInAs } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, writeHandedAppState } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
 
 /**
@@ -94,6 +94,13 @@ async function deliver(snapshot: AppStateSnapshot, version: number): Promise<voi
   await settle();
 }
 
+/** Whether setup's last step offers Finish. */
+function finishStands(): boolean {
+  return [...document.querySelectorAll("button")].some(
+    (each) => each.textContent?.trim() === "Finish",
+  );
+}
+
 /** The button drawn with `name` as its words. */
 function button(name: string): HTMLButtonElement {
   const found = [...document.querySelectorAll("button")].find(
@@ -109,6 +116,8 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
     "app.setupPlace",
     JSON.stringify({ "account-grace": { audience: "me", at: 3 } }),
   );
+  // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
+  await writeHandedAppState();
   root = createRoot(document.body.appendChild(document.createElement("div")));
   act(() =>
     root?.render(windowRouter().provide(onRegistry(AtomRegistry.make(), createElement(App)))),
@@ -119,9 +128,13 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
   assert.ok(document.querySelector(".desktop-settings"), "Settings stands");
 
   await deliver({ ...ADA, account: { status: ACCOUNT_STATUS.SIGNED_OUT } }, 2);
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector(".desktop-onboarding") !== null, true),
+  );
   await deliver(GRACE, 3);
+  await vi.waitFor(() => assert.equal(finishStands(), true));
   act(() => button("Finish").click());
 
-  assert.equal(document.querySelector(".desktop-settings"), null, "Settings is gone");
+  assert.equal(document.querySelector(".desktop-settings") === null, true, "Settings is gone");
   assert.ok(document.querySelector(".home-composer"), "Home stands");
 });

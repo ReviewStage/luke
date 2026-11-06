@@ -356,16 +356,6 @@ export const APP_SLICE = {
   WINDOW: sliceAtom("window"),
 } as const;
 
-/**
- * Whether the first read has answered with settings: nothing is drawn over
- * a document without them, and the window reports itself painted on the
- * first that holds them.
- */
-export const SETTINGS_HELD: Atom.Atom<boolean> = Atom.map(
-  APP_SLICE.SETTINGS,
-  (settings) => settings !== undefined,
-);
-
 /** The settings as the panel draws them, made once per change to the settings slice for every reader. */
 export const APP_SETTINGS_VIEW: Atom.Atom<AppSettingsView | undefined> = Atom.map(
   APP_SLICE.SETTINGS,
@@ -516,7 +506,11 @@ export const selectPortForwarding = (state: AppStateSnapshot) => state.portForwa
 /** The account's workspaces, which tell their readers only as the list moves, not as the tasks beside it do. */
 export const selectWorkspaces = (state: AppStateSnapshot) => state.tasks.workspaces;
 
-/** Whether the document holds settings: nothing is drawn over one without them (`SETTINGS_HELD`). */
+/**
+ * Whether the first read has answered with settings: nothing is drawn over
+ * a document without them, and the window reports itself painted on the
+ * first that holds them.
+ */
 export const selectSettingsHeld = (state: AppStateSnapshot): boolean =>
   state.settings !== undefined;
 

@@ -43,7 +43,7 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
  */
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
 /** The sidebar's groups and their rows, in the order the approved layout lists them, where no workspace is listed to head the first and no experiment is on. */
 const PAGE_GROUPS = [
@@ -117,7 +117,6 @@ function settingsProps(
   return {
     account: ACCOUNT,
     onSignOut: () => Promise.resolve(),
-    onDeleteAccount: accepted,
     view,
     onViewChange,
     microphone: {

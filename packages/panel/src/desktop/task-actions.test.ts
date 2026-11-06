@@ -33,7 +33,8 @@ import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers, readExperiments, registryWith } from "../testing/app-state.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { onRegistry, startQueriesAfresh, withQueryClient } from "../testing/copy-feedback.js";
+import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { openTaskMenu } from "../testing/task-menu.js";
 import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
@@ -475,15 +476,12 @@ test("a sidebar task no one is on wears no face in a workspace of the reader alo
     const { tasks, asked } = openTab();
     const task = { ...OTHER, workspaceId: workspace.id };
     const container = mountReading(
-      createElement(MemberDirectory, {
-        workspace,
-        readerId: DEAN.userId,
-        children: sidebarTask(tasks, task, asked),
-      }),
+      withPeopleRead({ workspace, readerId: DEAN.userId }, sidebarTask(tasks, task, asked)),
     );
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
+    await peopleRead();
     const marks = container.querySelectorAll(".sidebar-task-time > .actor-mark");
     const line = container.querySelector(".ui-list-row-title");
     const said = [...(line?.childNodes ?? [])]
@@ -780,15 +778,15 @@ test("a task's card says you of the reader's own task outside a member directory
     const card = mountReading(
       members === undefined
         ? taskCardOf(tasks, mine, mine.updatedAt)
-        : createElement(MemberDirectory, {
-            workspace,
-            readerId: DEAN.userId,
-            children: taskCardOf(tasks, mine, mine.updatedAt),
-          }),
+        : withPeopleRead(
+            { workspace, readerId: DEAN.userId },
+            taskCardOf(tasks, mine, mine.updatedAt),
+          ),
     );
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
+    if (members !== undefined) await peopleRead();
     const said = [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map((line) =>
       heard(line).replace(/ · .*$/u, ""),
     );
@@ -804,6 +802,8 @@ test("a task's card says you of the reader's own task outside a member directory
 
 /** The host holding the workspace's people as `members`, each a member of the workspace, or their read refused where there are none. */
 function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
+  // Note that each world reads its own members, never those the last one's surface left cached.
+  startQueriesAfresh();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
   });

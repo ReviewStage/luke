@@ -195,7 +195,8 @@ test("the sidebar's tasks that could not be read again while the app is offline 
   handState({}, { network: { online: false, reachable: true } });
   const page = await mount(sidebarOver(tasksControl({ listFailed: true, tasks: [TASK] })));
   assert.ok(page.textContent?.includes(TASK.name), "the task held still stands");
-  assert.equal(page.querySelector('[role="alert"]'), null);
+  // Note that the window reads as connected until the document saying it is offline reaches its query.
+  await vi.waitFor(() => assert.equal(page.querySelector('[role="alert"]') === null, true));
 });
 
 test("the Inbox's list says its feed could not be read as the sidebar does, and Retry lists what the plan holds", async () => {
@@ -342,7 +343,7 @@ test("an Inbox whose task list could not be read says so, never that nothing nee
   const failure = readFailure(page);
   assertSaidAlike(failure, "The inbox could not be read.");
   assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u);
-  assert.equal(page.querySelector('[role="status"]'), null, "no loading placeholder");
+  assert.equal(page.querySelector('[role="status"]') === null, true, "no loading placeholder");
   failure.retry();
   assert.equal(retried, 1);
 });
@@ -420,8 +421,8 @@ test("a version history whose version could not be read says so on its page and 
   const version = page.querySelector(".version-page");
   assert.match(sections?.textContent ?? "", /The sections it changed could not be read\./u);
   assert.match(version?.textContent ?? "", /The version could not be read\./u);
-  assert.equal(page.querySelector('[role="status"]'), null, "no placeholder stands");
-  assert.equal(page.querySelector(".ui-skeleton"), null, "no block stands");
+  assert.equal(page.querySelector('[role="status"]') === null, true, "no placeholder stands");
+  assert.equal(page.querySelector(".ui-skeleton") === null, true, "no block stands");
   act(() => retryIn(sections)?.click());
   act(() => retryIn(version)?.click());
   assert.equal(retried, 2, "each Retry reads the version again");

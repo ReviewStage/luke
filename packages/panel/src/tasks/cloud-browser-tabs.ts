@@ -28,10 +28,10 @@ import {
   type BrowserTabsPlace,
   browserTabsPlaceId,
 } from "@repo/features/agent-browser-tab-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
+import { useQuery } from "@tanstack/react-query";
 import { Duration } from "effect";
 import { useEffect, useSyncExternalStore } from "react";
-import { useHostRead } from "../use-host-read.js";
+import { browserTabsQuery } from "../live-reads.js";
 
 /** How long after its agent last acted on a tab the tab says the agent is using it. */
 export const CLOUD_BROWSER_AGENT_RECENT = Duration.seconds(15);
@@ -126,7 +126,7 @@ function withOpened(
  * The holder's cloud Browser tabs, the oldest first: the agent's its page
  * shows, or the open task's agents'; none while unread, and none at all
  * where `listing` is off: no holder, or a panel that draws none. Held by
- * this panel while it lists them (`useHostRead`). A tab opened here stands
+ * this panel while it lists them (`browserTabsQuery`). A tab opened here stands
  * from its open, and is let go of once the held list lists it, so one its
  * agent closes afterwards goes.
  */
@@ -134,7 +134,7 @@ export function useCloudBrowserTabs(
   place: BrowserTabsPlace | undefined,
   listing: boolean,
 ): readonly AgentBrowserTab[] | undefined {
-  const listed = useHostRead(LIVE_READ.BROWSER_TABS, listing ? place : undefined).rows;
+  const listed = useQuery(browserTabsQuery(listing ? place : undefined)).data;
   const key = place === undefined ? undefined : browserTabsPlaceId(place);
   const openedHere = () => (key === undefined ? NO_TABS : (opened.get(key) ?? NO_TABS));
   const mine = useSyncExternalStore(hear, openedHere, openedHere);

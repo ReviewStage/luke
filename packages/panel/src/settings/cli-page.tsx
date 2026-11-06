@@ -1,6 +1,5 @@
 import { ACCOUNT_STATUS, signedInAccountId } from "@repo/credentials/snapshot";
 import { CLI_COMMAND, CLI_LINK_FOLDER } from "@repo/features/cli-release";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { MCP_ACCESS_TOKEN_MINUTES, type McpClient } from "@repo/features/mcp-client-wire";
 import { FIRST_PARTY_OAUTH_CLIENT_ID } from "@repo/features/oauth-client-ids";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -38,8 +37,8 @@ import { useState } from "react";
 import { actMutation } from "../act-mutations.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
-import { APP_SLICE, appStateQuery, selectCapability, useAppSlice } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { mcpClientsQuery, mcpClientsRetryMutation } from "../live-reads.js";
+import { appStateQuery, selectAccount, selectCapability } from "../use-app-state.js";
 
 /**
  * cli-page.tsx -- Settings › CLI, the page named for our command: the `vespin` command's install, to copy and, in the desktop app, run here as VS Code installs `code`, and its sign-in, with Sign out everywhere once it holds one.
@@ -293,18 +292,23 @@ export function CliPage(): React.JSX.Element {
   const installs =
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.CLI_INSTALL) }).data ===
     true;
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const accountId = signedInAccountId(account);
-  const { rows, status, retry } = useHostRead(LIVE_READ.MCP_CLIENTS, accountId);
+  const read = useQuery(mcpClientsQuery(accountId));
+  const retry = useMutation(mcpClientsRetryMutation());
+  const rows = read.data;
   // The grant signed out while the page shows, by when it was allowed, which stands signed out until the read drops it or a new sign-in replaces it.
   const [signedOutAt, setSignedOutAt] = useState<number | null | undefined>(undefined);
   if (rows === undefined) {
-    return status === HOST_READ_STATUS.FAILED ? (
+    return read.isError ? (
       <>
         <InstallSection installs={installs} />
         <SettingsSection title={SECTION_TITLE.SIGN_IN} anchor={SETTINGS_SEARCH_ROW.CLI_SIGN_IN}>
           <SettingsLine>
-            <ErrorState failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)} onRetry={retry}>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)}
+              onRetry={() => retry.mutate()}
+            >
               {PAGE_LINE.READ_FAILED}
             </ErrorState>
           </SettingsLine>
