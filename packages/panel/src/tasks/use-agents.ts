@@ -37,7 +37,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useOfferedModels } from "../account-choices.js";
 import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
 import { actMutation } from "../act-mutations.js";
@@ -50,6 +50,7 @@ import {
   useNewAgentDraft,
 } from "../composer-drafts.js";
 import type { ShownFailure } from "../failure-report.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
@@ -226,6 +227,17 @@ interface ArchivePress {
 export interface HeldPeople {
   readonly url: string;
   readonly people: AgentChangesPeople;
+}
+
+/** The agents whose own pull request's changes this window has read, as the cache holds them. */
+function agentsWithChangesRead(queryClient: QueryClient): readonly string[] {
+  return queryClient
+    .getQueryCache()
+    .findAll({ queryKey: [QUERY_ROOT.AGENT_CHANGES] })
+    .flatMap((query) => {
+      const [, agentId, number] = query.queryKey;
+      return typeof agentId === "string" && number === null ? [agentId] : [];
+    });
 }
 
 /** An agent's changes as read, which a failure never is. */
@@ -1508,9 +1520,15 @@ export function useAgents(input: {
   // pull request it was read for, so its Changes card says them wherever it
   // hangs once its tab has read them, and never for another pull request.
   // The observers are disabled because they only read what `useChangesReads` fetched.
+  // Note that every agent whose changes this window read is named, a pinned tab's of another task among them,
+  // found in the cache again each time the cache holds the changes of one more agent, or one fewer.
+  const changesHeld = useSyncExternalStore(
+    useCallback((heard: () => void) => queryClient.getQueryCache().subscribe(heard), [queryClient]),
+    () => agentsWithChangesRead(queryClient).length,
+  );
   const peopleAgentIds = useMemo(
-    () => [...(agents ?? []), ...(archivedAgents ?? [])].map((agent) => agent.id),
-    [agents, archivedAgents],
+    () => agentsWithChangesRead(queryClient),
+    [queryClient, changesHeld],
   );
   const combinePeople = useCallback(
     (results: readonly { readonly data?: ChangesRead | undefined }[]) =>
