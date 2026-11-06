@@ -24,6 +24,7 @@ import {
   STATUS_TONE,
   TEXT_BUTTON_LINES,
   TEXT_TONE,
+  TEXT_VARIANT,
   Text,
   TextButton,
   Tooltip,
@@ -289,12 +290,15 @@ function EditTime({
  * What an editable description with no text says at rest, the editor's own
  * placeholder in a quieter ink, so the room does not read as blank; its
  * press opens the editor, and the pointer or the keyboard reaching it reads
- * the editor's bundle ahead, as a section's block does.
+ * the editor's bundle ahead, as a section's block does. Note that it takes
+ * the document's reading type rather than the body's, because the editor's
+ * placeholder and the words written in its place stand in that type, so the
+ * line neither grows nor drops as the press opens the editor.
  */
 function EmptyDescriptionLine({ onOpen }: { onOpen: () => void }): React.JSX.Element {
   const prefetchEditorBundle = usePrefetchEditorBundle();
   return (
-    <Text tone={TEXT_TONE.MUTED}>
+    <Text variant={TEXT_VARIANT.INHERIT} tone={TEXT_TONE.MUTED}>
       <TextButton
         onPointerEnter={prefetchEditorBundle}
         onFocus={prefetchEditorBundle}
