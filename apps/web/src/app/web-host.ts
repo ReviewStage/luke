@@ -79,7 +79,7 @@ import { effectServiceLayer } from "@repo/host/service-layer";
 import { highlightSnippet } from "@repo/host/task-code";
 import type { AppPlatform } from "@repo/panel/app-platform";
 import { SETTING_SIDE_EFFECT } from "@repo/settings";
-import { Cause, ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
+import { Cause, ConfigProvider, Context, Effect, Layer, Path, Queue, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { version as appVersion } from "../../package.json";
 import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
@@ -205,6 +205,33 @@ function filesChangedElsewhere(storage: Storage): Stream.Stream<void> {
     (event) => event.storageArea === storage && (event.key === FILES_KEY || event.key === null),
   );
   return Stream.as(changed, undefined);
+}
+
+/**
+ * Whether the tab's machine has a network: the browser's answer as the host
+ * starts, then again each time it says `online` or `offline`. Note that the
+ * listeners are added before the first answer is read, so a change between
+ * the two is still heard; they are taken back as the stream ends.
+ */
+function tabOnline(): Stream.Stream<boolean> {
+  return Stream.callback<boolean>((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const heard = () => {
+          Queue.offerUnsafe(queue, navigator.onLine);
+        };
+        window.addEventListener("online", heard);
+        window.addEventListener("offline", heard);
+        heard();
+        return heard;
+      }),
+      (heard) =>
+        Effect.sync(() => {
+          window.removeEventListener("online", heard);
+          window.removeEventListener("offline", heard);
+        }),
+    ),
+  );
 }
 
 /** Every seam the host's kernel and assembly stand on, as the tab answers it. */
@@ -432,7 +459,7 @@ const composedWeb = (
       });
       yield* linkNetworkWatch({
         state,
-        isOnline: () => navigator.onLine,
+        online: tabOnline(),
         regained: operator.host.tasksRegained(),
         report,
       });
