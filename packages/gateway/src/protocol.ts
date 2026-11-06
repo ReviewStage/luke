@@ -543,25 +543,9 @@ export const GATEWAY_METHOD = {
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
-  SETTINGS_UPDATE: "settings.update",
-  SETTINGS_RESET: "settings.reset",
   /** The developer's answer to one command an agent asked to run on this Mac (`@repo/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
   MAC_COMMAND_ANSWER: "macCommands.answer",
-  /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
-  EXPERIMENTS_SET: "experiments.set",
   ACCOUNT_SNAPSHOT: "account.snapshot",
-  ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
-  ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
-  /** The sign-in taken again over the session that stands, answering whether a new one landed. */
-  ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
-  ACCOUNT_SIGN_OUT: "account.signOut",
-  ACCOUNT_DELETE: "account.delete",
-  /**
-   * The member's grant of support access granted for seven days or revoked
-   * on the service, under the account's own session (`{ grant }`); the
-   * grant as it then stands, which the account's access is read again for.
-   */
-  ACCOUNT_SUPPORT_ACCESS: "account.supportAccess",
   ANALYTICS_RECORD: "analytics.record",
 } as const;
 
