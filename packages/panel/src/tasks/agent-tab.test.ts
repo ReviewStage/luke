@@ -90,17 +90,15 @@ function drawn(message: AgentTranscriptMessage, moving = false, page?: TaskMenti
   });
   act(() =>
     root.render(
-      withQueryClient(
-        page === undefined
-          ? turn
-          : onRegistry(
-              AtomRegistry.make(),
-              createElement(TaskMentions, {
-                value: page,
-                children: createElement(TranscriptAgent, { value: TASK_AGENT, children: turn }),
-              }),
-            ),
-      ),
+      page === undefined
+        ? withQueryClient(turn)
+        : onRegistry(
+            AtomRegistry.make(),
+            createElement(TaskMentions, {
+              value: page,
+              children: createElement(TranscriptAgent, { value: TASK_AGENT, children: turn }),
+            }),
+          ),
     ),
   );
   return { container, opened };

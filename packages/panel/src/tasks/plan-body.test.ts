@@ -24,7 +24,7 @@ import {
   registryWith,
   signedInAs,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -188,7 +188,7 @@ function cardOf(
 }
 
 test("the saved body is drawn as Markdown", () => {
-  const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK }));
+  const markup = renderToStaticMarkup(withQueryClient(createElement(PlanBody, { task: TASK })));
 
   assert.match(markup, /<p class="ui-markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
