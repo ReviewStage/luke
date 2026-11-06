@@ -1,30 +1,30 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { AgentSummary } from "@repo/features/agent-wire";
-import { sandboxRead } from "@repo/features/terminal-store";
 import { noMatchWords, readingWords, TERM } from "@repo/features/words";
 import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import { PlusIcon, Shortcut } from "@repo/ui";
 import { CommandDialog, type CommandGroup, type CommandItem } from "@repo/ui/command";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { agentName, startsOwnAgents } from "./agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AgentGlyph, agentEndMark } from "./tab-look.js";
+import { shellsHeld } from "./terminal-held.js";
 import { TerminalStanding } from "./terminal-shells.js";
 import type { AgentsControl } from "./use-agents.js";
 
 /**
- * terminal-picker.tsx -- the palette asking which coding agent's sandbox a terminal is for, when the rules leave it to the developer.
+ * terminal-picker.tsx -- the palette asking which coding agent a terminal is for, when the rules leave it to the developer.
  *
- * A terminal belongs to one agent's sandbox (`terminal-entry.ts`), and with
+ * A terminal belongs to one agent (`terminal-entry.ts`), and with
  * several agents on the task New terminal asks, as ⌘J does before any
  * terminal was used. It is the command palette's own dialog and rows: each
  * agent as its tab wears it, its glyph, its name and its failed mark, its
- * card hung beside it, with how its sandbox stands in the panel's own words, the agent whose terminal was used last chosen to begin with and
- * saying so. Whether the agent works is its glyph's to say, the working mark
- * in its place, so no word repeats it. A task with no agent offers to start one.
- * How each sandbox stands is read as the picker opens, which never wakes
- * one.
+ * card hung beside it, with how many shells this window holds for it in the
+ * panel's own words, the agent whose terminal was used last chosen to begin
+ * with and saying so. Whether the agent works is its glyph's to say, the
+ * working mark in its place, so no word repeats it. A task with no agent
+ * offers to start one.
  */
 
 /** The value of the row that starts an agent, which no agent's id spells. */
@@ -37,9 +37,9 @@ const START_WORDS = "Start an agent";
 const AGENTS_GROUP = "agents";
 
 /** What the picker's field asks. */
-const PICKER_QUESTION = "New terminal in which agent’s sandbox?";
+const PICKER_QUESTION = "New terminal for which agent?";
 
-/** The row's words after the name: the sandbox as the panel's "+" says it, and whether it was used last; none where neither is known. */
+/** The row's words after the name: its shells as the panel's "+" says them, and whether it was used last; none where it has neither. */
 function RowDetail({
   agent,
   last,
@@ -47,18 +47,18 @@ function RowDetail({
   agent: AgentSummary;
   last: boolean;
 }): React.JSX.Element | null {
-  const listed = useAtomValue(sandboxRead(agent.id));
-  if (listed === undefined && !last) return null;
+  const shells = useAtomValue(shellsHeld(agent.id)).length;
+  if (shells === 0 && !last) return null;
   return (
     <>
-      {listed === undefined ? null : <TerminalStanding agent={agent} />}
-      {listed !== undefined && last ? " · " : null}
+      <TerminalStanding agentId={agent.id} />
+      {shells > 0 && last ? " · " : null}
       {last ? "last used" : null}
     </>
   );
 }
 
-/** One agent's row: its look, its failed mark, and the card its hover hangs, with its standing read from what the window last read of its sandbox. */
+/** One agent's row: its look, its failed mark, and the card its hover hangs, with how many shells the window holds for it. */
 function agentItem(
   agent: AgentSummary,
   agents: AgentsControl,
@@ -106,7 +106,6 @@ export function TerminalPicker({
   pick,
   agents,
   lastUsed,
-  readSandbox,
   onPick,
   onStartAgent,
   start,
@@ -116,8 +115,6 @@ export function TerminalPicker({
   pick: TerminalPick | undefined;
   agents: AgentsControl;
   lastUsed: string | undefined;
-  /** Reads how one agent's sandbox stands, into what the window last read of it. */
-  readSandbox: (agentId: string) => void;
   onPick: (agentId: string) => void;
   /** Starts a coding agent on the task, the picker's offer where it has none. */
   onStartAgent: () => void;
@@ -132,7 +129,7 @@ export function TerminalPicker({
   const offersStart = startsOwnAgents(agents.mode);
   const [selected, setSelected] = useState("");
   const open = pick !== undefined;
-  // Each opening starts on the agent chosen to begin with, or the first, and reads how every sandbox stands.
+  // Each opening starts on the agent chosen to begin with, or the first.
   const [opened, setOpened] = useState(open);
   if (opened !== open) {
     setOpened(open);
@@ -142,10 +139,6 @@ export function TerminalPicker({
       );
     }
   }
-  useEffect(() => {
-    if (!open) return;
-    for (const agent of listed) readSandbox(agent.id);
-  }, [open, listed, readSandbox]);
   const choose = (run: () => void) => {
     onClose();
     run();

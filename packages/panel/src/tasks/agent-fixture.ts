@@ -71,11 +71,9 @@ import {
   TERMINAL_CONNECTION,
   TERMINAL_PORT_CHANNEL,
   TERMINAL_PORT_MESSAGE,
-  TERMINAL_REFUSAL,
   type TerminalConnection,
   type TerminalPortOutbound,
 } from "@repo/features/terminal-acts";
-import { SANDBOX_STATE, type SandboxState } from "@repo/features/terminal-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppChapters,
@@ -839,16 +837,14 @@ function treeAt(path: string): readonly TaskTreeEntry[] {
 /** The file the File profile opens, read from the agent's branch. */
 const OPENED_FILE = "src/members/invite.ts";
 
-/** How a profile stages the agent's Terminal: its sandbox stopped or starting, a list it refuses, an attach no port answers, or a port that says how the connection stands. */
+/** How a profile stages the agent's Terminal: a mirror main refuses, an attach no port answers, or a port that says how the connection stands. */
 const TERMINAL_STAGE = {
-  SANDBOX: "sandbox",
   REFUSED: "refused",
   HELD: "held",
   PORT: "port",
 } as const;
 
 type TerminalStage =
-  | { readonly kind: typeof TERMINAL_STAGE.SANDBOX; readonly sandbox: SandboxState }
   | { readonly kind: typeof TERMINAL_STAGE.REFUSED }
   | { readonly kind: typeof TERMINAL_STAGE.HELD }
   | {
@@ -892,24 +888,8 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   [RUN_PROFILE.AGENT_TERMINAL, { terminal: { kind: TERMINAL_STAGE.PORT } }],
   [RUN_PROFILE.AGENT_TERMINAL_CONNECTING, { terminal: { kind: TERMINAL_STAGE.HELD } }],
   [
-    RUN_PROFILE.AGENT_TERMINAL_RECONNECTING,
-    { terminal: { kind: TERMINAL_STAGE.PORT, after: TERMINAL_CONNECTION.RECONNECTING } },
-  ],
-  [
-    RUN_PROFILE.AGENT_TERMINAL_IDLE,
-    { terminal: { kind: TERMINAL_STAGE.PORT, after: TERMINAL_CONNECTION.IDLE } },
-  ],
-  [
     RUN_PROFILE.AGENT_TERMINAL_EXITED,
     { terminal: { kind: TERMINAL_STAGE.PORT, after: TERMINAL_CONNECTION.EXITED, code: 0 } },
-  ],
-  [
-    RUN_PROFILE.AGENT_TERMINAL_STOPPED,
-    { terminal: { kind: TERMINAL_STAGE.SANDBOX, sandbox: SANDBOX_STATE.STOPPED } },
-  ],
-  [
-    RUN_PROFILE.AGENT_TERMINAL_STARTING,
-    { terminal: { kind: TERMINAL_STAGE.SANDBOX, sandbox: SANDBOX_STATE.STARTING } },
   ],
   [RUN_PROFILE.AGENT_TERMINAL_UNREACHABLE, { terminal: { kind: TERMINAL_STAGE.REFUSED } }],
   [RUN_PROFILE.AGENT_PAGE, { page: FIXTURE_PAGE.id }],
@@ -917,25 +897,19 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   [RUN_PROFILE.TASKS_COMMENTS, { plan: true }],
 ]);
 
-/** The shell the agent's sandbox holds. */
-const SHELL = {
-  id: SHELL_ID,
-  title: "zsh",
-  command: "zsh",
-  cwd: "/vercel/sandbox/relay",
-  running: false,
-};
+/** The agent's mirror on this Mac, which its shell opens in. */
+const MIRROR_FOLDER = "/Users/ada/.vespin/mirrors/relay";
 
-/** What the shell printed before the tab attached, as tmux redraws it. */
+/** What the shell printed before the tab attached, as main holds it for the attach. */
 const SHELL_SCREEN = [
-  "ada@sandbox relay % pnpm test src/members",
+  "ada@studio relay % pnpm test src/members",
   "",
   " ✓ src/members/invite.test.ts (1 test) 12ms",
   "",
   " Test Files  1 passed (1)",
   "      Tests  1 passed (1)",
   "",
-  "ada@sandbox relay % ",
+  "ada@studio relay % ",
 ].join("\r\n");
 
 /**
@@ -1029,20 +1003,19 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       truncated: false,
     },
   }),
-  [ACT_KIND.TERMINAL_LIST]: (_payload, stage) => {
-    const terminal = terminalStage(stage);
-    if (terminal?.kind === TERMINAL_STAGE.REFUSED) {
-      return { refused: TERMINAL_REFUSAL.SANDBOX_UNANSWERED };
+  [ACT_KIND.MAC_SHELL_MIRROR]: (_payload, stage) => {
+    // A mirror main could not make is its refusal, which the act door rejects with.
+    if (terminalStage(stage)?.kind === TERMINAL_STAGE.REFUSED) {
+      throw new Error("The agent's files could not be mirrored.");
     }
-    if (terminal?.kind === TERMINAL_STAGE.SANDBOX)
-      return { sandbox: terminal.sandbox, terminals: [] };
-    return { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] };
+    return { folder: MIRROR_FOLDER };
   },
-  [ACT_KIND.TERMINAL_ATTACH]: (_payload, stage) => {
+  [ACT_KIND.MAC_SHELL_OPEN]: () => ({ terminalId: SHELL_ID }),
+  [ACT_KIND.MAC_SHELL_ATTACH]: (_payload, stage) => {
     const terminal = terminalStage(stage);
     if (terminal?.kind === TERMINAL_STAGE.PORT) postShellPort(terminal);
   },
-  [ACT_KIND.TERMINAL_DETACH]: () => closeHeldPort(),
+  [ACT_KIND.MAC_SHELL_CLOSE]: () => closeHeldPort(),
 };
 
 /**

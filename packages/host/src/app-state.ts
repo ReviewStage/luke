@@ -107,11 +107,7 @@ export const RUN_PROFILE = {
   /** The same agent beside its Terminal, attached to a shell: one profile per state the tab draws. */
   AGENT_TERMINAL: "agent-terminal",
   AGENT_TERMINAL_CONNECTING: "agent-terminal-connecting",
-  AGENT_TERMINAL_RECONNECTING: "agent-terminal-reconnecting",
-  AGENT_TERMINAL_IDLE: "agent-terminal-idle",
   AGENT_TERMINAL_EXITED: "agent-terminal-exited",
-  AGENT_TERMINAL_STOPPED: "agent-terminal-stopped",
-  AGENT_TERMINAL_STARTING: "agent-terminal-starting",
   AGENT_TERMINAL_UNREACHABLE: "agent-terminal-unreachable",
   /** The same agent beside a page it showed, open in a tab of its own. */
   AGENT_PAGE: "agent-page",

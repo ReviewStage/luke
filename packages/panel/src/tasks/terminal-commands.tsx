@@ -7,15 +7,13 @@ import {
   type TerminalAsk,
   terminalTarget,
 } from "@repo/features/terminal-entry";
-import { sandboxRead, shellsAsked } from "@repo/features/terminal-store";
-import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { STATUS_TONE } from "@repo/ui";
 import { useCallback, useContext, useState } from "react";
-import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
+import { shellsAsked } from "./terminal-held.js";
 import { TerminalPicker } from "./terminal-picker.js";
 import type { AgentsControl } from "./use-agents.js";
 import type { SidePanelControl } from "./use-side-panel.js";
@@ -26,9 +24,8 @@ import type { SidePanelControl } from "./use-side-panel.js";
  * Both commands are offers on the window's one keymap (`app-commands.ts`), so
  * the menu bar and ⌘K run them as ⌘J does. Each decides the agent
  * (`terminal-entry.ts`) from where the developer is, then shows that agent's
- * Terminal tab in the side panel, New terminal asking its sandbox for a new
- * shell first (`terminal-store.ts`'s `shellsAsked`), which the tab starts
- * once the sandbox runs. Where the rules leave the agent to the developer
+ * Terminal tab in the side panel, New terminal asking for a new shell in
+ * its mirror first (`terminal-held.ts`'s `shellsAsked`), which the tab opens. Where the rules leave the agent to the developer
  * the picker asks, and what it is answered with is done as the command
  * would have done it.
  */
@@ -41,7 +38,7 @@ interface Asking {
 
 /**
  * Opens an agent's terminal as a command means it: its Terminal tab shown,
- * after a new shell is asked of its sandbox where the command was New
+ * after a new shell is asked of its mirror where the command was New
  * terminal. The panel's "+" opens its Terminal rows through the same door.
  */
 export function useOpenTerminal(
@@ -72,8 +69,6 @@ export function TerminalCommands({
   /** Hands the keyboard to the side panel, where the terminal now stands. */
   onShown: () => void;
 }): React.JSX.Element {
-  const { act } = useAct();
-  const registry = useContext(RegistryContext);
   const toast = useToast();
   const repositoryRemedy = useRepositoryRemedy();
   const [asking, setAsking] = useState<Asking | undefined>(undefined);
@@ -100,18 +95,6 @@ export function TerminalCommands({
   };
   useAppCommand(APP_COMMAND.SHOW_TERMINAL, () => run(TERMINAL_ASK.SHOW));
   useAppCommand(APP_COMMAND.NEW_TERMINAL, () => run(TERMINAL_ASK.NEW));
-  // How each sandbox stands, read as the picker opens, which never wakes one.
-  const readSandbox = useCallback(
-    (agentId: string) => {
-      void act(ACT_KIND.TERMINAL_LIST, { agentId }).then(
-        (answer) => {
-          if (!("refused" in answer)) registry.set(sandboxRead(agentId), answer);
-        },
-        () => undefined,
-      );
-    },
-    [act, registry],
-  );
   // A refused start says why on the toast, its repository's remedy as its action where it has one,
   // since the picker that pressed it has closed; a move starts the agent again once it lands.
   const startAgent = () => {
@@ -146,7 +129,6 @@ export function TerminalCommands({
       pick={asking}
       agents={agents}
       lastUsed={sidePanel.lastTerminal}
-      readSandbox={readSandbox}
       onPick={(agentId) => open(agentId, asking?.ask ?? TERMINAL_ASK.SHOW)}
       onStartAgent={startAgent}
       start={agents.start}

@@ -830,7 +830,7 @@ export function panelEntries(input: {
     row: {
       id: tabKey({ terminal: agent.id }),
       ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
-      detail: <TerminalStanding agent={agent} />,
+      detail: <TerminalStanding agentId={agent.id} />,
       command: showsOnChord ? APP_COMMAND.SHOW_TERMINAL : undefined,
       section: ADD_SECTION.TERMINAL,
       replayMasked: true,
@@ -1916,7 +1916,6 @@ function TabContent({
   fileTree,
   onBrowseFile,
   onFileHistory,
-  onCloseTab,
   pullRequestViews,
   onPullRequestView,
   shellsList,
@@ -1961,8 +1960,6 @@ function TabContent({
   onBrowseFile: (from: string | undefined, path: string, newTab: boolean) => void;
   /** Walks a File tab's history a step (`SidePanelControl.onFileHistory`). */
   onFileHistory: (from: string, step: FileHistoryStep) => void;
-  /** Closes a tab whose subject is gone, as an archived agent's Terminal tab closes. */
-  onCloseTab: (tab: SidePanelTab) => void;
   /** What each Pull request tab shows, by agent and number (`SidePanelControl.pullRequestViews`). */
   pullRequestViews: SidePanelControl["pullRequestViews"];
   /** Chooses what an agent's Pull request tab shows. */
@@ -2018,7 +2015,6 @@ function TabContent({
         agents={agentsOf(tab.terminal)}
         shown={shown}
         onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: tab.terminal })}
-        onClose={() => onCloseTab(tab)}
         shells={shellsList}
       />
     );
@@ -2850,7 +2846,6 @@ export function SidePanel({
                 fileTree={fileTree}
                 onBrowseFile={panel.onBrowseFile}
                 onFileHistory={panel.onFileHistory}
-                onCloseTab={panel.onClose}
                 pullRequestViews={panel.pullRequestViews}
                 onPullRequestView={panel.onPullRequestView}
                 shellsList={shellsList}

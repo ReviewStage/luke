@@ -23,8 +23,8 @@ it("every platform kind is refused in its own words, whatever it is sent", async
   ports.push(port);
 
   assert.deepEqual(
-    await port.call(PANEL, PLATFORM_PORT_ACT_KIND.TERMINAL_LIST, { agentId: "agent-1" }),
-    { refused: "Could not reach this agent's sandbox." },
+    await port.call(PANEL, PLATFORM_PORT_ACT_KIND.MAC_SHELL_MIRROR, { agentId: "agent-1" }),
+    { refused: "Could not mirror this agent’s files." },
   );
   assert.deepEqual(await port.call(PANEL, PLATFORM_PORT_ACT_KIND.MICROPHONE_OPEN_SETTINGS), {
     refused: "Could not open the microphone privacy settings.",

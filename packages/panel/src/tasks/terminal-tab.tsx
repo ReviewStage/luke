@@ -32,14 +32,13 @@ import {
 import { TerminalShells } from "./terminal-shells.js";
 import type { AgentsControl } from "./use-agents.js";
 import { useTerminalSession } from "./use-terminal-session.js";
-import { WorkingTime } from "./working-time.js";
 
 /**
- * terminal-tab.tsx -- an agent's Terminal tab: a shell in the agent's own sandbox, under a bar naming the agent and where the connection stands.
+ * terminal-tab.tsx -- a cloud agent's Terminal tab: a shell on this Mac in the agent's mirrored files, under a bar naming the agent and where the connection stands.
  *
  * The tab is the File tab's frame: a bar across its top, here naming the
- * agent whose sandbox it is (`AgentRef`, which hangs the agent's card and
- * opens its tab), "sandbox", and the connection in a word or two; then the
+ * agent whose files the shell stands in (`AgentRef`, which hangs the agent's
+ * card and opens its tab) and the connection in a word or two; then the
  * terminal's screen (`terminal/`), which fills the rest. A state with
  * something to do lays one slim bar over the screen with one text action
  * and its key, and the terminal prints a state with nothing to do as a dim
@@ -87,7 +86,7 @@ const OPEN_AGENT = "Open agent";
 /** What the shells list's toggle says. */
 const SHELLS_TOGGLE = { open: "Hide shells", closed: "Show shells" } as const;
 
-/** The slim bar over the screen: its words, a count or a note, and its one action with its key. */
+/** The slim bar over the screen: its words, and its one action with its key. */
 function StateBar({
   bar,
   onAction,
@@ -115,10 +114,6 @@ function StateBar({
         <OneLine className="terminal-bar-words">{bar.words}</OneLine>
       </span>
       <span className="terminal-bar-end ml-auto inline-flex items-center gap-control-gap">
-        {bar.since === undefined ? null : (
-          <WorkingTime startedAt={bar.since} className="text-muted-foreground" />
-        )}
-        {bar.note === undefined ? null : <span className="text-muted-foreground">{bar.note}</span>}
         {action === undefined ? null : (
           <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => onAction(action.kind)}>
             {action.label}
@@ -138,7 +133,6 @@ export function TerminalTab({
   agents,
   shown,
   onOpenAgent,
-  onClose,
   shells,
 }: {
   agentId: string;
@@ -147,17 +141,15 @@ export function TerminalTab({
   shown: boolean;
   /** Opens the agent's own tab in the task's column. */
   onOpenAgent: () => void;
-  /** Closes the tab, as an archived agent's does. */
-  onClose: () => void;
   /** Whether the shells list stands beside the screen, which holds for every Terminal tab alike, and its toggle. */
   shells: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
   const subject = agentSubject(agents, agentId, NOTHING_HELD, false);
-  const session = useTerminalSession(agentId, shown, onClose);
+  const session = useTerminalSession(agentId, shown);
   useFindSource(useScrollbackFind(session.find));
   const look = terminalLook(session.state);
   const room = usePaneRoom(shells);
-  // A phone draws no bar over the screen: its header's ⋯ opens the agent and the shells, saying where the sandbox stands.
+  // A phone draws no bar over the screen: its header's ⋯ opens the agent and the shells, saying where the connection stands.
   const phone = usePhoneRoom();
   // Note that a phone has no title bar to carry "connecting…", so a state only that bar says is said in a bar over the screen.
   const bar = look.bar ?? (phone ? look.phoneBar : undefined);
@@ -165,7 +157,7 @@ export function TerminalTab({
     phone
       ? [
           [
-            paneToggleAction(room, SHELLS_TOGGLE, `Sandbox · ${look.words}`),
+            paneToggleAction(room, SHELLS_TOGGLE, `Terminal · ${look.words}`),
             {
               label: OPEN_AGENT,
               icon: <AgentGlyph agent={subject.agent} />,
@@ -194,9 +186,7 @@ export function TerminalTab({
                 glyph={<AgentGlyph agent={subject.agent} />}
                 label={subject.name}
               />
-              <span className="terminal-tab-standing flex-none">
-                <span className="terminal-tab-sandbox">· sandbox </span>· {look.words}
-              </span>
+              <span className="terminal-tab-standing flex-none">· {look.words}</span>
             </span>
           }
           actions={<TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />}

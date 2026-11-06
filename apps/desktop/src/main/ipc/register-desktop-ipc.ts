@@ -11,7 +11,6 @@ import {
   macShellProcedures,
   type PlatformActProcedures,
   portForwardProcedures,
-  terminalProcedures,
 } from "@repo/host/act-port";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { LEAVE } from "@repo/host/quit";
@@ -126,6 +125,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...cliProcedures({ install: () => installCli(config.hostedServiceBaseUrl) }),
     ...macShellProcedures<WebContents>({
+      mirror: (agentId) => operator.host.mirrorEnsure({ agentId }),
       spawn: spawnMacShell,
       ports: {
         open: portTo(TERMINAL_PORT_CHANNEL),
@@ -141,15 +141,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       exists: (folder) => fs.existsSync(folder),
     }),
     ...portForwardProcedures<WebContents>({ host: operator.host }),
-    ...terminalProcedures<WebContents>({
-      host: operator.host,
-      ports: {
-        open: portTo(TERMINAL_PORT_CHANNEL),
-        whenGone: whenPageGone,
-      },
-      createId: randomUUID,
-      fork: (effect) => void run(effect),
-    }),
     ...updateProcedures({ updates }),
     ...windowSurfaceProcedures({
       panels,

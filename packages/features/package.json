@@ -129,7 +129,6 @@
     "./provider-key-wire": "./src/provider-key-wire.js",
     "./github-token-wire": "./src/github-token-wire.js",
     "./repository-reach-wire": "./src/repository-reach-wire.js",
-    "./terminal-view": "./src/terminal-view.js",
     "./terminal-wire": "./src/terminal-wire.js",
     "./sandbox-tunnel-wire": "./src/sandbox-tunnel-wire.js",
     "./sandbox-mirror-wire": "./src/sandbox-mirror-wire.js",
@@ -190,7 +189,6 @@
     "./terminal-model": "./src/terminal-model.js",
     "./automation-list-model": "./src/automation-list-model.js",
     "./automation-draft-model": "./src/automation-draft-model.js",
-    "./terminal-store": "./src/terminal-store.js",
     "./trigger-catalog": "./src/trigger-catalog.js",
     "./time-format": "./src/time-format.js",
     "./number-format": "./src/number-format.js"

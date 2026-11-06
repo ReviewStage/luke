@@ -368,29 +368,10 @@ export const SCENES: readonly Scene[] = [
     profile: "agent-terminal-connecting",
   },
   {
-    id: "terminal-reconnecting",
-    place: PLACE.TERMINAL,
-    title: "Reconnecting",
-    profile: "agent-terminal-reconnecting",
-  },
-  { id: "terminal-idle", place: PLACE.TERMINAL, title: "Idle", profile: "agent-terminal-idle" },
-  {
     id: "terminal-exited",
     place: PLACE.TERMINAL,
     title: "Exited",
     profile: "agent-terminal-exited",
-  },
-  {
-    id: "terminal-stopped",
-    place: PLACE.TERMINAL,
-    title: "Stopped",
-    profile: "agent-terminal-stopped",
-  },
-  {
-    id: "terminal-starting",
-    place: PLACE.TERMINAL,
-    title: "Starting",
-    profile: "agent-terminal-starting",
   },
   {
     id: "terminal-unreachable",

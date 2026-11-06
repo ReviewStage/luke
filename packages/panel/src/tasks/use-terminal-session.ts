@@ -1,14 +1,12 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_FLOW,
   TERMINAL_PORT_MESSAGE,
-  TERMINAL_REFUSAL,
-  type TerminalConnection,
   type TerminalPortInbound,
   type TerminalPortOutbound,
-  type TerminalRefusal,
   terminalPortOutboundSchema,
 } from "@repo/features/terminal-acts";
 import {
@@ -19,50 +17,37 @@ import {
   type TerminalState,
   terminalLook,
 } from "@repo/features/terminal-model";
-import { sandboxRead, shellsAsked } from "@repo/features/terminal-store";
-import { SANDBOX_STATE, type TerminalsAnswer } from "@repo/features/terminal-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { STATUS_TONE } from "@repo/ui";
-import {
-  type PendingValues,
-  pendingSettled,
-  pendingShown,
-  pendingValue,
-  pendingWithout,
-  type SameValue,
-} from "@repo/ui/pending-values";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useSideBundles } from "../bundle-loader.js";
-import { usePendingNow } from "../pending-clock.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import type { TerminalFind, TerminalHandle } from "../terminal/contract.js";
 import { onTerminalPort } from "../terminal/terminal-port.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { type HeldShell, nextShellTitle, shellsAsked, shellsHeld } from "./terminal-held.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
- * use-terminal-session.ts -- one Terminal tab's connection to a shell in its agent's sandbox: found, attached while the tab is shown, and let go when it is not.
+ * use-terminal-session.ts -- one Terminal tab's shells on this Mac, in its agent's mirror: opened, attached while the tab is shown, and let go when it is not.
  *
- * A terminal connects on demand and disconnects when it is not used. While
- * the tab is shown it lists the agent's shells (`terminal.list`), which never
- * wakes a stopped sandbox, and attaches to the one it held, else the oldest,
- * else a new one (`terminal.create`); main then posts the shell's port, which
- * carries its bytes and where the connection stands (`TERMINAL_CONNECTION`)
- * and nothing else. Hidden, the tab closes the port, which detaches; the
- * shells go on running in the sandbox, and showing the tab again attaches
- * to the same one, which tmux redraws.
+ * While the tab is shown it attaches to the shell it held, else the oldest
+ * the window holds for the agent (`terminal-held.ts`), else a new one: the
+ * agent's mirror found or made (`macShell.mirror`, which starts mirroring
+ * the agent's files and answers as soon as its folder stands), then a
+ * shell opened there (`macShell.open`). Main then posts the shell's port,
+ * which carries its bytes and how it stands (`TERMINAL_CONNECTION`) and
+ * nothing else. Hidden, the tab closes the port; the shell goes on running
+ * in main, which holds what it printed meanwhile for the next attach, and
+ * a reload attaches to it again. A shell main no longer holds, refused on
+ * attach, is dropped from the list and the next one found.
  *
- * What each state asks of the developer is what a terminal asks: after five
- * minutes without typing any key reconnects, a shell that ended takes any key
- * for a new one, and the bar's action (its click, or Return) retries a
- * dropped connection or resumes a stopped sandbox, which nothing but that
- * resumes. While the agent has not opened its sandbox the tab lists again
- * every few seconds, and once a shell's port is open the host waits on the
- * sandbox itself.
+ * A shell that ended takes any key for a new one, and the bar's action (its
+ * click, or Return) asks again for a mirror or a shell main could not make.
  *
  * The bytes go to the screen and to the port, and nowhere else.
  */
@@ -70,52 +55,11 @@ import { useOpenLink } from "./use-open-link.js";
 /** How long a resize waits for the next before the shell is told, so a dragged edge tells it once. */
 const RESIZE_SETTLES = Duration.millis(100);
 
-/** How often a tab waiting on an agent that has not opened its sandbox lists again, and a shown tab reads its shells again. */
-const STARTING_RELIST = Duration.seconds(5);
-const SHELLS_REREAD = Duration.seconds(5);
-
-/** What a toast says when a shell could not be started or ended; a refused name is said by its row. */
+/** What a toast says when a shell could not be started or ended. */
 const SHELL_FAILED = {
   CREATE: "Could not start a shell.",
   KILL: "Could not end that shell.",
 } as const;
-
-/** No shell's name given here and waiting on the list. */
-const NO_PENDING_TITLES: PendingValues<string, string> = new Map();
-
-/** Whether two shells' names are one. */
-const sameTitle: SameValue<string> = (a, b) => a === b;
-
-/** A shell's name as the list read it; none where the list holds no such shell. */
-function shellTitle(listed: TerminalsAnswer | undefined, shell: string): string | undefined {
-  return listed?.terminals.find((each) => each.id === shell)?.title;
-}
-
-/** The list with each name given here that it does not yet carry drawn in its shell's place. */
-function withTitles(
-  listed: TerminalsAnswer | undefined,
-  titles: PendingValues<string, string>,
-): TerminalsAnswer | undefined {
-  if (listed === undefined || titles.size === 0) return listed;
-  const shown = pendingShown(
-    pendingSettled(titles, (shell) => shellTitle(listed, shell), sameTitle, undefined),
-  );
-  if (shown.size === 0) return listed;
-  return {
-    ...listed,
-    terminals: listed.terminals.map((each) => {
-      const title = shown.get(each.id);
-      return title === undefined ? each : { ...each, title };
-    }),
-  };
-}
-
-/** The states the host says that change the agent's shells. */
-const LIST_CHANGES: ReadonlySet<TerminalState["kind"]> = new Set([
-  TERMINAL_STATE.STOPPED,
-  TERMINAL_STATE.STARTING,
-  TERMINAL_STATE.EXITED,
-]);
 
 /** Reads a message main sent on a shell's port. */
 const readOutbound = Schema.decodeUnknownOption(terminalPortOutboundSchema);
@@ -129,76 +73,6 @@ const RESET = "\x1b[0m";
 
 /** What hides the cursor, as a terminal reads it (DECTCEM). */
 const HIDE_CURSOR = "\x1b[?25l";
-
-/** Where a call main refused leaves the tab: main refuses where the service could not be reached or did not answer. */
-const SERVICE_UNREACHED: TerminalState = {
-  kind: TERMINAL_STATE.UNREACHABLE,
-  why: TERMINAL_UNREACHED.SERVICE,
-};
-
-/** A state from the host's word for it. */
-function stateOf(
-  connection: TerminalConnection,
-  code: number | undefined,
-): TerminalState | undefined {
-  switch (connection) {
-    case TERMINAL_CONNECTION.CONNECTING:
-      return { kind: TERMINAL_STATE.CONNECTING };
-    case TERMINAL_CONNECTION.ATTACHED:
-      return { kind: TERMINAL_STATE.ATTACHED };
-    case TERMINAL_CONNECTION.RECONNECTING:
-      return { kind: TERMINAL_STATE.RECONNECTING };
-    case TERMINAL_CONNECTION.IDLE:
-      return { kind: TERMINAL_STATE.IDLE };
-    case TERMINAL_CONNECTION.STOPPED:
-      return { kind: TERMINAL_STATE.STOPPED };
-    case TERMINAL_CONNECTION.STARTING:
-      return { kind: TERMINAL_STATE.STARTING };
-    case TERMINAL_CONNECTION.EXITED:
-      return { kind: TERMINAL_STATE.EXITED, code };
-    case TERMINAL_CONNECTION.GONE:
-      return undefined;
-    case TERMINAL_CONNECTION.UNAVAILABLE:
-      return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.RELAY };
-  }
-}
-
-/** The action Return runs in a state, where the state offers one. */
-function returnAction(state: TerminalState): TerminalAction | undefined {
-  switch (state.kind) {
-    case TERMINAL_STATE.RECONNECTING:
-    case TERMINAL_STATE.UNREACHABLE:
-      return TERMINAL_ACTION.RETRY;
-    case TERMINAL_STATE.STOPPED:
-      return TERMINAL_ACTION.RESUME;
-    default:
-      return undefined;
-  }
-}
-
-/**
- * Where a refusal leaves the tab: a stopped sandbox's bar, the wait for an
- * agent that has not opened its sandbox, or the bar that asks again for a
- * shell or agent not found, a sandbox that did not answer, or one whose
- * saved files are gone, saying which; nothing for an agent archived or retired, whose tab closes, as its
- * Changes tab does.
- */
-function refusedState(refused: TerminalRefusal): TerminalState | undefined {
-  switch (refused) {
-    case TERMINAL_REFUSAL.SANDBOX_STOPPED:
-      return { kind: TERMINAL_STATE.STOPPED };
-    case TERMINAL_REFUSAL.AGENT_NOT_READY:
-      return { kind: TERMINAL_STATE.STARTING };
-    case TERMINAL_REFUSAL.NOT_FOUND:
-      return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.NOT_FOUND };
-    case TERMINAL_REFUSAL.SANDBOX_UNANSWERED:
-      return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SANDBOX };
-    case TERMINAL_REFUSAL.SANDBOX_SNAPSHOT_GONE:
-      return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SNAPSHOT_GONE };
-    case TERMINAL_REFUSAL.GONE:
-      return undefined;
-  }
-}
 
 /** What is typed, cut into messages the port takes, a long paste in several. */
 function inputMessages(data: string): TerminalPortInbound[] {
@@ -225,12 +99,17 @@ interface AttachAsked {
   readonly shell: string;
 }
 
+/** A shell opened, or why none could be. */
+type Opened =
+  | { readonly terminalId: string }
+  | { readonly why: (typeof TERMINAL_UNREACHED)[keyof typeof TERMINAL_UNREACHED] };
+
 /** What the session holds between renders, read by callbacks no render stands between. */
 interface LiveSession {
   state: TerminalState;
   handle: TerminalHandle | undefined;
   port: MessagePort | undefined;
-  /** The shell the tab shows, which an attach, a reconnect, and a port's ticket name. */
+  /** The shell the tab shows, which an attach and a port's ticket name. */
   shell: string | undefined;
   /** Whether the tab wants the port of the newest attach it sent. */
   attaching: boolean;
@@ -248,16 +127,9 @@ interface LiveSession {
   unacked: number;
   /** Counts each connect up, so an answer to one the tab has since let go lands nowhere. */
   generation: number;
-  /** Whether the tab is shown, which its shells are read again for. */
-  showing: boolean;
-  /**
-   * Counts each change of the list the tab makes or asks for, so a read
-   * that went out before one lands nowhere rather than undoing it.
-   */
-  listMoves: number;
 }
 
-/** A Terminal tab's session: where it stands, where its screen mounts, and the bar's action. */
+/** A Terminal tab's session: where it stands, where its screen mounts, the bar's action, and its shells. */
 export interface TerminalSession {
   readonly state: TerminalState;
   /** Whether the terminal bundle failed to load, so there is no screen to draw on. */
@@ -268,15 +140,15 @@ export interface TerminalSession {
   readonly find: TerminalFind | undefined;
   readonly screen: (element: HTMLDivElement | null) => void;
   readonly onAction: (action: TerminalAction) => void;
-  /** The agent's shells and where its sandbox stands, as last read, or nothing before the first read. */
-  readonly listed: TerminalsAnswer | undefined;
+  /** The agent's shells this window opened, oldest first. */
+  readonly listed: readonly HeldShell[];
   /** The shell the screen shows, or nothing before one is found. */
   readonly shell: string | undefined;
   /** Shows another of the agent's shells on the screen. */
   readonly onChoose: (shell: string) => void;
-  /** Starts a shell in the same agent's sandbox and shows it. */
+  /** Opens another shell in the same agent's mirror and shows it. */
   readonly onCreate: () => void;
-  /** Names a shell, drawn at once and put back where refused; answers whether the name took. */
+  /** Names a shell; answers whether the name took. */
   readonly onRename: (shell: string, title: string) => Promise<boolean>;
   /** Ends a shell, answering whether it ended; the one shown gives way to the oldest left, or a new one. */
   readonly onKill: (shell: string) => Promise<ActionResult>;
@@ -293,13 +165,9 @@ const waitAtom = (wait: Duration.Duration) =>
     Effect.sleep(wait).pipe(Effect.andThen(Effect.sync(after.run))),
   );
 
-export function useTerminalSession(
-  agentId: string,
-  shown: boolean,
-  /** Closes the tab, once the service says the agent was archived or retired. */
-  onGone: () => void,
-): TerminalSession {
+export function useTerminalSession(agentId: string, shown: boolean): TerminalSession {
   const { act } = useAct();
+  const registry = useContext(RegistryContext);
   const openLink = useOpenLink();
   // Note that the module itself is held, not the result around it, which is a new value each render.
   const { terminal } = useSideBundles();
@@ -310,20 +178,10 @@ export function useTerminalSession(
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const [handle, setHandle] = useState<TerminalHandle | undefined>(undefined);
   const [resizeAtom] = useState(() => waitAtom(RESIZE_SETTLES));
-  const [relistAtom] = useState(() => waitAtom(STARTING_RELIST));
-  const [rereadAtom] = useState(() => waitAtom(SHELLS_REREAD));
   const settleResize = useAtomSet(resizeAtom);
-  const relistLater = useAtomSet(relistAtom);
-  const rereadLater = useAtomSet(rereadAtom);
-  const listed = useAtomValue(sandboxRead(agentId));
-  const setListed = useAtomSet(sandboxRead(agentId));
+  const listed = useAtomValue(shellsHeld(agentId));
   const asked = useAtomValue(shellsAsked(agentId));
   const setAsked = useAtomSet(shellsAsked(agentId));
-  // Note that the ask is read through a ref too, because a connect under way reads it as it lands.
-  const askedNow = useRef(asked);
-  useLayoutEffect(() => {
-    askedNow.current = asked;
-  });
   const [shell, setShell] = useState<string | undefined>(undefined);
   const show = useToast();
   const failedToast = useCallback(
@@ -336,11 +194,6 @@ export function useTerminalSession(
       }),
     [show, agentId],
   );
-  // Note that the close is read through a ref, because the tab hands a new one each render.
-  const gone = useRef(onGone);
-  useLayoutEffect(() => {
-    gone.current = onGone;
-  });
   const live = useRef<LiveSession>({
     state,
     handle: undefined,
@@ -351,12 +204,23 @@ export function useTerminalSession(
     release: undefined,
     unacked: 0,
     generation: 0,
-    showing: false,
-    listMoves: 0,
   });
 
+  // Note that the list is read and written through the registry, because a
+  // connect under way reads it as it lands rather than as its render saw it.
+  const heldNow = useCallback(() => registry.get(shellsHeld(agentId)), [registry, agentId]);
+  const writeHeld = useCallback(
+    (update: (shells: readonly HeldShell[]) => readonly HeldShell[]) =>
+      registry.set(shellsHeld(agentId), update(registry.get(shellsHeld(agentId)))),
+    [registry, agentId],
+  );
+  const forget = useCallback(
+    (target: string) => writeHeld((shells) => shells.filter((each) => each.terminalId !== target)),
+    [writeHeld],
+  );
+
   // Note that a dimmed screen hides its cursor, because no shell stands
-  // behind it to type into; tmux shows it again as it redraws on reattach.
+  // behind it to type into.
   const enter = useCallback((next: TerminalState) => {
     const { line, dim } = terminalLook(next);
     const was = terminalLook(live.current.state);
@@ -374,25 +238,51 @@ export function useTerminalSession(
     live.current.port = undefined;
   }, []);
 
+  // A new shell in the agent's mirror, held in the window's list, or why
+  // main could not make the mirror or the shell.
+  const open = useCallback(async (): Promise<Opened> => {
+    const mirrored = await act(ACT_KIND.MAC_SHELL_MIRROR, { agentId }).catch(() => undefined);
+    if (mirrored === undefined) return { why: TERMINAL_UNREACHED.MIRROR };
+    const opened = await act(ACT_KIND.MAC_SHELL_OPEN, {
+      agentId,
+      folder: mirrored.folder,
+    }).catch(() => undefined);
+    if (opened === undefined) return { why: TERMINAL_UNREACHED.SHELL };
+    const { terminalId } = opened;
+    writeHeld((shells) => [...shells, { terminalId, title: nextShellTitle(shells) }]);
+    return { terminalId };
+  }, [act, agentId, writeHeld]);
+
+  // Note that `connect` is read through a ref here, because a refused
+  // attach finds the next shell, and `connect` is built over `attach`.
+  const connectNow = useRef<() => Promise<void>>(async () => undefined);
+
   const attach = useCallback(
-    (shell: string) => {
+    (target: string, opened = false) => {
       const held = live.current;
       const size = held.handle?.size();
       if (size === undefined) return;
-      held.shell = shell;
+      held.shell = target;
       held.attaching = true;
-      const asked: AttachAsked = { shell };
+      const asked: AttachAsked = { shell: target };
       held.asked.push(asked);
-      setShell(shell);
+      setShell(target);
       enter({ kind: TERMINAL_STATE.CONNECTING });
-      // An attach main refused posts no port, so it is out of the line.
-      void act(ACT_KIND.TERMINAL_ATTACH, { agentId, terminalId: shell, ...size }).catch(() => {
+      // An attach main refused posts no port, so it is out of the line, and
+      // its shell, which main no longer holds, out of the list; the next one
+      // is found in its place, unless it was just opened, which says so.
+      void act(ACT_KIND.MAC_SHELL_ATTACH, { agentId, terminalId: target, ...size }).catch(() => {
         held.asked = held.asked.filter((each) => each !== asked);
         if (held.asked.length === 0) held.release?.();
-        if (held.attaching && held.asked.length === 0) enter(SERVICE_UNREACHED);
+        forget(target);
+        if (held.shell !== target) return;
+        held.shell = undefined;
+        if (!held.attaching || held.asked.length > 0) return;
+        if (opened) enter({ kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SHELL });
+        else void connectNow.current();
       });
     },
-    [act, agentId, enter],
+    [act, agentId, enter, forget],
   );
 
   const connect = useCallback(async () => {
@@ -400,65 +290,23 @@ export function useTerminalSession(
     const generation = live.current.generation;
     const current = () => generation === live.current.generation;
     enter({ kind: TERMINAL_STATE.CONNECTING });
-    // An agent that has not opened its sandbox is listed again a while on,
-    // and one gone closes its tab.
-    const wait = (next: TerminalState | undefined) => {
-      if (next === undefined) return gone.current();
-      enter(next);
-      if (next.kind !== TERMINAL_STATE.STARTING) return;
-      relistLater({
-        run: () => {
-          if (current()) void connect();
-        },
-      });
-    };
-    try {
-      const listed = await act(ACT_KIND.TERMINAL_LIST, { agentId });
-      if (!current()) return;
-      if ("refused" in listed) return wait(refusedState(listed.refused));
-      setListed(listed);
-      if (listed.sandbox === SANDBOX_STATE.STOPPED) return wait({ kind: TERMINAL_STATE.STOPPED });
-      if (listed.sandbox === SANDBOX_STATE.STARTING) return wait({ kind: TERMINAL_STATE.STARTING });
-      // A new shell asked for is started in place of the one held.
-      const fresh = askedNow.current > 0;
-      if (fresh) setAsked((was) => Math.max(0, was - 1));
-      const held = listed.terminals.find((each) => each.id === live.current.shell);
-      const oldest = held ?? listed.terminals[0];
-      if (oldest !== undefined && !fresh) return attach(oldest.id);
-      const made = await act(ACT_KIND.TERMINAL_CREATE, { agentId });
-      if (!current()) return;
-      if ("refused" in made) return wait(refusedState(made.refused));
-      setListed({ ...listed, terminals: [...listed.terminals, made.terminal] });
-      attach(made.terminal.id);
-    } catch {
-      if (current()) enter(SERVICE_UNREACHED);
-    }
-  }, [act, agentId, attach, enter, letGo, relistLater, setAsked, setListed]);
-
-  // The list as an answer says it, every read since let go.
-  const writeList = useCallback(
-    (answer: TerminalsAnswer) => {
-      live.current.listMoves += 1;
-      setListed(answer);
-    },
-    [setListed],
-  );
-
-  // The shells read again without touching the connection; a read that
-  // fails or is refused leaves the last one standing, and one overtaken by
-  // a change the tab made since is let go.
-  const reread = useCallback(async () => {
-    const seen = live.current.listMoves;
-    try {
-      const answer = await act(ACT_KIND.TERMINAL_LIST, { agentId });
-      if (!("refused" in answer) && live.current.listMoves === seen) writeList(answer);
-    } catch {
-      // The next read, a few seconds on, asks again.
-    }
-  }, [act, agentId, writeList]);
+    // A new shell asked for is opened in place of the one held.
+    const fresh = registry.get(shellsAsked(agentId)) > 0;
+    if (fresh) setAsked((was) => Math.max(0, was - 1));
+    const shells = heldNow();
+    const target = shells.find((each) => each.terminalId === live.current.shell) ?? shells[0];
+    if (target !== undefined && !fresh) return attach(target.terminalId);
+    const made = await open();
+    if (!current()) return;
+    if ("why" in made) return enter({ kind: TERMINAL_STATE.UNREACHABLE, why: made.why });
+    attach(made.terminalId, true);
+  }, [agentId, attach, enter, heldNow, letGo, open, registry, setAsked]);
+  useLayoutEffect(() => {
+    connectNow.current = connect;
+  });
 
   // Note that a shell shown on the same screen as another starts from a
-  // clear screen, which its tmux session then redraws.
+  // clear screen, which main then fills with what it held of that shell.
   const onChoose = useCallback(
     (next: string) => {
       const held = live.current;
@@ -473,57 +321,28 @@ export function useTerminalSession(
   );
 
   const onCreate = useCallback(async () => {
-    try {
-      const made = await act(ACT_KIND.TERMINAL_CREATE, { agentId });
-      if ("refused" in made) {
-        const next = refusedState(made.refused);
-        return next === undefined ? gone.current() : enter(next);
-      }
-      onChoose(made.terminal.id);
-      await reread();
-    } catch (cause) {
-      failedToast(SHELL_FAILED.CREATE, cause);
-    }
-  }, [act, agentId, enter, failedToast, onChoose, reread]);
+    const made = await open();
+    if ("why" in made) return failedToast(SHELL_FAILED.CREATE, made.why);
+    onChoose(made.terminalId);
+  }, [failedToast, onChoose, open]);
 
-  // A name given here stands over the list until a read carries it, or a third name, or its time
-  // runs out (`@repo/ui/pending-values`), and goes at once where the rename is refused.
-  const [titles, setTitles] = useState(NO_PENDING_TITLES);
-  const titlesNow = usePendingNow(titles.size > 0);
-  useEffect(
-    () =>
-      setTitles((was) =>
-        pendingSettled(was, (shell) => shellTitle(listed, shell), sameTitle, titlesNow),
-      ),
-    [listed, titlesNow],
+  // A shell's name is the window's own, so it takes at once.
+  const onRename = useCallback(
+    async (target: string, title: string): Promise<boolean> => {
+      writeHeld((shells) =>
+        shells.map((each) => (each.terminalId === target ? { ...each, title } : each)),
+      );
+      return true;
+    },
+    [writeHeld],
   );
-  const named = useMemo(() => withTitles(listed, titles), [listed, titles]);
-  const onRename = async (target: string, title: string): Promise<boolean> => {
-    live.current.listMoves += 1;
-    const asked = pendingValue(titles.get(target), title, shellTitle(listed, target), sameTitle);
-    setTitles((was) => new Map(was).set(target, asked));
-    const answer = await act(ACT_KIND.TERMINAL_RENAME, {
-      agentId,
-      terminalId: target,
-      title,
-    }).catch(() => undefined);
-    if (answer === undefined || "refused" in answer) {
-      setTitles((was) => pendingWithout(was, target, asked));
-      return false;
-    }
-    writeList(answer);
-    return true;
-  };
 
-  // Note that the shown shell's port is let go before it is ended, because
-  // the host says it is gone on that port, which would start a shell in its
-  // place beside the one this starts. Once the end answers, the screen moves
-  // on only where nothing else has moved it meanwhile: to the oldest shell
-  // left, or back to the same shell where it was not ended.
+  // Note that the shown shell's port is let go before it is ended, so its
+  // end is never said as an exit on the screen. The screen then moves on to
+  // the oldest shell left, or a new one, where nothing else moved it meanwhile.
   const onKill = useCallback(
     async (target: string): Promise<ActionResult> => {
       const held = live.current;
-      held.listMoves += 1;
       const shown = target === held.shell;
       if (shown) {
         letGo();
@@ -531,90 +350,60 @@ export function useTerminalSession(
         held.handle?.reset();
       }
       const generation = held.generation;
-      const moveOn = async (ended: boolean) => {
-        if (!shown || held.generation !== generation) return;
-        if (!ended) held.shell = target;
-        await connect();
-      };
       try {
-        const answer = await act(ACT_KIND.TERMINAL_KILL, { agentId, terminalId: target });
-        if ("refused" in answer) {
-          await moveOn(false);
-          return { status: ACTION_RESULT_STATUS.REJECTED, reason: SHELL_FAILED.KILL };
-        }
-        writeList(answer);
-        await moveOn(true);
+        await act(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: target });
+        forget(target);
+        if (shown && held.generation === generation) await connect();
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
       } catch {
-        await moveOn(false);
+        if (shown && held.generation === generation) attach(target);
         return { status: ACTION_RESULT_STATUS.REJECTED, reason: SHELL_FAILED.KILL };
       }
     },
-    [act, agentId, connect, letGo, writeList],
+    [act, agentId, attach, connect, forget, letGo],
   );
-
-  const resume = useCallback(async () => {
-    const generation = live.current.generation;
-    enter({ kind: TERMINAL_STATE.RESUMING, since: Date.now() });
-    try {
-      const resumed = await act(ACT_KIND.TERMINAL_RESUME, { agentId });
-      if (generation !== live.current.generation) return;
-      if ("refused" in resumed) {
-        const next = refusedState(resumed.refused);
-        return next === undefined ? gone.current() : enter(next);
-      }
-      await connect();
-    } catch {
-      if (generation === live.current.generation) enter(SERVICE_UNREACHED);
-    }
-  }, [act, agentId, connect, enter]);
 
   // Note that the screen takes the keyboard back as the bar's action
   // starts, because the button pressed goes with the bar.
   const onAction = useCallback(
-    (action: TerminalAction) => {
+    (_action: TerminalAction) => {
       live.current.handle?.focus();
-      if (action === TERMINAL_ACTION.RESUME) return void resume();
-      // A dropped connection is asked for again at once, which replaces the
-      // host's own retry; a read that failed starts over.
-      const { shell } = live.current;
-      if (live.current.state.kind === TERMINAL_STATE.RECONNECTING && shell !== undefined) {
-        attach(shell);
-      } else {
-        void connect();
-      }
+      void connect();
     },
-    [attach, connect, resume],
+    [connect],
   );
 
   // What is typed goes to the shell while one is attached, and otherwise
-  // is the state's own: any key after an idle close or an ended shell,
-  // Return for the bar's action, and nothing while a connection opens.
+  // is the state's own: any key after the shell ended opens a new one in
+  // its place, Return runs the bar's action, and nothing while a shell opens.
   const onInput = useCallback(
     (data: string) => {
       const held = live.current;
       switch (held.state.kind) {
-        case TERMINAL_STATE.IDLE:
-          if (held.shell !== undefined) attach(held.shell);
-          return;
-        case TERMINAL_STATE.EXITED:
+        case TERMINAL_STATE.EXITED: {
+          const ended = held.shell;
           held.shell = undefined;
+          if (ended !== undefined) {
+            forget(ended);
+            void act(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: ended }).catch(
+              () => undefined,
+            );
+          }
           void connect();
           return;
-        default: {
-          const action = returnAction(held.state);
-          if (action !== undefined) {
-            if (data === RETURN) onAction(action);
-            return;
-          }
-          // Note that typing goes out only to an attached shell, because the
-          // host drops what reaches a connection still opening or dropped.
-          if (held.state.kind !== TERMINAL_STATE.ATTACHED) return;
-          for (const message of inputMessages(data)) held.port?.postMessage(message);
         }
+        case TERMINAL_STATE.UNREACHABLE:
+          if (data === RETURN) onAction(TERMINAL_ACTION.RETRY);
+          return;
+        case TERMINAL_STATE.ATTACHED:
+          for (const message of inputMessages(data)) held.port?.postMessage(message);
+          return;
+        default:
+          // Note that typing goes out only to an attached shell, because nothing stands to take it while one opens.
+          return;
       }
     },
-    [attach, connect, onAction],
+    [act, agentId, connect, forget, onAction],
   );
 
   const onPortMessage = useCallback(
@@ -634,18 +423,13 @@ export function useTerminalSession(
         });
         return;
       }
-      const next = stateOf(message.state, message.code);
-      if (next === undefined) {
-        // The shell was killed elsewhere: find another, or open one.
-        held.shell = undefined;
-        void connect();
-        return;
-      }
-      enter(next);
-      // A sandbox that stopped or a shell that ended changes the list, which is read again.
-      if (LIST_CHANGES.has(next.kind)) void reread();
+      enter(
+        message.state === TERMINAL_CONNECTION.EXITED
+          ? { kind: TERMINAL_STATE.EXITED, code: message.code }
+          : { kind: TERMINAL_STATE.ATTACHED },
+      );
     },
-    [connect, enter, reread],
+    [enter],
   );
 
   // Note that the screen reads the latest of these through refs, because
@@ -705,19 +489,16 @@ export function useTerminalSession(
     [agentId, onPortMessage],
   );
 
-  // Note that a tab taken down with attaches still out lets their shells go,
-  // and closes their ports as they land, since no listener of its own is
-  // left to, and an unclaimed port would hold its connection open. It reads
-  // the same line of attaches the tab kept, which a refused attach leaves as
-  // well, and stops listening once that line is empty, so it never takes a
-  // port a later tab asked for.
+  // Note that a tab taken down with attaches still out closes their ports
+  // as they land, since no listener of its own is left to, and an unclaimed
+  // port would hold its shell's output back. It reads the same line of
+  // attaches the tab kept, which a refused attach leaves as well, and stops
+  // listening once that line is empty, so it never takes a port a later
+  // tab asked for.
   useEffect(() => {
     const held = live.current;
     return () => {
       if (held.asked.length === 0) return;
-      for (const shell of new Set(held.asked.map((asked) => asked.shell))) {
-        void act(ACT_KIND.TERMINAL_DETACH, { agentId, terminalId: shell }).catch(() => undefined);
-      }
       // Note that a port is matched to any attach still out for its shell,
       // not only the oldest, since nothing waits on their order any more.
       const stop = onTerminalPort((ticket, port) => {
@@ -729,7 +510,7 @@ export function useTerminalSession(
       });
       held.release = stop;
     };
-  }, [act, agentId]);
+  }, [agentId]);
 
   // Connected only while shown, and only once there is a screen to draw on.
   useEffect(() => {
@@ -739,12 +520,11 @@ export function useTerminalSession(
     return letGo;
   }, [shown, handle, connect, letGo]);
 
-  // A new shell asked for while a shell is attached starts at once, each ask
-  // its own shell; one asked for of a connection the host ended is the key
-  // that connects again, starting it; one asked for before is started by
-  // the connect, once the sandbox runs, which a stopped one waits on Resume
-  // for. Note that attached means a port held too, because a hidden tab let
-  // its port go and its state stands as it was until it is shown again.
+  // A new shell asked for while a shell is attached opens at once, each ask
+  // its own shell; one asked for while the shown shell ended is the key
+  // that opens it; one asked for before is opened by the connect. Note that
+  // attached means a port held too, because a hidden tab let its port go
+  // and its state stands as it was until it is shown again.
   useEffect(() => {
     if (!shown || asked === 0) return;
     if (state.kind === TERMINAL_STATE.ATTACHED && live.current.port !== undefined) {
@@ -752,32 +532,8 @@ export function useTerminalSession(
       void onCreate();
       return;
     }
-    if (state.kind === TERMINAL_STATE.IDLE || state.kind === TERMINAL_STATE.EXITED) void connect();
+    if (state.kind === TERMINAL_STATE.EXITED) void connect();
   }, [shown, asked, state.kind, setAsked, onCreate, connect]);
-
-  // While shown, the shells are read again every few seconds and whenever
-  // the window takes the keyboard back, so a shell started or ended
-  // elsewhere, or a command started in one, shows in the list.
-  useEffect(() => {
-    if (!shown) return;
-    const held = live.current;
-    held.showing = true;
-    const again = () =>
-      rereadLater({
-        run: () => {
-          if (!held.showing) return;
-          void reread();
-          again();
-        },
-      });
-    again();
-    const onFocus = () => void reread();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      held.showing = false;
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [shown, reread, rereadLater]);
 
   return {
     state,
@@ -786,7 +542,7 @@ export function useTerminalSession(
     find: handle?.find,
     screen: setElement,
     onAction,
-    listed: named,
+    listed,
     shell,
     onChoose,
     onCreate: () => void onCreate(),

@@ -10,7 +10,6 @@ import {
   HostedMacCommandClient,
   HostedMcpClientsClient,
   HostedTaskClient,
-  HostedTerminalClient,
   HostedWorkspaceClient,
 } from "@repo/features";
 import { HostedInstalledSkillClient } from "@repo/features/installed-skill-client";
@@ -380,17 +379,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       : unavailableConcern(HOST_PLATFORM_CONCERN.THIS_MAC_HOST);
     const terminals: TerminalsComposer =
       openSocket !== undefined
-        ? yield* served(
-            composeTerminals({
-              kernel,
-              account,
-              client: new HostedTerminalClient({
-                serviceBaseUrl: kernel.hostedServiceBaseUrl,
-                credential: account.credential,
-              }),
-              openSocket,
-            }),
-          )
+        ? yield* served(composeTerminals({ kernel, account, openSocket }))
         : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
     const mirrors = platform.has(HOST_PLATFORM_CONCERN.MIRRORS)
       ? yield* composeMirrors({

@@ -119,14 +119,6 @@ export {
   type TaskWritten,
 } from "./task-client.js";
 export {
-  HostedTerminalClient,
-  type HostedTerminalClientOptions,
-  TERMINAL_UNANSWERED,
-  type TerminalRelayAsk,
-  type TerminalUnanswered,
-  terminalRelayAddress,
-} from "./terminal-client.js";
-export {
   WORKSPACE_CALL_FAILURE,
   type WorkspaceCallFailure,
   type WorkspaceCallResult,

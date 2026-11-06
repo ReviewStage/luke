@@ -1,4 +1,5 @@
 import {
+  terminalAgentParamsSchema,
   terminalAttachParamsSchema,
   terminalShellParamsSchema,
 } from "@repo/features/terminal-acts";
@@ -7,13 +8,12 @@ import { actProcedure, exactInput } from "./base.js";
 import { MAC_SHELL_ACT_KIND } from "./kinds.js";
 
 /**
- * mac-shells.ts -- a shell on this Mac, opened in a folder for the asking panel, attached, and closed, as procedures.
+ * mac-shells.ts -- a cloud agent's shells on this Mac: the agent's mirror found or made, and a shell opened in a folder for the asking panel, attached, and closed, as procedures.
  *
  * Main answers them itself (`../act-port/mac-shell-procedures.ts`), and a
- * browser tab refuses them. A shell is named as a cloud shell is, by its
- * agent and its own id, so an attach takes the cloud's attach as it stands
- * and posts the same port: what the shell prints, how it stands, and what
- * the panel types, resizes, and acks travel on it, never on these.
+ * browser tab refuses them. A shell is named by its agent and its own id,
+ * and an attach posts it a port: what the shell prints, how it stands, and
+ * what the panel types, resizes, and acks travel on it, never on these.
  */
 
 /** The longest folder a shell opens in, as macOS's `PATH_MAX` bounds a path. */
@@ -28,12 +28,18 @@ const macShellOpenParamsSchema = EffectSchema.Struct({
   ),
 });
 
+/** The agent's mirror, by the absolute path of its folder. */
+const macShellMirrorSchema = EffectSchema.Struct({ folder: EffectSchema.String });
+
 /** The shell opened, by the id an attach and a close name it by. */
 const macShellOpenedSchema = EffectSchema.Struct({
   terminalId: terminalShellParamsSchema.fields.terminalId,
 });
 
 export const macShellActsContract = {
+  [MAC_SHELL_ACT_KIND.MAC_SHELL_MIRROR]: actProcedure("Could not mirror this agent’s files.")
+    .input(exactInput(terminalAgentParamsSchema))
+    .output(macShellMirrorSchema),
   [MAC_SHELL_ACT_KIND.MAC_SHELL_OPEN]: actProcedure("Could not open a shell in that folder.")
     .input(exactInput(macShellOpenParamsSchema))
     .output(macShellOpenedSchema),

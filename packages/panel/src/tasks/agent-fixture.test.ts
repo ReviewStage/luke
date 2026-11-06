@@ -55,7 +55,7 @@ const READS: readonly Read[] = [
     lastLine: 200,
   }),
   read(ACT_KIND.TASKS_TREE, { planId: FIXTURE_TASK_ID, path: "src/members" }),
-  read(ACT_KIND.TERMINAL_LIST, AGENT),
+  read(ACT_KIND.MAC_SHELL_OPEN, { ...AGENT, folder: "/Users/ada/.vespin/mirrors/relay" }),
 ];
 
 /** Whether a procedure's declared schema is an Effect Schema, which encodes with no service, as every act's output but a stream's is. */

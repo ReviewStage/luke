@@ -4,9 +4,6 @@ import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { Task, TaskSummary } from "@repo/features/task-wire";
-import { shellsAsked } from "@repo/features/terminal-store";
-import { SANDBOX_STATE } from "@repo/features/terminal-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type { StripTab } from "@repo/ui/tab-strip-model";
@@ -25,6 +22,7 @@ import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
+import { shellsAsked } from "./terminal-held.js";
 import type { MainTab } from "./use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
@@ -32,10 +30,9 @@ import { NO_LOOKS } from "./use-task-looks.js";
 /**
  * Show terminal (⌘J) and New terminal from each place a developer can be,
  * as the new-terminal rules have them: which agent's Terminal tab the side
- * panel is asked to show, whether a new shell is asked of its sandbox, and
+ * panel is asked to show, whether a new shell is asked of its mirror, and
  * the picker where the rules leave the agent to the developer. The task is
- * drawn by the real window over a staged control; main answers how each
- * sandbox stands.
+ * drawn by the real window over a staged control.
  */
 
 const TASK: Task = {
@@ -79,16 +76,8 @@ const roots: Root[] = [];
 beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
   installScrollIntoView();
-  // Main answers how each agent's sandbox stands: the working agent's runs, the other's is stopped.
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.TERMINAL_LIST]: ({ agentId }) =>
-      Promise.resolve(
-        agentId === WORKING.id
-          ? { sandbox: SANDBOX_STATE.RUNNING, terminals: [] }
-          : { sandbox: SANDBOX_STATE.STOPPED, terminals: [] },
-      ),
-  });
+  fakeActPort({});
   handCapabilities(DESKTOP_CAPABILITIES);
 });
 
@@ -168,7 +157,7 @@ async function mount(input: {
   return {
     /** Every tab the side panel was asked to show, in order. */
     shown,
-    /** How many new shells were asked of the agent's sandbox and not yet started. */
+    /** How many new shells were asked of the agent's mirror and not yet opened. */
     asked: (agentId: string) => registry.get(shellsAsked(agentId)),
     run: async (command: typeof APP_COMMAND.SHOW_TERMINAL | typeof APP_COMMAND.NEW_TERMINAL) => {
       act(() => {
@@ -202,7 +191,7 @@ function picker() {
   };
 }
 
-test("on a plan with one agent, ⌘J shows its Terminal tab and New terminal asks its sandbox for a new shell there", async () => {
+test("on a plan with one agent, ⌘J shows its Terminal tab and New terminal asks for a new shell there", async () => {
   const task = await mount({ agents: [WORKING] });
   await task.run(APP_COMMAND.SHOW_TERMINAL);
   assert.deepEqual(task.shown, [{ terminal: WORKING.id }]);
@@ -230,10 +219,10 @@ test("with several agents, ⌘J shows the terminal used last, and New terminal a
   assert.deepEqual(task.shown, [{ terminal: DONE.id }]);
   await task.run(APP_COMMAND.NEW_TERMINAL);
   const asked = picker();
-  assert.equal(asked?.question, "New terminal in which agent’s sandbox?");
+  assert.equal(asked?.question, "New terminal for which agent?");
   assert.deepEqual(asked?.rows, [
-    { name: "Invite flow", detail: "0 shells", working: true, chosen: false },
-    { name: "Expiry job", detail: "Sandbox stopped · last used", working: false, chosen: true },
+    { name: "Invite flow", detail: "", working: true, chosen: false },
+    { name: "Expiry job", detail: "last used", working: false, chosen: true },
   ]);
   await asked?.choose("Invite flow");
   assert.deepEqual(task.shown.at(-1), { terminal: WORKING.id });
@@ -282,7 +271,7 @@ test("a Start the picker pressed that the service refused says why on the toast,
   assert.ok(said.includes("Choose a repository"), "and offers the remedy");
 });
 
-test("the panel's + lists each agent's terminal under Terminal, says how it stands, and a pick adds a shell to that agent's sandbox", async () => {
+test("the panel's + lists each agent's terminal under Terminal, and a pick asks for a new shell in that agent's mirror", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
     side: SIDE_PANEL_TAB.COMMENTS,

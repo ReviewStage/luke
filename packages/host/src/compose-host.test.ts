@@ -93,11 +93,15 @@ const desktopAccountSource = Layer.provide(
 /** A client offering one capability of its own, as a browser might. */
 const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.MICROPHONE];
 
-/** What a standing host answers for an agent's terminals, and which concerns it says it runs. */
+/** What a standing host answers for a cloud browser's live view, and which concerns it says it runs. */
 const askedOfStandingHost = Effect.gen(function* () {
   const { concerns } = yield* HostAssemblyTag;
   const { gateway } = yield* HostTag;
-  const terminals = yield* gateway.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: "agent" });
+  const terminals = yield* gateway.call(GATEWAY_METHOD.BROWSER_LIVE_CONNECT, {
+    connectionId: "connection",
+    agentId: "agent",
+    tabId: "tab",
+  });
   return { concerns, terminals };
 });
 

@@ -22,7 +22,6 @@ import { portForwardActsContract } from "./port-forwards.js";
 import { pushesContract } from "./pushes.js";
 import { settingsActsContract } from "./settings.js";
 import { tasksActsContract } from "./tasks.js";
-import { terminalActsContract } from "./terminals.js";
 import { updateActsContract } from "./updates.js";
 import { windowSurfaceActsContract } from "./window-surface.js";
 import { workspaceActsContract } from "./workspaces.js";
@@ -64,7 +63,6 @@ export {
   type PortActKind,
   SETTINGS_ACT_KIND,
   TASKS_ACT_KIND,
-  TERMINAL_ACT_KIND,
   UPDATE_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
   WORKSPACE_ACT_KIND,
@@ -100,7 +98,6 @@ export const actContract = {
   ...portForwardActsContract,
   ...settingsActsContract,
   ...tasksActsContract,
-  ...terminalActsContract,
   ...updateActsContract,
   ...windowSurfaceActsContract,
   ...workspaceActsContract,

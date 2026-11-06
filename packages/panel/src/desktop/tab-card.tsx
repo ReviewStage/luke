@@ -84,7 +84,7 @@ export type CardSubject =
   | {
       readonly kind: typeof TAB_KIND.TERMINAL;
       readonly agentId: string;
-      /** The agent whose sandbox its shells run in. */
+      /** The agent whose mirror its shells run in. */
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
     }
@@ -221,7 +221,7 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         />
       );
     }
-    // A Terminal tab hangs its agent's card, saying at its foot whose sandbox its shells run in.
+    // A Terminal tab hangs its agent's card, saying at its foot where its shells run.
     case TAB_KIND.TERMINAL:
       return (
         <AgentCard

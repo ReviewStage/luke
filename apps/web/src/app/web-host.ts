@@ -2,18 +2,17 @@
  * web-host.ts -- the shared host composed in a browser tab: its seams answered by the tab, signed in by the service's cookie, and reached by the panel through the in-process bridge.
  *
  * The host is the desktop's own (`@repo/host`), assembled with one platform
- * concern, an agent's terminals: each shell's relay socket is opened from
- * the page on its own origin under the session cookie
- * (`web-terminal-socket.ts`), and its port is posted to the panel in the
- * same page. Nothing here spawns a process or reaches the Mac's own
- * terminal. What the desktop's seams read from the machine the tab answers
+ * concern, the terminals concern, whose relay sockets (a cloud Browser tab's
+ * live view and each live read) are opened from the page on its own origin
+ * under the session cookie (`web-terminal-socket.ts`). Nothing here spawns a
+ * process or reaches the Mac's own terminal. What the desktop's seams read from the machine the tab answers
  * instead: the settings file in the browser's storage, ids from `crypto`,
  * the service at the origin that served the page, and the account from the
  * session cookie that origin set, which no code here reads or keeps.
  *
  * The panel's acts reach the host's own procedures on the act port in this
  * process; the few a platform answers itself (a copy, a download, focus, the
- * contact mail, feedback, and an agent's Terminal tab) are the tab's, and
+ * contact mail, and feedback) are the tab's, and
  * every other platform kind is refused in its own words, so the table stays
  * total. What waits is counted on the tab's badge (`web-notices.ts`), and the
  * tab posts no notification. The composition is a
@@ -25,7 +24,6 @@
 import { PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { feedbackDelivery } from "@repo/features/feedback";
 import type { LinkPlatform } from "@repo/features/link-open";
-import { TERMINAL_PORT_CHANNEL } from "@repo/features/terminal-acts";
 import { runModeFor } from "@repo/host";
 import {
   type ActPortDependencies,
@@ -34,8 +32,6 @@ import {
   createActPortHandler,
   type PlatformActProcedures,
   refusedPlatformProcedures,
-  type TerminalPortSeam,
-  terminalProcedures,
   WindowPushes,
 } from "@repo/host/act-port";
 import { AgentNoticeDoors } from "@repo/host/agent-notices";
@@ -230,54 +226,18 @@ const noticeDoors = Effect.acquireRelease(Effect.sync(webNoticeDoors), (doors) =
 );
 
 /**
- * How the host in this tab hands a shell's port to the panel beside it: a
- * channel in the page, its far end posted to this window under the
- * terminal's channel and the ticket naming the shell, as the desktop's
- * preload posts one (`@repo/panel`'s `terminal-port.ts` reads it). The page
- * goes only with the tab, and the host with it, so no port outlives it.
- */
-const pageTerminalPorts: TerminalPortSeam<WebSender> = {
-  open: (sender, ticket) => {
-    const { port1, port2 } = new MessageChannel();
-    sender.postMessage({ channel: TERMINAL_PORT_CHANNEL, ticket }, sender.location.origin, [port2]);
-    port1.start();
-    return {
-      post: (message) => port1.postMessage(message),
-      onMessage: (listener) => port1.addEventListener("message", (event) => listener(event.data)),
-      close: () => port1.close(),
-    };
-  },
-  whenGone: () => undefined,
-};
-
-/** What the tab's own procedures reach of the host: its operator, and the runtime a port's message is run on. */
-interface PlatformHost {
-  readonly operator: OperatorClient;
-  readonly fork: WebHostOptions["fork"];
-}
-
-/**
  * The platform procedures the tab answers itself: a copy of words or a
- * picture, a download, focus, the contact mail, feedback, and an agent's Terminal tab, its shells' ports posted to the
- * page. Every other platform kind is refused in its own words, since a page
- * cannot carry it yet: the updater, the microphone, the system's
- * notification settings, and the Mac's own terminal.
+ * picture, a download, focus, the contact mail, and feedback. Every other
+ * platform kind is refused in its own words, since a page cannot carry it:
+ * the updater, the microphone, the system's notification settings, and a
+ * shell on the Mac, so a cloud agent has no Terminal tab here.
  */
-function platformProcedures(
-  http: HttpClient.HttpClient,
-  { operator, fork }: PlatformHost,
-): PlatformActProcedures<WebSender> {
+function platformProcedures(http: HttpClient.HttpClient): PlatformActProcedures<WebSender> {
   const port = actPortFor<WebSender>();
   const feedback = feedbackDelivery({ url: new URL(FEEDBACK_PATH, location.origin).href });
   const KIND = WINDOW_SURFACE_ACT_KIND;
   return {
     ...refusedPlatformProcedures<WebSender>(),
-    ...terminalProcedures<WebSender>({
-      host: operator.host,
-      ports: pageTerminalPorts,
-      createId: () => crypto.randomUUID(),
-      fork,
-    }),
     [KIND.WINDOW_COPY_TEXT]: port[KIND.WINDOW_COPY_TEXT].handler(({ input }) =>
       navigator.clipboard.writeText(input.words),
     ),
@@ -459,7 +419,7 @@ const composedWeb = (
       });
       const actPort = yield* servedActPort(
         portDependencies(operator, notices, crypto.randomUUID(), tabs),
-        platformProcedures(http, { operator, fork }),
+        platformProcedures(http),
         services,
       );
       return {

@@ -1,12 +1,12 @@
 /**
- * mac-shell-procedures.ts -- shells on this Mac as the act port carries them: the developer's login shell opened in a folder for the asking panel, attached on a port of its own, and closed, from a panel alone.
+ * mac-shell-procedures.ts -- shells on this Mac as the act port carries them: a cloud agent's mirror found or made, the developer's login shell opened in a folder for the asking panel, attached on a port of its own, and closed, from a panel alone.
  *
  * The platform holds each shell (`MacShell`: the desktop's main, over
  * node-pty), and these procedures hold which window it belongs to. A shell
  * belongs to the window that opened it, and no other window can attach to
  * or close it. An attach opens a channel and posts its other end to that
- * window under the ticket a cloud shell's port carries, so the Terminal tab
- * reads it as it reads a cloud shell's: what the shell prints, paced to the
+ * window under a ticket naming the shell, which the Terminal tab reads:
+ * what the shell prints, paced to the
  * tab's acks (`TERMINAL_FLOW`), how it stands, and its exit, out; what the
  * panel types, resizes, and acks, in. The window's page going, a reload
  * among it, closes the port and leaves the shell running, so the page that
@@ -23,6 +23,7 @@ import {
   TERMINAL_CONNECTION,
   TERMINAL_FLOW,
   TERMINAL_PORT_MESSAGE,
+  type TerminalPortOutbound,
   type TerminalPortTicket,
   terminalPortInboundSchema,
 } from "@repo/features/terminal-acts";
@@ -32,9 +33,24 @@ import { Effect, Result } from "effect";
 import { MAC_SHELL_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPortFor } from "./base.js";
 import type { PlatformActProcedures } from "./index.js";
-import type { HostTerminalPort, TerminalPortSeam } from "./terminal-procedures.js";
 
 type MacShellActKind = (typeof MAC_SHELL_ACT_KIND)[keyof typeof MAC_SHELL_ACT_KIND];
+
+/** The host's end of one attached shell's channel. */
+export interface HostTerminalPort {
+  post(message: TerminalPortOutbound): void;
+  /** Hears each message the panel sends, unread. */
+  onMessage(listener: (message: WireBoundaryInput) => void): void;
+  close(): void;
+}
+
+/** How main reaches a panel's page for its ports, `Sender` being the platform's own handle on the window. */
+export interface TerminalPortSeam<Sender> {
+  /** A fresh channel: the host's end, with the other end already posted to the panel under the ticket. */
+  open(sender: Sender, ticket: TerminalPortTicket): HostTerminalPort;
+  /** Calls `then` once, when the panel's page is gone. */
+  whenGone(sender: Sender, then: () => void): void;
+}
 
 /** One running shell, as the platform holds it. */
 export interface MacShell {
@@ -51,6 +67,8 @@ export interface MacShell {
 }
 
 export interface MacShellActsDependencies<Sender> {
+  /** The agent's mirror on this Mac, made where none stands, by its folder; none where the host could not make it. */
+  mirror: (agentId: string) => Effect.Effect<string | undefined>;
   /** The developer's login shell started in `folder`; none where that is no folder on this Mac or the shell did not start. */
   spawn: (folder: string) => MacShell | undefined;
   ports: TerminalPortSeam<Sender>;
@@ -148,7 +166,7 @@ function attached(held: Held, port: HostTerminalPort): void {
 export function macShellProcedures<Sender>(
   dependencies: MacShellActsDependencies<Sender>,
 ): Pick<PlatformActProcedures<Sender>, MacShellActKind> {
-  const { spawn, ports, whenClosed, createId } = dependencies;
+  const { mirror, spawn, ports, whenClosed, createId } = dependencies;
   const macShellPort = actPortFor<Sender>();
   /** Each window's shells, by agent and then by shell. */
   const windows = new Map<Sender, Map<string, Map<string, Held>>>();
@@ -190,6 +208,14 @@ export function macShellProcedures<Sender>(
   };
 
   return {
+    [MAC_SHELL_ACT_KIND.MAC_SHELL_MIRROR]: macShellPort[MAC_SHELL_ACT_KIND.MAC_SHELL_MIRROR].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const folder = yield* mirror(input.agentId);
+        if (folder === undefined) return yield* Effect.fail(errors.REFUSED());
+        return { folder };
+      },
+    ),
     [MAC_SHELL_ACT_KIND.MAC_SHELL_OPEN]: macShellPort[MAC_SHELL_ACT_KIND.MAC_SHELL_OPEN].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
