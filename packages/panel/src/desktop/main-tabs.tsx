@@ -414,8 +414,12 @@ export function agentEntries(
 }
 
 /** The task's Inbox as a row, its tray and its name, which picking opens through `onPick`. */
-function inboxEntry(onPick: () => void): AddEntry {
-  return { row: { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) }, onPick };
+function inboxEntry(waiting: number, onPick: () => void): AddEntry {
+  return {
+    row: { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) },
+    endMark: waitingMark(waiting),
+    onPick,
+  };
 }
 
 /** What waits on the developer counted at a row's or a tab's end in the attention tone the Inbox's rows wear; nothing at none. */
@@ -431,18 +435,19 @@ function waitingMark(waiting: number): React.JSX.Element | undefined {
 /**
  * The task's Inbox as ⌘K offers it, by itself rather than among the task's
  * agents, though only they post to it; none on a task with no agent and
- * nothing main says waits on it (`waiting`), which holds the Inbox while its
- * agents are unread. Picking it opens the window's Inbox narrowed to the
- * task, through `onPick`.
+ * nothing main says waits on it (`waiting`, how many), which holds the Inbox
+ * while its agents are unread and is counted at its end as the task's Inbox
+ * row counts it. Picking it opens the window's Inbox narrowed to the task,
+ * through `onPick`.
  */
 export function inboxEntries(
   agents: AgentsControl,
-  waiting: boolean,
+  waiting: number,
   onPick: () => void,
 ): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the task holds any agent.
-  if ((agents.heldIds?.length ?? 0) === 0 && !waiting) return [];
-  return [inboxEntry(onPick)];
+  if ((agents.heldIds?.length ?? 0) === 0 && waiting === 0) return [];
+  return [inboxEntry(waiting, onPick)];
 }
 
 /**
