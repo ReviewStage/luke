@@ -23,11 +23,9 @@ export type ServersWriter = (
 const NONE_OFF: readonly string[] = [];
 
 export function useAgentServers(input: {
-  agent: Pick<AgentSummary, "id" | "disabledServers" | "startedBy">;
+  agent: Pick<AgentSummary, "id" | "disabledServers">;
   write: ServersWriter;
   onOpenSettings: () => void;
-  /** The reader's account, which says whether they started the agent and so whether this Mac's setting meets its commands. */
-  me: string | undefined;
 }): AgentServersControl {
   const { agent } = input;
   // Note that the writer is read through a ref, because the tab hands a new
@@ -39,9 +37,5 @@ export function useAgentServers(input: {
     disabled: agent.disabledServers ?? NONE_OFF,
     onSwitch: (next) => void latest.current.write(agent.id, next),
     onOpenSettings: () => latest.current.onOpenSettings(),
-    workspace: {
-      agentId: agent.id,
-      starterReading: input.me !== undefined && agent.startedBy?.userId === input.me,
-    },
   };
 }

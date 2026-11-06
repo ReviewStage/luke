@@ -1,24 +1,30 @@
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   AGENT_MACHINE,
   type AgentSummary,
   DEVICE_STANDING,
   type DeviceStanding,
 } from "@repo/features/agent-wire";
+import { RUN_ON_MAC_REASON_WORDS } from "@repo/features/workspace-tools-model";
 import {
   ChipName,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
+  HoverCardRow,
+  HoverCardRule,
   STATUS_TONE,
   StaticChip,
   Tooltip,
   useSecond,
   VisuallyHidden,
 } from "@repo/ui";
+import { actorName, personActor } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
 import type { ReactNode } from "react";
 import { presenceStanding, useDevicePresence } from "../device-presence.js";
 import { machineName, useThisMac } from "../machine-name.js";
+import { useRunOnMac } from "./run-on-mac.js";
 import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
 
 /**
@@ -32,7 +38,11 @@ import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
  * takes no press (`StaticChip`); a rest on it, or a tap under a finger,
  * hangs a card saying where the agent runs and whether the
  * device is online, and a reader hears "Runs on:" before its words. An
- * agent in a sandbox says "Cloud" beside the cloud glyph.
+ * agent in a sandbox says "Cloud" beside the cloud glyph, and its card says
+ * under a rule whose Mac its `run_on_mac` runs shell commands on, the task's
+ * assignee's or else its starter's, "Your Mac" for the reader's own, and how
+ * that Mac stands: listening, offline, or off in this Mac's Settings
+ * (`run-on-mac.ts`), read only while the card shows.
  *
  * While a device has not beaten lately, asleep or with the app closed,
  * judged from how long ago the service says it last beat, the label adds
@@ -62,17 +72,49 @@ function macWords(name: string, standing: DeviceStanding | undefined): string {
     : `${name} · Can't check status`;
 }
 
+/** What the card's `run_on_mac` row says at its end while the Mac listens. */
+const RUN_ON_MAC_LISTENING = "Listening";
+
 /** What the card says under its head of the agent, in the cloud or on a device. */
 const SHARED_NOTE = {
   CLOUD: "This agent runs in a cloud sandbox. Set when it was started.",
   DEVICE: "This agent runs on this device. Set when it was started.",
 } as const;
 
+/**
+ * Whose Mac the agent's `run_on_mac` runs on and how it stands, under a rule
+ * in the card; nothing while it is read, or for an agent offered none.
+ */
+function RunOnMacRow({
+  agentId,
+  readerId,
+}: {
+  agentId: string;
+  readerId: string | undefined;
+}): React.JSX.Element | null {
+  const { standing, reason } = useRunOnMac(agentId, (userId) => userId === readerId);
+  if (standing === undefined) return null;
+  const mac = `${actorName(personActor(standing.owner, undefined, readerId), { possessive: true })} Mac`;
+  return (
+    <>
+      <HoverCardRule />
+      <HoverCardRow
+        glyph={<DeviceGlyph device={undefined} />}
+        label={`${AGENT_TOOL.RUN_ON_MAC} · ${mac}`}
+        end={reason === undefined ? RUN_ON_MAC_LISTENING : RUN_ON_MAC_REASON_WORDS[reason]}
+      />
+    </>
+  );
+}
+
 export function AgentPlace({
   agent,
+  readerId,
   narrow = false,
 }: {
-  agent: Pick<AgentSummary, "mac" | "machine">;
+  agent: Pick<AgentSummary, "id" | "mac" | "machine">;
+  /** The reader's account, whose own Mac the card calls "Your Mac". */
+  readerId: string | undefined;
   /** Whether the box is too narrow for the chip's words, so it draws its glyph alone. */
   narrow?: boolean;
 }): React.JSX.Element | null {
@@ -83,6 +125,7 @@ export function AgentPlace({
         words={RUNS_ON_WORDS.CLOUD}
         sub={undefined}
         note={SHARED_NOTE.CLOUD}
+        more={<RunOnMacRow agentId={agent.id} readerId={readerId} />}
         narrow={narrow}
       />
     );
@@ -97,6 +140,7 @@ function PlaceChip({
   words,
   sub,
   note,
+  more,
   quiet = true,
   narrow,
 }: {
@@ -104,6 +148,8 @@ function PlaceChip({
   words: string;
   sub: string | undefined;
   note: string;
+  /** What the card lists after its note, where it lists anything. */
+  more?: ReactNode;
   quiet?: boolean;
   narrow: boolean;
 }): React.JSX.Element {
@@ -114,6 +160,7 @@ function PlaceChip({
         <HoverCard>
           <HoverCardHead glyph={glyph} name={words} sub={sub} />
           <HoverCardNote>{note}</HoverCardNote>
+          {more}
         </HoverCard>
       }
     >

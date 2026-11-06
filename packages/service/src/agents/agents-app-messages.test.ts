@@ -1384,7 +1384,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an agent's run_on_mac standing reads for its starter, and as not found for a member who reaches the agent but not its task",
+    "an agent's run_on_mac standing names its starter's Mac for its starter, and reads as not found for a member who reaches the agent but not its task",
     () =>
       Effect.gen(function* () {
         const agentSessions = fakeAgentSessions();
@@ -1407,7 +1407,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         const teammate = yield* ask(request(AGENT_WORKSPACE_TOOLS, other, { id: agent.id }));
 
-        assert.deepEqual(read.runOnMac, { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY });
+        assert.deepEqual(read.runOnMac, {
+          on: false,
+          reason: RUN_ON_MAC_OFF.MAC_AWAY,
+          owner: { userId: owner, name: "Test User" },
+        });
         assert.deepEqual(
           teammate,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
