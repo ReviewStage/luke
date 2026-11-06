@@ -190,6 +190,7 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { mentionableAgent } from "../tasks/task-mentions.js";
 import { useKnownNames } from "../tasks/use-known-names.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
+import { useListedAgent } from "../tasks/use-workspace-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
@@ -1927,8 +1928,8 @@ function ModelRow({
   );
 }
 
-/** What the agent picker names the saved agent the workspace's list no longer holds. */
-const KEPT_AGENT_LABEL = "The agent it goes to now";
+/** What the agent picker names the saved agent the task list holds no longer, such as one deleted. */
+const KEPT_AGENT_LABEL = "An agent no longer listed";
 
 /** What the agent row says where the workspace's agents could not be read, and where the search among them did not answer. */
 const AGENTS_UNREAD = readFailedWords("the workspace's agents");
@@ -1951,7 +1952,8 @@ const FIRST_RUN_DETAIL =
  * the service finds on the repository, so an agent past the newest is
  * found; the agent chosen from a search stays named after the list moves
  * on. The agent it goes to as saved is kept first in the menu where the
- * list no longer holds it, so another pick can still be taken back.
+ * newest no longer hold it, named as the task list carries it, so another
+ * pick can still be taken back.
  */
 function AgentRow({
   draft,
@@ -1977,6 +1979,7 @@ function AgentRow({
   const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
   const known = useKnownNames();
   const place = useAgentRowPlace();
+  const savedAgent = useListedAgent(savedAgentId);
   // Note that the catalog this row read names the models, since the window's own may not hold it yet.
   const drawn = { ...place, models: models ?? place.models };
   const detail = draft.agentId === null ? FIRST_RUN_DETAIL : AGENT_DETAIL;
@@ -2017,19 +2020,32 @@ function AgentRow({
           ...offered.filter((agent) => matched.has(agent.id)),
           ...(searched ?? []).filter((agent) => !matched.has(agent.id)),
         ];
-  const chosen =
-    offered.find((agent) => agent.id === draft.agentId) ??
-    searched?.find((agent) => agent.id === draft.agentId) ??
-    (picked?.id === draft.agentId ? picked : undefined);
-  const chosenRow = chosen === undefined ? undefined : agentMenuRow(chosen, drawn);
   const kept =
     savedAgentId !== null && !offered.some((agent) => agent.id === savedAgentId)
       ? savedAgentId
       : undefined;
+  // Note that the saved agent past the newest is found by its id among every agent the list carries.
+  const keptAgent =
+    kept === undefined || savedAgent === undefined
+      ? undefined
+      : mentionableAgent(savedAgent, known.tasks, drawn.models);
+  const keptRow = keptAgent === undefined ? undefined : agentMenuRow(keptAgent, drawn);
+  const chosen =
+    offered.find((agent) => agent.id === draft.agentId) ??
+    searched?.find((agent) => agent.id === draft.agentId) ??
+    (picked?.id === draft.agentId ? picked : undefined) ??
+    (keptAgent?.id === draft.agentId ? keptAgent : undefined);
+  const chosenRow = chosen === undefined ? undefined : agentMenuRow(chosen, drawn);
   // Note that a search lists only what it found, so choosing none and the kept agent stand in the menu while none is typed.
   const rows = [
     ...(words !== "" ? [] : [{ id: FIRST_RUN_ROW, label: FIRST_RUN_LABEL }]),
-    ...(kept === undefined || words !== "" ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
+    ...(kept === undefined || words !== ""
+      ? []
+      : [
+          keptRow === undefined
+            ? { id: kept, label: KEPT_AGENT_LABEL }
+            : { ...keptRow, replayMasked: true },
+        ]),
     ...listed.map((agent) => ({ ...agentMenuRow(agent, drawn), replayMasked: true })),
   ];
   return (
