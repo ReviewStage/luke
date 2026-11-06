@@ -88,7 +88,6 @@ import { macCommandKindsRead } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
-import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { cursorOfWire, cursorToWire } from "../agents/coder-host/transcript.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import {
@@ -105,6 +104,7 @@ import {
 } from "../inbox/inbox-store.js";
 import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
 import type { AnyBoundRead } from "../live/live-read-binding.js";
+import { agentOriginRead } from "../live/reads/agent-origin.js";
 import { hostsRead } from "../live/reads/hosts.js";
 import { taskCommentsLiveStatements } from "../tasks/description-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
@@ -674,32 +674,6 @@ export const agentPagesLive = defineLiveQuery({
 });
 
 /**
- * The run of an automation that started one coding agent, with the name of
- * the member who asked for it where one did, woken by the agent's own row,
- * which nothing moves the run on once the agent is made, and by what admits
- * the reader to it. Note that a runner's own name wakes no origin, as the
- * history's editor's wakes no history: a rename shows at the hold's end.
- */
-export const agentOriginLive = defineLiveQuery({
-  name: "agentOrigin",
-  params: ["userId", "agentId"],
-  reads: [
-    agentSync,
-    userSync,
-    taskSync,
-    memberSync,
-    githubPersonalTokenSync,
-    githubRepositoryReadSync,
-  ],
-  topics: ({ userId, agentId }) => [
-    [TOPIC.AGENT, agentId],
-    [TOPIC.ACCOUNT, userId],
-  ],
-  statements: ({ userId, agentId }) => agentOriginLiveStatements(userId, agentId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
  * One task's newest page of description history, woken by a revision written or
  * moved on, and by the task and its agents, all of which name the task.
  * Note that an editor's own name, read beside each revision, wakes no
@@ -937,7 +911,7 @@ export const agentTranscriptLive = defineLiveQuery({
 });
 
 /** Every read declared once and bound (`../live/live-read-binding.ts`), each a live read Sync wakes beside the definitions. */
-export const BOUND_READS: readonly AnyBoundRead[] = [hostsRead];
+export const BOUND_READS: readonly AnyBoundRead[] = [hostsRead, agentOriginRead];
 
 export const LIVE_QUERIES = liveQueryRegistry([
   sidebarLive,
@@ -961,7 +935,6 @@ export const LIVE_QUERIES = liveQueryRegistry([
   taskRecordLive,
   taskPagesLive,
   agentPagesLive,
-  agentOriginLive,
   taskHistoryLive,
   taskCommentsLive,
   taskBrowserTabsLive,

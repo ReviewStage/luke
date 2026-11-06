@@ -44,7 +44,7 @@ import {
   accountPreferencesOfLiveRows,
 } from "@repo/features/account-preferences-live";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
-import { agentOriginLiveAnswerSchema, agentOriginOfLive } from "@repo/features/agent-origin-live";
+import { AGENT_ORIGIN_READ, agentOriginOfLive } from "@repo/features/agent-origin-live";
 import { AGENT_CURSOR_START } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
@@ -130,7 +130,6 @@ import {
 } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -161,6 +160,7 @@ import {
 import { SentryApp, sentryAppService } from "../triggers/sentry/sentry-app-config.js";
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
+import { agentOriginRead } from "./reads/agent-origin.js";
 
 /**
  * The reads the desktop follows, answered by the procedure the way the
@@ -663,7 +663,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
 
         const polled = yield* askTask({ bearer: teammate, taskId: agentId, path });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(agentOriginLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(AGENT_ORIGIN_READ.answer)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(agentOriginOfLive(answer.queries.origin.rows ?? []), {
           prompt: "Triage the inbox.",
@@ -673,7 +673,9 @@ it.layer(getTestDB())("a task's live reads", (it) => {
           status: HOSTED_HTTP_STATUS.NOT_FOUND,
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
         });
-        const statement = Option.getOrThrow(agentOriginLiveStatements(stranger, agentId)).origin;
+        const statement = Option.getOrThrow(
+          agentOriginRead.statements({ userId: stranger, id: agentId }),
+        ).origin;
         const sql = yield* SqlClient.SqlClient;
         assert.deepEqual(yield* sql.unsafe(statement.sql, [...statement.params]), []);
       }),

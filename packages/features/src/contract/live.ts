@@ -46,7 +46,7 @@ import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
 import { accountPreferencesLiveAnswerSchema } from "../account-preferences-live.js";
-import { agentOriginLiveAnswerSchema } from "../agent-origin-live.js";
+import { AGENT_ORIGIN_READ } from "../agent-origin-live.js";
 import {
   automationRunsLiveAnswerSchema,
   automationsLiveAnswerSchema,
@@ -222,10 +222,7 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_PAGES }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskPagesLiveAnswerSchema)),
-  agentOrigin: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_ORIGIN }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(agentOriginLiveAnswerSchema)),
+  [AGENT_ORIGIN_READ.name]: liveProcedure(AGENT_ORIGIN_READ),
   taskHistory: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY }))
     .input(liveTaskSchema)

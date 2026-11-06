@@ -211,7 +211,6 @@ import {
   accountPreferencesLive,
   agentBrowserTabsLive,
   agentInboxLive,
-  agentOriginLive,
   agentPagesLive,
   agentTranscriptLive,
   automationRunsLive,
@@ -249,6 +248,7 @@ import { NO_TOPICS } from "../sync/watch.js";
 import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { type BoundLiveRead, WATCHED_LOOK } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
+import { agentOriginRead } from "./reads/agent-origin.js";
 import { hostsRead } from "./reads/hosts.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
@@ -838,8 +838,10 @@ const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string | undefined }, us
 /**
  * Every bound read's handler (`live-read-binding.ts`): each param the
  * reader's account (`LIVE_PARAM.USER`) refused as signed out unless it is
- * the caller's, then bound to the caller, and each text the query names
- * bound as it is; the caller admitted as the binding asks; the parts sealed
+ * the caller's, then bound to the caller; each text the query names bound
+ * as it is; each id it names read as one (`pathUuid`), not found where it
+ * spells none, and an optional one bound empty where it names none; the
+ * caller admitted as the binding asks; the parts sealed
  * (`liveQueryParts`); and the fields beside them read.
  */
 function answerBoundRead<Read extends AnyLiveRead>(read: BoundLiveRead<Read>) {
@@ -854,6 +856,11 @@ function answerBoundRead<Read extends AnyLiveRead>(read: BoundLiveRead<Read>) {
       if (param === LIVE_PARAM.USER) {
         yield* sameUser({ [LIVE_USER_QUERY]: asked[key] }, context.userId);
         params[key] = context.userId;
+      } else if (param === LIVE_PARAM.ID) {
+        params[key] = yield* pathUuid(asked[key] ?? "");
+      } else if (param === LIVE_PARAM.OPTIONAL_ID) {
+        const named = asked[key];
+        params[key] = named === undefined ? "" : yield* pathUuid(named);
       } else if (param !== LIVE_PARAM.SERVED) {
         params[key] = asked[key] ?? "";
       }
@@ -983,13 +990,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(agentPagesLive, { userId: context.userId, agentId }, input);
     }),
-    agentOrigin: signedIn.agentOrigin.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
-      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(agentOriginLive, { userId: context.userId, agentId }, input);
-    }),
+    agentOrigin: signedIn.agentOrigin.effect(answerBoundRead(agentOriginRead)),
     taskHistory: signedIn.taskHistory.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const taskId = yield* pathUuid(input.id);
