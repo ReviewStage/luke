@@ -13,7 +13,7 @@ import {
   type AgentSummary,
   type TasklessAgent,
 } from "@repo/features/agent-wire";
-import { Context, Effect, type Scope, Stream } from "effect";
+import { Clock, Context, Duration, Effect, FiberHandle, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 
 /**
@@ -62,10 +62,10 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * agent. Of those, only the items of agents the account started wait on
  * it, since an agent runs on its starter's keys and asks its starter: each
  * answer is written whole as each task's open items of those, which the
- * sidebar counts, and the Dock's badge counts the open asks among them,
- * the questions waiting on the developer as the Inbox's number reads them
- * (`askingReader` in the service's inbox store),
- * since a notice asks nobody to act; every task holding any
+ * sidebar counts, and the Dock's badge counts them as the Inbox's Open
+ * lists them: every one, a question and a notice not yet acknowledged
+ * alike, but those whose reminder is set for later than now, each counted
+ * again the moment its reminder comes due; every task holding any
  * member's item is listed for the Inbox. The same read carries the newest
  * run of each of the account's own automations that failed to start lately,
  * which is written for the window's Automations to mark until that
@@ -109,7 +109,7 @@ export interface AgentNotice {
  */
 export interface AgentNoticeDoorsSurface {
   post(notice: AgentNotice): void;
-  /** How many inbox items wait across the account, which the Dock's badge counts; none clears it. */
+  /** How many inbox items wait across the account as the Inbox's Open lists them, which the Dock's badge counts; none clears it. */
   badge(count: number): void;
 }
 
@@ -311,6 +311,11 @@ function agentsOfOpenItems(
   return [...held.values()];
 }
 
+/** Whether an item waits now rather than under a reminder set for later than `now`, as the Inbox's Open lists it. */
+function dueBy(now: number): (item: { readonly remindAt?: number | null }) => boolean {
+  return (item) => item.remindAt === undefined || item.remindAt === null || item.remindAt <= now;
+}
+
 /** What an answer of the inbox read carries that the window and the Dock are told of. */
 type InboxAnswered = Pick<
   AccountInboxAnswer,
@@ -470,15 +475,48 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       };
     }
 
-    /** What waits in the inbox that the Dock counts: its open asks alone, the questions waiting on the reader. */
-    function countedOf(answer: InboxAnswered): number {
-      return [...answer.items, ...(answer.planless ?? [])].filter(asking).length;
+    /** The wait for the next reminder of the answer last written to come due, which the next answer replaces. */
+    const reminders = yield* FiberHandle.make<void>();
+
+    /**
+     * What waits in the inbox that the Dock counts, as the Inbox's Open lists
+     * it: every open item, a question or a notice not yet acknowledged, but
+     * one whose reminder is set for later than `now`. Note that it is the
+     * whole app's, so every workspace's items count.
+     */
+    function countedOf(answer: InboxAnswered, now: number): number {
+      return [...answer.items, ...(answer.planless ?? [])].filter(dueBy(now)).length;
     }
 
-    /** Writes what waits for the window, and its number, a task's items and an agent's with no task alike, the account's own alone, for the Dock. */
-    function publishWaiting(answer: InboxAnswered, listed: readonly AccountTasklessEntry[]): void {
+    /** When the answer's next reminder later than `now` comes due; none where it holds none. */
+    function nextDueOf(answer: InboxAnswered, now: number): number | undefined {
+      let next: number | undefined;
+      for (const { remindAt } of [...answer.items, ...(answer.planless ?? [])]) {
+        if (remindAt === undefined || remindAt === null || remindAt <= now) continue;
+        if (next === undefined || remindAt < next) next = remindAt;
+      }
+      return next;
+    }
+
+    /** The Dock's badge for an answer, counted now and again as each reminder it holds comes due, on the Clock rather than a timer of its own. */
+    const badgeAsDue = (answer: InboxAnswered): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        for (;;) {
+          const now = yield* Clock.currentTimeMillis;
+          doors.badge(countedOf(answer, now));
+          const due = nextDueOf(answer, now);
+          if (due === undefined) return;
+          yield* Effect.sleep(Duration.millis(due - now));
+        }
+      });
+
+    /** Writes what waits for the window, and its number, a task's items and an agent's with no task alike, the account's own alone, for the Dock, whose wait for the last answer's reminders it replaces. */
+    function publishWaiting(
+      answer: InboxAnswered,
+      listed: readonly AccountTasklessEntry[],
+    ): Effect.Effect<void> {
       dependencies.onInboxChanged(sliceOf(answer, listed));
-      doors.badge(countedOf(answer));
+      return Effect.asVoid(FiberHandle.run(reminders, badgeAsDue(answer)));
     }
 
     /**
@@ -487,7 +525,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
      * waits on the account (`waitingOnAccount`) is counted, while every
      * member's items of agents with no task are written for the window.
      */
-    function observeWaiting(read: AccountInboxAnswer): void {
+    function observeWaiting(read: AccountInboxAnswer): Effect.Effect<void> {
       const answer = waitingOnAccount(read, dependencies.accountId());
       const listed = read.planless ?? [];
       const was = waiting;
@@ -506,7 +544,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           sameAgents(was.answer.agents ?? [], answer.agents ?? []) &&
           sameTaskless(was.listed, listed)
         ) {
-          return;
+          return Effect.void;
         }
         const moved = {
           ...was.answer,
@@ -517,10 +555,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         };
         waiting = { ...was, answer: moved, listed };
         dependencies.onInboxChanged(sliceOf(moved, listed));
-        return;
+        return Effect.void;
       }
       waiting = { answer, listed };
-      publishWaiting(answer, listed);
+      return publishWaiting(answer, listed);
     }
 
     /**
@@ -534,14 +572,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const waitingOf = (reader: string | undefined): Effect.Effect<void> =>
       Effect.suspend(() => {
         waiting = undefined;
-        publishWaiting({ items: [], plans: [] }, []);
-        if (reader === undefined) return Effect.void;
+        const letGo = publishWaiting({ items: [], plans: [] }, []);
+        if (reader === undefined) return letGo;
         // An answer that throws is reported rather than left to end the follow, which would never resume.
         const look = (answer: AgentAccountInboxAnswerView) =>
           Effect.catchDefect(
-            Effect.sync(() => {
-              if (dependencies.signedInAs() !== reader || "failure" in answer) return;
-              observeWaiting(answer);
+            Effect.suspend(() => {
+              if (dependencies.signedInAs() !== reader || "failure" in answer) return Effect.void;
+              return observeWaiting(answer);
             }),
             (defect) =>
               Effect.sync(() =>
@@ -550,7 +588,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
                 ),
               ),
           );
-        return Stream.runForEach(dependencies.followAccountInbox(), look);
+        return Effect.andThen(letGo, Stream.runForEach(dependencies.followAccountInbox(), look));
       });
 
     /** One agent as an answer carried it, against where the ledger last had it. */

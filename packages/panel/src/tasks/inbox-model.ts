@@ -1525,8 +1525,8 @@ export function waitsOnReader(
 
 /**
  * Whether an open item main lists holds an ask open rather than being a
- * notice: what the Inbox's number and the Dock's badge count. One from a
- * service before it, which says nothing, counts as asking, as every item did.
+ * notice. One from a service before it, which says nothing, counts as
+ * asking, as every item did.
  */
 export function holdsAsk(item: Pick<AppInboxWaitingItem, "asking">): boolean {
   return item.asking !== false;
@@ -1758,8 +1758,8 @@ export function isDone(item: InboxItem): boolean {
 
 /**
  * Whether a scope lists the item: Questions every question whose ask waits
- * on the reader (`threadNeedsReader`), what main's to-do count and the
- * Dock's badge count but for those with a reminder, a notice never; Open every
+ * on the reader (`threadNeedsReader`) but for those with a reminder, a
+ * notice never; Open every
  * thread the reader is not done with (`isDone`), one still open, one
  * answered since they last read it, or one closed without an answer that
  * they marked unread or that was written on since it closed, as a mail

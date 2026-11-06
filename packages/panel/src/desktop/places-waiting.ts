@@ -22,8 +22,7 @@ const NO_COUNTS: ReadonlyMap<string, number> = new Map();
  * workspace's: main's count
  * of each task's (`toDo`), which the host lowers the moment the reader
  * answers one (`@repo/host`'s `account-inbox-follow.ts`). A notice, a
- * teammate's question, and a settled item never count, read or not, as the
- * Dock's badge counts them. Where main carries no count of a task's to do,
+ * teammate's question, and a settled item never count, read or not. Where main carries no count of a task's to do,
  * from a service before it, its open items are counted, as before. A task
  * where none waits is left out.
  */
