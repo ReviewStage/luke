@@ -638,6 +638,45 @@ test("with Task descriptions off the instructions say nothing of a description: 
   );
 });
 
+test("with Task descriptions off a pilot plans on a page it shows, says a task is too small in its thread, and starts each child task's agent with its spec as its prompt, naming no description", () => {
+  const PILOT_DESCRIPTION_WORDS = [
+    `\`${CODER_TOOL.EDIT_DESCRIPTION}\``,
+    "your task's description",
+    "so its description is its brief",
+    "Change a child task's description",
+  ];
+  const told = (descriptionsOn: boolean) =>
+    coderInstructions(
+      "Acme/Relay",
+      AGENT_BRIEF.PROMPT,
+      true,
+      TASK_LINK,
+      undefined,
+      null,
+      false,
+      CODER_HARNESS.CLAUDE_CODE,
+      AGENT_KIND.PILOT,
+      false,
+      undefined,
+      [],
+      descriptionsOn,
+    );
+  const on = told(true);
+  const off = told(false);
+
+  assert.deepEqual(
+    PILOT_DESCRIPTION_WORDS.filter((words) => !on.includes(words)),
+    [],
+  );
+  assert.deepEqual(
+    PILOT_DESCRIPTION_WORDS.filter((words) => off.includes(words)),
+    [],
+  );
+  assert.ok(off.includes(`Write your plan as a page with \`${CODER_TOOL.SHOW_PAGE}\``));
+  assert.ok(off.includes("in the thread that asks for your go"));
+  assert.ok(off.includes("a `prompt` carrying its full spec from the plan page"));
+});
+
 /** A pilot's instructions, recorded byte for byte: an agent of kind pilot, handed a prompt, on a task and a repository. */
 const PILOT_PATH = fileURLToPath(
   new URL("../../../fixtures/coder-instructions/pilot.json", import.meta.url),
