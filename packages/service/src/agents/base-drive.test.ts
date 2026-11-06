@@ -203,6 +203,41 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a fill another finished ahead of, after its look for the base drive, undoes what it made once its sandbox stands",
+  () =>
+    Effect.gen(function* () {
+      const { fake, api } = yield* fixture;
+      let forks = 0;
+      const counted: VercelSandboxApi = {
+        ...api,
+        forkDrive: (source, target) =>
+          Effect.andThen(
+            Effect.sync(() => {
+              forks += 1;
+            }),
+            api.forkDrive(source, target),
+          ),
+      };
+      // The other fill runs whole after this one looked for the base drive, before it makes its staging drive.
+      const overtaken: VercelSandboxApi = {
+        ...counted,
+        getOrCreateDrive: (name) =>
+          Effect.andThen(
+            fillBaseDrive(counted, RELAY, IMAGE, CREDENTIAL, opener(api)),
+            api.getOrCreateDrive(name),
+          ),
+      };
+
+      yield* fillBaseDrive(overtaken, RELAY, IMAGE, CREDENTIAL, opener(api));
+
+      assert.equal(forks, 1);
+      assert.deepEqual([...fake.drives], [baseDriveName(RELAY)]);
+      assert.equal(fake.sandboxes.filter((each) => !each.deleted).length, 0);
+      assert.equal(yield* baseDriveFilled(api, RELAY), true);
+    }),
+);
+
 it.effect("a fill whose install failed leaves no base drive", () =>
   Effect.gen(function* () {
     const { fake, api } = yield* fixture;

@@ -150,7 +150,9 @@ export const installDependencies = Effect.fn("web/installCheckoutDependencies")(
  * the token at the firewall for the clone alone, its dependencies installed,
  * the sandbox stopped, the staging drive forked under the base drive's name,
  * and the sandbox and the staging drive deleted. A sandbox name another
- * launch took first is that launch's fill, and this one does nothing. A fill
+ * launch took first is that launch's fill, and this one does nothing; a
+ * base drive another fill finished before this one's sandbox stood has this
+ * one undo what it made, as a failed fill does. A fill
  * that failed or outlasted `FILL_TIMEOUT` stops its sandbox, deletes the
  * staging drive, and deletes the sandbox; one whose sandbox was never
  * created deletes the staging drive. A staging drive left once the base
@@ -201,6 +203,13 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   const stopped = Effect.flatMap(api.session({ name, sessionId: running }), (session) =>
     session.stop(),
   );
+  const undone = Effect.forEach(
+    [stopped, api.deleteDrive(staging), api.deleteSandbox(name)],
+    (step) => Effect.ignore(step),
+    { discard: true },
+  );
+  // Note that a fill which finished between this one's look for the base drive and its sandbox made the drive already, so this one undoes what it made.
+  if ((yield* api.getDrive(name)) !== undefined) return yield* undone;
   yield* Effect.gen(function* () {
     const sandbox = open({ name, running });
     // Note that what a failed fill left is cleared, or the clone would keep its checkout and the install build on it.
@@ -235,13 +244,7 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
       duration: BASE_DRIVE.FILL_TIMEOUT,
       orElse: () => Effect.fail(new SandboxUnavailable({ detail: "the fill timed out" })),
     }),
-    Effect.tapError(() =>
-      Effect.forEach(
-        [stopped, api.deleteDrive(staging), api.deleteSandbox(name)],
-        (step) => Effect.ignore(step),
-        { discard: true },
-      ),
-    ),
+    Effect.tapError(() => undone),
   );
   yield* api
     .deleteDrive(staging)
