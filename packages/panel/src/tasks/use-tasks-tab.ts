@@ -1799,8 +1799,10 @@ export function useTasksTab(input: {
   // shows something else; a fixture's staged agents are no one's to announce.
   // The window's Inbox stands in the column's place, showing the task whose item is chosen there.
   // Whether the column stands on screen, a fixture's among them.
+  // Note that Admin stands over the window's state, which stays as it was under it (`admin-route.ts`), so none of it is on screen then.
+  const stateShown = shown && !input.adminView.open;
   const columnInView =
-    shown && historyFor === undefined && standIn === undefined && !sidePanel.fullScreen;
+    stateShown && historyFor === undefined && standIn === undefined && !sidePanel.fullScreen;
   const columnShown = columnInView && fixture === undefined;
   // Note that the column is filled only while in view, because a blank draft out of view is let
   // go at once (below), which would leave it empty to fill again.
@@ -1834,7 +1836,7 @@ export function useTasksTab(input: {
   // An agent's page stands in the task's place, showing its agent as its tab would.
   // An agent's transcript beside the Inbox shows its agent the same way, while the panel stands open on it.
   const inboxTranscript =
-    shown &&
+    stateShown &&
     fixture === undefined &&
     inboxView !== undefined &&
     sidePanel.open &&
@@ -1843,7 +1845,7 @@ export function useTasksTab(input: {
       ? sidePanel.tab.transcript
       : undefined;
   const shownAgent =
-    shown && fixture === undefined && agentView !== undefined
+    stateShown && fixture === undefined && agentView !== undefined
       ? agentView.agentId
       : inboxTranscript !== undefined
         ? inboxTranscript
@@ -1851,7 +1853,7 @@ export function useTasksTab(input: {
           ? mainTabs.tab.agent
           : null;
   const shownInbox =
-    shown && fixture === undefined && inboxView !== undefined ? (inboxTask ?? null) : null;
+    stateShown && fixture === undefined && inboxView !== undefined ? (inboxTask ?? null) : null;
   // Main is told which agent's tab is on screen, whose end it marks unseen nowhere then.
   const reportedAgent = useRef<string | null | undefined>(undefined);
   useEffect(() => {
@@ -3505,7 +3507,7 @@ export function useTasksTab(input: {
   );
   // A strip's tab is viewed only while the task's page is on screen, nothing standing over it.
   const taskOnScreen =
-    shown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && historyFor === undefined;
+    stateShown && page === TASKS_PAGE.DOCUMENT && standIn === undefined && historyFor === undefined;
   const pinnedHere = (tab: StripTab) =>
     isAgentTab(tab)
       ? taskAgentPins.some((pin) => pin.agentId === tab.agent)

@@ -21,7 +21,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
-import { SHELL_AT, type ShellRouter, shellRouter } from "../testing/shell-router.js";
+import { SHELL_AT, shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { useSidebarCollapse } from "./sidebar-collapse.js";
@@ -95,26 +95,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The router the shell this test draws stands under, read before each test so the places stand from its first draw. */
-let routed: ShellRouter = shellRouter();
+/** The router the shell this test draws stands under, read before each test (`shell-router.ts`). */
+const routed = shellRouterEachTest();
 
-beforeEach(async () => {
-  routed = shellRouter();
-  await routed.router.load();
-});
-
-/** `shell` drawn under its router (`shell-router.ts`), standing where its props say: Settings where its tab is, Admin where it stands, else the places. */
+/** `shell` drawn under the test's router, standing where `standing` says, else where its props say. */
 function underRouter(shell: ReactElement, standing?: string): ReactElement {
-  const props: { tab?: unknown; tasks?: { adminView?: { open?: boolean } } } =
-    typeof shell.props === "object" && shell.props !== null ? shell.props : {};
-  const at =
-    standing ??
-    (props.tab === PANEL_TAB.SETTINGS
-      ? SHELL_AT.SETTINGS
-      : props.tasks?.adminView?.open === true
-        ? SHELL_AT.ADMIN
-        : SHELL_AT.PLACES);
-  return routed.draw(shell, at);
+  return routed().under(shell, standing);
 }
 
 /** Resizes the panel's stage, as the developer dragging the window's frame does on the desktop. */
@@ -148,7 +134,7 @@ function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
       // The window turns to Settings by the router, as its own doors do.
       onTabChange: (next: PanelTab) => {
         setTab(next);
-        void routed.router.navigate({
+        void routed().router.navigate({
           href: next === PANEL_TAB.SETTINGS ? SHELL_AT.SETTINGS : SHELL_AT.PLACES,
         });
       },

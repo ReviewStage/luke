@@ -456,7 +456,11 @@ function AppWindow(): React.JSX.Element {
     run?.capabilities ?? NO_CAPABILITIES,
     experiments,
   );
-  const chooseSettingsView = useSteadyDoor((view: SettingsView) => goSettings({ page: view }));
+  // A page chosen from outside Settings, as ⌘K chooses one, asks first while a page holds unsaved work, as entering Settings does; one turned within Settings asks nothing.
+  const chooseSettingsView = useSteadyDoor((view: SettingsView) => {
+    if (settingsPlace.standing) goSettings({ page: view });
+    else guardLeave(() => goSettings({ page: view }))();
+  });
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
     tasks,

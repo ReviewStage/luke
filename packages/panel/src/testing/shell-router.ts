@@ -24,6 +24,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { createContext, createElement, type ReactElement, useContext } from "react";
+import { beforeEach } from "vitest";
 import {
   AdminRouteLoading,
   SettingsRouteLoading,
@@ -31,6 +32,7 @@ import {
   StatePlace,
 } from "../desktop/desktop-shell.js";
 import { LAZY_ROUTE } from "../panel-router.js";
+import { PANEL_TAB } from "../panel-tabs.js";
 import { routeAccessNow } from "../route-gates.js";
 
 /** Where a shell under test stands: a place its state says, Settings's list or a page of it, or Admin. */
@@ -47,10 +49,27 @@ function ShellRoot(): ReactElement | null {
   return useContext(ShellElement);
 }
 
-/** A router to draw a shell under, and the way to draw it there, standing at `at`, a Settings page's address among them. */
+/** A router to draw a shell under, and the ways to draw it there: standing at `at`, or where `standing` or the shell's own props say. */
 export interface ShellRouter {
   readonly draw: (shell: ReactElement, at?: string) => ReactElement;
+  readonly under: (shell: ReactElement, standing?: string) => ReactElement;
   readonly router: AnyRouter;
+}
+
+/** Where a shell stands by its props: Settings where its tab is, Admin where it stands, else the places. */
+function standingOf(shell: ReactElement): string {
+  const props: { tab?: unknown; tasks?: { adminView?: { open?: boolean } } } =
+    typeof shell.props === "object" && shell.props !== null ? shell.props : {};
+  if (props.tab === PANEL_TAB.SETTINGS) return SHELL_AT.SETTINGS;
+  return props.tasks?.adminView?.open === true ? SHELL_AT.ADMIN : SHELL_AT.PLACES;
+}
+
+/** Where a shell stands by its props: Settings where its tab is, Admin where it stands, else the places. */
+function _standingOf(shell: ReactElement): string {
+  const props: { tab?: unknown; tasks?: { adminView?: { open?: boolean } } } =
+    typeof shell.props === "object" && shell.props !== null ? shell.props : {};
+  if (props.tab === PANEL_TAB.SETTINGS) return SHELL_AT.SETTINGS;
+  return props.tasks?.adminView?.open === true ? SHELL_AT.ADMIN : SHELL_AT.PLACES;
 }
 
 /** A router over the shell, the places, and the routed places, standing at `at`. */
@@ -85,16 +104,23 @@ export function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
     history: createMemoryHistory({ initialEntries: [at] }),
     context: { queryClient: new QueryClient(), access: routeAccessNow() },
   });
+  const draw = (shell: ReactElement, to?: string) => {
+    if (to !== undefined && router.history.location.href !== to) void router.navigate({ href: to });
+    return createElement(ShellElement, { value: shell }, createElement(RouterProvider, { router }));
+  };
   return {
     router,
-    draw: (shell, to) => {
-      if (to !== undefined && router.history.location.href !== to)
-        void router.navigate({ href: to });
-      return createElement(
-        ShellElement,
-        { value: shell },
-        createElement(RouterProvider, { router }),
-      );
-    },
+    draw,
+    under: (shell, standing) => draw(shell, standing ?? standingOf(shell)),
   };
+}
+
+/** A shell router made and read before each test, so the places stand from the test's first draw; answers the one standing. */
+export function shellRouterEachTest(): () => ShellRouter {
+  let routed = shellRouter();
+  beforeEach(async () => {
+    routed = shellRouter();
+    await routed.router.load();
+  });
+  return () => routed;
 }

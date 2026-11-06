@@ -275,6 +275,14 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
         : { kind: LINK_PLACE.SETTINGS, page: view };
     return [at_(place, LINK_THING.SETTINGS, slug)];
   }
+  // The Admin place stands over whatever the window's state says, so its link is the step's rather than that place's.
+  // Its workspace is only the one listed, since the place reads every workspace's accounts.
+  if (at.admin !== undefined) {
+    const root = { kind: LINK_PLACE.ADMIN } as const;
+    const fields = adminLinkFields(at.admin);
+    if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
+    return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];
+  }
   const { agentId } = tasks.agentView;
   if (agentId !== undefined) {
     const page = at.pageWorkspace;
@@ -324,14 +332,6 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     // A new automation's page is a step with no link of its own, so it offers the list it is in.
     if (place.kind === AUTOMATIONS_PAGE.NEW) return [within(list, LINK_THING.AUTOMATIONS)];
     return [at_(list, LINK_THING.AUTOMATIONS)];
-  }
-  // The Admin place stands over the plan, so its link is the step's rather than the plan's behind it.
-  // Its workspace is only the one listed, since the place reads every workspace's accounts.
-  if (at.admin !== undefined) {
-    const root = { kind: LINK_PLACE.ADMIN } as const;
-    const fields = adminLinkFields(at.admin);
-    if (Object.keys(fields).length === 0) return [at_(root, LINK_THING.ADMIN)];
-    return [at_({ ...root, ...fields }, LINK_THING.ADMIN_PAGE), within(root, LINK_THING.ADMIN)];
   }
   // A workspace's address naming none of the reader's has no link of the reader's to offer, so the tab keeps the one it was opened at.
   if (tasks.unknownWorkspace.open) return [];

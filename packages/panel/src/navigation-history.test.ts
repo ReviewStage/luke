@@ -13,7 +13,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { useAdminRoute } from "./admin/admin-route.js";
-import type { AdminView } from "./admin/routing.js";
+import { ADMIN_PAGE, ADMIN_TAB, type AdminView } from "./admin/routing.js";
 import { runAppCommand } from "./app-commands.js";
 import { stepTitle } from "./history-titles.js";
 import { useCopyLink } from "./links-at-hand.js";
@@ -689,9 +689,9 @@ test("the Admin place stands at its workspace's /admin though a task stands unde
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const task = onTask([ACME]);
   const window = mount(task);
-  window.openAdmin({ kind: "dashboard" });
-  window.openAdmin({ kind: "cost" });
-  window.openAdmin({ kind: "account", id: "user-ada" });
+  window.openAdmin({ kind: ADMIN_TAB.DASHBOARD });
+  window.openAdmin({ kind: ADMIN_TAB.COST });
+  window.openAdmin({ kind: ADMIN_PAGE.ACCOUNT, id: "user-ada" });
   act(() => runAppCommand(APP_COMMAND.COPY_LINK));
   await settle();
 

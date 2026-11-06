@@ -38,7 +38,7 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { SHELL_AT, type ShellRouter, shellRouter } from "../testing/shell-router.js";
+import { shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { HOST_READ_STATUS } from "../use-host-read.js";
 // Note that Settings is loaded as the shell loads it, on first use, so the
@@ -173,26 +173,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The router the shell this test draws stands under, read before each test so the places stand from its first draw. */
-let routed: ShellRouter = shellRouter();
+/** The router the shell this test draws stands under, read before each test (`shell-router.ts`). */
+const routed = shellRouterEachTest();
 
-beforeEach(async () => {
-  routed = shellRouter();
-  await routed.router.load();
-});
-
-/** `shell` drawn under its router (`shell-router.ts`), standing where its props say: Settings where its tab is, Admin where it stands, else the places. */
+/** `shell` drawn under the test's router, standing where `standing` says, else where its props say. */
 function underRouter(shell: ReactElement, standing?: string): ReactElement {
-  const props: { tab?: unknown; tasks?: { adminView?: { open?: boolean } } } =
-    typeof shell.props === "object" && shell.props !== null ? shell.props : {};
-  const at =
-    standing ??
-    (props.tab === PANEL_TAB.SETTINGS
-      ? SHELL_AT.SETTINGS
-      : props.tasks?.adminView?.open === true
-        ? SHELL_AT.ADMIN
-        : SHELL_AT.PLACES);
-  return routed.draw(shell, at);
+  return routed().under(shell, standing);
 }
 
 /** The shell on the stage, as the panel's root draws it: the stage measured, its room, and the real sidebar. */
@@ -405,7 +391,7 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
 
 test("Settings on a stage wide enough for panes, but under the split's line by its own width, shows its list, then a page chosen alone under a way back, and splits again once wide", async () => {
   const page = await mount(UNDER_SPLIT, createElement(SettingsWindow, { link: undefined }));
-  assert.equal(the(page, ".desktop-shell").dataset["room"], "wide", "the stage is no phone's");
+  assert.equal(the(page, ".desktop-shell").dataset.room, "wide", "the stage is no phone's");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 
   await press(the(page, SETTINGS_COLUMNS.list), "Appearance");

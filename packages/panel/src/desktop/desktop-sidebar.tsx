@@ -1790,10 +1790,11 @@ function SidebarColumn({
   const roving = useRovingKeys<HTMLDivElement>();
   const bodyRef = useMemo(() => joinRefs(body, roving.ref), [roving.ref]);
   // The window's Inbox, an agent's page, the Automations page, the Board, and Admin stand in the task's place, so while one does no task is the place shown.
-  const inInbox = onTasks && tasks.inboxView.open;
-  const inAutomations = onTasks && tasks.automationsView.open;
-  const inBoard = onTasks && tasks.boardView.open;
+  // Note that Admin stands over the window's state, which stays as it was under it, so no place of that state is shown then.
   const inAdmin = tasks.adminView.open;
+  const inInbox = onTasks && !inAdmin && tasks.inboxView.open;
+  const inAutomations = onTasks && !inAdmin && tasks.automationsView.open;
+  const inBoard = onTasks && !inAdmin && tasks.boardView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   // The workspace's runs, followed while the sidebar stands, as the Runs tab follows them, for the row to count the ones still at work.
@@ -1881,7 +1882,7 @@ function SidebarColumn({
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (taskId: string) => onTasks && !standingIn && taskId === tasks.activeTaskId;
   // An agent with no plan stands on its own page, which is the place shown while it stands.
-  const agentShown = onTasks ? tasks.agentView.agentId : undefined;
+  const agentShown = onTasks && !inAdmin ? tasks.agentView.agentId : undefined;
   const currentRow = (row: TaskRow) =>
     row.kind === TASK_ROW.TASK ? current(row.task.id) : row.agent.id === agentShown;
   const openAgent = (agentId: string) => {
