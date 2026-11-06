@@ -246,10 +246,10 @@ test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async (
   assert.ok(document.activeElement === first, "↑ goes back to the Inbox's item");
 });
 
-test("nothing waiting says so in the Inbox's words, and a list that could not be read says so under Recent", async () => {
+test("nothing waiting draws no Inbox section, and a list that could not be read says so under Recent", async () => {
   const quiet = mount({}, []);
   await settle();
-  assert.match(quiet.page.textContent ?? "", /Nothing needs you/u);
+  assert.deepEqual(Object.keys(sections(quiet.page)), ["Recent"]);
   act(() => root?.unmount());
 
   const refused = mount({ listRead: false, listFailed: true }, []);
