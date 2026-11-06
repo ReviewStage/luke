@@ -603,7 +603,7 @@ test("an item waits on whoever the service says, its task's assignee, rather tha
   assert.deepEqual(whose({ kind: INBOX_WHOSE.PERSON, ...KAI }), ["older-service"]);
 });
 
-test("Needs you lists and counts only the questions whose ask waits on the reader, whomever Addressed to names: never a notice of theirs, which asks nothing, a question of theirs they snoozed, or a question that waits on a teammate", () => {
+test("Needs you lists and counts only the questions whose ask waits on the reader, whomever Addressed to names: never a notice of theirs, which asks nothing, a question of theirs they set a reminder on, or a question that waits on a teammate", () => {
   const question = [asking({ type: INBOX_ASK.ANSWER })];
   const groups = [
     {
@@ -611,7 +611,7 @@ test("Needs you lists and counts only the questions whose ask waits on the reade
       items: [
         item({ id: "asks-me", startedBy: DANA, waitsOn: ME, thread: question, updatedAt: 30 }),
         item({ id: "tells-me", startedBy: ME, updatedAt: 20 }),
-        item({ id: "snoozed", waitsOn: ME, thread: question, snoozedUntil: 5_000, updatedAt: 15 }),
+        item({ id: "reminded", waitsOn: ME, thread: question, remindAt: 5_000, updatedAt: 15 }),
         item({ id: "asks-dana", startedBy: ME, waitsOn: DANA, thread: question, updatedAt: 10 }),
       ],
     },
@@ -713,7 +713,7 @@ test("Open addressed to the reader lists their own open items, read or not, and 
     [INBOX_SHOW.NEEDS_ME]: 0,
     [INBOX_SHOW.OPEN]: 4,
     [INBOX_SHOW.ALL]: 4,
-    [INBOX_SHOW.SNOOZED]: 0,
+    [INBOX_SHOW.REMINDERS]: 0,
   });
 });
 
@@ -757,31 +757,35 @@ test("Addressed to lists anyone's items, the reader's own, items whose starter t
     [INBOX_SHOW.NEEDS_ME]: 0,
     [INBOX_SHOW.OPEN]: 1,
     [INBOX_SHOW.ALL]: 2,
-    [INBOX_SHOW.SNOOZED]: 0,
+    [INBOX_SHOW.REMINDERS]: 0,
   });
 });
 
-test("an item the reader snoozed leaves Open and All for Snoozed until its snooze passes, then comes back unread at the top, and a change that made it unread ended its snooze early", () => {
+test("an item the reader set a reminder on leaves Open and All for Reminders until its reminder comes due, read or unread alike, then comes back at the top as read or unread as it was", () => {
   const groups = [
     {
       holder: taskHolder(BILLING),
       items: [
-        item({ id: "snoozed", updatedAt: 10, unread: false, snoozedUntil: 500 }),
-        item({ id: "woken", updatedAt: 20, unread: true, snoozedUntil: 500 }),
+        item({ id: "reminded", updatedAt: 10, unread: false, remindAt: 500 }),
+        item({ id: "unread", updatedAt: 20, unread: true, remindAt: 400 }),
         item({ id: "plain", updatedAt: 30 }),
       ],
     },
   ];
   const rows = (now: number, show: InboxShow) =>
     drawn(inboxList(inboxAtNow(groups, now), { show, readerId: undefined, chosen: undefined }));
-  assert.deepEqual(rows(100, INBOX_SHOW.OPEN), ["plain", "woken"]);
-  assert.deepEqual(rows(100, INBOX_SHOW.ALL), ["plain", "woken"]);
-  assert.deepEqual(rows(100, INBOX_SHOW.SNOOZED), ["snoozed"]);
-  assert.equal(inboxCounts(inboxAtNow(groups, 100), undefined)[INBOX_SHOW.SNOOZED], 1);
-  assert.deepEqual(rows(500, INBOX_SHOW.OPEN), ["snoozed", "plain", "woken"]);
-  assert.deepEqual(rows(500, INBOX_SHOW.SNOOZED), []);
-  const back = inboxAtNow(groups, 500)[0]?.items.find((each) => each.id === "snoozed");
-  assert.equal(back?.unread, true, "it comes back unread");
+  assert.deepEqual(rows(100, INBOX_SHOW.OPEN), ["plain"]);
+  assert.deepEqual(rows(100, INBOX_SHOW.ALL), ["plain"]);
+  assert.deepEqual(rows(100, INBOX_SHOW.REMINDERS), ["unread", "reminded"]);
+  assert.equal(inboxCounts(inboxAtNow(groups, 100), undefined)[INBOX_SHOW.REMINDERS], 2);
+  assert.deepEqual(rows(500, INBOX_SHOW.ALL), ["reminded", "unread", "plain"]);
+  assert.deepEqual(rows(500, INBOX_SHOW.REMINDERS), []);
+  const back = inboxAtNow(groups, 500)[0]?.items;
+  assert.deepEqual(
+    ["reminded", "unread"].map((id) => back?.find((each) => each.id === id)?.unread),
+    [false, true],
+    "each comes back read or unread as it was",
+  );
 });
 
 test("a note past the wire's bound is no answer, so the card offers no send for it", () => {

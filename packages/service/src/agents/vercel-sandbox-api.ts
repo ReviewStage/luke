@@ -7,7 +7,8 @@
  * terminal holds stopped, a developer's resume, a short command for a
  * terminal's list, a terminal's PTY, the GitHub credential at its firewall,
  * a native harness's sandbox opened and its runner started, our template of
- * that sandbox's image — it asks here, of the SDK at the version the
+ * that sandbox's image, a repository's base drive and the sandbox that
+ * fills it — it asks here, of the SDK at the version the
  * catalog pins, which loads in a function's bundle. The SDK tries a 429, a
  * 5xx, and a failure to connect again before it answers (a 429 waits out
  * Vercel's `Retry-After` up to 20 seconds), so nothing here tries again.
@@ -37,6 +38,7 @@ import { getVercelOidcToken } from "@vercel/oidc";
 import {
   APIError,
   type Command,
+  Drive,
   Sandbox,
   type NetworkPolicy as SdkNetworkPolicy,
   Session,
@@ -137,6 +139,9 @@ export const SANDBOX_CALL = {
   SNAPSHOT_LOOKUP: "snapshot-lookup",
   SNAPSHOT_LIST: "snapshot-list",
   RETENTION: "retention",
+  DRIVE_GET: "drive-get",
+  DRIVE_CREATE: "drive-create",
+  DRIVE_DELETE: "drive-delete",
 } as const;
 
 export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
@@ -305,6 +310,16 @@ interface SandboxCreate {
   };
   readonly env: Readonly<Record<string, string>>;
   readonly whenNameTaken: NameTaken;
+  /** The drives mounted read-write, each by its name at the absolute path it is keyed by. */
+  readonly mounts?: Readonly<Record<string, string>>;
+  /** Whether its filesystem is restored at its next session, and snapshotted at each stop for that; so where unsaid. */
+  readonly persistent?: boolean;
+}
+
+/** A drive as a lookup names it: its name, and the sandbox it is mounted read-write in, where one holds it. */
+interface ListedDrive {
+  readonly name: string;
+  readonly currentSandboxName?: string | undefined;
 }
 
 /** A persistent sandbox opened on an image rather than a snapshot: a template being prepared. */
@@ -449,8 +464,8 @@ export interface VercelSandboxApi {
     policy: NetworkPolicy,
   ) => Effect.Effect<void, SandboxUnavailable>;
   /**
-   * Opens a persistent sandbox from the snapshot named, on the open
-   * internet; answers it with the session it runs. Where the name is taken,
+   * Opens a sandbox from the snapshot named, persistent unless it says not,
+   * on the open internet; answers it with the session it runs. Where the name is taken,
    * `whenNameTaken` joins the sandbox holding it, resumed, or refuses with
    * Vercel's 409, which is what makes a name a lock.
    */
@@ -498,6 +513,12 @@ export interface VercelSandboxApi {
   readonly newestSnapshot: (
     name: string,
   ) => Effect.Effect<ListedSnapshot | undefined, SandboxUnavailable>;
+  /** The drive under the name; none where there is none. */
+  readonly getDrive: (name: string) => Effect.Effect<ListedDrive | undefined, SandboxUnavailable>;
+  /** The drive under the name, created in the sandboxes' region where there is none. */
+  readonly getOrCreateDrive: (name: string) => Effect.Effect<ListedDrive, SandboxUnavailable>;
+  /** Deletes the drive under the name with all it holds; one already gone is no failure. */
+  readonly deleteDrive: (name: string) => Effect.Effect<void, SandboxUnavailable>;
   /** Replaces the named sandbox's tags whole. */
   readonly updateTags: (
     name: string,
@@ -716,6 +737,18 @@ function sdkPolicyOf(policy: NetworkPolicy): SdkNetworkPolicy {
       ]),
     ),
   };
+}
+
+/** Drives mounted read-write as `@vercel/sandbox`'s create takes them. */
+function driveMounts(mounts: Readonly<Record<string, string>>) {
+  return Object.fromEntries(
+    Object.entries(mounts).map(([path, drive]) => [path, { drive, mode: "read-write" as const }]),
+  );
+}
+
+/** A drive as a lookup answers it. */
+function listedDrive(drive: Drive): ListedDrive {
+  return { name: drive.name, currentSandboxName: drive.currentSandboxName };
 }
 
 /** A sandbox as the SDK's list names it. */
@@ -1119,7 +1152,8 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
             ...under,
             source: { type: "snapshot", snapshotId: ask.snapshotId },
             name: ask.name,
-            persistent: true,
+            persistent: ask.persistent ?? true,
+            ...(ask.mounts === undefined ? undefined : { mounts: driveMounts(ask.mounts) }),
             tags: { ...ask.tags },
             timeout: ask.timeoutMs,
             resources: { vcpus: ask.vcpus },
@@ -1225,6 +1259,26 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
           },
         ),
       updateTags: (name, tags) => updated(SANDBOX_CALL.TAGS, name, { tags: { ...tags } }),
+      getDrive: (name) =>
+        asked(SANDBOX_CALL.DRIVE_GET, (signal, under) =>
+          Drive.get({ ...under, name, signal }),
+        ).pipe(
+          Effect.map((drive): ListedDrive | undefined => listedDrive(drive)),
+          Effect.catchIf(isGone, () => Effect.succeed(undefined)),
+        ),
+      getOrCreateDrive: (name) =>
+        // Note that the drive takes Vercel's default region, as every sandbox we create does, since a mount must match it.
+        Effect.map(
+          asked(SANDBOX_CALL.DRIVE_CREATE, (signal, under) =>
+            Drive.getOrCreate({ ...under, name, signal }),
+          ),
+          listedDrive,
+        ),
+      deleteDrive: (name) =>
+        asked(SANDBOX_CALL.DRIVE_DELETE, async (signal, under) => {
+          const drive = await Drive.get({ ...under, name, signal });
+          await drive.delete({ signal });
+        }).pipe(Effect.catchIf(isGone, () => Effect.void)),
     };
   });
 }

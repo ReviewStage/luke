@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { listAgentBrowserTabs } from "@repo/database/models/agent-browser-tabs";
@@ -8,8 +11,8 @@ import { createAgent, recordAgentRunnerToken } from "@repo/database/models/agent
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
-import { conversations, messages, turns } from "@repo/database/schemas/storage";
-import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
+import { conversations, turns } from "@repo/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@repo/features/browser-agent-actions";
@@ -25,9 +28,6 @@ import {
   type WireBoundaryInput,
 } from "@repo/wire";
 import { webmBytes } from "@repo/wire/testing";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { Base64 } from "effect/encoding";
@@ -614,31 +614,6 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       why: "in no repository, the checkout's",
       agent: agentOnNoTaskWithBearer,
       withheld: ["open_pull_request"],
-    },
-    {
-      why: "a teammate has put words into, run_on_mac",
-      agent: Effect.gen(function* () {
-        const agent = yield* agentInSandbox;
-        const teammate = `user-${randomUUID()}`;
-        yield* Database.use((db) =>
-          db.insert(user).values({ id: teammate, name: "Teammate", email: `${teammate}@app.test` }),
-        );
-        yield* Database.use((db) =>
-          db.insert(messages).values({
-            userId: agent.userId,
-            conversationId: agent.conversationId,
-            seq: 1,
-            clientId: randomUUID(),
-            role: "user",
-            parts: [],
-            placedAt: new Date(0),
-            sender: MESSAGE_SENDER.MEMBER,
-            senderUserId: teammate,
-          }),
-        );
-        return agent;
-      }),
-      withheld: ["run_on_mac"],
     },
     {
       why: "on a device, the browser and run_on_mac",

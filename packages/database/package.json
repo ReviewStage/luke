@@ -19,6 +19,7 @@
     "./models/agent-browser-tabs": "./src/models/agent-browser-tabs.js",
     "./models/automation-store": "./src/models/automation-store.js",
     "./models/attached-file-parts": "./src/models/attached-file-parts.js",
+    "./models/chatgpt-device-login-store": "./src/models/chatgpt-device-login-store.js",
     "./models/child-titles": "./src/models/child-titles.js",
     "./models/agent-store": "./src/models/agent-store.js",
     "./models/agent-repositories": "./src/models/agent-repositories.js",

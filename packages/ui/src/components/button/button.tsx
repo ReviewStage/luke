@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { cn } from "../../cn.js";
-import { CheckIcon } from "../../face/glyphs.js";
+import { ArrowUpRightIcon, CheckIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { replayMotion } from "../../replay-motion.js";
 import { buttonVariants, Button as ShadcnButton } from "../../shadcn/button.js";
@@ -34,7 +34,10 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * quiet one does. Two tinted looks carry news on a wash of their
  * color rather than a fill: `working-tint` for an act something under way
  * offers (Restart, once a release is downloaded), and `danger-tint` for the
- * one a failure offers (Download, once installing it failed). `row` is an
+ * one a failure offers (Download, once installing it failed). `danger-quiet`
+ * is a quiet one in the danger ink, for the mark of a failure that opens
+ * what mends it (the red alert beside a message that did not go), lighting
+ * on a wash of the danger color. `row` is an
  * act standing as a row of a card's own, its words at the row's start and
  * the row lit by the fill a menu's row is lit by, as a date picker's Clear
  * is. Each is one control's height, corner, and glyph
@@ -155,6 +158,7 @@ export const BUTTON_VARIANT = {
   INK: "ink",
   WORKING_TINT: "working-tint",
   DANGER_TINT: "danger-tint",
+  DANGER_QUIET: "danger-quiet",
   ROW: "row",
   MEDIA: "media",
 } as const;
@@ -647,6 +651,7 @@ export function ButtonLink({
   shape,
   icon,
   label,
+  external = false,
   onClick,
   children,
   ...hint
@@ -655,6 +660,8 @@ export function ButtonLink({
   variant?: ButtonVariant;
   /** Its outline: the control's corner, or a pill. */
   shape?: ButtonShape;
+  /** Whether a press leaves the app, which a small ↗ after its words says, as an external text link's does. */
+  external?: boolean | undefined;
   /** Called as the press leaves, before the browser follows the link; a press that is the window's to carry out stops the browser's with `preventDefault`. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** The glyph before its words. */
@@ -681,6 +688,7 @@ export function ButtonLink({
       >
         {icon}
         <span className={WORDS}>{children}</span>
+        {external ? <ArrowUpRightIcon /> : null}
       </span>
     </a>
   );

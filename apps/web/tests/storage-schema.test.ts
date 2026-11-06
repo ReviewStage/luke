@@ -34,6 +34,7 @@ afterAll(() => database.close());
 /** Every table the migrations declare, by its Postgres name, better-auth's own alongside ours. */
 const DECLARED_TABLES = [
   "account",
+  "account_chatgpt_device_login",
   "account_chatgpt_host",
   "account_preference",
   "account_provider_key",

@@ -30,6 +30,22 @@ export const LIQUID_GLASS_ADDON = {
   binary: "liquid-glass.node",
 };
 
+/**
+ * node-pty, which runs a shell on this Mac for a Terminal tab
+ * (`src/main/native/mac-shell.ts`): its JavaScript and its prebuilt N-API
+ * addon and `spawn-helper` for the packaged architecture, copied as one
+ * folder beside the helpers by the native build and shipped in the app's
+ * resources, where main loads it, rather than bundled, since its JavaScript
+ * finds the addon and the helper beside itself. The two binaries are signed
+ * as the helpers are.
+ */
+export const NODE_PTY = {
+  packageName: "node-pty",
+  folder: "node-pty",
+  prebuilds: path.join("prebuilds", `darwin-${PACKAGED_ARCHITECTURE}`),
+  binaries: ["pty.node", "spawn-helper"],
+};
+
 export function packagedAppPath(repoRoot) {
   return path.join(
     repoRoot,

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { askScroll } from "@repo/ui/scroll-asked";
-import { act, createElement } from "react";
+import { Activity, act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { relayout } from "../testing/resize-observer.js";
@@ -34,21 +34,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The log's box as the window would lay it out: its height, the room it shows, and every scroll written to it. */
+/** The log's box as the window would lay it out: its height, the room it shows, whether a page around it is hidden, and every scroll written to it. */
 interface StandInBox {
   height: number;
   room: number;
+  /** Whether the box is laid out at all, which a page hidden around it (`display: none`) takes away. */
+  hidden?: boolean;
   readonly writes: number[];
 }
 
 /** Lays out `box` as `layout` says, hearing every write to its scroll position. */
 function layOut(box: HTMLElement, layout: StandInBox): void {
   let top = 0;
-  Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => layout.height });
-  Object.defineProperty(box, "clientHeight", { configurable: true, get: () => layout.room });
+  // Note that a box hidden reads as empty and scrolled to its top, and keeps its scroll for when it is shown again, as Chromium's does.
+  const laidOut = (value: number) => (layout.hidden === true ? 0 : value);
+  Object.defineProperty(box, "scrollHeight", {
+    configurable: true,
+    get: () => laidOut(layout.height),
+  });
+  Object.defineProperty(box, "clientHeight", {
+    configurable: true,
+    get: () => laidOut(layout.room),
+  });
   Object.defineProperty(box, "scrollTop", {
     configurable: true,
-    get: () => top,
+    get: () => laidOut(top),
     set: (to: number) => {
       layout.writes.push(to);
       top = to;
@@ -129,6 +139,97 @@ test("a reader scrolled up to an earlier line is left there when a new line come
   draw(root, ["one", "two", "three"]);
   act(() => relayout());
   assert.deepEqual(layout.writes, [], "the reader's place stands");
+});
+
+/** The lines shrinking 80px under a reader 50px short of the end, long after their wheel, and the browser pulling the scroll up to their new end. */
+function shrunkPast(layout: StandInBox): void {
+  layout.height = 220;
+}
+
+test.each([
+  {
+    how: "the window reporting the shrink before the scroll",
+    shrink: (box: HTMLElement, layout: StandInBox) => {
+      shrunkPast(layout);
+      box.scrollTop = 120;
+      act(() => relayout());
+      lateScroll(box, 120, 2000);
+    },
+  },
+  {
+    how: "the scroll heard before the window reports the shrink",
+    shrink: (box: HTMLElement, layout: StandInBox) => {
+      shrunkPast(layout);
+      lateScroll(box, 120, 2000);
+      act(() => relayout());
+    },
+  },
+  {
+    how: "the lines shrinking to just where the reader stands, which scrolls nothing",
+    shrink: (_box: HTMLElement, layout: StandInBox) => {
+      layout.height = 250;
+      act(() => relayout());
+    },
+  },
+  {
+    how: "a press in the log just before, as a fold closed",
+    shrink: (box: HTMLElement, layout: StandInBox) => {
+      act(() => {
+        box.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+        box.dispatchEvent(new Event("pointerup", { bubbles: true }));
+      });
+      shrunkPast(layout);
+      scroll(box, 120);
+      act(() => relayout());
+    },
+  },
+])(
+  "a reader scrolled up near the newest line is not taken to it when the lines shrink under them, $how, and grow back",
+  ({ shrink }) => {
+    const { box, layout } = mount(["one", "two"]);
+    scroll(box, 200);
+    readerScroll(box, 150);
+    shrink(box, layout);
+    layout.writes.splice(0);
+    layout.height = 300;
+    act(() => relayout());
+    assert.deepEqual(layout.writes, [], "the log stays off its newest line");
+  },
+);
+
+test("a reader scrolled up to an earlier line is left there when the page around the log is hidden and shown again", () => {
+  const { box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  readerScroll(box, 50);
+  layout.writes.splice(0);
+  layout.hidden = true;
+  act(() => relayout());
+  layout.hidden = false;
+  act(() => relayout());
+  assert.deepEqual(layout.writes, [], "the reader's place stands");
+});
+
+test("a log on its newest line goes on following it once a page kept hidden around it is shown again", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const log = createElement(
+    Conversation,
+    null,
+    createElement(ConversationContent, null, createElement("p", null, "one")),
+  );
+  const shown = (mode: "visible" | "hidden") =>
+    act(() => root.render(createElement(Activity, { mode, children: log })));
+  shown("visible");
+  const box = container.querySelector<HTMLElement>("[role=log]") ?? assert.fail("the log");
+  const layout: StandInBox = { height: 300, room: 100, writes: [] };
+  layOut(box, layout);
+  shown("hidden");
+  shown("visible");
+  layout.writes.splice(0);
+  layout.height = 500;
+  act(() => relayout());
+  assert.deepEqual(layout.writes, [500], "the grown line is scrolled to");
 });
 
 test("a log the browser shifts down to hold its place, as lines above it grow, still follows its newest line", () => {

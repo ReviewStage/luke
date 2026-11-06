@@ -47,6 +47,14 @@ import { Redacted, Result, Schema } from "effect";
  * after it was last written, so a version stays in the ring that long past
  * the rewrap that moved every other row off it.
  *
+ * A pending ChatGPT device-code login's codes, which together claim the
+ * sign-in at OpenAI, are sealed the same way for the fifteen minutes the
+ * login may stand (`account_chatgpt_device_login`), with purposes of their
+ * own (`luke/chatgpt-device-login/*`) and the account and the login bound
+ * beside them, so the seal opens for no other login. The rewrap does not
+ * visit those rows either, which a login's settling clears and the
+ * account's next start replaces.
+ *
  * Rotation is a new version at the head of the environment's list: new
  * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every
  * standing row onto it by unwrapping and rewrapping its data key, never
@@ -79,6 +87,10 @@ const SEAL_PURPOSE = {
   SANDBOX_FIREWALL: {
     DATA_KEY: "luke/sandbox-firewall/data-key",
     SECRET: "luke/sandbox-firewall/entries",
+  },
+  CHATGPT_DEVICE_LOGIN: {
+    DATA_KEY: "luke/chatgpt-device-login/data-key",
+    SECRET: "luke/chatgpt-device-login/codes",
   },
 } as const;
 
@@ -142,6 +154,12 @@ export interface MacLaunchOwner {
 export interface FirewallOwner {
   readonly userId: string;
   readonly sandboxSessionId: string;
+}
+
+/** Whose pending device-code login a seal is: the account and the login, which its seal binds. */
+export interface DeviceLoginOwner {
+  readonly userId: string;
+  readonly loginId: string;
 }
 
 /** Whose key a seal is, and what kind of credential, which both seals bind. */
@@ -436,4 +454,32 @@ export function openFirewallEntries(
     read.success.sealed,
   );
   return entries === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(entries);
+}
+
+/** A pending device-code login's codes sealed for its row under a fresh data key, wrapped under the ring's current version, as the row's one text column holds them. */
+export function sealChatGptDeviceCodes(
+  ring: KeyRing,
+  owner: DeviceLoginOwner,
+  codes: Redacted.Redacted<string>,
+): string {
+  const names = [owner.userId, owner.loginId];
+  return encodeSealedColumn(sealSecret(ring, SEAL_PURPOSE.CHATGPT_DEVICE_LOGIN, names, codes));
+}
+
+/** The codes a pending device-code login's row seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
+export function openChatGptDeviceCodes(
+  ring: KeyRing,
+  owner: DeviceLoginOwner,
+  column: string,
+): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
+  const read = decodeSealedColumn(column);
+  if (Result.isFailure(read)) return Result.fail(PROVIDER_KEY_UNREADABLE);
+  const codes = openSecret(
+    ring,
+    SEAL_PURPOSE.CHATGPT_DEVICE_LOGIN,
+    [owner.userId, owner.loginId],
+    read.success,
+    read.success.sealed,
+  );
+  return codes === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(codes);
 }

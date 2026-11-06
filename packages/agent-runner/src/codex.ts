@@ -42,7 +42,13 @@
  * launch (`RUNNER_ENV.CODEX_TOKEN`), and the sandbox's firewall sets the
  * plan's token in its place on OpenAI's API, renewed by the service, so no
  * token enters the sandbox; on a host it asks the service at the config's
- * `tokenUrl` under the runner's bearer. Codex keeps
+ * `tokenUrl` under the runner's bearer. A plan connected through Codex's
+ * own device-code login has a token only Codex's ChatGPT backend accepts,
+ * so where the launch's environment names that backend
+ * (`RUNNER_ENV.CODEX_PLAN_BACKEND`) the provider sends there, naming the
+ * workspace the plan pays from as Codex's ChatGPT sign-in does
+ * (`CHATGPT_BACKEND_PROVIDER`), its token from the same command and, in a
+ * sandbox, swapped in at the firewall on that host. Codex keeps
  * what the command printed for the refresh interval, and runs it again past
  * that and after a 401, so a turn outlives any one token, and no token sits
  * in app-server's environment; what the command prints reaches app-server
@@ -110,13 +116,15 @@ import {
   type RunnerSelf,
   runsOnHost,
 } from "./launch.js";
-import { SANDBOX_TOOL_ENV } from "./pins.js";
+import { CODEX_PIN, SANDBOX_TOOL_ENV } from "./pins.js";
 import {
   CODEX_EFFORT,
   CODEX_ERROR_INFO,
+  CODEX_PLAN_BACKEND,
   CODEX_TOKEN_COMMAND,
   type CodexConfig,
   type CodexEffort,
+  type CodexPlanBackend,
   type ContentBlock,
   codexErrorKind,
   INPUT_LINE,
@@ -137,6 +145,23 @@ const CHATGPT_PROVIDER = {
   ID: "openai_chatgpt_plan",
   NAME: "ChatGPT plan",
   BASE_URL: "https://api.openai.com/v1",
+} as const;
+
+/**
+ * Codex's ChatGPT backend, for a plan's token Codex's own device-code login
+ * was issued, which OpenAI's API refuses: the base URL Codex's built-in
+ * ChatGPT sign-in sends to (Codex 0.163.0's `CHATGPT_CODEX_BASE_URL`), and
+ * the headers it adds there that a provider of ours must name itself. Codex
+ * sends the workspace's header beside its bearer for that sign-in alone,
+ * and the `version` header from its built-in provider's `http_headers`;
+ * `originator` and `User-Agent` it sends for every provider, so ours
+ * carries them as they are.
+ */
+const CHATGPT_BACKEND_PROVIDER = {
+  ID: "chatgpt_backend_plan",
+  NAME: "ChatGPT plan",
+  BASE_URL: "https://chatgpt.com/backend-api/codex",
+  HEADER: { ACCOUNT: "ChatGPT-Account-ID", VERSION: "version" },
 } as const;
 
 /**
@@ -394,7 +419,14 @@ const CODEX_AUTH = {
 } as const;
 
 type CodexAuth = (
-  | { readonly kind: typeof CODEX_AUTH.TOKEN_COMMAND; readonly command: TokenCommand }
+  | {
+      readonly kind: typeof CODEX_AUTH.TOKEN_COMMAND;
+      readonly command: TokenCommand;
+      /** Where the plan's token is sent (`RUNNER_ENV.CODEX_PLAN_BACKEND`). */
+      readonly backend: CodexPlanBackend;
+      /** The workspace the plan pays from, where its starter named one (`RUNNER_ENV.CHATGPT_ACCOUNT_ID`). */
+      readonly chatgptAccountId: string | undefined;
+    }
   | { readonly kind: typeof CODEX_AUTH.API_KEY }
 ) & {
   /** The catalog app-server reads in place of its bundled one (`catalogFile`): `planCatalog` on the plan, `ultrafastCatalog` on an API key. */
@@ -402,13 +434,40 @@ type CodexAuth = (
 };
 
 /**
+ * The headers our provider adds on Codex's ChatGPT backend, as Codex's
+ * ChatGPT sign-in sends them there: its pinned version, and the workspace
+ * where the plan names one; none on OpenAI's API.
+ */
+function backendHeaders(auth: CodexAuth): string | undefined {
+  if (auth.kind !== CODEX_AUTH.TOKEN_COMMAND || auth.backend !== CODEX_PLAN_BACKEND.CHATGPT) {
+    return undefined;
+  }
+  const { HEADER } = CHATGPT_BACKEND_PROVIDER;
+  const headers: (readonly [string, string])[] = [
+    ...(auth.chatgptAccountId === undefined
+      ? []
+      : ([[HEADER.ACCOUNT, auth.chatgptAccountId]] as const)),
+    [HEADER.VERSION, CODEX_PIN.VERSION],
+  ];
+  return `{ ${headers.map(([name, value]) => `${toml(name)} = ${toml(value)}`).join(", ")} }`;
+}
+
+/**
  * How our provider is handed its token: from the runner's token command
  * on the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API
- * key; its own name; and the catalog the launch wrote for it.
+ * key; its own name; where it sends its requests, Codex's ChatGPT backend
+ * with the headers it reads there for a device-code plan's token, OpenAI's
+ * API for every other; and the catalog the launch wrote for it.
  */
 function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
-  const named = auth.kind === CODEX_AUTH.API_KEY ? API_KEY_PROVIDER : CHATGPT_PROVIDER;
+  const named =
+    auth.kind === CODEX_AUTH.API_KEY
+      ? { ...API_KEY_PROVIDER, BASE_URL: CHATGPT_PROVIDER.BASE_URL }
+      : auth.backend === CODEX_PLAN_BACKEND.CHATGPT
+        ? CHATGPT_BACKEND_PROVIDER
+        : CHATGPT_PROVIDER;
   const provider = `model_providers.${named.ID}`;
+  const headers = backendHeaders(auth);
   const credential: (readonly [string, string])[] =
     auth.kind === CODEX_AUTH.API_KEY
       ? [[`${provider}.env_key`, toml(RUNNER_ENV.OPENAI_API_KEY)]]
@@ -424,8 +483,9 @@ function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
   return [
     ["model_provider", toml(named.ID)],
     [`${provider}.name`, toml(named.NAME)],
-    [`${provider}.base_url`, toml(CHATGPT_PROVIDER.BASE_URL)],
+    [`${provider}.base_url`, toml(named.BASE_URL)],
     ...credential,
+    ...(headers === undefined ? [] : ([[`${provider}.http_headers`, headers]] as const)),
     [`${provider}.wire_api`, toml("responses")],
     [`${provider}.requires_openai_auth`, "false"],
     [`${provider}.supports_websockets`, "false"],
@@ -924,22 +984,41 @@ function onApiKey(context: LaunchContext<CodexConfig>): boolean {
   return key !== undefined && key !== "";
 }
 
+const decodePlanBackend = Schema.decodeUnknownOption(
+  Schema.Literals(Object.values(CODEX_PLAN_BACKEND)),
+);
+
+/**
+ * The backend the plan's token is sent to, as the launch's starter named it:
+ * OpenAI's API where it named none; none where it named one this runner
+ * does not know.
+ */
+function planBackendOf(context: LaunchContext<CodexConfig>): CodexPlanBackend | undefined {
+  const named = context.env[RUNNER_ENV.CODEX_PLAN_BACKEND];
+  if (named === undefined || named === "") return CODEX_PLAN_BACKEND.OPENAI_API;
+  return Option.getOrUndefined(decodePlanBackend(named));
+}
+
 /**
  * The credential a launch's app-server runs on, with the catalog written for
  * it: the account's API key where the environment holds it, and the plan's
- * token command otherwise, where the runner knows its own bundle; none where
- * it does not.
+ * token command otherwise, on the backend given, where the runner knows its
+ * own bundle; none where it does not.
  */
 const authOf = Effect.fn("agent-runner/codexAuthOf")(function* (
   context: LaunchContext<CodexConfig>,
+  backend: CodexPlanBackend,
 ) {
   if (onApiKey(context)) {
     return { kind: CODEX_AUTH.API_KEY, catalog: yield* catalogFile(ultrafastCatalog()) } as const;
   }
   if (context.self === undefined) return undefined;
+  const chatgptAccountId = context.env[RUNNER_ENV.CHATGPT_ACCOUNT_ID];
   return {
     kind: CODEX_AUTH.TOKEN_COMMAND,
     command: { self: context.self, tokenUrl: context.config.tokenUrl },
+    backend,
+    chatgptAccountId: chatgptAccountId === "" ? undefined : chatgptAccountId,
     catalog: yield* catalogFile(planCatalog()),
   } as const;
 });
@@ -963,7 +1042,11 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   context: LaunchContext<CodexConfig>,
 ) {
   const { config, sink } = context;
-  const auth: CodexAuth | undefined = yield* authOf(context);
+  const backend = planBackendOf(context);
+  if (backend === undefined) {
+    return ended(RUNNER_END.FAILED, "the plan's backend is not one this runner knows");
+  }
+  const auth: CodexAuth | undefined = yield* authOf(context, backend);
   if (auth === undefined) {
     return ended(RUNNER_END.FAILED, "the runner was not started from its bundle");
   }

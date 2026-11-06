@@ -15,10 +15,13 @@
  * It is drawn in the Tailwind theme's utilities, in the caption's size and
  * the muted ink, held to the column: who sent it gives way, cut short, so
  * the time and the buttons keep their whole width, and a line that may wrap
- * breaks before the time rather than squeeze who sent it.
+ * breaks before the time rather than squeeze who sent it. A message that did
+ * not go says so in who sent it's place (`status`), in the danger tone, as
+ * a chat app writes "Not delivered" before the time under a bubble.
  */
 
 import type { ReactNode } from "react";
+import { STATUS_TONE } from "../../status-tone.js";
 import { TIME_LOOK, Time } from "../time/time.js";
 
 /** Which edge of the column the line keeps to: a sent message's right, a received one's left. */
@@ -57,9 +60,10 @@ function timeInset(named: boolean, align: MessageLineAlign, inset: MessageLineIn
   return !named && opensInset(align, inset) ? "px-ui-4" : "pe-ui-4";
 }
 
-/** The line under a message: `sender`, `at`, and `actions`, each left out where the message has none, the actions on the side away from `align`'s edge. */
+/** The line under a message: `sender` or `status`, `at`, and `actions`, each left out where the message has none, the actions on the side away from `align`'s edge. */
 export function MessageLine({
   sender,
+  status,
   at,
   actions,
   align = MESSAGE_LINE_ALIGN.END,
@@ -68,6 +72,8 @@ export function MessageLine({
 }: {
   /** Who sent it, as the caller's own mark and name, or what else leads the line, such as how long a turn worked; none for the reader's own. */
   sender?: ReactNode;
+  /** What leads the line in the danger tone in the sender's place, where the message did not go, as a chat app says "Not delivered" before the time, said as an alert as it lands; none where it went. */
+  status?: ReactNode;
   /** When it was sent. */
   at?: number | undefined;
   /** Its actions, a `MessageActions` bar. */
@@ -78,7 +84,14 @@ export function MessageLine({
   /** Whether the time may break onto a line under a sender too long to share one. */
   wrap?: boolean;
 }): React.JSX.Element | null {
-  const named = drawsSomething(sender);
+  const lead = drawsSomething(status) ? (
+    <span className="text-tone-ink" data-tone={STATUS_TONE.DANGER} role="alert">
+      {status}
+    </span>
+  ) : (
+    sender
+  );
+  const named = drawsSomething(lead);
   if (!named && at === undefined && !drawsSomething(actions)) return null;
   const actionsFirst = align === MESSAGE_LINE_ALIGN.END;
   return (
@@ -90,7 +103,7 @@ export function MessageLine({
       {actionsFirst ? actions : null}
       {named ? (
         <span className={`ui-message-line-sender flex min-w-0 items-center ${senderInset(inset)}`}>
-          {sender}
+          {lead}
         </span>
       ) : null}
       {at === undefined ? null : (

@@ -141,7 +141,11 @@ interface Answer {
 const LINEAR_CONNECTORS = { LINEAR_CONNECTOR_UID: "oauth/linear" } as const;
 
 /** A GitHub on which nobody reaches anything; the routes that read no repository never ask it. */
-const UNREACHED_GITHUB: FakeGitHub = { layer: NO_GITHUB, sent: [] };
+const UNREACHED_GITHUB: FakeGitHub = {
+  layer: NO_GITHUB,
+  sent: [],
+  respond: () => Promise.reject(new Error("this test reaches no GitHub")),
+};
 
 /**
  * Two accounts, each behind its own bearer. The owner signed in with GitHub

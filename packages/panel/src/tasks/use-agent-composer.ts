@@ -1,3 +1,4 @@
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
 import {
   type AgentAttachment,
@@ -5,23 +6,28 @@ import {
   type AgentTranscriptMessage,
   hasWordsOrFiles,
 } from "@repo/features/agent-wire";
-import type { Failure } from "@repo/features/failure-remedy";
+import { type Failure, remedyLabel } from "@repo/features/failure-remedy";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { STATUS_TONE } from "@repo/ui";
 import { sentLineId } from "@repo/wire/host-ids";
 import { useEffect, useRef, useState } from "react";
 import type { AgentActAnswer } from "../act.js";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { useSendQueue } from "../send-queue.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import {
   closesComposer,
   heldSentLines,
   messageFailureNote,
+  type RefusedCall,
   SENT_LINE_STATE,
   type SentLine,
   unreadSentLines,
 } from "./agent-model.js";
+import { type FailedLine, failedLinesAtom, failedLinesOf } from "./failed-lines.js";
 
 /**
- * use-agent-composer.ts -- the message box under an agent's transcript as one control: the words being written, the messages on their way, why the last one did not go, and the lines sent that the transcript has not read back.
+ * use-agent-composer.ts -- the message box under an agent's transcript as one control: the words being written, the messages on their way, the ones that did not go, and the lines sent that the transcript has not read back.
  *
  * A send takes the words out of the box and shows them in the transcript
  * at once as the developer's own line, and the box takes the next message
@@ -41,25 +47,35 @@ import {
  * at once would take it in either order, and a line sent while one is out
  * waits for its answer here, under the agent's key (`../send-queue.ts`).
  *
- * A message that did not go says why under the box, with Retry, which sends
- * it again under the same key, so a send whose answer was lost reaches the
- * agent once. Its words and files come back into the box where the box
- * holds nothing newer, the line leaving the transcript, and an edit there
- * is a new message under a new key, so Retry goes with the edit, as it does
- * with a file put on or taken off; where the developer has written on
- * meanwhile, the box keeps their words and the line stays where it went,
- * marked as not sent, with a Retry of its own. A refusal that is for good
- * holds the box, disabled, with its reason under it, and keeps the line
- * where it went, marked as not delivered, as it does every line still
- * waiting to go behind it, the box drawing none of the words its draft keeps
- * for Continue, so they show once. The marks are this tab's alone: a tab
- * opened again draws the words in its box. Another agent's tab starts from
- * nothing of this one's, though a line sent from it still goes.
+ * A message that did not go stays where it went, as a chat app keeps one,
+ * and never comes back into the box, which holds only words not yet sent:
+ * its line is marked as not delivered, with why, and offers Retry, which
+ * sends it again under the same key, so a send whose answer was lost reaches
+ * the agent once, as the newest line; Edit, which takes its words and files
+ * back into the box ahead of what the box holds; and Delete. Each line not
+ * delivered stands on its own, as a chat app's do, so a message sent after
+ * one that failed still goes. The line is kept past the tab for the account
+ * that sent it (`failed-lines.ts`), so a refusal that lands while the tab is
+ * closed, or its task left, is drawn where the line went once the tab opens
+ * again, the rows and tabs leading to it wear the failed mark meanwhile, and
+ * a toast says so where the tab is not on screen as it lands. A refusal that
+ * something elsewhere mends, a token to update or the task to move to the
+ * workspace that reaches its repository, is also said under the box with that
+ * remedy and Retry, which send the same line again, as a move's landing does
+ * by itself (`repository-remedy.tsx`). A refusal that
+ * is for good holds the box, disabled, with its reason under it, and keeps
+ * the line where it went, marked as not delivered, as it does every line
+ * still waiting to go behind it, the box drawing none of the words its draft
+ * keeps for Continue, so they show once; those marks are this tab's alone,
+ * and a tab opened again draws the words in its box, so a refusal for good
+ * that lands while the tab is not on screen is said in a toast as one for now
+ * is. Another agent's tab
+ * starts from nothing of this one's but the lines not delivered to it,
+ * though a line sent from it still goes.
  *
  * The words and the files not yet sent are the agent's draft, kept apart from
  * the tab (`../composer-drafts.ts`), so they wait while another tab or task is
- * open and come back as the tab does; a message that did not go comes back
- * into the agent's draft even once its tab is closed.
+ * open and come back as the tab does.
  *
  * Edit opens one of the developer's lines for writing again where it stands
  * (`rewind-action.tsx`), leaving the box as it is, and its send takes the
@@ -68,7 +84,7 @@ import {
  * line without sending. Either hides the messages the rewind drops at once,
  * until the transcript reads back without them, and says it is rewinding
  * until the service answers; an edit that did not go stays where it went,
- * marked as not sent, its Retry rewinding again where the rewind did not go
+ * marked as not delivered, its Retry rewinding again where the rewind did not go
  * and only sending where it did, and a revert says why under the box, its
  * Retry asking again. A line whose send has not answered yet is no place to
  * rewind to (`going`), because the service may still withdraw its row.
@@ -99,31 +115,20 @@ export interface AgentComposerControl {
   setAttachments: (next: (held: readonly AgentAttachment[]) => readonly AgentAttachment[]) => void;
   /** Whether a send holds the box until it answers, during which the box takes nothing: New task's, whose send opens the task; an agent's box never holds. */
   sending: boolean;
-  /** Why the last message did not go, said under the box beside what mends it; nothing while none failed. */
+  /** Why the last Revert did not go, or the newest message that did not go where what mends it is elsewhere, said under the box beside that remedy and Retry; nothing while neither waits. Every message that did not go says so on its own line too. */
   note: ComposerNote | undefined;
   /** Why the agent takes no message any more, in the host's words; nothing while it does. */
   closed: string | undefined;
   /** Sends the words in the box, trimmed, and its files under a fresh key; nothing on an empty box or a closed agent. */
   send: () => void;
-  /** Sends the message that did not go again under its key, so a send whose answer was lost reaches the agent once. */
+  /** Asks the Revert that did not go again, or sends the message whose remedy the note offers again under its key. */
   retry: () => void;
   /** The lines sent that the transcript has not read back yet, in order. */
   sent: readonly SentLine[];
 }
 
-/** The last message that did not go, which the note under the box is of and its Retry sends again. */
-interface Failed {
-  /** The line it went as, by its id. */
-  readonly lineId: string;
-  readonly clientKey: string;
-  /** Whether its words came back into the box, which Retry sends; else the line keeps them, marked as not sent. */
-  readonly inBox: boolean;
-  readonly note: ComposerNote;
-}
-
 interface Held {
   agentId: string;
-  failed: Failed | undefined;
   /** The developer's line open for writing again where it stands, by its message id; none while none is. */
   editing: string | undefined;
   /** The line a rewind under way, an edit's or a revert's, takes the agent back to just before, by its message id; none while none is out. */
@@ -132,6 +137,8 @@ interface Held {
   rewoundAt: number | undefined;
   /** The messages a rewind under way or just done drops, by their ids, hidden until the transcript reads back without them. */
   cut: ReadonlySet<string> | undefined;
+  /** The newest line not delivered whose refusal is mended elsewhere (`remedyLabel`), which the note under the box offers that remedy for and its Retry sends again; none while none waits. */
+  remedied: { readonly lineId: string; readonly note: ComposerNote } | undefined;
   /** The Revert that did not go, which the note under the box is of and its Retry asks again. */
   revertFailed: { readonly messageId: string; readonly note: ComposerNote } | undefined;
   closed: string | undefined;
@@ -140,18 +147,19 @@ interface Held {
   sent: readonly SentLine[];
 }
 
-function fresh(agentId: string): Held {
+/** A tab's composer as it opens on an agent: the lines not delivered to it, kept past the tab, where they went, and nothing else. */
+function fresh(agentId: string, failed: readonly FailedLine[]): Held {
   return {
     agentId,
-    failed: undefined,
     editing: undefined,
     reverting: undefined,
     rewoundAt: undefined,
     cut: undefined,
+    remedied: undefined,
     revertFailed: undefined,
     closed: undefined,
     behind: EMPTY_DRAFT,
-    sent: [],
+    sent: failed.map((each) => each.line),
   };
 }
 
@@ -182,10 +190,9 @@ function carried(sent: readonly SentLine[], behind: Draft): Draft {
 
 const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** Whether a draft holds neither words nor files. */
-function holdsNothing(draft: Draft): boolean {
-  return draft.text === "" && draft.attachments.length === 0;
-}
+/** What the toast says of a message not delivered while its tab is not on screen, and its press. */
+const NOT_DELIVERED_TOAST = "Message not delivered";
+const OPEN_WORD = "Open";
 
 /** The lines with the one by `id` in another state. */
 function marked(
@@ -196,9 +203,11 @@ function marked(
   return sent.map((each) => (each.id === id ? { ...each, state } : each));
 }
 
-/** The lines with the one by `id` marked as having taken the agent back already. */
-function rewoundBefore(sent: readonly SentLine[], id: string): readonly SentLine[] {
-  return sent.map((each) => (each.id === id ? { ...each, rewound: true } : each));
+/** The lines as a refusal for good leaves them: the one it refused, and every one refused for now, marked as not delivered. */
+function settled(sent: readonly SentLine[], id: string): readonly SentLine[] {
+  return marked(sent, id, SENT_LINE_STATE.UNDELIVERED).map((each) =>
+    each.state === SENT_LINE_STATE.FAILED ? { ...each, state: SENT_LINE_STATE.UNDELIVERED } : each,
+  );
 }
 
 /** The composer as an agent's tab holds it: what it draws, the words and files its draft keeps, which a closed box draws none of and Continue carries, and the Retry a line marked as not sent offers. */
@@ -207,8 +216,14 @@ export interface HeldComposer extends AgentComposerControl {
     readonly words: string;
     readonly attachments: readonly AgentAttachment[];
   };
-  /** Sends a line marked as not sent again under its key, from the line itself. */
+  /** Sends a line not delivered again under its key, from the line itself, as the newest line. */
   readonly retryLine: (id: string) => void;
+  /** Lets a line not delivered go, sending nothing. */
+  readonly dropLine: (id: string) => void;
+  /** Takes a line not delivered back into the box, ahead of what it holds, to be written again. */
+  readonly takeBackLine: (id: string) => void;
+  /** Why each line not delivered did not go, by its id. */
+  readonly failedNotes: ReadonlyMap<string, ComposerNote>;
   /** Sends the words given as a new line of the developer's own, under a fresh key, leaving the box as it is; nothing on a closed agent. */
   readonly sendWords: (text: string) => void;
   /** The developer's line open for writing again where it stands, by its message id; none while none is. */
@@ -254,11 +269,17 @@ export function useAgentComposer(input: {
   payer?: AgentPayer | undefined;
   /** The teammate who started the agent (`teammateStarter`), whose own credentials a refusal names; none for the reader's own. */
   starter?: string | undefined;
+  /** Whether the tab is on screen, which a refusal landing while it is not says in a toast; on screen where unsaid. */
+  shown?: boolean | undefined;
+  /** Opens the agent's tab, which that toast offers; none offers nothing. */
+  onOpen?: (() => void) | undefined;
 }): HeldComposer {
   const { agentId, messages } = input;
   const kept = useDraft({ kind: DRAFT_PLACE.AGENT, planId: input.taskId, agentId });
-  const [held, setHeld] = useState<Held>(() => fresh(agentId));
-  if (held.agentId !== agentId) setHeld(fresh(agentId));
+  const failedLines = useAtomValue(failedLinesAtom);
+  const keepFailed = useAtomSet(failedLinesAtom);
+  const [held, setHeld] = useState<Held>(() => fresh(agentId, failedLinesOf(failedLines, agentId)));
+  if (held.agentId !== agentId) setHeld(fresh(agentId, failedLinesOf(failedLines, agentId)));
   // The lines as last drawn, which an answer landing later reads.
   const heldNow = useRef(held);
   heldNow.current = held;
@@ -269,6 +290,15 @@ export function useAgentComposer(input: {
   latest.current = input;
   // Each agent's sends as one queue, the next going once the one before it answered.
   const queue = useSendQueue();
+  const toast = useToast();
+  // Whether the tab still stands, since a refusal landing after it closed is said in a toast.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // A line the transcript has read back is drawn as its row, and let go once the service took it too.
   const sent = unreadSentLines(held.sent, messages);
@@ -297,6 +327,8 @@ export function useAgentComposer(input: {
     );
   /** Sends one line once every line before it has answered, and takes its answer. */
   const deliver = (line: SentLine) => {
+    // Note that the task is read as the line goes, because the tab may show another agent by the time it answers.
+    const { taskId } = latest.current;
     queue.after(agentId, async () => {
       const now = heldNow.current;
       // A line behind one refused for good is refused with it, as the service would refuse it.
@@ -317,6 +349,12 @@ export function useAgentComposer(input: {
           : await latest.current
               .send(agentId, line.text, line.clientKey, line.attachments)
               .catch((): AgentAgentAnswer => UNANSWERED);
+      // A refusal for now is kept past the tab before anything else, so the line stands wherever its tab is drawn next.
+      if ("failure" in answer && !closesComposer(answer.failure)) {
+        keepFailedLine(line, answer, rewound !== undefined && !("failure" in rewound), taskId);
+      }
+      // Either refusal is said in a toast where the tab is not on screen as it lands.
+      if ("failure" in answer) sayWhereAway(answer);
       // An answer to another agent's tab, or to a tab since remounted, is nobody's.
       if (latest.current.agentId !== agentId) return;
       // A rewind that did not go drops nothing, so the messages it would have dropped are drawn again.
@@ -332,6 +370,7 @@ export function useAgentComposer(input: {
         }));
         return;
       }
+      if (!closesComposer(answer.failure)) return;
       // A line the tab no longer holds, its agent's tab drawn afresh meanwhile, is nobody's to mark.
       if (!heldNow.current.sent.some((each) => each.id === line.id)) return;
       const note: ComposerNote = {
@@ -345,46 +384,79 @@ export function useAgentComposer(input: {
       };
       // A refusal for good closes the box, and the line stays where it went, marked as not
       // delivered, its words kept in the agent's draft for Continue with every other line that
-      // did not go, ahead of what the box holds, which is newer.
-      if (closesComposer(answer.failure)) {
-        const sent = marked(heldNow.current.sent, line.id, SENT_LINE_STATE.UNDELIVERED);
-        // Note that the draft store takes a change at once, so the box as the refusal lands is what stands behind.
-        let behind: Draft = EMPTY_DRAFT;
-        update((draft) => {
-          behind = draft;
-          return carried(sent, draft);
-        });
-        ours((was) => ({
-          ...was,
-          failed: { lineId: line.id, clientKey: line.clientKey, inBox: true, note },
-          closed: note.text,
-          behind,
-          sent: marked(was.sent, line.id, SENT_LINE_STATE.UNDELIVERED),
-        }));
-        return;
-      }
-      // The words come back into the box only where it holds nothing newer; else the line keeps them.
-      // An edit's line always keeps them, since its Retry must go in the same line's place.
-      // Note that the draft store takes a change at once, so the box as the change lands decides.
-      let inBox = false;
+      // did not go, ahead of what the box holds, which is newer. Every line refused for now
+      // before it is marked so too, since the box takes no Retry any more. Note that the lines
+      // kept past the tab go with it, because their words are in the draft now, which a tab
+      // opened again draws in its box.
+      const sent = settled(heldNow.current.sent, line.id);
+      // Note that the draft store takes a change at once, so the box as the refusal lands is what stands behind.
+      let behind: Draft = EMPTY_DRAFT;
       update((draft) => {
-        inBox = line.rewinds === undefined && holdsNothing(draft);
-        return inBox ? { ...EMPTY_DRAFT, text: line.text, attachments: line.attachments } : draft;
+        behind = draft;
+        return carried(sent, draft);
       });
-      // Note that an edit whose rewind went is marked so, because the line it stood in place of is
-      // gone, so its Retry only sends; a rewind to that line again would find no line.
-      const rewoundNow = rewound !== undefined && !("failure" in rewound);
+      keepFailed((all) => all.filter((failed) => failed.agentId !== agentId));
       ours((was) => ({
         ...was,
-        failed: { lineId: line.id, clientKey: line.clientKey, inBox, note },
-        sent: inBox
-          ? was.sent.filter((each) => each.id !== line.id)
-          : marked(
-              rewoundNow ? rewoundBefore(was.sent, line.id) : was.sent,
-              line.id,
-              SENT_LINE_STATE.FAILED,
-            ),
+        closed: note.text,
+        behind,
+        sent: settled(was.sent, line.id),
       }));
+    });
+  };
+
+  /**
+   * Keeps a line refused for now past the tab, marked as not delivered with
+   * why, and marks it so in the tab where the tab still shows its agent,
+   * where it went, or at the end where the tab was drawn afresh while it was
+   * out.
+   */
+  const keepFailedLine = (
+    line: SentLine,
+    answer: RefusedCall,
+    rewoundNow: boolean,
+    taskId: string | null,
+  ) => {
+    const at = latest.current;
+    const note: ComposerNote = {
+      ...messageFailureNote(answer, taskId, at.payer, at.starter),
+      cause: answer,
+    };
+    // Note that an edit whose rewind went is marked so, because the line it stood in place of is
+    // gone, so its Retry only sends; a rewind to that line again would find no line.
+    const failed: SentLine = {
+      ...line,
+      state: SENT_LINE_STATE.FAILED,
+      ...(rewoundNow ? { rewound: true } : {}),
+    };
+    keepFailed((all) => [
+      ...all.filter((each) => each.line.id !== line.id),
+      { agentId, taskId, line: failed, note },
+    ]);
+    // A refusal mended elsewhere, a token updated or the task moved, is offered under the box too.
+    const remedied = remedyLabel(note) === undefined ? undefined : { lineId: line.id, note };
+    ours((was) => ({
+      ...was,
+      remedied: remedied ?? (was.remedied?.lineId === line.id ? undefined : was.remedied),
+      sent: was.sent.some((each) => each.id === line.id)
+        ? was.sent.map((each) => (each.id === line.id ? failed : each))
+        : [...was.sent, failed],
+    }));
+  };
+
+  /** Says a message to the agent was not delivered in a toast, where its tab is not on screen, which offers to open it. */
+  const sayWhereAway = (answer: RefusedCall) => {
+    const at = latest.current;
+    if (mounted.current && at.agentId === agentId && at.shown !== false) return;
+    const { onOpen } = at;
+    toast({
+      replayUnmasked: true,
+      words: NOT_DELIVERED_TOAST,
+      tone: STATUS_TONE.DANGER,
+      failure: { surface: FAILURE_SURFACE.AGENT_SEND, cause: answer, about: { agentId } },
+      ...(onOpen === undefined
+        ? { hold: TOAST_HOLD.FAILED }
+        : { action: { label: OPEN_WORD, onPress: onOpen, replayUnmasked: true } }),
     });
   };
 
@@ -399,7 +471,7 @@ export function useAgentComposer(input: {
       sentAt: Date.now(),
       state: SENT_LINE_STATE.PENDING,
     };
-    setHeld((was) => ({ ...was, failed: undefined, sent: [...was.sent, line] }));
+    setHeld((was) => ({ ...was, sent: [...was.sent, line] }));
     deliver(line);
   };
 
@@ -470,51 +542,71 @@ export function useAgentComposer(input: {
     });
   };
 
-  /** Sends a line marked as not sent again, under its key, where it stands. */
-  const resend = (id: string) => {
+  /** The line not delivered by `id`, which is let go past the tab as the developer acts on it; none where it is no such line or the box is closed. */
+  const takeFailed = (id: string): SentLine | undefined => {
     const line = held.sent.find((each) => each.id === id);
-    if (line?.state !== SENT_LINE_STATE.FAILED || held.closed !== undefined) return;
+    if (line?.state !== SENT_LINE_STATE.FAILED || held.closed !== undefined) return undefined;
+    keepFailed((all) => all.filter((failed) => failed.line.id !== id));
+    setHeld((was) => (was.remedied?.lineId === id ? { ...was, remedied: undefined } : was));
+    return line;
+  };
+
+  /**
+   * Sends a line not delivered again, under its key, as the newest line, as
+   * a chat app moves a message tried again to the conversation's end, so the
+   * transcript shows the order the agent took them in.
+   */
+  const resend = (id: string) => {
+    const line = takeFailed(id);
+    if (line === undefined) return;
     // Note that a Retry is a send of its own, so the line is stamped again and the working line counts from it.
     const again = { ...line, sentAt: Date.now(), state: SENT_LINE_STATE.PENDING };
-    setHeld((was) => ({
-      ...was,
-      failed: was.failed?.lineId === id ? undefined : was.failed,
-      sent: was.sent.map((each) => (each.id === id ? again : each)),
-    }));
+    setHeld((was) => ({ ...was, sent: [...was.sent.filter((each) => each.id !== id), again] }));
     deliver(again);
+  };
+
+  /** Lets a line not delivered go, sending nothing. */
+  const dropLine = (id: string) => {
+    if (takeFailed(id) === undefined) return;
+    setHeld((was) => ({ ...was, sent: was.sent.filter((each) => each.id !== id) }));
+  };
+
+  /** Takes a line not delivered back into the box to be written again, ahead of what the box holds, which is newer. */
+  const takeBackLine = (id: string) => {
+    const line = takeFailed(id);
+    if (line === undefined) return;
+    setHeld((was) => ({ ...was, sent: was.sent.filter((each) => each.id !== id) }));
+    kept.update((draft) => ({
+      ...draft,
+      text: [line.text, draft.text].filter((text) => text !== "").join("\n\n"),
+      attachments: [...line.attachments, ...draft.attachments],
+    }));
   };
 
   // Note that a closed box draws none of its words, because they stand in the transcript as the
   // line not delivered, and the draft keeps them for Continue, which carries them (`unsent`).
   const shown = held.closed === undefined ? kept.draft : EMPTY_DRAFT;
-  // Note that an edit lets Retry go where Retry would send the box's words, because they are
-  // no longer the message that failed; a line that keeps its own words keeps its Retry.
-  const editLetsGo = (was: Held): Held =>
-    was.failed?.inBox === true ? { ...was, failed: undefined } : was;
   return {
     draft: shown.text,
-    setDraft: (text) => {
-      if (text !== kept.draft.text) setHeld(editLetsGo);
-      kept.update((was) => ({ ...was, text }));
-    },
+    setDraft: (text) => kept.update((was) => ({ ...was, text })),
     attachments: shown.attachments,
-    // Note that a file put on or taken off lets Retry go too, since the message is another.
-    setAttachments: (next) => {
-      setHeld(editLetsGo);
-      kept.update((was) => ({ ...was, attachments: next(was.attachments) }));
-    },
+    setAttachments: (next) =>
+      kept.update((was) => ({ ...was, attachments: next(was.attachments) })),
     sending: false,
-    note: held.closed === undefined ? (held.failed?.note ?? held.revertFailed?.note) : undefined,
+    note: held.closed === undefined ? (held.revertFailed?.note ?? held.remedied?.note) : undefined,
     closed: held.closed,
     send: () => sendDraft(),
     retry: () => {
-      const { failed, revertFailed } = held;
+      const { revertFailed, remedied } = held;
       if (revertFailed !== undefined) return revert(revertFailed.messageId);
-      if (failed === undefined) return;
-      if (failed.inBox) sendDraft(failed.clientKey);
-      else resend(failed.lineId);
+      if (remedied !== undefined) resend(remedied.lineId);
     },
     retryLine: resend,
+    dropLine,
+    takeBackLine,
+    failedNotes: new Map(
+      failedLinesOf(failedLines, agentId).map((failed) => [failed.line.id, failed.note]),
+    ),
     sendWords: (text) => {
       if (text.trim() === "" || held.closed !== undefined) return;
       sendLine(text.trim(), [], crypto.randomUUID());

@@ -53,7 +53,6 @@ import {
   type AgentLine,
   agentLineOf,
   archiveAgent,
-  archiveIdleAgent,
   archiveUnmovedAgent,
   continuationsOf,
   createAgent,
@@ -62,7 +61,6 @@ import {
   discardAgent,
   dispatchMentioningServers,
   forgetAgentPublishedRead,
-  IDLE_ARCHIVE,
   linePlacesOf,
   lineSendersOf,
   listAgentLines,
@@ -849,7 +847,7 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
 
 it.layer(getTestDB())("the coding-agent store's record of who archived an agent", (it) => {
   it.effect(
-    "a member's archive records the member, an idle agent's archive made for a member records who made it and why once, a working one stands, and an unarchive clears only the archive its reader saw",
+    "a member's archive records the member, an agent's archive made for a member records who made it and why, and an unarchive clears only the archive its reader saw",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -866,7 +864,6 @@ it.layer(getTestDB())("the coding-agent store's record of who archived an agent"
           agentName: "Billing helper",
           reason: "Its pull request merged.",
         };
-        const idle = () => Effect.succeed(true);
 
         const byMember = yield* archiveAgent(teammate, agentId, true);
         assert.deepEqual(Option.getOrThrow(byMember).archivedBy, {
@@ -878,24 +875,10 @@ it.layer(getTestDB())("the coding-agent store's record of who archived an agent"
         assert.equal(yield* unarchiveAgentFrom(teammate, agentId, seen), true);
         // The archive made again is made later, as any archive after a read of the last one is.
         yield* TestClock.adjust("1 second");
-        assert.equal(
-          yield* archiveIdleAgent(teammate, agentId, byAgent, () => Effect.succeed(false)),
-          IDLE_ARCHIVE.WORKING,
-        );
-        assert.equal(
-          yield* archiveIdleAgent(teammate, agentId, byAgent, idle),
-          IDLE_ARCHIVE.ARCHIVED,
-        );
-        assert.equal(
-          yield* archiveIdleAgent(starter, agentId, { ...byAgent, reason: "Again." }, idle),
-          IDLE_ARCHIVE.ALREADY,
-        );
+        yield* archiveAgent(teammate, agentId, true, byAgent);
         const archived = Option.getOrThrow(yield* readAgent(starter, agentId));
         assert.deepEqual(archived.archivedBy, byAgent);
-        assert.equal(
-          yield* archiveIdleAgent(outsider, agentId, byAgent, idle),
-          IDLE_ARCHIVE.NOT_FOUND,
-        );
+        assert.ok(Option.isNone(yield* archiveAgent(outsider, agentId, true, byAgent)));
         // An unarchive from the archive a reader saw before it was made again takes nothing.
         assert.equal(yield* unarchiveAgentFrom(starter, agentId, seen), false);
         assert.ok(Option.getOrThrow(yield* readAgent(starter, agentId)).archivedAt !== null);

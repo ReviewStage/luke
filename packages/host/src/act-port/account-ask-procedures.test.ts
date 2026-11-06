@@ -47,6 +47,9 @@ const REFUSAL = {
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: "Couldn't continue with ChatGPT on this system.",
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]:
     "Couldn't stop waiting for ChatGPT on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START]: "Couldn't start connecting Codex on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_WAIT]: "Couldn't wait for Codex on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_CANCEL]: "Couldn't stop connecting Codex on this system.",
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: "Could not forget that memory on this system.",
   [ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE]: "Could not transcribe the recording on this system.",
 } as const;
@@ -78,6 +81,21 @@ const ACTS = [
     ask: "providerKeyForAgents",
   },
   { kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN, payload: undefined, ask: "chatGptSignIn" },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START,
+    payload: undefined,
+    ask: "chatGptDeviceStart",
+  },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_WAIT,
+    payload: { loginId: "login-1", intervalSeconds: 5 },
+    ask: "chatGptDeviceWait",
+  },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_CANCEL,
+    payload: { loginId: "login-1" },
+    ask: "chatGptDeviceCancel",
+  },
   {
     kind: ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET,
     payload: { workspaceId: "workspace-1", id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d" },

@@ -222,30 +222,44 @@ export function Conversation({
   // A line can grow a word or shrink, a card or a group closed, without the
   // list scrolling or this rendering, so one observer watches the scroll box
   // and the block its lines stand in: it keeps a log that follows its newest
-  // line at its bottom, and puts one back there once nothing is left below
-  // to scroll to. Note that it watches no line of its own, because the block
+  // line at its bottom. Note that it watches no line of its own, because the block
   // is as tall as its lines, so any line resizing resizes it, and a line
   // replaced or removed is then never held by the observer; and that it
   // watches the block's border box, so its end growing keeps a following log
-  // at its newest line too.
+  // at its newest line too. Note that a box with no room is one a page
+  // hidden around it took out of the layout (`display: none`), as the kept
+  // Inbox is while another page stands: it reads as empty and scrolled to
+  // its top, which says nothing of where the reader stands, so it is left
+  // as it was, or a reader scrolled up would be taken to the end once it
+  // is shown again. And note that a log off its newest line is never put
+  // back on it here, even where it now stands at its end, because only lines
+  // shrinking under the reader bring it there without a scroll of theirs:
+  // they may grow back a moment later, as they do around a dialog closing,
+  // and following would then carry a reader who was just short of the end
+  // all the way down to it.
   const [resized] = useState(
     () =>
       new ResizeObserver(() => {
         const element = list.current;
-        if (element === null) return;
+        if (element === null || element.clientHeight === 0) return;
         if (following.current) {
           toEnd(element);
           return;
         }
-        if (!followsNewest(element)) {
-          setAtBottom(false);
-          return;
-        }
-        following.current = true;
-        setAtBottom(true);
+        setAtBottom(false);
       }),
   );
-  useEffect(() => () => resized.disconnect(), [resized]);
+  // Note that what was observed is forgotten with the observer, because a
+  // page kept hidden (`Activity`) takes its effects down and puts them back
+  // as it is shown again, its lines as they were, and the render after
+  // would otherwise find nothing changed and watch nothing.
+  useEffect(
+    () => () => {
+      resized.disconnect();
+      observed.current = undefined;
+    },
+    [resized],
+  );
   // Note that a new subject reuses the box, scrolled wherever the reader
   // left the last, so it is taken to its newest line here, before the paint,
   // even where its lines happen to number and end as the last subject's did.
@@ -336,7 +350,10 @@ export function Conversation({
         return;
       }
       lastTop.current = element.scrollTop;
-      following.current = followsNewest(element) || (following.current && down);
+      // A log off its newest line follows it again only once scrolled down to it: a scroll up to the end, a press of theirs just before it or not, is the lines shrinking under the reader, which leaves them off it, as the observer does.
+      following.current = following.current
+        ? followsNewest(element) || down
+        : followsNewest(element) && down;
       setAtBottom(following.current);
       const first = observed.current?.first;
       if (first !== null && first !== undefined) {

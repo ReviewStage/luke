@@ -38,7 +38,7 @@ export const APP_COMMAND = {
   VERSION_HISTORY: "version-history",
   OPEN_ON_GITHUB: "open-on-github",
   TOGGLE_READ: "toggle-read",
-  SNOOZE: "snooze",
+  REMIND_ME: "remind-me",
   PIN: "pin",
   OPEN_IN_TASK: "open-in-task",
   PREVIOUS_TASK: "previous-plan",
@@ -439,9 +439,9 @@ export const APP_SHORTCUTS = {
     label: "Mark as read or unread",
     chord: { key: SHORTCUT_KEY.U, plain: true },
   },
-  // Note that H snoozes the chosen Inbox item, as Linear's inbox and Superhuman have it.
-  [APP_COMMAND.SNOOZE]: {
-    label: "Snooze",
+  // Note that H sets a reminder on the chosen Inbox item, as Linear's inbox and Superhuman snooze one.
+  [APP_COMMAND.REMIND_ME]: {
+    label: "Remind me",
     chord: { key: SHORTCUT_KEY.H, plain: true },
   },
   [APP_COMMAND.PIN]: {
@@ -879,7 +879,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.COPY_FULL_TRANSCRIPT,
       APP_COMMAND.COMMENT_ON_SELECTION,
       APP_COMMAND.TOGGLE_READ,
-      APP_COMMAND.SNOOZE,
+      APP_COMMAND.REMIND_ME,
       APP_COMMAND.PIN,
       APP_COMMAND.VERSION_HISTORY,
       APP_COMMAND.OPEN_ON_GITHUB,

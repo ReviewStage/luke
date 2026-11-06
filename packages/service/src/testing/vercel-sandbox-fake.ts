@@ -17,13 +17,17 @@ import { SandboxFetch } from "../agents/vercel-sandbox-api.js";
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
 
-/** An unsigned token naming the fixture's project and team, a year from expiring. */
+/**
+ * An unsigned token naming the fixture's project and team, with no expiry.
+ * Note that it names none, because `@vercel/sandbox` reads the deployment's
+ * token again before each request and refreshes one past its expiry, which
+ * a fixed date would one day make it ask the network for.
+ */
 export function fixtureToken(): string {
-  const exp = Math.floor(Date.UTC(2027, 9, 14) / 1000);
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
-  const payload = Buffer.from(
-    JSON.stringify({ project_id: PROJECT, owner_id: TEAM, exp }),
-  ).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ project_id: PROJECT, owner_id: TEAM })).toString(
+    "base64url",
+  );
   return `${header}.${payload}.`;
 }
 

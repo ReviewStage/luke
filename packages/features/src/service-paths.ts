@@ -33,6 +33,12 @@ export const HOSTED_SERVICE_PATH = {
   ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
   /** The `ext_agent_host_id` the desktop signs in to ChatGPT for our hosted runtime under (GET). */
   ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
+  /** A ChatGPT plan's connection through Codex's device-code login begun (POST): the code to enter, and the login to poll. */
+  ACCOUNT_CHATGPT_DEVICE: "/api/account/chatgpt/device",
+  /** One check of a device-code connection (POST), by its login. */
+  ACCOUNT_CHATGPT_DEVICE_POLL: "/api/account/chatgpt/device/poll",
+  /** A device-code connection dropped (POST), by its login. */
+  ACCOUNT_CHATGPT_DEVICE_CANCEL: "/api/account/chatgpt/device/cancel",
   /**
    * The memories our agents kept in a workspace the account is a member
    * of, named in the query: read them (GET), or forget one by its id

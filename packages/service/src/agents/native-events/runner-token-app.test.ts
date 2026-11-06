@@ -32,7 +32,11 @@ import { Clock, DateTime, Effect, Layer, Logger, Option, Redacted, Result } from
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
+import {
+  CHATGPT_OAUTH,
+  sealChatGptCredentials,
+  sealCodexDeviceCredentials,
+} from "../../accounts/chatgpt-credentials.js";
 import { HOST_VERSION, mintHostSecret } from "../../auth/device-secret.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { GitHubApp } from "../../github/github-app.js";
@@ -281,6 +285,40 @@ it.layer(getTestDB())("the runner's token route", (it) => {
 
         yield* recordAgentRunnerToken(agent.userId, agent.agentId, null);
         assert.deepEqual((yield* ask(agent.bearer)).body, invalid);
+        assert.equal(openai.state.renewals, 0);
+      }),
+  );
+
+  it.effect(
+    "hands a Codex agent on a plan connected through Codex's device-code login its access token",
+    () =>
+      Effect.gen(function* () {
+        const { ask, openai } = yield* standing;
+        const agent = yield* codexOnPlan;
+        const now = yield* DateTime.nowAsDate;
+        const accessExpiresAt = new Date(now.getTime() + 60 * MINUTE);
+        const { sealed, hint } = sealCodexDeviceCredentials(ring(), agent.userId, {
+          accessToken: "device-access-0",
+          refreshToken: "device-refresh-0",
+          idToken: "device-id-token-0",
+          accountId: "chatgpt-subject",
+          chatgptAccountId: "chatgpt-workspace-fixture",
+          accessExpiresAt,
+        });
+        yield* saveProviderKey(
+          agent.userId,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          sealed,
+          hint,
+          null,
+          now,
+          accessExpiresAt,
+        );
+
+        const answered = yield* ask(agent.bearer);
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(answered.body, { accessToken: "device-access-0" });
         assert.equal(openai.state.renewals, 0);
       }),
   );

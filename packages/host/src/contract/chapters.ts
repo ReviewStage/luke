@@ -1,7 +1,5 @@
 import { eventIterator, type } from "@orpc/contract";
 import {
-  chaptersModelAnswerViewSchema,
-  chaptersModelWriteParamsSchema,
   pullRequestChaptersAnswerViewSchema,
   pullRequestChaptersParamsSchema,
   pullRequestChaptersReadParamsSchema,
@@ -34,9 +32,4 @@ export const chaptersActsContract = {
   )
     .input(exactInput(pullRequestChaptersParamsSchema))
     .output(EffectSchema.flip(pullRequestChaptersAnswerViewSchema)),
-  [CHAPTERS_ACT_KIND.CHAPTERS_MODEL_WRITE]: actProcedure(
-    "Could not change the chapters model on this system.",
-  )
-    .input(exactInput(chaptersModelWriteParamsSchema))
-    .output(EffectSchema.flip(chaptersModelAnswerViewSchema)),
 };

@@ -37,7 +37,6 @@
  */
 
 import { readAgentOfConversation } from "@repo/database/models/agent-store";
-import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
 import { WORKSPACE_MCP_SERVER } from "@repo/features/agent-tools";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { integrationConnectionOf } from "@repo/features/integration-wire";
@@ -273,8 +272,8 @@ const ALWAYS_LOADED_META = { ...TOOL_META, "anthropic/alwaysLoad": true } as con
 /** What an agent whose row is gone is offered by: no repository, on our own machine. */
 const NO_AGENT_OFFERED: WorkspaceMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
 
-/** What beside its row an agent whose row is gone is offered by: no Memory, and no outside words. */
-const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, heardFromAnotherAccount: false };
+/** What beside its row an agent whose row is gone is offered by: no Memory. */
+const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false };
 
 /** The tool result where the door failed rather than refused. */
 const DOOR_FAILED_RESULT: McpToolCallResult = {
@@ -352,8 +351,7 @@ function callWorkspaceTool(
 
 /**
  * The tools listed to the admitted agent: those eve offers it, by its
- * repository, where it runs, whether anyone but its starter has put words
- * into it, and its starter's Memory (`offeredWorkspaceMcpTool`); those eve offers
+ * repository, where it runs, and its starter's Memory (`offeredWorkspaceMcpTool`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.
  */
@@ -365,10 +363,7 @@ function listWorkspaceTools(
     Effect.flatMap((found) =>
       Effect.map(
         Option.isSome(found)
-          ? Effect.all({
-              memoryOn: memoryOnFor(found.value.userId),
-              heardFromAnotherAccount: heardFromAnotherAccount(admitted.target),
-            })
+          ? Effect.all({ memoryOn: memoryOnFor(found.value.userId) })
           : Effect.succeed(NO_AGENT_BESIDE),
         (beside) =>
           offeredWorkspaceMcpTool(

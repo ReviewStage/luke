@@ -18,17 +18,13 @@ import {
   REVIEW_STATE,
   type ReviewThread,
 } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL, type ChaptersModelId } from "@repo/features/chapters-model-choice";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
   type Chapter,
   LINE_REF_SIDE,
 } from "@repo/features/pull-request-chapters";
-import {
-  PULL_REQUEST_CHAPTERS_CALL_FAILURE,
-  type PullRequestChaptersAnswerView,
-} from "@repo/features/pull-request-chapters-view";
+import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
   PULL_REQUEST_CHAPTERS_STATE,
@@ -53,8 +49,7 @@ import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
-import { rendererRegistry } from "../renderer-runtime.js";
-import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, holdMembers, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
@@ -62,8 +57,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
-import { newestToastSays } from "../testing/toast.js";
-import { ToastHost } from "../toast.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import type { AgentsControl } from "./use-agents.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
@@ -240,8 +233,6 @@ function ready(
 }
 
 let root: Root | undefined;
-/** The toasts drawn beside the tab, where a test reads one. */
-let toasts: Root | undefined;
 /** What each of Files changed's lists was handed, mount first, each draw after it, with the box it was drawn in. */
 let lists: Array<{ readonly host: HTMLElement; readonly props: DiffListProps }> = [];
 /** The files the lists were scrolled to, in order. */
@@ -319,8 +310,6 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
-  act(() => toasts?.unmount());
-  toasts = undefined;
   document.body.innerHTML = "";
   for (const style of document.head.querySelectorAll("style")) style.remove();
   document.body.style.removeProperty("--ui-duration-pane");
@@ -584,7 +573,7 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
       .map((name) => name.replace(/[\d+−\s].*$/u, "")),
     ["Conversation", "Checks", "Chapters", "Files"],
   );
-  act(() => button(tab, "Generate chapters").click());
+  act(() => button(tab, "Generate chapters (Haiku 5.5)").click());
   await settle();
   assert.match(tab.textContent ?? "", /Generating chapters/u);
 
@@ -599,83 +588,6 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
     tabNames(tab).some((name) => name === "Chapters3"),
     "the tab counts the chapters",
   );
-});
-
-test("a model picked on Generate's chevron is kept before the Generate after it is asked, since the service reads the model it keeps", async () => {
-  const kept = Promise.withResolvers<{ model: ChaptersModelId }>();
-  const picked: ChaptersModelId[] = [];
-  fakeActPort({
-    ...fakeActPortCalls(),
-    [ACT_KIND.CHAPTERS_MODEL_WRITE]: ({ model }) => {
-      picked.push(model);
-      return kept.promise;
-    },
-  });
-  let asked = 0;
-  const tab = await draw(
-    controlAnswering({
-      generateChapters: () => {
-        asked += 1;
-        return Promise.resolve(answering(ready()));
-      },
-    }),
-  );
-
-  const chevron =
-    tab.querySelector<HTMLButtonElement>(
-      'button[aria-label="Choose the model chapters are generated on"]',
-    ) ?? assert.fail("Generate chapters has a chevron");
-  act(() => chevron.click());
-  const sonnet =
-    [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
-      (item) => item.textContent === "Sonnet 5.5",
-    ) ?? assert.fail("the chevron offers Sonnet 5.5");
-  act(() => sonnet.click());
-  act(() => button(tab, "Generate chapters").click());
-  await settle();
-  assert.deepEqual(picked, [CHAPTERS_MODEL.SONNET]);
-  assert.equal(asked, 0, "the Generate waits on the pick");
-
-  kept.resolve({ model: CHAPTERS_MODEL.SONNET });
-  await settle();
-  assert.equal(asked, 1);
-});
-
-test("a pick the service refuses says so in a toast, and the Generate after it still runs on the model the service keeps", async () => {
-  fakeActPort({
-    ...fakeActPortCalls(),
-    [ACT_KIND.CHAPTERS_MODEL_WRITE]: () =>
-      Promise.resolve({ failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED }),
-  });
-  toasts = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => toasts?.render(onRegistry(rendererRegistry, createElement(ToastHost))));
-  let asked = 0;
-  const tab = await draw(
-    controlAnswering({
-      generateChapters: () => {
-        asked += 1;
-        return Promise.resolve(answering(ready()));
-      },
-    }),
-  );
-
-  act(() =>
-    (
-      tab.querySelector<HTMLButtonElement>(
-        'button[aria-label="Choose the model chapters are generated on"]',
-      ) ?? assert.fail("Generate chapters has a chevron")
-    ).click(),
-  );
-  const opus =
-    [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
-      (item) => item.textContent === "Opus 5.5",
-    ) ?? assert.fail("the chevron offers Opus 5.5");
-  act(() => opus.click());
-  act(() => button(tab, "Generate chapters").click());
-  await settle();
-
-  assert.match(newestToastSays() ?? "", /The chapters model could not be saved\. Try again\./u);
-  assert.equal(asked, 1);
 });
 
 test("a chapter's diff is Files changed's list handed only its hunks, and its rail row counts the review threads on them", async () => {
@@ -910,7 +822,7 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
     }),
   );
 
-  act(() => button(tab, "Generate chapters").click());
+  act(() => button(tab, "Generate chapters (Haiku 5.5)").click());
   await settle();
   assert.equal(heading(tab), "Read the expiry");
   assert.doesNotMatch(tab.querySelector(".ui-tab-notice")?.textContent ?? "", /New commits since/u);
@@ -970,8 +882,8 @@ test("a generation that failed says why with Retry, chapters someone else is mak
     /Save an API key in Agents settings to generate chapters\./u,
   );
   assert.equal(
-    [...unavailable.querySelectorAll("button")].some(
-      (each) => each.textContent === "Generate chapters",
+    [...unavailable.querySelectorAll("button")].some((each) =>
+      each.textContent?.startsWith("Generate chapters"),
     ),
     false,
   );

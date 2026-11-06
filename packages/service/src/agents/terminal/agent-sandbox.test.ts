@@ -145,26 +145,30 @@ const listedShell = (id: string, title: string, command: string) =>
   [`terminal-${id}`, "100", field(title), field(command), field("/workspace/repository")].join(" ");
 
 it.layer(getTestDB())("a coding agent's sandbox", (it) => {
-  it.effect("a stopped sandbox lists no shells and is never woken by a list or a start", () =>
-    Effect.gen(function* () {
-      const api = vercel("stopped");
+  it.effect(
+    "a stopped sandbox lists no shells and no ports, and is never woken by a list or a start",
+    () =>
+      Effect.gen(function* () {
+        const api = vercel("stopped");
 
-      const { listed, started } = yield* Effect.gen(function* () {
-        const sandbox = yield* AgentSandbox;
-        return {
-          listed: yield* sandbox.terminals(SESSION),
-          started: yield* sandbox.start(SESSION, SHELL, undefined),
-        };
-      }).pipe(Effect.provide(api.layer));
+        const { listed, ports, started } = yield* Effect.gen(function* () {
+          const sandbox = yield* AgentSandbox;
+          return {
+            listed: yield* sandbox.terminals(SESSION),
+            ports: yield* sandbox.listeningPorts(SESSION),
+            started: yield* sandbox.start(SESSION, SHELL, undefined),
+          };
+        }).pipe(Effect.provide(api.layer));
 
-      assert.deepEqual(listed, { sandbox: SANDBOX_STATE.STOPPED, terminals: [] });
-      assert.deepEqual(
-        started,
-        Result.fail({ kind: SHELL_REFUSAL.NOT_RUNNING, sandbox: SANDBOX_STATE.STOPPED }),
-      );
-      assert.ok(api.asked.every((call) => call.url.searchParams.get("resume") !== "true"));
-      assert.ok(api.asked.every((call) => !call.url.pathname.endsWith("/cmd")));
-    }),
+        assert.deepEqual(listed, { sandbox: SANDBOX_STATE.STOPPED, terminals: [] });
+        assert.deepEqual(ports, { running: false, ports: [] });
+        assert.deepEqual(
+          started,
+          Result.fail({ kind: SHELL_REFUSAL.NOT_RUNNING, sandbox: SANDBOX_STATE.STOPPED }),
+        );
+        assert.ok(api.asked.every((call) => call.url.searchParams.get("resume") !== "true"));
+        assert.ok(api.asked.every((call) => !call.url.pathname.endsWith("/cmd")));
+      }),
   );
 
   it.effect(
@@ -196,6 +200,42 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
         const run = api.asked.find((call) => call.args !== undefined);
         assert.equal(run?.url.pathname, `/api/v2/sandboxes/sessions/${RUNNING_SESSION}/cmd`);
         assert.deepEqual(unopened, { sandbox: SANDBOX_STATE.STARTING, terminals: [] });
+      }),
+  );
+
+  it.effect(
+    "a running sandbox's ports are the ones its servers listen on, each once, never root's or the browser's, and tables it could not read are an outage",
+    () =>
+      Effect.gen(function* () {
+        // The kernel's tables as `cat` prints them, by hand: the sandbox's init on 23456 as root,
+        // the browser's DevTools on 9333, a dev server on 3000 over both families with a connection
+        // to it, and a server on 5173.
+        const tables = [
+          "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+          "   0: 00000000:5BA0 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 3107 1",
+          "   1: 0100007F:2475 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002        0 4100 1",
+          "   2: 00000000:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002        0 4200 1",
+          "   3: 0100007F:A2D2 0100007F:0BB8 01 00000000:00000000 00:00000000 00000000  1002        0 4300 1",
+          "  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+          "   0: 00000000000000000000000000000000:0BB8 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1002        0 4500 1",
+          "   1: 00000000000000000000000000000000:1435 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1001        0 4600 1",
+        ];
+        const api = vercel("running", tables);
+        const unread = vercel("running", [], 1);
+
+        const ports = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+          sandbox.listeningPorts(SESSION),
+        ).pipe(Effect.provide(api.layer));
+        const outage = yield* Effect.flip(
+          Effect.flatMap(AgentSandbox, (sandbox) => sandbox.listeningPorts(SESSION)).pipe(
+            Effect.provide(unread.layer),
+          ),
+        );
+
+        assert.deepEqual(ports, { running: true, ports: [3000, 5173] });
+        const run = api.asked.find((call) => call.args !== undefined);
+        assert.equal(run?.url.pathname, `/api/v2/sandboxes/sessions/${RUNNING_SESSION}/cmd`);
+        assert.ok(outage instanceof SandboxUnavailable);
       }),
   );
 

@@ -57,9 +57,9 @@ import {
 import type { HttpClient } from "effect/http";
 import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "../../core.js";
 import { jsonOf } from "../../http/http-effect.js";
-import type { RelayFrame, RelaySocket } from "../../terminal/relay.js";
+import type { RelaySocket } from "../../terminal/relay.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
-import { SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
+import { ptyLinesOf, SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
   deploymentOidcToken,
   SANDBOX_STATUS,
@@ -231,13 +231,9 @@ const BRIDGE_FAILURE = {
   OUT_OF_TIME: "no attempt came up within the bound",
 } as const;
 
-/** The PTY server's exit frame: the bridge ended. */
-const PtyExitSchema = Schema.Struct({ type: Schema.Literal("exit"), code: Schema.Int });
-
 const readLine = readEither(BridgeLineSchema, { excess: EXCESS_KEYS.DROP });
 const readPages = readEither(PagesSchema, { excess: EXCESS_KEYS.DROP });
 const readCreated = readEither(CreatedSchema, { excess: EXCESS_KEYS.DROP });
-const readPtyExit = readEither(PtyExitSchema, { excess: EXCESS_KEYS.DROP });
 
 const unreachable = (reason: BrowserUnreachableReason, status?: number) =>
   new BrowserUnreachable(status === undefined ? { reason } : { reason, status });
@@ -251,20 +247,6 @@ function bridgeFailed(how: string, word?: string) {
   return Effect.andThen(
     Effect.logWarning(`The browser bridge did not come up: ${how}${said}`),
     Effect.fail(unreachable(BROWSER_UNREACHABLE.BRIDGE_FAILED)),
-  );
-}
-
-/** The PTY's output as the lines the bridge wrote, ending where the bridge exits; a text frame that is not its exit is output sent as text. */
-function linesOf(frames: Stream.Stream<RelayFrame>): Stream.Stream<string> {
-  const decoder = new TextDecoder();
-  return frames.pipe(
-    Stream.takeWhile(
-      (frame) => "bytes" in frame || Result.isFailure(readPtyExit(jsonOf(frame.text))),
-    ),
-    Stream.map((frame) =>
-      "bytes" in frame ? decoder.decode(frame.bytes, { stream: true }) : frame.text,
-    ),
-    Stream.splitLines,
   );
 }
 
@@ -353,7 +335,7 @@ function cdpSessionOver(
     });
 
     yield* Effect.forkScoped(
-      Effect.ensuring(Stream.runForEach(linesOf(socket.frames), dispatch), end),
+      Effect.ensuring(Stream.runForEach(ptyLinesOf(socket.frames), dispatch), end),
     );
     yield* Deferred.await(ready).pipe(
       Effect.timeoutOrElse({

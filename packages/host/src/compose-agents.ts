@@ -19,7 +19,7 @@ import {
   type AgentInboxReadAllView,
   type AgentInboxReadStateParams,
   type AgentInboxReadStateView,
-  type AgentInboxSnoozeParams,
+  type AgentInboxRemindParams,
   type AgentListAnswer,
   type AgentMarkReadParams,
   type AgentMessagesAnswerView,
@@ -43,8 +43,8 @@ import {
   agentInboxMessageParamsSchema,
   agentInboxReadAllParamsSchema,
   agentInboxReadStateParamsSchema,
+  agentInboxRemindParamsSchema,
   agentInboxScopeSchema,
-  agentInboxSnoozeParamsSchema,
   agentInboxStartParamsSchema,
   agentListParamsSchema,
   agentMarkReadParamsSchema,
@@ -66,7 +66,11 @@ import {
   agentTranscriptKeySchema,
   agentTranscriptOlderParamsSchema,
   agentWorkspaceListParamsSchema,
+  type ChatGptDevicePollAnswerView,
+  type ChatGptDeviceStartAnswerView,
   type ChatGptSignInAnswerView,
+  chatGptDeviceLoginParamsSchema,
+  chatGptDeviceWaitParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
   type GitHubTokenAnswerView,
@@ -108,9 +112,8 @@ import { WRITE_UNTAKEN, writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
+import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import {
-  chaptersModelWriteParamsSchema,
   type PullRequestChaptersAnswerView,
   pullRequestChaptersParamsSchema,
   pullRequestChaptersReadParamsSchema,
@@ -144,6 +147,7 @@ import {
   FiberMap,
   Option,
   RcMap,
+  Schedule,
   Schema,
   type Scope,
   Stream,
@@ -151,11 +155,7 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
-import {
-  agentDefaultWritten,
-  chaptersModelWritten,
-  heldAccountPreferences,
-} from "./account-preferences-follow.js";
+import { agentDefaultWritten, heldAccountPreferences } from "./account-preferences-follow.js";
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
@@ -285,7 +285,6 @@ export type AgentClient = Pick<
   | "pullRequestChaptersLive"
   | "agentOriginLive"
   | "generateChapters"
-  | "writeChaptersModel"
   | "models"
   | "accountPreferencesLive"
   | "writeDefault"
@@ -331,6 +330,9 @@ export type AgentClient = Pick<
   | "saveProviderKey"
   | "removeProviderKey"
   | "setProviderKeyForAgents"
+  | "startChatGptDeviceLogin"
+  | "pollChatGptDeviceLogin"
+  | "cancelChatGptDeviceLogin"
   | "readGitHubToken"
   | "saveGitHubToken"
   | "removeGitHubToken"
@@ -342,7 +344,7 @@ export type AgentClient = Pick<
   | "messageInbox"
   | "startInboxThread"
   | "markInboxItemRead"
-  | "snoozeInboxItem"
+  | "remindInboxItem"
   | "inboxItemHome"
   | "markInboxItemUnread"
   | "markInboxRead"
@@ -433,6 +435,11 @@ function isKeptImage(src: string): boolean {
   const image = githubImageOf(src);
   if (image?.source === GITHUB_IMAGE_SOURCE.ASSET) return true;
   return image?.source === GITHUB_IMAGE_SOURCE.FILE && isCommitSha(image.ref);
+}
+
+/** Whether a device-code login's poll ends its wait: settled one way or another, or unanswered, which the window offers to start over from. */
+function deviceSettled(answer: ChatGptDevicePollAnswerView): boolean {
+  return "failure" in answer || answer.outcome !== CHATGPT_DEVICE_LOGIN.PENDING;
 }
 
 /** Whether the service may be asked now: a run that sends, behind an open account gate. */
@@ -1169,15 +1176,18 @@ function composed(
       queued: ({ itemId, unread }) => ({ id: itemId, unread }),
     },
   );
-  /** An item snoozed until an instant, or its snooze ended. Note that snoozing marks it read, which is drawn at once, while the snooze itself arrives with the read its transaction reaches. */
-  const snoozed = inboxWrite<AgentInboxSnoozeParams, AgentInboxReadStateView>(
+  /** An item's reminder set for an instant, or canceled, drawn at once; whether it is read stands as it was. */
+  const reminded = inboxWrite<AgentInboxRemindParams, AgentInboxReadStateView>(
     ({ itemId }) => [itemId],
-    ({ itemId }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false }),
-    ({ itemId, until }, key) => asked(client.snoozeInboxItem(itemId, until, key)),
+    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until, at: kernel.now() }),
+    ({ itemId, until }, key) => asked(client.remindInboxItem(itemId, until, key)),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_SNOOZE,
-      input: agentInboxSnoozeParamsSchema,
-      queued: ({ itemId }) => ({ id: itemId, unread: false }),
+      name: GATEWAY_METHOD.AGENTS_INBOX_REMIND,
+      input: agentInboxRemindParamsSchema,
+      queued: ({ itemId }) => ({
+        id: itemId,
+        unread: dependencies.pool.row(INBOX_ITEM, itemId)?.unread === true,
+      }),
     },
   );
   /** Every item the inbox lists marked read. */
@@ -1220,6 +1230,13 @@ function composed(
             models.wake(() => true),
           );
     });
+
+  /** A device-code login's wait or cancel answered whole to the window that asked; once it connected, the keys it carries laid as a write's are. */
+  const deviceAnswered = (answer: ChatGptDevicePollAnswerView) =>
+    Effect.as(
+      "keys" in answer && answer.keys !== undefined ? keysAnswered(answer.keys) : Effect.void,
+      carried<ChatGptDevicePollAnswerView>(answer),
+    );
 
   /**
    * A token's write answered whole to the window that asked; where the
@@ -1396,6 +1413,35 @@ function composed(
           "a default names a provider, a plan, and on or off",
         );
         return yield* keysWritten(yield* asked(client.setProviderKeyForAgents(change)));
+      }),
+    [GATEWAY_METHOD.CHATGPT_DEVICE_START]: () =>
+      Effect.map(asked(client.startChatGptDeviceLogin()), (answer) =>
+        carried<ChatGptDeviceStartAnswerView>(answer),
+      ),
+    // Note that the login is asked after here, on the interval its start named, so a window waits on one answer rather than asking again on a timer of its own.
+    [GATEWAY_METHOD.CHATGPT_DEVICE_WAIT]: (params) =>
+      Effect.gen(function* () {
+        const { loginId, intervalSeconds } = yield* readParams(
+          chatGptDeviceWaitParamsSchema,
+          params,
+          "a wait names a login and its interval",
+        );
+        const interval = Duration.seconds(intervalSeconds);
+        const poll = Effect.suspend(() => asked(client.pollChatGptDeviceLogin({ loginId })));
+        const answer = yield* Effect.andThen(
+          Effect.sleep(interval),
+          Effect.repeat(poll, { schedule: Schedule.spaced(interval), until: deviceSettled }),
+        );
+        return yield* deviceAnswered(answer);
+      }),
+    [GATEWAY_METHOD.CHATGPT_DEVICE_CANCEL]: (params) =>
+      Effect.gen(function* () {
+        const login = yield* readParams(
+          chatGptDeviceLoginParamsSchema,
+          params,
+          "a cancel names a login",
+        );
+        return yield* deviceAnswered(yield* asked(client.cancelChatGptDeviceLogin(login)));
       }),
     // The token is held for the windows while any draws it, under the account signed in, and told only on the app state (`GITHUB_TOKEN_CHANGED`); a save's and a removal's own answer is laid there too.
     [GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW]: () => Effect.as(tokenHold.follow, {}),
@@ -1758,19 +1804,6 @@ function composed(
         const answer = yield* asked(client.generateChapters(agentId, number));
         return carried<PullRequestChaptersAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.CHAPTERS_MODEL_WRITE]: declaredMethod(
-      dependencies.pool,
-      chaptersModelWritten(
-        (write) => asked(client.writeChaptersModel(write.model)),
-        dependencies.accountId,
-      ),
-      (params: WireRecord) =>
-        readParams(
-          chaptersModelWriteParamsSchema,
-          params,
-          "the chapters model names one of the models Generate offers",
-        ),
-    ),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -1958,14 +1991,14 @@ function composed(
           "marking an inbox item names the item and whether it reads as unread",
         ),
     ),
-    [GATEWAY_METHOD.AGENTS_INBOX_SNOOZE]: declaredMethod(
+    [GATEWAY_METHOD.AGENTS_INBOX_REMIND]: declaredMethod(
       dependencies.pool,
-      snoozed,
+      reminded,
       (params: WireRecord) =>
         readParams(
-          agentInboxSnoozeParamsSchema,
+          agentInboxRemindParamsSchema,
           params,
-          "snoozing an inbox item names the item and until when, or none to end its snooze",
+          "setting an inbox item's reminder names the item and when, or none to cancel it",
         ),
     ),
     [GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME]: (params) =>
@@ -2064,7 +2097,7 @@ function composed(
       anyWrite(nodded),
       anyWrite(closed),
       anyWrite(marked),
-      anyWrite(snoozed),
+      anyWrite(reminded),
       anyWrite(markedAll),
     ],
   };

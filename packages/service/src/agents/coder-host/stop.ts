@@ -21,6 +21,7 @@ import { QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
 import { AGENT_STATUS, type AgentStatus, type AgentSummary } from "@repo/features/agent-wire";
 import { Clock, DateTime, Effect, Exit, Result } from "effect";
 import type { HttpClient } from "effect/http";
+import { recordServerEvent, SERVER_EVENT } from "../../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -161,6 +162,24 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   // An agent its starter's plan pays for is stopped by those the plan's policy admits.
   yield* admitsPlanWriter(account, agent);
   return yield* canceledTurn(routedSessions(account), writer, agent, stop);
+});
+
+/** A Stop of the agent as every surface makes it, the app's button, `stop_agent`, and the command line alike: `stoppedTurn`, counted under the account where it stopped a turn. */
+export const stoppedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+  writer: Effect.Effect<StoreWriter>,
+  account: string,
+  agent: Agent,
+  stop: TurnStop = {},
+): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
+  const stopped = yield* stoppedTurn(writer, account, agent, stop);
+  if (stopped) {
+    yield* recordServerEvent(
+      SERVER_EVENT.AGENT_STOP,
+      { userId: account, workspaceId: agent.organizationId },
+      { agent_kind: agent.kind },
+    );
+  }
+  return stopped;
 });
 
 /**

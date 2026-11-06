@@ -151,7 +151,7 @@ function optionHeads(page: HTMLElement): (string | null)[] {
   return openOptions(pane).map((each) => wordsOf(each));
 }
 
-test("an open item's ⋯ menu in the pane's bar offers Resolve without answering beside Mark as read or unread, Snooze, and Copy link, which asks first and then settles it at the revision drawn, the thread saying who resolved it; a settled item's menu offers Copy link alone", async () => {
+test("an open item's ⋯ menu in the pane's bar offers Resolve without answering beside Mark as read or unread, Remind me, and Copy link, which asks first and then settles it at the revision drawn, the thread saying who resolved it; a settled item's menu offers the same less Resolve", async () => {
   world.listedWorkspace = ACME;
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -166,7 +166,7 @@ test("an open item's ⋯ menu in the pane's bar offers Resolve without answering
     "Copy link",
     "—",
     "Mark as unreadU",
-    "SnoozeH",
+    "Remind meH",
     "—",
     "Resolve without answering",
   ]);
@@ -188,8 +188,8 @@ test("an open item's ⋯ menu in the pane's bar offers Resolve without answering
   act(() => ellipsis().click());
   assert.deepEqual(
     menuWords(),
-    ["Copy link", "—", "Mark as unreadU"],
-    "a settled item offers no Close",
+    ["Copy link", "—", "Mark as unreadU", "Remind meH"],
+    "a settled item offers Remind me but no Close",
   );
 });
 

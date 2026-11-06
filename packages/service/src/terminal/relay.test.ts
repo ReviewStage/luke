@@ -111,6 +111,7 @@ function world(options: {
   };
   const sandbox: AgentSandboxService = {
     terminals: () => Effect.die("the relay lists nothing"),
+    listeningPorts: () => Effect.die("the relay lists no ports"),
     start: () => Effect.die("the relay starts nothing"),
     rename: () => Effect.die("the relay renames nothing"),
     kill: () => Effect.die("the relay kills nothing"),
@@ -134,6 +135,7 @@ function world(options: {
             }
           : { state };
       }),
+    open: () => Effect.die("the relay opens no PTY of its own"),
     setCredential: ({ sandboxSessionId }) =>
       Effect.sync(() => void asked.policies.push(sandboxSessionId)),
     withdrawCredential: ({ sandboxSessionId }) =>

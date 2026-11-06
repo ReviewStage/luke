@@ -26,10 +26,11 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useDraftedAgents } from "../composer-drafts.js";
-import { DraftMark } from "../draft-mark.js";
+import { leftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
+import { useFailedAgents } from "../tasks/failed-lines.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
 import { agentReadsUnread } from "../tasks/use-task-looks.js";
@@ -177,6 +178,8 @@ export function SidebarAgent({
   const archived = agent.archivedAt !== undefined;
   // A draft waiting in its box wears the pencil while its page is not the one open, as a task's row does.
   const drafted = useDraftedAgents().includes(agent.id) && !current;
+  // A message to it that did not go wears the failed mark in the pencil's place.
+  const sendFailed = useFailedAgents().includes(agent.id) && !current;
   const { rename } = actions;
   const editing = rename?.editing ?? false;
   const endedByKey = useRefocusAfterEdit(editing, row);
@@ -279,7 +282,7 @@ export function SidebarAgent({
                 {starter === undefined ? null : (
                   <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
                 )}
-                {drafted ? <DraftMark /> : null}
+                {leftMark(sendFailed, drafted)}
                 {agentEndMark(agent, false)}
                 <Time at={at} now={now} hint={false} />
               </span>

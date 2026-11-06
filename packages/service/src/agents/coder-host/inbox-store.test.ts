@@ -81,8 +81,8 @@ import {
   postInboxThread,
   readInboxAttachment,
   readInboxItem,
+  remindInboxItem,
   replyInboxItem,
-  snoozeInboxItem,
   taskInboxItems,
   taskInboxLiveStatements,
   withdrawInboxAnswer,
@@ -330,12 +330,16 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "the account's items stamp every open item and the settled ones of the last week, an old notice nodded to this week among them, and carry whole only those changed since the reader's instant",
+    "the account's items stamp every open item, the settled ones of the last week, an old notice nodded to this week among them, and those the reader set a reminder on, and carry whole only those changed since the reader's instant",
     () =>
       Effect.gen(function* () {
         const { agent } = yield* openAgentIn;
         yield* post(agent, { ...SETTINGS, key: "stale" });
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "stale", "Not needed after all")));
+        const reminded = yield* post(agent, { ...SETTINGS, key: "reminded" });
+        assert.ok(Option.isSome(yield* closeInboxItem(agent, "reminded", "Done another way")));
+        // The reminder is weighed on the database's clock, so it stands come due by the read.
+        yield* remindInboxItem(agent.userId, reminded.id, new Date("2001-01-01T09:00:00Z"));
         const waiting = yield* post(agent, { ...SETTINGS, key: "waiting" });
         const notice = yield* post(agent, { key: "merged", title: "Merged", body: "On main." });
         yield* TestClock.adjust(Duration.days(8));
@@ -352,7 +356,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(
           yield* accountItemIdsOf(agent.userId, now, now - Duration.toMillis(Duration.days(7))),
           {
-            stamps: [waiting.id, notice.id, lately.id, fresh.id].toSorted(),
+            stamps: [reminded.id, waiting.id, notice.id, lately.id, fresh.id].toSorted(),
             items: [lately.id, fresh.id].toSorted(),
           },
         );
@@ -1523,7 +1527,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
   );
 
   it.effect(
-    "a snooze marks the item read for its member alone and holds until a change wakes it or it comes due, and a read then takes it off",
+    "a reminder is its member's alone and leaves whether the item is read as it stands: a read or a mark never ends it, a change ends it, and canceling it brings it back now",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -1533,66 +1537,71 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         yield* openWorkspace(outsider);
         const id = yield* postedId(agent, SETTINGS.key);
         const taskId = agent.taskId ?? "";
-        const snoozedFor = (userId: string) =>
+        const reminderFor = (userId: string) =>
           Effect.map(
             taskInboxItems(userId, taskId),
-            (items) => items.find((item) => item.id === id)?.snoozedUntil,
+            (items) => items.find((item) => item.id === id)?.remindAt,
           );
-        // The store's clock is the test's, while the snooze is weighed on the database's, so ahead is far off and due is long past.
+        // The store's clock is the test's, while the reminder is weighed on the database's, so ahead is far off and due is long past.
         const ahead = new Date("2999-01-01T09:00:00Z");
         const due = new Date("2001-01-01T09:00:00Z");
+        assert.equal(yield* unreadFor(agent.userId, id), true);
 
-        const snoozed = yield* snoozeInboxItem(agent.userId, id, ahead);
-        assert.match(snoozed === false ? "" : (snoozed.txid ?? ""), /^\d+$/u);
-        assert.deepEqual(
-          [yield* snoozedFor(agent.userId), yield* unreadFor(agent.userId, id)],
-          [ahead.getTime(), false],
-          "snoozing marks it read for its member",
-        );
-        assert.deepEqual(
-          [yield* snoozedFor(teammate), yield* unreadFor(teammate, id)],
-          [undefined, true],
-          "a teammate's item is neither snoozed nor read",
-        );
-        assert.deepEqual(yield* markInboxItemRead(agent.userId, id), {});
+        const reminded = yield* remindInboxItem(agent.userId, id, ahead);
+        assert.match(reminded === false ? "" : (reminded.txid ?? ""), /^\d+$/u);
         assert.equal(
-          yield* snoozedFor(agent.userId),
-          ahead.getTime(),
-          "opening a snoozed item nothing woke leaves it snoozed",
+          reminded === false ? undefined : reminded.unread,
+          true,
+          "it answers the item unread",
+        );
+        assert.deepEqual(
+          [yield* reminderFor(agent.userId), yield* unreadFor(agent.userId, id)],
+          [ahead.getTime(), true],
+          "setting a reminder on an unread item leaves it unread",
+        );
+        assert.deepEqual(
+          [yield* reminderFor(teammate), yield* unreadFor(teammate, id)],
+          [undefined, true],
+          "a teammate's item has no reminder",
+        );
+        yield* markInboxItemRead(agent.userId, id);
+        yield* markInboxItemUnread(agent.userId, id);
+        yield* markInboxItemRead(agent.userId, id);
+        assert.deepEqual(
+          [yield* reminderFor(agent.userId), yield* unreadFor(agent.userId, id)],
+          [ahead.getTime(), false],
+          "reading it and marking it leave the reminder standing",
         );
 
         yield* TestClock.adjust(Duration.seconds(1));
         yield* replyInboxItem(agent, SETTINGS.key, "Still needed.");
-        assert.equal(yield* unreadFor(agent.userId, id), true, "a change wakes it, unread");
-        yield* markInboxItemRead(agent.userId, id);
-        assert.equal(
-          yield* snoozedFor(agent.userId),
-          undefined,
-          "reading it then takes the snooze off",
-        );
+        assert.equal(yield* reminderFor(agent.userId), undefined, "a change ends it");
 
-        yield* snoozeInboxItem(agent.userId, id, due);
-        const read = yield* markInboxItemRead(agent.userId, id);
-        assert.match(read === false ? "" : (read.txid ?? ""), /^\d+$/u);
-        assert.equal(
-          yield* snoozedFor(agent.userId),
-          undefined,
-          "a read once it came due takes it off",
-        );
-        yield* snoozeInboxItem(agent.userId, id, due);
+        yield* remindInboxItem(agent.userId, id, due);
         assert.equal((yield* markInboxRead(agent.userId, undefined)).marked, 1);
-        assert.equal(yield* snoozedFor(agent.userId), undefined, "so does marking every item read");
+        assert.equal(
+          yield* reminderFor(agent.userId),
+          due.getTime(),
+          "a reminder come due stands as it came due, through marking every item read",
+        );
 
-        yield* snoozeInboxItem(agent.userId, id, ahead);
-        yield* snoozeInboxItem(agent.userId, id, null);
-        assert.equal(yield* snoozedFor(agent.userId), undefined, "a snooze of none ends it");
+        yield* remindInboxItem(agent.userId, id, ahead);
+        yield* remindInboxItem(agent.userId, id, null);
+        const ended = yield* reminderFor(agent.userId);
+        assert.ok(
+          ended !== undefined && ended < ahead.getTime(),
+          "canceling a reminder brings the item back now rather than forgetting when",
+        );
+        yield* markInboxItemRead(teammate, id);
+        yield* remindInboxItem(teammate, id, null);
+        assert.equal(yield* reminderFor(teammate), undefined, "canceling no reminder makes none");
 
         assert.equal(
-          yield* snoozeInboxItem(outsider, id, ahead),
+          yield* remindInboxItem(outsider, id, ahead),
           false,
           "an outsider reaches no item",
         );
-        assert.equal(yield* snoozeInboxItem(agent.userId, randomUUID(), ahead), false);
+        assert.equal(yield* remindInboxItem(agent.userId, randomUUID(), ahead), false);
       }),
   );
 

@@ -554,7 +554,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                 }),
                 onMark: markItem,
                 onClose: closeItem,
-                onSnooze: marks.onSnooze,
+                onRemind: marks.onRemind,
               }}
             />
           </TaskMentions>
@@ -669,7 +669,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                   onChoose={open}
                   onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
                   onClose={closeItem}
-                  onSnooze={marks.onSnooze}
+                  onRemind={marks.onRemind}
                   onPointing={onPointing}
                 />
                 {chosen === undefined ? (
