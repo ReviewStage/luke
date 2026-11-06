@@ -1,11 +1,15 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { AgentAttachment } from "@repo/features/agent-wire";
-import type { DescriptionCommentStart } from "@repo/features/description-comment-wire";
+import {
+  DESCRIPTION_COMMENT_BOUNDS,
+  type DescriptionCommentStart,
+} from "@repo/features/description-comment-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
-  BUTTON_VARIANT,
-  Button,
+  BLOCK_LIST_ELEMENT,
+  BlockList,
+  BlockListItem,
   CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
@@ -14,16 +18,21 @@ import {
 } from "@repo/ui";
 import { neverBusyAct } from "@repo/ui/confirm-state";
 import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
-import { GLYPH } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { Schema } from "effect";
-import { Fragment, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { keptLines } from "../composer-drafts.js";
 import { confirmFailure, failureShown } from "../failure-report.js";
-import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
+import { undoToast, useToast } from "../toast.js";
+import {
+  REVIEW_PANEL_WORDS,
+  type ReviewOpen,
+  ReviewPress,
+  type ReviewWords,
+} from "./review-panel.js";
 
 /**
- * page-review.tsx -- a member's review of a page: comments gathered on it and held in this window, unsent, until they send them together, and the section at the head of the page's comments column that lists, sends, and discards them.
+ * page-review.tsx -- a member's review of a page: comments gathered on it and held in this window, unsent, until they send them together from the page's Review press, as a pull request's review is finished from its tab's.
  *
  * A comment on a page reaches the agent that wrote it the moment it is
  * posted, and each one wakes it again. A member with several things to say
@@ -32,32 +41,51 @@ import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
  * until it is sent or discarded. Held comments are the reader's alone, kept
  * for the account signed in, in the renderer's storage as drafts are
  * (`keptLines`), so a reload or a relaunch finds them; their files stay in
- * the window that attached them, as a draft's do. Each is pinned to its
- * element, dashed, until it is sent.
+ * the window that attached them, as a draft's do. Each stands where it was
+ * written, pinned dashed to its element, and in the Review press's panel
+ * (`review-panel.tsx`), never among the posted threads of the comments
+ * column, as a pull request's pending comments stand on their lines and in
+ * its Review panel. Each is edited in place, and deleted at once with Undo,
+ * since it reaches no one but the reader.
  *
  * Sending the review starts each comment's thread held (`held`), which
  * posts it for every member to read and hands it to no agent, then starts
  * the last naming the others along (`along`), which hands each agent in any
  * of them every thread in one message, so the agent revises the page once
- * (the service's `reviewHandedOver`). A start is taken once under its key,
- * so a send that stopped part way is simply sent again.
+ * (the service's `reviewHandedOver`). The panel's summary, where one is
+ * written, is held as a comment on the whole page and sent last. A start is
+ * taken once under its key, so a send that stopped part way is simply sent
+ * again.
  */
 
-/** What the review's press, panel, and the field's presses say. */
+/** What starting, holding, and deleting a comment of a review say. */
 export const PAGE_REVIEW_WORDS = {
-  TITLE: "Your review",
   START: "Start a review",
   ADD: "Add to review",
-  SEND: "Send",
-  SENDING: "Sending",
-  DISCARD: "Discard",
-  REMOVE: "Remove",
   PENDING: "Pending",
-  WHOLE_PAGE: "Whole page",
+  REMOVED: "Comment removed from your review",
   NOT_SENT: "Some comments could not be sent.",
   /** A held pin's name. */
   pin: (count: number) => `${count} ${count === 1 ? "comment" : "comments"} in your review`,
 } as const;
+
+/** Where a page's review goes, said before what it holds. */
+const PAGE_LEAD = "Sent as you to the agent that wrote the page.";
+
+/** The page's Review press's and panel's words. */
+const PAGE_REVIEW_PRESS_WORDS: ReviewWords = {
+  open: "Review",
+  openWith: (count) => `Review, ${REVIEW_PANEL_WORDS.pending(count)}`,
+  title: REVIEW_PANEL_WORDS.TITLE,
+  lead: (count) =>
+    count === 0
+      ? PAGE_LEAD
+      : `${PAGE_LEAD} ${REVIEW_PANEL_WORDS.pending(count)} will be sent together.`,
+  body: REVIEW_PANEL_WORDS.BODY,
+  placeholder: "Leave a summary comment (optional)",
+  send: "Send review",
+  sending: "Sending review",
+};
 
 /** What Discard asks before it lets every held comment go. */
 const DISCARD_QUESTION: DialogQuestion = {
@@ -170,38 +198,79 @@ export interface PageReviewControl {
   readonly failed: boolean;
   /** Holds a comment in the review, starting it where none was held. */
   readonly hold: (comment: Omit<HeldComment, "planId" | "pageId">) => void;
+  /** Writes a held comment's words anew. */
+  readonly edit: (clientKey: string, words: string) => void;
+  /** Takes a held comment out of the review at once, saying so with Undo, which puts it back where it stood. */
   readonly remove: (clientKey: string) => void;
   readonly discard: () => void;
-  readonly send: () => void;
+  /** Sends every held comment, then `summary` on the whole page where it holds words; answers whether all of it landed. */
+  readonly send: (summary: string) => Promise<boolean>;
 }
 
-/** The review of one page of the plan the control holds, held in this window. */
+/** The review of one page, at the version shown, of the plan the control holds, held in this window. */
 export function usePageReview(
   control: DescriptionCommentsControl | undefined,
   pageId: string,
+  version: number,
 ): PageReviewControl {
   const planId = control?.planId;
   const all = useAtomValue(reviewAtom);
   const setAll = useAtomSet(reviewAtom);
+  const toast = useToast();
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);
   const held = useMemo(
     () => all.filter((comment) => heldOn(comment, planId, pageId)),
     [all, planId, pageId],
   );
-  const send = () => {
-    if (control === undefined || sending || held.length === 0) return;
-    const comments = held;
+  const send = async (summary: string): Promise<boolean> => {
+    if (control === undefined || planId === undefined || sending) return false;
+    const words = summary.trim();
+    // Note that the summary is held before it goes, so a send that stops part way keeps it, under its key, for the next.
+    const last: HeldComment[] =
+      words === ""
+        ? []
+        : [
+            {
+              planId,
+              pageId,
+              clientKey: crypto.randomUUID(),
+              version,
+              element: undefined,
+              words,
+              attachments: [],
+            },
+          ];
+    const comments = [...held, ...last];
+    if (comments.length === 0) return false;
+    if (last.length > 0) setAll((now) => [...now, ...last]);
     setSending(true);
     setFailed(false);
-    void sendReview(control, comments).then((sent) => {
-      setSending(false);
-      if (!sent) return setFailed(true);
-      const keys = new Set(comments.map((comment) => comment.clientKey));
-      setAll((now) => now.filter((comment) => !keys.has(comment.clientKey)));
-    });
+    const sent = await sendReview(control, comments);
+    setSending(false);
+    if (!sent) {
+      setFailed(true);
+      return false;
+    }
+    const keys = new Set(comments.map((comment) => comment.clientKey));
+    setAll((now) => now.filter((comment) => !keys.has(comment.clientKey)));
+    return true;
   };
   const drop = (keep: (comment: HeldComment) => boolean) => setAll((now) => now.filter(keep));
+  const remove = (clientKey: string) => {
+    const at = all.findIndex((comment) => comment.clientKey === clientKey);
+    const gone = all[at];
+    if (gone === undefined) return;
+    drop((comment) => comment.clientKey !== clientKey);
+    // Note that Undo puts the comment back where it stood among the rest, its files with it, unless it stands there again already.
+    const undo = () =>
+      setAll((now) =>
+        now.some((comment) => comment.clientKey === clientKey)
+          ? now
+          : [...now.slice(0, at), gone, ...now.slice(at)],
+      );
+    toast({ ...undoToast(PAGE_REVIEW_WORDS.REMOVED, undo), replayUnmasked: true });
+  };
   return {
     held,
     sending,
@@ -209,7 +278,11 @@ export function usePageReview(
     hold: (comment) => {
       if (planId !== undefined) setAll((now) => [...now, { ...comment, planId, pageId }]);
     },
-    remove: (clientKey) => drop((comment) => comment.clientKey !== clientKey),
+    edit: (clientKey, words) =>
+      setAll((now) =>
+        now.map((comment) => (comment.clientKey === clientKey ? { ...comment, words } : comment)),
+      ),
+    remove,
     discard: () => {
       setFailed(false);
       drop((comment) => !heldOn(comment, planId, pageId));
@@ -219,71 +292,81 @@ export function usePageReview(
 }
 
 /**
- * The reader's review at the head of a page's comments column, standing
- * while they hold comments on the page: each held comment as a comment card
- * marked Pending, with Remove (`cardOf`), then
- * Discard, which asks first, and Send. Once sent, the section goes with the
- * comments it held, which stand as threads in the list under it.
+ * The page's Review press and its Finish your review panel, as a pull
+ * request's tab draws them: the count of held comments at its corner; in
+ * the panel, where the review goes, each held comment (`pendingOf`), the
+ * summary, why the last send did not land, then Discard, which asks first,
+ * Cancel, and Send review.
  */
-export function PageReviewSection({
+export function PageReviewPress({
   review,
-  cardOf,
+  panel,
+  pendingOf,
 }: {
   review: PageReviewControl;
-  /** A held comment drawn as a comment card, with its Remove; none while the review is on its way, since a start out may still post it. */
-  cardOf: (comment: HeldComment, onRemove: (() => void) | undefined) => React.ReactNode;
-}): React.JSX.Element | null {
+  /** The panel's open state, which the page's pending comments open too. */
+  panel: ReviewOpen;
+  /** A held comment as the panel lists it, with its Edit and Delete; none while the review is on its way, since a start out may still post it. */
+  pendingOf: (comment: HeldComment, busy: boolean) => ReactNode;
+}): React.JSX.Element {
+  const [body, setBody] = useState("");
   const count = review.held.length;
   const discarding = useConfirmDialog(
-    { subject: count > 0, surfaceOpen: true },
+    { subject: count > 0, surfaceOpen: panel.open },
     neverBusyAct(() => {
       review.discard();
     }),
     confirmFailure(FAILURE_SURFACE.DESCRIPTION_COMMENT_DISCARD),
   );
-  if (count === 0) return null;
+  const nothing = count === 0 && body.trim() === "";
   return (
-    <section
-      className="page-review flex min-w-0 flex-col gap-item-gap"
-      aria-label={PAGE_REVIEW_WORDS.TITLE}
-    >
-      {review.held.map((comment) => (
-        <Fragment key={comment.clientKey}>
-          {cardOf(comment, review.sending ? undefined : () => review.remove(comment.clientKey))}
-        </Fragment>
-      ))}
-      {review.failed ? (
-        <FailureNote
-          onRetry={review.send}
-          failure={failureShown({
-            surface: FAILURE_SURFACE.DESCRIPTION_COMMENT_SEND,
-            cause: FAILURE_CONDITION.REFUSED,
-          })}
-        >
-          <ReplayUnmask>{PAGE_REVIEW_WORDS.NOT_SENT}</ReplayUnmask>
-        </FailureNote>
-      ) : null}
-      <ReplayUnmask>
-        <div className={ACTS_AT_END_CLASS}>
-          <Button
-            variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            icon={<GLYPH.DELETE />}
-            disabled={review.sending}
-            onClick={discarding.ask}
-          >
-            {PAGE_REVIEW_WORDS.DISCARD}
-          </Button>
-          <Button
-            variant={BUTTON_VARIANT.PRIMARY}
-            busy={review.sending}
-            busyLabel={PAGE_REVIEW_WORDS.SENDING}
-            onClick={review.send}
-          >
-            {`${PAGE_REVIEW_WORDS.SEND} ${count} ${count === 1 ? "comment" : "comments"}`}
-          </Button>
-        </div>
-      </ReplayUnmask>
+    <>
+      <ReviewPress
+        className="page-review"
+        words={PAGE_REVIEW_PRESS_WORDS}
+        count={count}
+        panel={panel}
+        draft={{
+          body,
+          setBody,
+          over: nothing || body.length > DESCRIPTION_COMMENT_BOUNDS.MAX_WORDS_CHARS,
+        }}
+        sending={review.sending}
+        pendingList={
+          count === 0 ? null : (
+            <BlockList as={BLOCK_LIST_ELEMENT.OL} label={PAGE_REVIEW_WORDS.PENDING}>
+              {review.held.map((comment) => (
+                <BlockListItem key={comment.clientKey}>
+                  {pendingOf(comment, review.sending)}
+                </BlockListItem>
+              ))}
+            </BlockList>
+          )
+        }
+        note={
+          review.failed ? (
+            <FailureNote
+              onRetry={() => void review.send("")}
+              failure={failureShown({
+                surface: FAILURE_SURFACE.DESCRIPTION_COMMENT_SEND,
+                cause: FAILURE_CONDITION.REFUSED,
+              })}
+            >
+              <ReplayUnmask>{PAGE_REVIEW_WORDS.NOT_SENT}</ReplayUnmask>
+            </FailureNote>
+          ) : null
+        }
+        onDiscard={count === 0 ? undefined : discarding.ask}
+        onSent={(done) => {
+          // Note that a summary goes into the review as it is sent, so it is let go of here whether or not the rest lands.
+          const summary = body;
+          setBody("");
+          void review.send(summary).then((sent) => {
+            if (sent) done();
+          });
+        }}
+      />
       <ConfirmDialog open confirm={discarding} question={DISCARD_QUESTION} />
-    </section>
+    </>
   );
 }
