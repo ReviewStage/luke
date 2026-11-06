@@ -288,11 +288,13 @@ test("a workspace that reaches no repository says so over Home's composer, telli
   const { page, opened } = mount({ newTask });
   const notice = () => page.querySelector(".new-task-notices")?.textContent ?? "";
 
-  await vi.waitFor(() =>
-    assert.equal(
-      notice(),
-      "This workspace has no repositories yetAsk Ada Lovelace to connect GitHub, or add one with your own GitHub token.Add with your token",
-    ),
+  // Note that the owner is named by their person chip, whose disc's initial stands before the name.
+  const chip = () =>
+    page.querySelector('.new-task-notices [data-actor-ref][data-kind="person"]')?.textContent;
+  await vi.waitFor(() => assert.equal(chip(), "AAda Lovelace"));
+  assert.equal(
+    notice(),
+    "This workspace has no repositories yetAsk AAda Lovelace to connect GitHub, or add one with your own GitHub token.Add with your token",
   );
   // Note that the workspace's Add repository stands only once a token is saved, so a member with none saves one first.
   const add = [...page.querySelectorAll<HTMLButtonElement>(".new-task-notices button")].find(
