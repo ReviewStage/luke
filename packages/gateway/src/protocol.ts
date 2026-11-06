@@ -236,7 +236,7 @@ export const GATEWAY_METHOD = {
    * The models a coding agent may run on as the account is offered them, and
    * its devices, held for a window from now until it is let go, asked of the
    * service at once, again as a window comes forward, as the account's
-   * provider keys move, and every `MODEL_CATALOG_TTL`, and a while after
+   * provider keys move, and a while after
    * among the reads let go lately. What it holds is heard as
    * `MODELS_CHANGED` events, on the app state every window draws, never
    * answered.

@@ -424,7 +424,7 @@ export interface HostOperator {
   ): Effect.Effect<void>;
   /** Every workspace's token repositories the host holds for the windows, whole, each time any of them moves. */
   onTokenRepositoriesChanged(listener: (held: AppTokenRepositories) => void): () => void;
-  /** The models a coding agent may run on as the account is offered them, and its devices, held for the windows from now until let go, asked again as a window comes forward, as the provider keys move, and every `MODEL_CATALOG_TTL`; what they hold is heard through `onModelsChanged`. */
+  /** The models a coding agent may run on as the account is offered them, and its devices, held for the windows from now until let go, asked again as a window comes forward, and as the provider keys move; what they hold is heard through `onModelsChanged`. */
   agentModelsFollow(): Effect.Effect<void>;
   /** The models let go by the windows. */
   agentModelsUnfollow(): Effect.Effect<void>;
