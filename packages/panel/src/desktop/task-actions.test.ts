@@ -150,7 +150,7 @@ function mount(element: ReactElement): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(withQueryClient(element)));
+  act(() => root.render(element));
   return container;
 }
 
@@ -166,7 +166,7 @@ function mountPlanTab(tasks: TasksControl, registry?: AtomRegistry.AtomRegistry)
     looks: NO_LOOKS,
     tasks,
   });
-  return mount(registry === undefined ? page : onRegistry(registry, page));
+  return mount(registry === undefined ? withQueryClient(page) : onRegistry(registry, page));
 }
 
 function sidebarTask(
@@ -195,7 +195,7 @@ function mountSidebarTask(
   asked: Asked,
   current = false,
 ): HTMLButtonElement {
-  const container = mount(sidebarTask(tasks, task, asked, current));
+  const container = mount(withQueryClient(sidebarTask(tasks, task, asked, current)));
   const row = container.querySelector("ul > li > button");
   assert.ok(row instanceof HTMLButtonElement);
   return row;
@@ -435,11 +435,13 @@ test("a sidebar task wears its assignee's face where someone else is on it, the 
   const faces = (task: TaskSummary) => {
     const { tasks, asked } = openTab();
     const container = mount(
-      createElement(MemberDirectory, {
-        workspace: undefined,
-        readerId: DEAN.userId,
-        children: sidebarTask(tasks, task, asked),
-      }),
+      withQueryClient(
+        createElement(MemberDirectory, {
+          workspace: undefined,
+          readerId: DEAN.userId,
+          children: sidebarTask(tasks, task, asked),
+        }),
+      ),
     );
     const marks = container.querySelectorAll(".sidebar-task-time > .actor-mark");
     // What the row says while it holds the keyboard, its time stepped out for Pin and Archive.
@@ -506,11 +508,13 @@ test("a sidebar task Vespin or a coding agent made wears who is on it rather tha
   const marks = (task: TaskSummary) => {
     const { tasks, asked } = openTab();
     const container = mount(
-      createElement(MemberDirectory, {
-        workspace: undefined,
-        readerId: DEAN.userId,
-        children: sidebarTask(tasks, task, asked),
-      }),
+      withQueryClient(
+        createElement(MemberDirectory, {
+          workspace: undefined,
+          readerId: DEAN.userId,
+          children: sidebarTask(tasks, task, asked),
+        }),
+      ),
     );
     const worn = [...container.querySelectorAll(".sidebar-task-time > .actor-mark")].map((mark) =>
       mark.getAttribute("data-kind"),
@@ -534,11 +538,13 @@ test("a sidebar task Vespin or a coding agent made wears who is on it rather tha
 
 test("the task's toolbar draws no ⋯ of the task's, and ⌘⌫ still asks to delete the open task with the panel shut and no tab chosen", () => {
   const container = mount(
-    createElement(DesktopTasks, {
-      summary: UNPINNED_SUMMARY,
-      looks: NO_LOOKS,
-      tasks: sharedTab(DEAN.userId),
-    }),
+    withQueryClient(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: sharedTab(DEAN.userId),
+      }),
+    ),
   );
   assert.equal(container.querySelector('.ui-toolbar [aria-label="Task actions"]'), null);
   assert.equal(container.querySelector(".side-panel-bar"), null, "the panel is shut");
@@ -585,11 +591,13 @@ test("a sidebar task's press says its status after its name, as a List row's doe
   const said = (task: TaskSummary) => {
     const { tasks, asked } = openTab();
     const container = mount(
-      createElement(MemberDirectory, {
-        workspace: undefined,
-        readerId: DEAN.userId,
-        children: sidebarTask(tasks, { ...task, assignee: DEAN }, asked),
-      }),
+      withQueryClient(
+        createElement(MemberDirectory, {
+          workspace: undefined,
+          readerId: DEAN.userId,
+          children: sidebarTask(tasks, { ...task, assignee: DEAN }, asked),
+        }),
+      ),
     );
     const press = container.querySelector(".ui-list-row-title");
     const words = press === null ? "" : heard(press);
@@ -609,7 +617,7 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
     ...STRANDED,
     agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
-  const container = mount(sidebarTask(tasks, working, asked));
+  const container = mount(withQueryClient(sidebarTask(tasks, working, asked)));
   const card = mount(taskCardOf(tasks, working, working.updatedAt));
 
   assert.ok(
@@ -652,7 +660,7 @@ function installClipboard(): string[] {
 
 test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab's ⋯, the Copy link button beside its title, and its sidebar row, and says Link copied", async () => {
   const copied = installClipboard();
-  mount(createElement(ToastHost));
+  mount(withQueryClient(createElement(ToastHost)));
   const opened = openTab();
   // The title's Copy link button stands over the plan, which the side panel shows.
   const tasks: TasksControl = {
@@ -675,7 +683,7 @@ test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab
   assert.ok(title, "the title has a Copy link button");
   await act(async () => title.click());
   unmountAll();
-  mount(createElement(ToastHost));
+  mount(withQueryClient(createElement(ToastHost)));
   rightClick(mountSidebarTask(tasks, TASK, opened.asked), 40, 60);
   await copyFromMenu();
 
@@ -688,11 +696,13 @@ test("a task's card says who created it where others share its workspace, the re
   const details = (task: TaskSummary, workspace: Workspace) => {
     const tasks = tasksControl({ me: DEAN.userId, workspaces: [workspace] });
     const card = mount(
-      createElement(MemberDirectory, {
-        workspace: undefined,
-        readerId: DEAN.userId,
-        children: taskCardOf(tasks, { ...task, workspaceId: workspace.id }, task.updatedAt),
-      }),
+      withQueryClient(
+        createElement(MemberDirectory, {
+          workspace: undefined,
+          readerId: DEAN.userId,
+          children: taskCardOf(tasks, { ...task, workspaceId: workspace.id }, task.updatedAt),
+        }),
+      ),
     );
     const lines = [...card.querySelectorAll('.ui-hover-card-row[data-look="detail"]')].map((line) =>
       heard(line).replace(/ · .*$/u, ""),
@@ -726,13 +736,15 @@ test("a task's card's creator line opens the creator's page in the window, and i
   const drawn = (inWindow: boolean, task: TaskSummary = charles) => {
     const card = taskCardOf(tasks, { ...task, workspaceId: STAGE.id }, task.updatedAt);
     const view = mount(
-      createElement(MemberDirectory, {
-        workspace: undefined,
-        readerId: DEAN.userId,
-        children: inWindow
-          ? createElement(OpenPersonProvider, { value: (id: string) => opened.push(id) }, card)
-          : card,
-      }),
+      withQueryClient(
+        createElement(MemberDirectory, {
+          workspace: undefined,
+          readerId: DEAN.userId,
+          children: inWindow
+            ? createElement(OpenPersonProvider, { value: (id: string) => opened.push(id) }, card)
+            : card,
+        }),
+      ),
     );
     return [...view.querySelectorAll<HTMLElement>('.ui-hover-card-row[data-look="detail"]')].find(
       (each) => each.textContent?.includes("Created by"),
@@ -846,7 +858,7 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
   const doneButton = (container: HTMLElement) =>
     container.querySelector('button[aria-label="Mark done"]');
 
-  const row = mount(sidebarTask(tasks, working, asked));
+  const row = mount(withQueryClient(sidebarTask(tasks, working, asked)));
   const check = doneButton(row);
   assert.ok(check instanceof HTMLButtonElement, "the row offers Mark done as its button");
   act(() => check.click());
@@ -880,7 +892,7 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
   ]);
 
   unmountAll();
-  const doneRow = mount(sidebarTask(tasksControl({ tasks: [done] }), done, asked));
+  const doneRow = mount(withQueryClient(sidebarTask(tasksControl({ tasks: [done] }), done, asked)));
   assert.equal(doneButton(doneRow), null, "a done task's row offers no Mark done");
 });
 

@@ -228,12 +228,15 @@ export const appStateQuery = queryOptions({
  * `setQueryData`, as the docs' guide to data pushed over a socket does from
  * a hook mounted once: the readings are the one subscription's
  * (`appStateAtom`), so `app:state` is still subscribed to once however many
- * readers the cache and the registry have. The panel's root (`app.tsx`)
- * mounts it and nothing else does.
+ * readers the cache and the registry have. `AppStateSubscription` mounts it
+ * beside each root's `QueryProvider`, and beside a test's own client
+ * (`testing/copy-feedback.ts`).
  */
 export function useAppStateSubscription(): void {
   const queryClient = useQueryClient();
   const registry = useContext(RegistryContext);
+  // Note that the reading held now is written as the hook mounts (`immediate`), because a
+  // delivery adopted between the root's first read and this mount would otherwise wait for the next.
   useEffect(
     () =>
       registry.subscribe(
@@ -248,6 +251,12 @@ export function useAppStateSubscription(): void {
   );
 }
 
+/** `useAppStateSubscription` as an element, for a root to mount beside the surface it draws. */
+export function AppStateSubscription(): null {
+  useAppStateSubscription();
+  return null;
+}
+
 /**
  * The snapshot as it stands, for a callback that cannot wait a render: two
  * acts asked in one breath arrive as two calls in one turn, and the second
@@ -255,11 +264,6 @@ export function useAppStateSubscription(): void {
  */
 export function appStateNow(): AppStateSnapshot | undefined {
   return Option.getOrUndefined(AsyncResult.value(rendererRegistry.get(appStateAtom)));
-}
-
-/** This window's snapshot, absent only before the first read has answered. */
-export function useAppState(): AppStateSnapshot | undefined {
-  return Option.getOrUndefined(AsyncResult.value(useAtomValue(appStateAtom)));
 }
 
 /**
@@ -376,33 +380,6 @@ export function useAppSlice<A>(slice: Atom.Atom<A>): A {
   return useAtomValue(slice);
 }
 
-/**
- * The settings as the document holds them, for a callback that cannot wait a
- * render: two actions asked in one breath arrive as two calls in one turn, and
- * the second has to compose against what the first stored.
- */
-export function appSettingsNow(): AppSettingsView | undefined {
-  const stored = appStateNow()?.settings;
-  return stored ? appSettingsView(stored) : undefined;
-}
-
-/** Whether the account has one experiment on, an atom per experiment, which tells its readers only as that one turns. */
-const experimentAtom = Atom.family((experiment: Experiment) =>
-  Atom.map(APP_SLICE.SETTINGS, (settings) =>
-    experimentOn(settings?.experiments ?? NO_EXPERIMENTS, experiment),
-  ),
-);
-
-/**
- * Whether the signed-in account has an experiment on, redrawn as it moves:
- * the one way a gated feature's row, command, and place ask, so each appears
- * and goes as its switch in Settings › Experimental does. Signed out, or
- * before the first read, every experiment is off.
- */
-export function useExperiment(experiment: Experiment): boolean {
-  return useAtomValue(experimentAtom(experiment));
-}
-
 /** Every experiment the account chose, which tells its readers as any of them turns: for a list that filters entries tagged with their experiment as it is built. */
 const experimentChoicesAtom = Atom.map(
   APP_SLICE.SETTINGS,
@@ -413,15 +390,12 @@ const experimentChoicesAtom = Atom.map(
  * The signed-in account's experiment choices, redrawn as they move: what a
  * list gating its entries by a tag on their declaration filters by, such as
  * the Settings pages (`settingsPageShown`). Signed out, every one is off.
+ * `navigation-history.ts` alone reads it here, until the cleanup PR; a surface
+ * reads the same answer through `appStateQuery` and its `select`.
  */
 export function useExperimentChoices(): ExperimentChoices {
   return useAtomValue(experimentChoicesAtom);
 }
-
-/** Whether the platform offers one capability, an atom per capability, which tells its readers only as that one turns. */
-const capabilityAtom = Atom.family((capability: HostCapability) =>
-  Atom.map(APP_SLICE.RUN, (run) => run?.capabilities.includes(capability) === true),
-);
 
 /** Whether the signed-in account is an admin, which tells its readers only as it turns. */
 const ADMIN_ACCESS: Atom.Atom<boolean> = Atom.map(
@@ -441,6 +415,8 @@ const ADMIN_ACCESS_PENDING: Atom.Atom<boolean> = Atom.map(
  * let it stand by. Signed out, before the first read,
  * or where the host's read of it failed, no account is. It only draws: the
  * dashboard's own gate on the service decides every admin read.
+ * `navigation-history.ts` alone reads it here, until the cleanup PR; a surface
+ * reads the same answer through `appStateQuery` and its `select`.
  */
 export function useAdminAccess(): boolean {
   return useAtomValue(ADMIN_ACCESS);
@@ -450,19 +426,11 @@ export function useAdminAccess(): boolean {
  * Whether the signed-in account's access is still being read, as it is for
  * a moment after a sign-in or a launch: what an admin alone may reach waits
  * on it rather than being refused, a reloaded Admin address among it.
+ * `navigation-history.ts` alone reads it here, until the cleanup PR; a surface
+ * reads the same answer through `appStateQuery` and its `select`.
  */
 export function useAdminAccessPending(): boolean {
   return useAtomValue(ADMIN_ACCESS_PENDING);
-}
-
-/**
- * Whether the platform this window runs on offers a capability, redrawn as
- * the document arrives: the one way a platform feature's tab, command, or
- * button asks whether to stand at all. Before the first read nothing is
- * offered, as no experiment is on.
- */
-export function useCapability(capability: HostCapability): boolean {
-  return useAtomValue(capabilityAtom(capability));
 }
 
 /** The same answer for a callback that cannot wait a render. */

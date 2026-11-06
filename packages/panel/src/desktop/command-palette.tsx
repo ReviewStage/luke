@@ -90,6 +90,7 @@ import {
   experimentOn,
   HOST_CAPABILITY,
   type HostCapability,
+  NO_EXPERIMENTS,
 } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
 import {
@@ -146,6 +147,7 @@ import {
   taskRow,
 } from "@repo/ui/task-list-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, settleOffered, TASK_MARK } from "@repo/ui/tasks-model";
+import { useQuery } from "@tanstack/react-query";
 import {
   Fragment,
   isValidElement,
@@ -207,7 +209,7 @@ import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-pa
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability, useExperimentChoices } from "../use-app-state.js";
+import { appStateQuery, selectCapability, selectExperimentChoices } from "../use-app-state.js";
 import { HOST_READ_STATUS, type HostRead, useHostRead } from "../use-host-read.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
@@ -1958,7 +1960,8 @@ export function CommandPalette({
   readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const experiments = useExperimentChoices();
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   // How many times ⌘K has opened the palette, each of which chooses its first row.
@@ -2139,9 +2142,11 @@ export function CommandPalette({
   // The task's terminals and Browser tabs are offered as the panel's "+" offers them, through its own doors.
   const openTerminal = useOpenTerminal(tasks.sidePanel, noFocusMove);
   const offerDoors: PanelOfferDoors = {
-    onNewTerminal: useCapability(HOST_CAPABILITY.TERMINALS)
-      ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
-      : undefined,
+    onNewTerminal:
+      useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
+      true
+        ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
+        : undefined,
   };
   const taskId = tasks.activeTaskId;
   const repository = tasks.tasks.find((task) => task.id === taskId)?.repository ?? null;

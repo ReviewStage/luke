@@ -158,7 +158,7 @@ function openPalette(
     page,
   });
   act(() =>
-    root.render(withQueryClient(registry === undefined ? palette : onRegistry(registry, palette))),
+    root.render(registry === undefined ? withQueryClient(palette) : onRegistry(registry, palette)),
   );
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");

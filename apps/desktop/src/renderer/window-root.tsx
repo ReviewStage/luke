@@ -22,7 +22,7 @@ import {
 } from "@repo/panel/panel-spans";
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
-import { appStateQuery } from "@repo/panel/use-app-state";
+import { AppStateSubscription, appStateQuery } from "@repo/panel/use-app-state";
 import { ReloadState } from "@repo/ui/error-boundary";
 import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
@@ -124,7 +124,10 @@ export function mountWindow(
     endWindowSpanOnFirstDraw(rootElement, PANEL_SPAN.WINDOW_FIRST_PAINT);
     draw(
       <RegistryContext.Provider value={rendererRegistry}>
-        <QueryProvider>{surface}</QueryProvider>
+        <QueryProvider>
+          <AppStateSubscription />
+          {surface}
+        </QueryProvider>
       </RegistryContext.Provider>,
     );
   })();

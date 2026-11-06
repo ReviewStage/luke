@@ -74,6 +74,7 @@ import {
   tabKey,
 } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
+import { useQuery } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import {
   Fragment,
@@ -180,7 +181,7 @@ import {
   type SidePanelTab,
   sameHolder,
 } from "../tasks/use-side-panel.js";
-import { useCapability } from "../use-app-state.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { useHostReads, usePlacesPages } from "../use-host-read.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
@@ -2534,7 +2535,9 @@ export function SidePanel({
     drawsChanges(each, { taskAgents: agents.heldIds }),
   );
   // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does, and never beside the Inbox or where the platform runs no terminals.
-  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
+  const terminalsOffered =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
+    true;
   const terminalsHere = terminalsOffered && holder !== SIDE_PANEL_HOLDER.INBOX;
   const terminals = !terminalsHere
     ? NO_TERMINALS

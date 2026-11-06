@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
+import { useQuery } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -11,7 +12,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 import { deliveryOf, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
-import { useAppState } from "./use-app-state.js";
+import { appStateQuery } from "./use-app-state.js";
 
 /**
  * use-app-state.test.ts -- what a window's readers hold across deliveries of
@@ -43,7 +44,7 @@ async function settle(): Promise<void> {
 }
 
 /**
- * A window reading the document through `useAppState`, first answered
+ * A window reading the document through `useQuery(appStateQuery)`, first answered
  * `first`; what it answers is each snapshot the reader drew, a door to
  * deliver the next one whole, and one to push a delivery of what moved as
  * main's stream would, a new tree each time.
@@ -63,7 +64,7 @@ async function window(first: AppStateSnapshot): Promise<{
   });
   const drawn: AppStateSnapshot[] = [];
   function Reader(): null {
-    const state = useAppState();
+    const state = useQuery(appStateQuery).data;
     if (state) drawn.push(state);
     return null;
   }

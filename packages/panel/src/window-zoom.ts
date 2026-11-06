@@ -25,10 +25,11 @@ import {
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { useLayoutEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
 import { showToast, TOAST_HOLD } from "./toast.js";
-import { useCapability } from "./use-app-state.js";
+import { appStateQuery, selectCapability } from "./use-app-state.js";
 
 /** The custom property desktop.css divides the traffic lights' width by, since the page zoom does not scale them. */
 const ZOOM_PROPERTY = "--zoom";
@@ -46,7 +47,9 @@ export function useWindowZoom(
 ): void {
   // The size a press asked for that the settings do not say yet.
   const asked = useRef<ZoomPercent | undefined>(undefined);
-  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
+  const desktopApp =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.DESKTOP_APP) }).data ===
+    true;
 
   /** A write of the size `next` steps to from the latest size asked for, or nothing at that size already. */
   const offerOf = (next: (from: ZoomPercent) => ZoomPercent): (() => void) | undefined => {

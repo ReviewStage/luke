@@ -6,11 +6,12 @@ import {
 import type { MacOffer } from "@repo/features/models-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { GLYPH } from "@repo/ui/icons";
+import { useQuery } from "@tanstack/react-query";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import type { MenuAction, MenuSubmenu } from "../desktop/action-menu.js";
 import { useDevicePresence } from "../device-presence.js";
 import { machineName, useThisMac } from "../machine-name.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { agentStillWriting, offersContinue } from "./agent-model.js";
 import { deviceMark, RUNS_ON_WORDS } from "./runs-on.js";
 import type { AgentsControl } from "./use-agents.js";
@@ -59,7 +60,8 @@ type MoveDoors = Pick<AgentsControl, "agents" | "continueAgent" | "macs" | "mode
 /** Whether the agent offers a move at all, on the terms the header says, the continue that carries it aside. */
 function useMoveOffered(agent: MovedAgent, agents: MoveDoors): boolean {
   return (
-    useExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST) &&
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST) })
+      .data === true &&
     agents.onUnarchive === undefined &&
     agents.agents?.some((each) => each.id === agent.id) === true &&
     agent.archivedAt === undefined &&

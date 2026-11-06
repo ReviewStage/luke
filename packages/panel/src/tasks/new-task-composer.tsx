@@ -28,6 +28,7 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { workspaceReaches } from "@repo/ui/tasks-model";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAgentDefault } from "../account-choices.js";
 import { useAct } from "../act.js";
@@ -41,7 +42,7 @@ import {
 } from "../composer-drafts.js";
 import { automationAgentBrief } from "../desktop/automation-agent-brief.js";
 import { useOpenSettings } from "../open-settings.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, type ComposerWords } from "./agent-composer.js";
 import { unrunnableChoice } from "./agent-model.js";
 import type { AgentServersControl } from "./agent-servers.js";
@@ -408,7 +409,9 @@ export function NewTaskComposer({
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(refused?.note);
   // Pilot or Agent stands on a task's card while the Pilot experiment is on, set to Pilot.
-  const offersPilot = useExperiment(EXPERIMENT.PILOT) && !forAutomation;
+  const offersPilot =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.PILOT) }).data === true &&
+    !forAutomation;
   const [mode, setMode] = useState<TaskMode>(refused?.card.press.ask.mode ?? TASK_MODE.PILOT);
   const asked = offersPilot ? mode : undefined;
   // The relations the press that opened the card chose, or the refused card's, which the + menu and the rows change.
@@ -455,7 +458,9 @@ export function NewTaskComposer({
   // Runs on stands on every card but an automation's agent's.
   const runsOnStands = !forAutomation;
   // It offers the member's devices only while Bring your own host is on, and Cloud alone otherwise.
-  const asksDevices = useExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST) && runsOnStands;
+  const asksDevices =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST) })
+      .data === true && runsOnStands;
   // Note that the devices are read as the card opens rather than when the
   // model chip first draws, which waits on the default's read, so Start is held for as short as can be.
   const readModels = useRef(newTask.readModels);
@@ -536,7 +541,9 @@ export function NewTaskComposer({
   const repository = treeRelation === undefined ? picked : treeRelation.task.repository;
   // Several repositories offers repositories beside the task's on a task's card, once the task names
   // one; a pick the chip's read does not list, or the task's own, is let go as the task's is.
-  const offersAlso = useExperiment(EXPERIMENT.SEVERAL_REPOSITORIES) && !forAutomation;
+  const offersAlso =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.SEVERAL_REPOSITORIES) })
+      .data === true && !forAutomation;
   const also =
     !offersAlso || repository === null
       ? NONE_ALSO
@@ -570,7 +577,8 @@ export function NewTaskComposer({
     [workspaceId, slug, repository, onShowMention, readMentionAgents],
   );
   // A `/` offers no skill while the Skills experiment is off.
-  const skillsOn = useExperiment(EXPERIMENT.SKILLS);
+  const skillsOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.SKILLS) }).data === true;
   const skills = useMemo(
     () =>
       workspaceId === undefined || !skillsOn

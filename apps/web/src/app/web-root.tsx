@@ -35,7 +35,7 @@ import { installShownFailureReporter } from "@repo/panel/failure-report";
 import { createPanelRouter } from "@repo/panel/panel-router";
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
-import { appStateQuery } from "@repo/panel/use-app-state";
+import { AppStateSubscription, appStateQuery } from "@repo/panel/use-app-state";
 import { ErrorBoundary, ReloadState } from "@repo/ui/error-boundary";
 import { createBrowserHistory, RouterProvider } from "@tanstack/react-router";
 import { Effect, Layer, ManagedRuntime } from "effect";
@@ -165,6 +165,7 @@ export async function mountWebApp(
     <ErrorBoundary failure={TAB_FAILED} onReload={reloadTab}>
       <RegistryContext.Provider value={rendererRegistry}>
         <QueryProvider>
+          <AppStateSubscription />
           <WebAppearance />
           <RouterProvider router={router} />
         </QueryProvider>

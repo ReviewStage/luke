@@ -5,8 +5,9 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
+import { appSettingsView } from "@repo/settings/wire";
 import { OPENAI_KEY_MISSING_NOTE } from "@repo/ui/microphone-access";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useRef, useState } from "react";
@@ -14,7 +15,7 @@ import { actMutation } from "../act-mutations.js";
 import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import type { ComposerEditorHandle, ComposerMark } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { appSettingsNow, appStateNow, capabilityNow } from "../use-app-state.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { base64Of } from "./attached-files.js";
 import { openPreferredMicrophone } from "./microphone-choice.js";
 
@@ -135,6 +136,7 @@ export function useDictation(input: {
   const { mutateAsync: sendClip } = useMutation(actMutation(ACT_KIND.DICTATION_TRANSCRIBE));
   const { mutateAsync: askMicrophone } = useMutation(actMutation(ACT_KIND.MICROPHONE_REQUEST));
   const { mutateAsync: routeMicrophone } = useMutation(actMutation(ACT_KIND.MICROPHONE_ROUTE));
+  const queryClient = useQueryClient();
   const keyMissing = useOpenAiKeyMissing();
   const openApiKeys = useOpenApiKeys();
   const [phase, setPhase] = useState<DictationPhase>(DICTATION_PHASE.IDLE);
@@ -239,9 +241,10 @@ export function useDictation(input: {
   const open = async (asked: number, context: AudioContext | undefined) => {
     // Note that the platform's own microphone permission and route are asked
     // only where it offers them: elsewhere the page's own ask is the whole of it.
-    const routed = capabilityNow(HOST_CAPABILITY.MICROPHONE);
+    const state = queryClient.getQueryData(appStateQuery.queryKey);
+    const routed = state !== undefined && selectCapability(HOST_CAPABILITY.MICROPHONE)(state);
     // Note that macOS is asked only where it has not answered, because the ask is counted and a granted microphone needs none.
-    const known = appStateNow()?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED;
+    const known = state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED;
     const status =
       routed && known === MICROPHONE_STATUS.NOT_DETERMINED
         ? await askMicrophone().catch(() => MICROPHONE_STATUS.UNKNOWN)
@@ -250,10 +253,12 @@ export function useDictation(input: {
       return fail(asked, DICTATION_NOTE.MICROPHONE_DENIED);
     }
     const stream = await openPreferredMicrophone({
-      route: () =>
-        routed && (appSettingsNow()?.preferBuiltInMicrophone ?? true)
+      route: () => {
+        const stored = queryClient.getQueryData(appStateQuery.queryKey)?.settings;
+        return routed && (stored === undefined || appSettingsView(stored).preferBuiltInMicrophone)
           ? routeMicrophone()
-          : Promise.resolve(undefined),
+          : Promise.resolve(undefined);
+      },
       enumerate: () => navigator.mediaDevices.enumerateDevices(),
       open: (audio) => navigator.mediaDevices.getUserMedia({ audio, video: false }),
     }).catch(() => undefined);
