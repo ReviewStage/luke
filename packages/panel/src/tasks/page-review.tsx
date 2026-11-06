@@ -110,6 +110,8 @@ export interface HeldComment {
   readonly attachments: readonly AgentAttachment[];
   /** Whether a send that stopped part way posted it held already, so it is sent no more, and neither edited nor deleted, since the service holds it as it stood. */
   readonly landed?: true;
+  /** Whether a Discard asked to delete it, posted already, and the service would not: it is sent no more, and only another Discard tries again. */
+  readonly discarded?: true;
 }
 
 /** A held comment as the renderer's storage keeps it: all of it but its files. */
@@ -128,6 +130,7 @@ const keptHeldSchema = Schema.Struct({
   ),
   words: Schema.String,
   landed: Schema.optionalKey(Schema.Literal(true)),
+  discarded: Schema.optionalKey(Schema.Literal(true)),
 });
 
 /** Every comment held in a review, the account signed in's alone, in the order they were held, kept across a relaunch but for their files. */
@@ -190,8 +193,10 @@ async function sendReview(
 
 /** A page's review as its pane draws and presses it. */
 export interface PageReviewControl {
-  /** The comments held on the page, in the order they were held. */
+  /** The comments held on the page, in the order they were held, but those a Discard is still deleting. */
   readonly held: readonly HeldComment[];
+  /** Whether a Discard left anything to delete, a thread the service would not delete yet, which another Discard tries again. */
+  readonly leftover: boolean;
   readonly sending: boolean;
   /** Whether the last send stopped part way, until the next. */
   readonly failed: boolean;
@@ -233,10 +238,12 @@ export function usePageReview(
       return next;
     });
   }, []);
-  const held = useMemo(
+  const page = useMemo(
     () => all.filter((comment) => heldOn(comment, planId, pageId)),
     [all, planId, pageId],
   );
+  // Note that a thread a Discard could not delete is never sent, drawn, or counted, so no Send hands on what the reader discarded.
+  const held = useMemo(() => page.filter((comment) => comment.discarded !== true), [page]);
   const send = async (summary: string): Promise<boolean> => {
     // Note that an edit standing open would land after the words it changes went, so it is saved or canceled first.
     if (control === undefined || planId === undefined || sending || edits.size > 0) return false;
@@ -295,6 +302,7 @@ export function usePageReview(
   };
   return {
     held,
+    leftover: page.length > held.length,
     sending,
     failed,
     hold: (comment) => {
@@ -312,8 +320,14 @@ export function usePageReview(
     discard: () => {
       setFailed(false);
       // Note that a thread a stopped send posted already is deleted with the rest, so a discarded review leaves nothing behind, as its question says; one the service would not delete stays held, for the next Discard to try again.
-      const posted = held.filter((comment) => comment.landed === true);
-      drop((comment) => !heldOn(comment, planId, pageId) || comment.landed === true);
+      const posted = page.filter((comment) => comment.landed === true);
+      const keys = new Set(posted.map((comment) => comment.clientKey));
+      setAll((now) =>
+        now.flatMap((comment) => {
+          if (!heldOn(comment, planId, pageId)) return [comment];
+          return keys.has(comment.clientKey) ? [{ ...comment, discarded: true as const }] : [];
+        }),
+      );
       for (const comment of posted) {
         void control
           ?.act(comment.clientKey, { action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD })
@@ -347,7 +361,7 @@ export function PageReviewPress({
   const [body, setBody] = useState("");
   const count = review.held.length;
   const discarding = useConfirmDialog(
-    { subject: count > 0, surfaceOpen: open },
+    { subject: count > 0 || review.leftover, surfaceOpen: open },
     neverBusyAct(() => {
       review.discard();
     }),
@@ -391,7 +405,7 @@ export function PageReviewPress({
             </FailureNote>
           ) : null
         }
-        onDiscard={count === 0 ? undefined : discarding.ask}
+        onDiscard={count === 0 && !review.leftover ? undefined : discarding.ask}
         onSent={(done) => {
           // Note that a summary goes into the review as it is sent, so it is let go of here whether or not the rest lands.
           const summary = body;

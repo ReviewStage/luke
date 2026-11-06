@@ -776,7 +776,7 @@ function buttonNamed(within: ParentNode, words: string): HTMLButtonElement {
   return found ?? assert.fail(`a button named ${words}`);
 }
 
-test("Discard after a send that stopped part way deletes the threads it posted already, so the review leaves nothing behind, and keeps one the service would not delete for the next Discard", async () => {
+test("Discard after a send that stopped part way deletes the threads it posted already, so the review leaves nothing behind, and keeps one the service would not delete for the next Discard, never to be sent", async () => {
   const starts: DescriptionCommentStart[] = [];
   const acted: [string, unknown][] = [];
   const control: DescriptionCommentsControl = {
@@ -835,10 +835,12 @@ test("Discard after a send that stopped part way deletes the threads it posted a
   assert.deepEqual(acted, [
     [starts[0]?.clientKey, { action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD }],
   ]);
-  assert.ok(
-    document.querySelector('button[aria-label="Review, 1 pending comment"]'),
-    "the thread the service would not delete stays in the review",
+  assert.equal(
+    document.querySelector('button[aria-label^="Review, "]'),
+    null,
+    "the thread the service would not delete is counted no more, so no Send hands it on",
   );
+  assert.equal(buttonNamed(panel, "Send review").disabled, true, "nothing is left to send");
 
   await act(async () => buttonNamed(panel, "Discard").click());
   await act(async () =>
