@@ -32,7 +32,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import {
   type AnyAct,
@@ -1018,6 +1018,9 @@ test("a recent default the workspace's GitHub turns out not to list gives way to
       },
     });
   const unlisted = await mount(undefined, undefined, { list: listing });
+  const chip = () =>
+    unlisted.dialog()?.querySelector(".new-task-head .repository-chip")?.textContent;
+  await vi.waitFor(() => expect(chip()).toBe("acme/api"));
   await unlisted.key("Enter", { metaKey: true });
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
