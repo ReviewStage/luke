@@ -1,4 +1,5 @@
 import type { TaskSummary } from "@repo/features/task-wire";
+import { noMatchWords, TERM } from "@repo/features/words";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -22,9 +23,10 @@ import { FolderGitIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useAppCommand } from "../app-commands.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { memberReadNotice, PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
+import { memberReadNote, PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { actionSearchPanel } from "./action-search-menu.js";
 import type { TaskListViewControl } from "./task-list-view.js";
 import { FILTERED } from "./tasks-page-options.js";
 
@@ -50,6 +52,9 @@ import { FILTERED } from "./tasks-page-options.js";
 /** What View options is called, on its button and its menu alike. */
 const VIEW_OPTIONS = "View options";
 
+/** What Assigned to's search field asks for. */
+const ASSIGNED_TO_PLACEHOLDER = "Search members";
+
 /** The switch that groups the list under its repositories' headers, or lists it in one run. */
 const GROUP_BY_REPOSITORY = "Group by repository";
 
@@ -71,7 +76,7 @@ function filteredActor(
   return creatorActor(named ?? { ownerId: userId }, reader, undefined);
 }
 
-/** Assigned to's choices: Me, Anyone, then each other member, the one chosen checked, and while the members are read a row saying so. */
+/** Assigned to's choices: Me, Anyone, then each other member, the one chosen checked. */
 function assignedToChoices(
   chosen: AssignedTo,
   onChoose: (assignedTo: AssignedTo) => void,
@@ -105,7 +110,6 @@ function assignedToChoices(
         ? item
         : { ...item, replayMasked: true, icon: <ReplayMask>{item.icon}</ReplayMask> },
     ),
-    ...memberReadNotice(reader),
   ];
 }
 
@@ -132,10 +136,15 @@ function viewEntries(
       grouping,
       ...(shared
         ? [
-            {
-              ...commandHead(PANEL_COMMAND.ASSIGNED_TO),
-              items: assignedToChoices(view.assignedTo, control.onAssignedTo, reader),
-            },
+            // Note that a workspace's members may run to hundreds, so they are searched in a panel that draws only those near its view.
+            actionSearchPanel(commandHead(PANEL_COMMAND.ASSIGNED_TO), {
+              label: commandHead(PANEL_COMMAND.ASSIGNED_TO).label,
+              placeholder: ASSIGNED_TO_PLACEHOLDER,
+              noMatch: noMatchWords(TERM.MEMBER),
+              actions: assignedToChoices(view.assignedTo, control.onAssignedTo, reader),
+              note: memberReadNote(reader),
+              replayUnmasked: true,
+            }),
           ]
         : []),
     ],

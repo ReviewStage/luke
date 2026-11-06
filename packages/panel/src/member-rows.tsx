@@ -1,11 +1,13 @@
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readFailedWords, TERM, VERB } from "@repo/features/words";
 import type { WorkspaceMember } from "@repo/features/workspace-wire";
-import { MENU_DETAIL } from "@repo/ui";
+import { ErrorState, MENU_DETAIL, Spinner } from "@repo/ui";
 import { memberActor, type PersonActor } from "@repo/ui/actor-model";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { UserIcon, UsersIcon } from "lucide-react";
 import { ACTOR_SIZE, ActorMark, PersonCard } from "./actor-ref.js";
 import type { MenuAction } from "./desktop/action-menu.js";
+import { unreadShown } from "./failure-report.js";
 import type { Directory } from "./member-directory.js";
 
 /**
@@ -52,6 +54,24 @@ export function memberReadNotice(
   }
   if (!reader.reading) return [];
   return [{ label: `Reading ${TERM.MEMBER.many}…`, disabled: true, onSelect: () => undefined }];
+}
+
+/**
+ * What a searchable people menu says in its list's place while the members
+ * are read or could not be: a wait, or the failure with its Retry; nothing
+ * while they stand read.
+ */
+export function memberReadNote(
+  reader: Pick<Directory, "reading" | "refused" | "retry">,
+): React.ReactNode {
+  if (reader.refused) {
+    return (
+      <ErrorState failure={unreadShown(FAILURE_SURFACE.MEMBERS_READ)} onRetry={reader.retry}>
+        {readFailedWords(TERM.MEMBER.many)}
+      </ErrorState>
+    );
+  }
+  return reader.reading ? <Spinner delay label="Reading members" /> : undefined;
 }
 
 /** One person as every people menu lists them. */

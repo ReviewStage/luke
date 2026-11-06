@@ -235,15 +235,21 @@ function mountSidebar(
   return container;
 }
 
-/** The words each standing menu item says, its glyph left out. */
+/** The words each standing menu item or searched row says, its glyph left out. */
 function itemLabel(item: HTMLElement): string {
-  return (item.querySelector(".ui-menu-item-label") ?? item).textContent?.trim() ?? "";
+  return (
+    (
+      item.querySelector(".ui-menu-item-label, .ui-combobox-option-label") ?? item
+    ).textContent?.trim() ?? ""
+  );
 }
 
-/** The menu item that says `label`, in whichever menu stands. */
+/** The menu item, or the searched panel's row, that says `label`, in whichever menu stands. */
 function menuItem(label: string): HTMLElement {
   const items = [
-    ...document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]'),
+    ...document.querySelectorAll<HTMLElement>(
+      '[role="menuitem"], [role="menuitemcheckbox"], [role="option"]',
+    ),
   ];
   const found = items.find((item) => itemLabel(item) === label);
   assert.ok(found, `a menu item named ${label} stands among ${items.map(itemLabel).join(", ")}`);
@@ -363,18 +369,17 @@ test("View options offers Group by repository, on at first, and Assigned to: Me,
   assert.deepEqual(lastMenuItems(), ["Group by repository", "Assigned to"]);
   assert.equal(menuItem("Group by repository").getAttribute("aria-checked"), "true");
   act(() => menuItem("Assigned to").click());
-  const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
   assert.deepEqual(
-    [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]') ?? [])].map((item) => [
-      itemLabel(item),
-      item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
-      item.getAttribute("aria-checked"),
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].map((row) => [
+      itemLabel(row),
+      row.querySelector(".ui-combobox-option-detail")?.textContent ?? null,
+      row.getAttribute("aria-current") === "true",
     ]),
     [
-      ["Me", null, "true"],
-      ["Anyone", null, "false"],
-      ["Charles Pan", "charles@acme.dev", "false"],
-      ["Maya Okafor", "maya@acme.dev", "false"],
+      ["Me", null, true],
+      ["Anyone", null, false],
+      ["Charles Pan", "charles@acme.dev", false],
+      ["Maya Okafor", "maya@acme.dev", false],
     ],
   );
   restOn(menuItem("Charles Pan"));
@@ -837,7 +842,7 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
   assert.equal(headWords(sidebar), "Everyone's tasks");
 });
 
-test("Assigned to says the members could not be read, with Retry, after Me and Anyone, and Retry reads them again and leaves the menu standing", async () => {
+test("Assigned to says the members could not be read, with Retry, under Me and Anyone, and Retry reads them again and leaves the menu standing", async () => {
   const reads = handHostReads({ members: { [ACME.id]: { failed: true } } });
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_RETRY]: ({ workspaceId }) => {
@@ -850,21 +855,19 @@ test("Assigned to says the members could not be read, with Retry, after Me and A
   assert.ok(button, "the Tasks head offers View options");
   act(() => button.click());
   act(() => menuItem("Assigned to").click());
-  const offered = () => {
-    const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
-    return [
-      ...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]') ??
-        []),
-    ].map((item) => [
-      itemLabel(item),
-      item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
-    ]);
-  };
+  const offered = () =>
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].map(itemLabel);
+  const retry = () =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+      (each) => each.textContent === "Retry",
+    );
 
   const failed = offered();
-  await act(async () => menuItem("Members could not be read.").click());
+  const said = document.body.textContent ?? "";
+  await act(async () => (retry() ?? assert.fail("the panel offers Retry")).click());
 
-  assert.deepEqual(failed.at(-1), ["Members could not be read.", "Retry"]);
-  assert.ok(offered().some(([label]) => label === "Charles Pan"));
-  assert.ok(offered().every(([label]) => label !== "Members could not be read."));
+  assert.deepEqual(failed, ["Me", "Anyone"]);
+  assert.match(said, /Members could not be read\./u);
+  assert.ok(offered().includes("Charles Pan"));
+  assert.equal(retry(), undefined);
 });
