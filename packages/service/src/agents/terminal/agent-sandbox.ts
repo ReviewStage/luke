@@ -103,7 +103,7 @@ export type SandboxOpen =
 export interface AgentSandboxService {
   /** The agent's shells and where its sandbox stands; none while it is not running. */
   readonly terminals: (sessionId: string) => Effect.Effect<TerminalsAnswer, SandboxUnavailable>;
-  /** The ports a server listens on in the agent's sandbox and where it stands; none while it is not running, which a read never changes. */
+  /** Whether the agent's sandbox is running, and the ports a server listens on in it; none while it is not running, which a read never changes. */
   readonly listeningPorts: (
     sessionId: string,
   ) => Effect.Effect<ListeningPortsAnswer, SandboxUnavailable>;
@@ -201,12 +201,12 @@ function agentSandboxOver(
       }),
     listeningPorts: (sessionId) =>
       Effect.gen(function* () {
-        const { state, running } = yield* standing(sessionId);
-        if (running === undefined) return { sandbox: state, ports: [] };
+        const { running } = yield* standing(sessionId);
+        if (running === undefined) return { running: false, ports: [] };
         const ports = listeningPortsOf(yield* api.run(running, readSocketTables()));
         // Tables the kernel could not be read for are an outage, never a sandbox with no servers.
         if (ports === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
-        return { sandbox: state, ports };
+        return { running: true, ports };
       }),
     start: (sessionId, terminalId, title) =>
       inRunning(sessionId, (running) =>

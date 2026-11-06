@@ -8,14 +8,13 @@
  * running sandbox each time they are asked (`terminal/listening-ports.ts`),
  * one look at where the sandbox stands and one short command in it, so the
  * desktop polls this every few seconds while the control is open or
- * forwarding is on. A stopped sandbox is never woken here, and answers where
- * it stands with no ports; an agent on a Mac has no sandbox, and answers
- * none, as stopped.
+ * forwarding is on. A sandbox that is not running, stopped or never opened,
+ * is never woken here, and answers so with no ports; an agent on a Mac has
+ * no sandbox, and answers the same.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
-import { SANDBOX_STATE } from "@repo/features/terminal-wire";
 import { Effect, type Layer } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UserIdResolver } from "../http/http-effect.js";
@@ -33,11 +32,12 @@ export interface AgentPortsProcedureSeams {
 export function agentPortsProcedures(seams: AgentPortsProcedureSeams) {
   const signedIn = hosted.agentPorts.use(accountMiddleware(seams.resolveUserId));
   return {
-    /** The ports listened on in the agent's sandbox, and where it stands. */
+    /** The ports listened on in the agent's sandbox, and whether it is running. */
     list: signedIn.list.effect(function* ({ input, context }) {
       const { sessionId, machine } = yield* reachedAgentSession(context.userId, input.id);
-      if (machine === AGENT_MACHINE.DEVICE) return { sandbox: SANDBOX_STATE.STOPPED, ports: [] };
-      if (sessionId === undefined) return { sandbox: SANDBOX_STATE.STARTING, ports: [] };
+      if (machine === AGENT_MACHINE.DEVICE || sessionId === undefined) {
+        return { running: false, ports: [] };
+      }
       return yield* Effect.provide(
         Effect.gen(function* () {
           const sandbox = yield* AgentSandbox;

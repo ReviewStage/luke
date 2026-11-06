@@ -4,15 +4,13 @@
  * The tables are read from `/proc/net/tcp` and `/proc/net/tcp6` rather
  * than `ss`, which the sandbox's image does not carry: one `cat`, quick
  * enough for the desktop to ask every few seconds. A socket is kept where
- * it listens on an unprivileged port (`LISTENING_PORTS`) and is not one of
- * our own. Ours are the agent's browser's DevTools port
+ * it listens and is not one of our own. Ours are the agent's browser's DevTools port
  * (`SANDBOX_BROWSER.DEVTOOLS_PORT`), and whatever root holds: no member's
  * or agent's server runs as root, since every command they drive runs with
  * every capability dropped (`../sandbox-capabilities.ts`), while the
  * sandbox's own init, which serves the sandbox's API, listens as root.
  */
 
-import { LISTENING_PORTS } from "@repo/features/listening-ports-wire";
 import { SANDBOX_BROWSER } from "../browser/sandbox-browser.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
@@ -44,9 +42,7 @@ function keptPort(row: string): number | undefined {
   const columns = row.trim().split(/\s+/);
   if (columns[COLUMN.STATE] !== LISTEN_STATE || columns[COLUMN.UID] === ROOT_UID) return undefined;
   const port = Number.parseInt(columns[COLUMN.LOCAL_ADDRESS]?.split(":").at(-1) ?? "", 16);
-  if (!Number.isInteger(port) || port < LISTENING_PORTS.MIN_PORT) return undefined;
-  if (port > LISTENING_PORTS.MAX_PORT || OWN_PORTS.has(port)) return undefined;
-  return port;
+  return OWN_PORTS.has(port) ? undefined : port;
 }
 
 /**

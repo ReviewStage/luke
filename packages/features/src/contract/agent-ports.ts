@@ -3,8 +3,8 @@
  *
  * The agent travels in the path. The read is cheap enough for the desktop
  * to ask every few seconds while the control is open or forwarding is on:
- * one look at where the sandbox stands, and one short command in it while it
- * runs. It never wakes a stopped sandbox.
+ * one look at whether the sandbox is running, and one short command in it
+ * while it runs. It never wakes a stopped sandbox.
  */
 
 import { openapi } from "@orpc/openapi";
@@ -18,7 +18,7 @@ import { hostedProcedure } from "./base.js";
 const agentParamsSchema = EffectSchema.Struct({ id: EffectSchema.String });
 
 export const agentPortsContract = {
-  /** The ports listened on in the agent's sandbox, and where the sandbox stands. */
+  /** The ports listened on in the agent's sandbox, and whether it is running. */
   list: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.AGENTS}/{id}/ports` }))
     .input(agentParamsSchema)

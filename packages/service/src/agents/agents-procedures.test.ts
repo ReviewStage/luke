@@ -74,7 +74,8 @@ function scriptedSandbox(state: SandboxState) {
     listeningPorts: (sessionId) =>
       Effect.sync(() => {
         asked.push({ what: "ports", sessionId });
-        return { sandbox: state, ports: state === SANDBOX_STATE.RUNNING ? PORTS : [] };
+        const running = state === SANDBOX_STATE.RUNNING;
+        return { running, ports: running ? PORTS : [] };
       }),
     start: (sessionId, terminalId) =>
       Effect.sync(() => {
@@ -289,7 +290,7 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
         assert.equal(strangers.status, 404);
         assert.deepEqual(ports, {
           status: 200,
-          body: { sandbox: SANDBOX_STATE.RUNNING, ports: PORTS },
+          body: { running: true, ports: PORTS },
         });
         assert.equal(strangersPorts.status, 404);
         assert.deepEqual(sandbox.asked, [
