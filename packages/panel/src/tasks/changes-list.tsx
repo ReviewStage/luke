@@ -109,13 +109,6 @@ export const LIST_WORDS = {
   VIEWED: "Viewed",
   MARK_VIEWED: "Mark as viewed",
   UNMARK_VIEWED: "Mark as not viewed",
-  /** How many files there are, said where the marks are not read. */
-  filesOf: (files: number) => `${files} ${files === 1 ? "file" : "files"}`,
-  /** How far through the files the member is, as GitHub counts it. */
-  viewedOf: (viewed: number, files: number) =>
-    `${viewed} / ${files} ${files === 1 ? "file" : "files"} viewed`,
-  /** Every file viewed. */
-  allViewed: (files: number) => (files === 1 ? "1 file viewed" : `All ${files} files viewed`),
 } as const;
 
 /** Whether the press landed in something taking typing, which keeps its letters. */

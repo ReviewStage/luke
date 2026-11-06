@@ -1,5 +1,5 @@
 /**
- * messages.tsx -- a turn of a conversation, the line over a received one naming who sent it and what they did, and the line under every one: when, then its actions, flush with an agent's words where they stand on no bubble, the actions hidden until the pointer rests on the turn or the keyboard is on one of them, and on a touch screen shown by a tap on the turn.
+ * messages.tsx -- a turn of a conversation, the line over a received one naming who sent it and what they did, and the line under every one: when, then its actions, or, where a sent one did not go, Not delivered before when and a red alert beside it, flush with an agent's words where they stand on no bubble, the actions hidden until the pointer rests on the turn or the keyboard is on one of them, and on a touch screen shown by a tap on the turn.
  */
 
 import {
@@ -13,13 +13,16 @@ import {
   MESSAGE_LINE_ALIGN,
   MESSAGE_LINE_INSET,
   MessageActions,
+  MessageFailedMark,
   MessageFrame,
   MessageHead,
   MessageLine,
+  RetryIcon,
   SUBJECT_FIT,
   SubjectLine,
   Text,
 } from "@repo/ui";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -111,6 +114,25 @@ function Messages(): React.JSX.Element {
               sender="Worked for 2m 29s · Today, 3:42 PM"
               actions={COPY}
             />
+          </MessageFrame>
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="message-not-delivered"
+        title="A sent message that did not go: the red alert beside it, its menu saying why, and Not delivered leading its time"
+      >
+        <div className="catalog-frame">
+          <MessageFrame revealActionsOnTap>
+            <div className="flex items-center justify-end gap-tight-gap">
+              <Text>Rebase on main and fix the lint errors.</Text>
+              <MessageFailedMark
+                label="Not delivered"
+                reason="No answer came back."
+                groups={[[{ label: "Retry", icon: <RetryIcon />, onSelect: () => {} }]]}
+                failure={CATALOG_FAILURE}
+              />
+            </div>
+            <MessageLine status="Not delivered" at={SENT_AT} />
           </MessageFrame>
         </div>
       </CatalogSection>

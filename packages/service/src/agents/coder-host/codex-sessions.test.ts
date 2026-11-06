@@ -61,6 +61,7 @@ import {
   runnerSandboxApi,
   runnerTook,
 } from "../../testing/runner-sandbox-fake.js";
+import { sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import { AgentSandboxImage } from "../agent-sandbox-image.js";
 import { claimedDeviceAgentLine } from "../device-agent.js";
 import {
@@ -158,10 +159,13 @@ function services(
   api: ReturnType<typeof runnerSandboxApi>,
   openai: ReturnType<typeof openAi> = openAi(),
 ) {
-  const http = fakeHttpClientLayer((url, init) =>
-    new URL(url).hostname === new URL(CHATGPT_OAUTH.TOKEN_URL).hostname
-      ? openai.respond(url, init)
-      : api.respond(url, init),
+  const http = Layer.merge(
+    fakeHttpClientLayer((url, init) =>
+      new URL(url).hostname === new URL(CHATGPT_OAUTH.TOKEN_URL).hostname
+        ? openai.respond(url, init)
+        : api.respond(url, init),
+    ),
+    sandboxFetchOver(api.respond),
   );
   return Layer.mergeAll(
     http,

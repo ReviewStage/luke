@@ -51,7 +51,6 @@ import {
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import { rendererRegistry } from "../renderer-runtime.js";
-import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -1560,14 +1559,6 @@ const MARKED: AgentPullRequestViewedAnswerView = {
   ],
 };
 
-/** What the bar's count of the files viewed says. */
-function viewedCount(): string {
-  return (
-    document.querySelector(".ui-pane-bar .files-viewed")?.textContent ??
-    assert.fail("the bar counts the files viewed")
-  );
-}
-
 /** Every mark asked of the service, answered as `answer` says. */
 function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionRequest[] {
   const asked: PullRequestActionRequest[] = [];
@@ -1592,7 +1583,7 @@ function viewedBox(path: string): HTMLInputElement {
   );
 }
 
-test("the member's viewed marks tick their files, count toward the bar's progress, and fold them; a file changed since reads not viewed", async () => {
+test("the member's viewed marks tick their files and fold them; a file changed since reads not viewed", async () => {
   viewedAnswer = MARKED;
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
   await drawTab();
@@ -1606,20 +1597,6 @@ test("the member's viewed marks tick their files, count toward the bar's progres
     ["b.ts", false],
     ["c.ts", false],
   ]);
-  assert.equal(viewedCount(), "1 / 3 files viewed");
-});
-
-test("the count of files viewed is announced politely as a tick changes it", async () => {
-  viewedAnswer = MARKED;
-  answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
-  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
-  await drawTab();
-  mountAnnouncer();
-  assert.equal(announcedPolitely(), "", "the count first drawn is not read out");
-
-  act(() => viewedBox("c.ts").click());
-  await flush();
-  assert.equal(announcedPolitely(), "2 / 3 files viewed");
 });
 
 test("ticking a file's box marks it viewed on GitHub at once and folds it; one GitHub refuses goes back and says why", async () => {
@@ -1637,7 +1614,6 @@ test("ticking a file's box marks it viewed on GitHub at once and folds it; one G
   await flush();
   assert.equal(viewedBox("c.ts").checked, true);
   assert.deepEqual(folds()[2], ["c.ts", true]);
-  assert.equal(viewedCount(), "2 / 3 files viewed");
 
   refuse = true;
   act(() => viewedBox("a.ts").click());
@@ -1653,7 +1629,7 @@ test("ticking a file's box marks it viewed on GitHub at once and folds it; one G
   ]);
 });
 
-test("the bar leads with the count of files viewed in the crumbs' place, polite to a screen reader, and no count stands under the list or the tree", async () => {
+test("the bar names no file in the crumbs' place, and no count of files or lines changed stands under the list or the tree", async () => {
   viewedAnswer = MARKED;
   files = [changed("src/billing/a.ts"), changed("b.ts"), changed("c.ts")];
   await drawTab({ treeOpen: true });
@@ -1661,86 +1637,29 @@ test("the bar leads with the count of files viewed in the crumbs' place, polite 
   const bar = document.querySelector(".ui-pane-bar") ?? assert.fail("a bar");
   assert.equal(bar.querySelector(".ui-breadcrumbs"), null, "no crumbs");
   assert.doesNotMatch(bar.textContent ?? "", /billing/u, "the bar names no file");
-  const count = bar.querySelector(".files-viewed") ?? assert.fail("a count");
-  assert.equal(count.hasAttribute("aria-live"), false, "it is said through the announcer");
-  assert.equal(count.querySelector("button, input"), null, "the count is words, not a control");
   assert.doesNotMatch(
     document.body.textContent ?? "",
     /changed/u,
     "no files or lines changed count",
   );
-  assert.equal(document.querySelectorAll(".files-viewed").length, 1, "the bar's count alone");
 
   await redraw({ treeOpen: false });
   assert.doesNotMatch(document.body.textContent ?? "", /changed/u);
-  assert.equal(document.querySelectorAll(".files-viewed").length, 1);
 });
 
-test("with no marks read the bar says only how many files there are", async () => {
-  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
-  await drawTab();
-  assert.equal(viewedCount(), "3 files");
-
-  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
-  files = [changed("a.ts")];
-  await drawTab();
-  assert.equal(viewedCount(), "1 file");
-});
-
-test("every file viewed reads as complete, with a check, and unticking one counts again", async () => {
-  viewedAnswer = {
-    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
-    files: [
-      { path: "a.ts", state: FILE_VIEWED_STATE.VIEWED },
-      { path: "b.ts", state: FILE_VIEWED_STATE.UNVIEWED },
-    ],
-  };
-  answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
-  files = [changed("a.ts"), changed("b.ts")];
-  await drawTab();
-  const count = () =>
-    document.querySelector(".files-viewed") ?? assert.fail("the bar counts the files viewed");
-  assert.equal(viewedCount(), "1 / 2 files viewed");
-  assert.equal(count().hasAttribute("data-complete"), false);
-
-  act(() => viewedBox("b.ts").click());
-  await flush();
-  assert.equal(viewedCount(), "All 2 files viewed");
-  assert.equal(count().hasAttribute("data-complete"), true);
-  assert.notEqual(count().querySelector("svg"), null, "a check stands before the words");
-
-  act(() => viewedBox("a.ts").click());
-  await flush();
-  assert.equal(viewedCount(), "1 / 2 files viewed");
-  assert.equal(count().querySelector("svg"), null);
-});
-
-test("a read that stopped short of every file never reads as all viewed", async () => {
-  viewedAnswer = {
-    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
-    files: [{ path: "a.ts", state: FILE_VIEWED_STATE.VIEWED }],
-  };
-  truncated = true;
-  files = [changed("a.ts")];
-  await drawTab();
-
-  assert.equal(viewedCount(), "1 / 1 file viewed");
-});
-
-test("the count goes up the moment a box is ticked, and back down where GitHub refuses the mark", async () => {
+test("a box ticks the moment it is pressed, and unticks where GitHub refuses the mark", async () => {
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
   await drawTab();
-  assert.equal(viewedCount(), "1 / 3 files viewed");
 
   act(() => viewedBox("c.ts").click());
   await flush();
-  assert.equal(viewedCount(), "2 / 3 files viewed", "counted before GitHub answers");
+  assert.equal(viewedBox("c.ts").checked, true, "ticked before GitHub answers");
 
   held[0]?.answer({ outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Locked." });
   await flush();
-  assert.equal(viewedCount(), "1 / 3 files viewed");
+  assert.equal(viewedBox("c.ts").checked, false);
 });
 
 test("V marks the file the keys stand on viewed and steps on to the next, and is no key at all until the marks are read", async () => {
@@ -1884,7 +1803,6 @@ test("presses on one file go to GitHub one at a time, the last of them winning, 
   held[1]?.answer(DONE);
   await flush();
   assert.equal(viewedBox("c.ts").checked, false);
-  assert.equal(viewedCount(), "0 / 1 file viewed");
 });
 
 test("a read asked before a mark settled never undoes it, and a read that does not answer takes the boxes away", async () => {

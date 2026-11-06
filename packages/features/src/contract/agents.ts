@@ -37,6 +37,7 @@ import {
   agentRewindRequestSchema,
   agentServersRequestSchema,
   agentStartRequestSchema,
+  agentWorkspaceListAnswerSchema,
   MAXIMUM_START_BODY_BYTES,
 } from "../agent-wire.js";
 import { modelChoiceSchema } from "../models-wire.js";
@@ -75,6 +76,11 @@ const terminalParams = EffectSchema.Struct({
   terminal: EffectSchema.String,
 });
 
+/** How many of a workspace's agents a page passes over, as its query carries it: a whole number from zero. */
+const offsetQuery = EffectSchema.NumberFromString.pipe(
+  EffectSchema.decodeTo(EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0))),
+);
+
 /** What a list's `archived` query may say, read as the old groups read it: `include`, or anything else for none. */
 const archivedQuery = EffectSchema.optionalKey(EffectSchema.String);
 
@@ -103,7 +109,7 @@ const startAnswerSchema = EffectSchema.Struct({
 });
 
 export const agentsContract = {
-  /** A workspace's agents, newest started first, narrowed as the query asks. */
+  /** A page of a workspace's agents, newest started first, narrowed as the query asks, from its `offset`. */
   listOfWorkspace: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.AGENTS }))
     .input(
@@ -112,9 +118,10 @@ export const agentsContract = {
         [AGENT_WORKSPACE_QUERY.REPOSITORY]: EffectSchema.optionalKey(EffectSchema.String),
         [AGENT_WORKSPACE_QUERY.WORDS]: EffectSchema.optionalKey(EffectSchema.String),
         [AGENT_WORKSPACE_QUERY.ARCHIVED]: archivedQuery,
+        [AGENT_WORKSPACE_QUERY.OFFSET]: EffectSchema.optionalKey(offsetQuery),
       }),
     )
-    .output(EffectSchema.flip(agentListAnswerSchema)),
+    .output(EffectSchema.flip(agentWorkspaceListAnswerSchema)),
   /** One task's agents with their status. */
   listOfTask: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.TASKS}/{id}/agents` }))

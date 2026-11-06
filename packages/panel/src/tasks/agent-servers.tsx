@@ -1254,8 +1254,7 @@ function ServersPopover({
 
   /** `run_on_mac`'s page over the app's: back, its name, whether it is on, what it does, and where it is off, why, and the fix where there is one. */
   const runOnMacPage = (reason: RunOnMacReason | undefined) => {
-    const detail =
-      reason === undefined ? undefined : runOnMacDetail(reason, workspace.answer?.runOnMac);
+    const detail = reason === undefined ? undefined : runOnMacDetail(reason);
     return (
       <div className="agent-servers-tool-page flex min-h-0 flex-col">
         <div className={SERVER_PAGE_HEAD_CLASS}>

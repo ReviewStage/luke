@@ -19,10 +19,13 @@ import { Database } from "@repo/database/core/query";
 import { runnerLine } from "@repo/database/schemas/runner-line";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { runnerTag } from "../agents/machine/vercel-machine.js";
 import type { NetworkPolicy } from "../agents/vercel-sandbox-api.js";
 import {
+  sandboxDeleted,
+  sandboxFetchOver,
+  sandboxFound,
   sandboxListRefusal,
   sandboxStopRefusal,
   sandboxTagsRefusal,
@@ -142,7 +145,12 @@ export function runnerSandboxApi() {
   const sandboxes: FakeSandbox[] = [];
   /** How many stdin writes with data the API refuses next, and with what status: a passing outage by default. */
   const failStdin = { remaining: 0, status: 502 };
-  /** How many deletes the API refuses next, as a passing outage. */
+  /**
+   * How many deletes the API refuses next. Note that the refusal is a 400
+   * rather than a passing outage's 503, because `@vercel/sandbox` tries a
+   * 5xx again on a real timer, so only a status it never retries fails the
+   * delete at once, as a test reads it.
+   */
   const failDelete = { remaining: 0 };
   const commands: FakeCommand[] = [];
   /** The snapshots Vercel no longer holds, which a create from one is refused for. */
@@ -268,11 +276,11 @@ export function runnerSandboxApi() {
       }
       if (method === "DELETE" && failDelete.remaining > 0) {
         failDelete.remaining -= 1;
-        return new Response(null, { status: 503 });
+        return Response.json({ error: { code: "bad_request" } }, { status: 400 });
       }
       if (method === "DELETE") {
         sandbox.deleted = true;
-        return Response.json({});
+        return Response.json(sandboxDeleted(listed(sandbox)));
       }
       const resuming = parsed.searchParams.get("resume") === "true";
       if (resuming && sandbox.status === "stopped" && sandbox.snapshotExpired === true) {
@@ -285,7 +293,7 @@ export function runnerSandboxApi() {
         sandbox.currentSessionId = mintSession();
         sandbox.resumedWith.push(sandbox.timeout);
       }
-      return Response.json({ sandbox: listed(sandbox), session: { id: sandbox.currentSessionId } });
+      return Response.json(sandboxFound(listed(sandbox)));
     }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(path);
     assert.ok(session !== null, `an unexpected call: ${method} ${path}`);
@@ -439,7 +447,7 @@ export function runnerSandboxApi() {
           .slice(0, command.policiesBefore)
           .findLast((each) => each.session === command.sandboxSessionId)?.policy;
   return {
-    layer: fakeHttpClientLayer(respond),
+    layer: Layer.merge(fakeHttpClientLayer(respond), sandboxFetchOver(respond)),
     respond,
     policyAtStart,
     sandboxes,

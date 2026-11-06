@@ -170,9 +170,9 @@ import {
 import {
   CREATE_SECTION_TOOL,
   DELETE_SECTION_TOOL,
+  NO_SECTION_DELETED,
   runCreateSection,
   runDeleteSection,
-  TASK_SECTION_TOOL_REFUSAL,
 } from "../agents/task-section-tools.js";
 import {
   CREATE_TASK_TOOL,
@@ -353,13 +353,15 @@ const listAsMember = <R>(
 /** A read by id run as the member, about the workspace that holds what it names as the member reaches it; refused in the read's own words where they reach none. */
 const readAsMember = <R, RRead>(
   workspaceOf: (userId: string) => Effect.Effect<Option.Option<string>, StoreFailure, R>,
-  refusal: string,
+  refusal: string | WireRecord,
   read: (call: AgentReadCall) => Effect.Effect<WireRecord, never, RRead>,
 ) =>
   Effect.gen(function* () {
     const member = yield* AdmittedMember;
     const workspace = yield* workspaceOf(member.userId);
-    if (Option.isNone(workspace)) return agentToolRejected(refusal);
+    if (Option.isNone(workspace)) {
+      return typeof refusal === "string" ? agentToolRejected(refusal) : refusal;
+    }
     return yield* read(memberCaller(member, workspace.value));
   });
 
@@ -641,7 +643,7 @@ const listWriteAsMember = <R>(
 /** A write by id run as the member, about the workspace that holds what it names as the member reaches it; refused in the door's own words where they reach none. */
 const writeAsMember = <R, RWrite>(
   workspaceOf: (userId: string) => Effect.Effect<Option.Option<string>, StoreFailure, R>,
-  refusal: string,
+  refusal: string | WireRecord,
   write: (call: AgentCall) => Effect.Effect<WireRecord, never, RWrite>,
 ) => readAsMember(workspaceOf, refusal, (read) => Effect.flatMap(memberWriteCall(read), write));
 
@@ -810,13 +812,14 @@ const MEMBER_DELETE_SECTION_TOOL = memberMcpTool({
     "Delete one of the member's sidebar sections, by its id as " +
     `${MEMBER_MCP_TOOL.LIST_TASKS} answered it, as their Delete section would: the tasks in it ` +
     "go back under Tasks, and none of them is deleted. Answers `accepted` with the section's " +
-    "id and title and how many tasks went back under Tasks, or `rejected` and why.",
+    "id and title and how many tasks went back under Tasks, with section null where no such " +
+    "section stands, as one already deleted, or `rejected` and why.",
   input: DELETE_SECTION_TOOL.inputSchema,
   annotations: DESTRUCTIVE,
   run: (asked) =>
     writeAsMember(
       (userId) => sectionWorkspace(userId, asked.sectionId),
-      TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
+      { ...NO_SECTION_DELETED },
       (call) => runDeleteSection(call, asked),
     ),
 });
@@ -970,8 +973,8 @@ const MEMBER_STOP_AGENT_TOOL = memberMcpTool({
   description:
     "Stop a coding agent the member can see, by its id, as their Stop button would: its turn " +
     "under way is canceled and its status reads canceled, while the agent stays available, its " +
-    "transcript and branch kept, and a later message starts a new turn. An archived one is " +
-    "refused. Answers `accepted` with the agent's status now and whether it was stopped, " +
+    "transcript and branch kept, and a later message starts a new turn. Answers `accepted` " +
+    "with the agent's status now and whether it was stopped, " +
     "`stopped` false for an agent already idle, which changes nothing, or `rejected` and why. " +
     `${MEMBER_MCP_TOOL.READ_AGENT} reads where it stopped.`,
   input: AgentIdInputSchema,
@@ -1000,8 +1003,8 @@ const UpdateAgentInputSchema = Schema.Struct({
       Schema.Boolean,
       "true to archive it, as the member's Archive agent would: it leaves the sidebar, its " +
         "task's tabs, and every list but the archived ones, takes no message, and is not woken, " +
-        "its transcript, branch, and pull request kept; only an idle agent is archived. false to " +
-        "bring an archived one back.",
+        "its transcript, branch, and pull request kept; a turn still running is stopped first. " +
+        "false to bring an archived one back.",
     ),
   ),
   reason: Schema.optionalKey(
@@ -1038,8 +1041,8 @@ const MEMBER_UPDATE_AGENT_TOOL = memberMcpTool({
     "member's own, or add a repository it works in beside its own, alone. Name at least one " +
     "change, a model only with its effort, a contextWindow only with them, and a reason only " +
     "with archived true; an archive is checked first, and " +
-    "the rest land together or not at all. One still starting or working is not archived: " +
-    `stop it with ${MEMBER_MCP_TOOL.STOP_AGENT} first. Answers \`accepted\` with the agent ` +
+    "the rest land together or not at all. One still working is stopped first, as the Stop " +
+    "button would, and one still starting is refused until it can be. Answers `accepted` with the agent " +
     "as it then stands, whether archived among it, or `rejected` and why; a rejected model " +
     "or effort lists the choices.",
   input: UpdateAgentInputSchema,

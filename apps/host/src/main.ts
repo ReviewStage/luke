@@ -136,9 +136,6 @@ const RELEASE_COMMAND = "bin/vespin-host";
 /** The transient systemd unit a removed box's uninstall runs in, apart from the daemon's own unit, which it stops. */
 const UNINSTALL_UNIT = "vespin-host-uninstall";
 
-/** How long a removed daemon waits for the uninstall it started to stop its service, before it exits for its service to start it again. */
-const UNINSTALL_WAIT = Duration.minutes(5);
-
 const COMMAND = { RUN: "run", CONNECT: "connect", LEAVE: "leave", VERSION: "version" } as const;
 
 /** The release's own folder: this bundle stands in its `lib/`. */
@@ -352,9 +349,9 @@ const uninstallApart = (service: HostService | undefined) => {
 /**
  * A box removed in Settings › Hosts removing itself, as `vespin-host
  * uninstall` would: its service, its agents' folders, its state and its
- * releases. The daemon then waits for the uninstall to stop it; one that
- * did not start, or did not stop it in time, is said, and the daemon exits
- * for its service to start it again, where it rests on its refused record.
+ * releases. The daemon exits once the uninstall has started, since the
+ * uninstall stops its service within moments; one that did not start is
+ * said, and a start of the service meanwhile rests on its refused record.
  */
 const removeItself = (service: HostService | undefined) =>
   Effect.gen(function* () {
@@ -365,12 +362,7 @@ const removeItself = (service: HostService | undefined) =>
       reportToStderr(
         `${PRODUCT_NAME} host: could not start its uninstall. Run ${HOST_COMMAND} uninstall to remove it.`,
       );
-      return;
     }
-    yield* Effect.sleep(UNINSTALL_WAIT);
-    reportToStderr(
-      `${PRODUCT_NAME} host: its uninstall did not finish. Run ${HOST_COMMAND} uninstall to remove it.`,
-    );
   });
 
 /** `vespin-host run`: the daemon, resting while the service refuses the box's secret, until it switched to a newer release, which its service is asked to start at once, or the box was removed, which it removes itself from. */

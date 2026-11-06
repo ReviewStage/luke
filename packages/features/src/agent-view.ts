@@ -745,13 +745,13 @@ export const agentInboxReadStateParamsSchema = EffectSchema.Struct({
 
 export type AgentInboxReadStateParams = typeof agentInboxReadStateParamsSchema.Type;
 
-/** One item snoozed for the account until an instant, in epoch milliseconds, which marks it read, or its snooze ended where `until` is null. */
-export const agentInboxSnoozeParamsSchema = EffectSchema.Struct({
+/** One item's reminder set for the account for an instant, in epoch milliseconds, or canceled where `until` is null; whether it is read stands as it was. */
+export const agentInboxRemindParamsSchema = EffectSchema.Struct({
   itemId: EffectSchema.NonEmptyString,
   until: EffectSchema.NullOr(countedNumber),
 });
 
-export type AgentInboxSnoozeParams = typeof agentInboxSnoozeParamsSchema.Type;
+export type AgentInboxRemindParams = typeof agentInboxRemindParamsSchema.Type;
 
 /** One item marked read or unread, as the window hears it: the item's id and its read state for the account, or why there is no answer. */
 export const agentInboxReadStateViewSchema = EffectSchema.Union([inboxReadStateSchema, failed]);

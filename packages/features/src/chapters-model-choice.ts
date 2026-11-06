@@ -2,16 +2,17 @@ import type { UnparsedWireValue } from "@repo/wire";
 import { Schema } from "effect";
 
 /**
- * chapters-model-choice.ts -- the Claude model a member's Generate chapters runs on, as the Chapters view offers it and the service reads it.
+ * chapters-model-choice.ts -- the Claude models chapters are told on, as the Chapters view names them and an account's preferences keep them.
  *
- * Each member picks it on Generate chapters' own chevron, and a Generate reads the
- * choice of the member who pressed it. The chapters stay the workspace's,
- * and the row they land in names the model that told them. Every choice
- * runs on the member's own API key, OpenAI's model of the same tier standing
- * in where they saved only an OpenAI key, and the set is Claude's alone, at
- * Anthropic's own ids (the ones an agent's title model and the catalog's
- * provider ids use). A stored value outside the set,
- * one a later build dropped or a row never written, reads as Haiku.
+ * Every Generate runs on Haiku, which its button names. Earlier builds let a
+ * member pick Sonnet or Opus, which the account's preferences still keep for
+ * the builds that write it, and chapters those picks told still name their
+ * model, so the set stays whole. Each runs on the member's own API key,
+ * OpenAI's model of the same tier standing in where they saved only an
+ * OpenAI key, and the set is Claude's alone, at Anthropic's own ids (the
+ * ones an agent's title model and the catalog's provider ids use). A stored
+ * value outside the set, one a later build dropped or a row never written,
+ * reads as Haiku.
  */
 
 /** The models a member may tell chapters on, at Anthropic's own ids. */
@@ -41,7 +42,7 @@ export const CHAPTERS_MODEL_LABEL = {
 } as const satisfies Record<ChaptersModelId, string>;
 
 /** One of the choices, as the wire carries it. */
-export const chaptersModelSchema = Schema.Literals(CHAPTERS_MODEL_LIST);
+const chaptersModelSchema = Schema.Literals(CHAPTERS_MODEL_LIST);
 
 const readsChaptersModel = Schema.is(chaptersModelSchema);
 

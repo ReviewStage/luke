@@ -11,7 +11,7 @@
  *   token the set is minted on is minted for the starter;
  * - while the starter has the Several repositories experiment off;
  * - to an agent caller that has heard words from another account
- *   (`heardFromAnotherAccount`, as `run_on_mac` is gated), so words from a
+ *   (`heardFromAnotherAccount`), so words from a
  *   review comment on a public repository never widen what an agent's
  *   token reaches, its own or another agent's it would then message;
  * - for an agent that works in no repository of its own, or runs on a

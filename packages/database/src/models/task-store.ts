@@ -253,6 +253,8 @@ export interface NewTask {
   readonly mode?: TaskMode;
   /** Whether `start_agent` made it for the agent it started, its caller on no task; not where none is named. */
   readonly madeByStart?: boolean;
+  /** The plan's text as it starts; empty where none is named. */
+  readonly text?: string;
 }
 
 /**
@@ -1239,7 +1241,7 @@ const nameUntitled = SqlSchema.findOneOption({
  * the list. A plan handed no name, or a blank one, starts as
  * `UNTITLED_PLAN_NAME`.
  */
-/** A started task's row as it is inserted: its name, or Untitled, its plan's empty text, and its brief, or none for a blank one. */
+/** A started task's row as it is inserted: its name, or Untitled, its plan's text, empty where none is named, and its brief, or none for a blank one. */
 const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -1253,7 +1255,7 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       repository: started.repository ?? null,
       githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
       parentTaskId: started.parentTaskId ?? null,
-      document: "",
+      document: started.text ?? "",
       brief: brief.length > 0 ? brief : null,
       mode: started.mode ?? TASK_MODE.AGENT,
       status: started.status ?? TASK_STATUS.TODO,
@@ -1417,7 +1419,7 @@ export function createTaskOnce(
   return Effect.gen(function* () {
     yield* assigneeAdmitted(started.assigneeId, started.organizationId);
     const values = yield* insertOf(userId, started);
-    const row = yield* insertTaskOnce({ ...values, document: started.text });
+    const row = yield* insertTaskOnce(values);
     return yield* Effect.transposeOption(Option.map(row, (made) => taskOf(userId, made)));
   });
 }

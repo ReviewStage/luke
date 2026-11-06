@@ -88,7 +88,7 @@ import { SwitchRow } from "../settings/switch-row.js";
  * it landed; any other close hands it back to the words.
  *
  * An owner that asks for one moment rather than a date to write, as a
- * snooze does (`inbox-snooze.tsx`), opens it with `moment`: the card is
+ * reminder does (`inbox-remind.tsx`), opens it with `moment`: the card is
  * titled as the owner names it and holds one date and its time, always
  * timed, with no End date, no Include time, and no Clear; a range typed
  * keeps only its start. Its foot holds Cancel and the owner's act

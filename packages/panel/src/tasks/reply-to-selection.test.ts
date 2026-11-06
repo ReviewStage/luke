@@ -31,7 +31,7 @@ import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentComposer } from "./agent-composer.js";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { ReplyToSelection } from "./reply-to-selection.js";
-import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
+import { type HeldComposer, type MessageSender, useAgentComposer } from "./use-agent-composer.js";
 
 /**
  * Words selected in an agent's message, answered from its box: Reply stands
@@ -106,6 +106,9 @@ async function settle(): Promise<void> {
 }
 
 /** An agent's tab cut to what a reply crosses: one of the agent's messages, one of the developer's, and the box, under the window's keymap. */
+/** The box's control as the tab last drew it, whose Edit a line that did not go offers from its transcript, which this tab draws none of. */
+let drawnComposer: HeldComposer | undefined;
+
 function Tab({ sender }: { sender: MessageSender }): ReactNode {
   useAppKeymap(true);
   const tab = useRef<HTMLElement>(null);
@@ -116,6 +119,7 @@ function Tab({ sender }: { sender: MessageSender }): ReactNode {
     messages: [],
     send: sender,
   });
+  drawnComposer = composer;
   return createElement(
     "section",
     { ref: tab },
@@ -331,7 +335,7 @@ test("a triple-click's selection is offered Reply past words no selection takes,
   assert.equal(tab.reply() === undefined, true, "Reply goes once the developer's words are held");
 });
 
-test("a message that did not go comes back with its quotes as blocks, a quote's way off takes it out, and a quote alone sends as any words do", async () => {
+test("a message that did not go comes back on Edit with its quotes as blocks, a quote's way off takes it out, and a quote alone sends as any words do", async () => {
   const tab = await mounted(() => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   tab.select(AGENT_WORDS, "Option A", "today.");
   await tab.pressReply();
@@ -339,6 +343,10 @@ test("a message that did not go comes back with its quotes as blocks, a quote's 
   await tab.pressReply();
   typeInComposer(tab.container, "Ship it");
   pressInComposer(tab.container, "Enter");
+  await settle();
+  const [refused] = drawnComposer?.sent ?? [];
+  assert.ok(refused, "the line that did not go stands");
+  await act(async () => drawnComposer?.takeBackLine(refused.id));
   await settle();
   assert.deepEqual(tab.blocks(), [
     "> Option A ships today.",

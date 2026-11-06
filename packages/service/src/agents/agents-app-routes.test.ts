@@ -10,6 +10,7 @@ import { GITHUB_ACCOUNT_TYPE } from "@repo/database/github-installation-vocabula
 import { readAccountPreferences } from "@repo/database/models/account-store";
 import {
   archiveAgent,
+  createAgent,
   readAgent,
   readAgentByKey,
   renameAgent,
@@ -28,7 +29,7 @@ import { user } from "@repo/database/schemas/auth";
 import { planRevision } from "@repo/database/schemas/plan-revision";
 import { conversations, messages } from "@repo/database/schemas/storage";
 import { task as taskTable } from "@repo/database/schemas/task";
-import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
+import { CONVERSATION_KIND, CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   DEVICE_LAYOUT,
   fakeWorkspaceSeams,
@@ -50,6 +51,7 @@ import {
   agentNewestAnswerSchema,
   agentOlderAnswerSchema,
   agentPartAnswerSchema,
+  agentWorkspaceListAnswerSchema,
   LOCAL_AGENT_REFUSAL,
   PART_CUT_FIELD,
   TRANSCRIPT_PARTS_QUERY,
@@ -252,6 +254,51 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             [kept.agent.id, false],
             [put.agent.id, true],
           ].toSorted(([first], [second]) => String(first).localeCompare(String(second))),
+        );
+      }),
+  );
+
+  it.effect(
+    "a workspace's list answers a page of its bound with the next page's offset, and that page answers the rest with none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const bound = AGENT_BOUNDS.MAX_WORKSPACE_AGENTS;
+        // One past the bound of agents is written through the store, which takes about two seconds.
+        const made = new Set<string>();
+        for (let each = 0; each <= bound; each += 1) {
+          const started = yield* createAgent(owner, {
+            ...AGENT_DEFAULT_CHOICE,
+            idempotencyKey: randomUUID(),
+            taskId: task.id,
+            planSnapshot: "# Invitations",
+            prompt: null,
+            repository: task.repository,
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          });
+          made.add(Option.getOrThrow(started).agent.id);
+        }
+        const page = (offset: number | undefined) => {
+          const url = new URL(WORKSPACE_AGENTS, ORIGIN);
+          url.searchParams.set("workspaceId", task.workspaceId);
+          if (offset !== undefined) url.searchParams.set("offset", String(offset));
+          return Effect.map(
+            ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
+            (answered) =>
+              readAnswer(agentWorkspaceListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        };
+
+        const first = yield* page(undefined);
+        assert.equal(first.agents.length, bound);
+        assert.equal(first.nextOffset, bound);
+        const second = yield* page(bound);
+        assert.equal(second.agents.length, 1);
+        assert.equal(second.nextOffset, undefined);
+        assert.deepEqual(
+          new Set([...first.agents, ...second.agents].map((agent) => agent.id)),
+          made,
+          "the two pages hold every agent once",
         );
       }),
   );

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { CHAPTER_KIND, CHAPTER_RISK } from "@repo/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
@@ -35,7 +34,6 @@ const AGENT_ID = "6b1f3c2e-9d4a-4f1b-8c7d-2e3f4a5b6c7d";
 
 const RETRY_REFUSAL = "Could not read the pull request's chapters again on this system.";
 const GENERATE_REFUSAL = "Could not generate the pull request's chapters on this system.";
-const MODEL_WRITE_REFUSAL = "Could not change the chapters model on this system.";
 
 /** Chapters made for the pull request's head. */
 const READY: PullRequestChaptersAnswerView = {
@@ -88,11 +86,6 @@ function windowPort(
         chaptersUnfollow: () => Effect.sync(() => asked.push("unfollow")),
         chaptersRetry: () => Effect.sync(() => asked.push("retry")),
         pullRequestChaptersGenerate: answering("generate"),
-        chaptersModelWrite: ({ model }) =>
-          Effect.sync(() => {
-            asked.push(`model-write:${model}`);
-            return { model };
-          }),
       },
     }),
   );
@@ -103,9 +96,6 @@ function windowPort(
       settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_RETRY](params)),
     generate: (params: PullRequestChaptersParams) =>
       settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_GENERATE](params)),
-    writeModel: (model: string) =>
-      // SAFETY: a model is written as a window might send it, one the kind's schema may refuse.
-      settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_MODEL_WRITE]({ model } as never)),
     asked,
   };
 }
@@ -156,20 +146,4 @@ it("a failure word crosses as the answer, and an answer the schema does not admi
   assert.deepEqual(await broken.generate({ agentId: AGENT_ID, number: 11 }), {
     refused: GENERATE_REFUSAL,
   });
-});
-
-it("a panel writes the chapters model, and a model outside the set is refused before the host is asked", async () => {
-  const { writeModel, asked } = windowPort(PANEL);
-
-  assert.deepEqual(await writeModel(CHAPTERS_MODEL.OPUS), {
-    answer: { model: CHAPTERS_MODEL.OPUS },
-  });
-  assert.deepEqual(await writeModel("gpt-5.5"), { refused: MODEL_WRITE_REFUSAL });
-  assert.deepEqual(asked, [`model-write:${CHAPTERS_MODEL.OPUS}`]);
-});
-
-it("a window that is not a panel is refused the chapters model write in the kind's own words", async () => {
-  const { writeModel, asked } = windowPort(OTHER_WINDOW);
-  assert.deepEqual(await writeModel(CHAPTERS_MODEL.OPUS), { refused: MODEL_WRITE_REFUSAL });
-  assert.deepEqual(asked, []);
 });

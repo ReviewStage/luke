@@ -52,6 +52,7 @@ import {
 } from "@repo/database/models/session-sandbox-cleanup";
 import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
+import { afterResponse } from "../http/after-response.js";
 import { discardedOrLogged } from "./device-discard.js";
 import { sandboxFirewall } from "./sandbox-firewall.js";
 import { capSandboxTimeout, keepAliveExtension } from "./sandbox-keep-alive.js";
@@ -201,6 +202,12 @@ export interface SandboxStopReach {
    */
   readonly keepAwake: <R>(work: Effect.Effect<void, never, R>) => Effect.Effect<void, never, R>;
 }
+
+/** The reach of a caller handed none, such as an agent's tool: Vercel's sandboxes on the function's own token, the stops kept past the answer where the runtime keeps work (`afterResponse`, the web's `waitUntil`), run in place where it keeps none. */
+export const deploymentSandboxStops: SandboxStopReach = {
+  sessionSandboxes: sessionSandboxesLayer,
+  keepAwake: (work) => afterResponse("an archived agent's sandbox stop", work),
+};
 
 /** A failure as the log says it: a sandbox's own words, and the kind alone for any other, since a store failure's message may name a statement. */
 function describeStopFailure(failure: {

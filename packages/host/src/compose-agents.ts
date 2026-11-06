@@ -19,7 +19,7 @@ import {
   type AgentInboxReadAllView,
   type AgentInboxReadStateParams,
   type AgentInboxReadStateView,
-  type AgentInboxSnoozeParams,
+  type AgentInboxRemindParams,
   type AgentListAnswer,
   type AgentMarkReadParams,
   type AgentMessagesAnswerView,
@@ -43,8 +43,8 @@ import {
   agentInboxMessageParamsSchema,
   agentInboxReadAllParamsSchema,
   agentInboxReadStateParamsSchema,
+  agentInboxRemindParamsSchema,
   agentInboxScopeSchema,
-  agentInboxSnoozeParamsSchema,
   agentInboxStartParamsSchema,
   agentListParamsSchema,
   agentMarkReadParamsSchema,
@@ -110,7 +110,6 @@ import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import {
-  chaptersModelWriteParamsSchema,
   type PullRequestChaptersAnswerView,
   pullRequestChaptersParamsSchema,
   pullRequestChaptersReadParamsSchema,
@@ -151,11 +150,7 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
-import {
-  agentDefaultWritten,
-  chaptersModelWritten,
-  heldAccountPreferences,
-} from "./account-preferences-follow.js";
+import { agentDefaultWritten, heldAccountPreferences } from "./account-preferences-follow.js";
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
@@ -285,7 +280,6 @@ export type AgentClient = Pick<
   | "pullRequestChaptersLive"
   | "agentOriginLive"
   | "generateChapters"
-  | "writeChaptersModel"
   | "models"
   | "accountPreferencesLive"
   | "writeDefault"
@@ -342,7 +336,7 @@ export type AgentClient = Pick<
   | "messageInbox"
   | "startInboxThread"
   | "markInboxItemRead"
-  | "snoozeInboxItem"
+  | "remindInboxItem"
   | "inboxItemHome"
   | "markInboxItemUnread"
   | "markInboxRead"
@@ -1169,15 +1163,18 @@ function composed(
       queued: ({ itemId, unread }) => ({ id: itemId, unread }),
     },
   );
-  /** An item snoozed until an instant, or its snooze ended. Note that snoozing marks it read, which is drawn at once, while the snooze itself arrives with the read its transaction reaches. */
-  const snoozed = inboxWrite<AgentInboxSnoozeParams, AgentInboxReadStateView>(
+  /** An item's reminder set for an instant, or canceled, drawn at once; whether it is read stands as it was. */
+  const reminded = inboxWrite<AgentInboxRemindParams, AgentInboxReadStateView>(
     ({ itemId }) => [itemId],
-    ({ itemId }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false }),
-    ({ itemId, until }, key) => asked(client.snoozeInboxItem(itemId, until, key)),
+    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until, at: kernel.now() }),
+    ({ itemId, until }, key) => asked(client.remindInboxItem(itemId, until, key)),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_SNOOZE,
-      input: agentInboxSnoozeParamsSchema,
-      queued: ({ itemId }) => ({ id: itemId, unread: false }),
+      name: GATEWAY_METHOD.AGENTS_INBOX_REMIND,
+      input: agentInboxRemindParamsSchema,
+      queued: ({ itemId }) => ({
+        id: itemId,
+        unread: dependencies.pool.row(INBOX_ITEM, itemId)?.unread === true,
+      }),
     },
   );
   /** Every item the inbox lists marked read. */
@@ -1758,19 +1755,6 @@ function composed(
         const answer = yield* asked(client.generateChapters(agentId, number));
         return carried<PullRequestChaptersAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.CHAPTERS_MODEL_WRITE]: declaredMethod(
-      dependencies.pool,
-      chaptersModelWritten(
-        (write) => asked(client.writeChaptersModel(write.model)),
-        dependencies.accountId,
-      ),
-      (params: WireRecord) =>
-        readParams(
-          chaptersModelWriteParamsSchema,
-          params,
-          "the chapters model names one of the models Generate offers",
-        ),
-    ),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -1958,14 +1942,14 @@ function composed(
           "marking an inbox item names the item and whether it reads as unread",
         ),
     ),
-    [GATEWAY_METHOD.AGENTS_INBOX_SNOOZE]: declaredMethod(
+    [GATEWAY_METHOD.AGENTS_INBOX_REMIND]: declaredMethod(
       dependencies.pool,
-      snoozed,
+      reminded,
       (params: WireRecord) =>
         readParams(
-          agentInboxSnoozeParamsSchema,
+          agentInboxRemindParamsSchema,
           params,
-          "snoozing an inbox item names the item and until when, or none to end its snooze",
+          "setting an inbox item's reminder names the item and when, or none to cancel it",
         ),
     ),
     [GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME]: (params) =>
@@ -2064,7 +2048,7 @@ function composed(
       anyWrite(nodded),
       anyWrite(closed),
       anyWrite(marked),
-      anyWrite(snoozed),
+      anyWrite(reminded),
       anyWrite(markedAll),
     ],
   };

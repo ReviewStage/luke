@@ -264,8 +264,8 @@ export const AGENT_INBOX_ACT_KIND = {
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
-  /** One item snoozed for the account until an instant, or its snooze ended; it marks the item read, and changes neither what it asks nor whether it waits. */
-  AGENTS_INBOX_SNOOZE: "agents.inboxSnooze",
+  /** One item's reminder set for the account for an instant, or canceled; it changes neither whether the item is read, what it asks, nor whether it waits. */
+  AGENTS_INBOX_REMIND: "agents.inboxRemind",
   /** Where one item stands, its agent, task, and workspace, as a link by its id alone is opened; it reads, and changes nothing. */
   AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
@@ -289,7 +289,6 @@ export const CHAPTERS_ACT_KIND = {
   CHAPTERS_FOLLOW: "chapters.follow",
   CHAPTERS_RETRY: "chapters.retry",
   CHAPTERS_GENERATE: "chapters.generate",
-  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
 } as const;
 
 /**
@@ -542,6 +541,18 @@ export const MAC_TERMINAL_ACT_KIND = {
 } as const;
 
 /**
+ * A shell on this Mac (`mac-shells.ts`): the developer's login shell opened
+ * in a folder for the asking panel, attached, and closed, answered by the
+ * desktop's main, which holds it. What it prints travels on the port an
+ * attach posts to that panel, as a cloud shell's does, never on an act.
+ */
+export const MAC_SHELL_ACT_KIND = {
+  MAC_SHELL_OPEN: "macShell.open",
+  MAC_SHELL_ATTACH: "macShell.attach",
+  MAC_SHELL_CLOSE: "macShell.close",
+} as const;
+
+/**
  * A command an agent asked to run on this Mac (`../mac-command-ask.ts`),
  * answered by the developer from the prompt the panel draws over the window:
  * allowed once, allowed always, which also writes Settings › This Mac to
@@ -731,6 +742,7 @@ export const PORT_ACT_KIND = {
   ...INSTALLED_SKILL_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...MAC_COMMAND_ACT_KIND,
+  ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
@@ -852,7 +864,7 @@ export const PORT_ACT_USE = {
   AGENTS_INBOX_MESSAGE: ACT_USE.WRITE,
   AGENTS_INBOX_START: ACT_USE.WRITE,
   AGENTS_INBOX_READ_STATE: ACT_USE.WRITE,
-  AGENTS_INBOX_SNOOZE: ACT_USE.WRITE,
+  AGENTS_INBOX_REMIND: ACT_USE.WRITE,
   AGENTS_INBOX_ITEM_HOME: ACT_USE.FETCH,
   AGENTS_INBOX_READ_ALL: ACT_USE.WRITE,
   AGENTS_INBOX_ATTACHMENT: ACT_USE.FETCH,
@@ -872,7 +884,6 @@ export const PORT_ACT_USE = {
   CHAPTERS_FOLLOW: ACT_USE.READ,
   CHAPTERS_RETRY: ACT_USE.READ,
   CHAPTERS_GENERATE: ACT_USE.WRITE,
-  CHAPTERS_MODEL_WRITE: ACT_USE.WRITE,
 
   CLI_INSTALL: ACT_USE.WRITE,
 
@@ -896,6 +907,10 @@ export const PORT_ACT_USE = {
   MCP_CLIENTS_REVOKE: ACT_USE.WRITE,
 
   MAC_COMMAND_ANSWER: ACT_USE.WRITE,
+
+  MAC_SHELL_OPEN: ACT_USE.WRITE,
+  MAC_SHELL_ATTACH: ACT_USE.WRITE,
+  MAC_SHELL_CLOSE: ACT_USE.WRITE,
 
   MAC_TERMINAL_LOCAL_AGENT: ACT_USE.WRITE,
 
@@ -1023,6 +1038,7 @@ export const PORT_ACT_USE = {
 export const PLATFORM_PORT_ACT_KIND = {
   ...BROWSER_LIVE_ACT_KIND,
   ...CLI_ACT_KIND,
+  ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
