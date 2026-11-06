@@ -28,7 +28,7 @@ import { useWorkspacePhotoPick } from "../workspace-photo.js";
  */
 
 /** The addresses typed into the invite field, each once. */
-export function addressesOf(words: string): readonly string[] {
+function addressesOf(words: string): readonly string[] {
   return [...new Set(words.split(/[\s,;]+/u).filter((one) => one.includes("@")))];
 }
 
