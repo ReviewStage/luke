@@ -63,6 +63,8 @@ function routedMachine(cloud: AgentMachineService, mac: DeviceMachineService): A
   return {
     ...routedLifecycle(cloud, mac),
     layout: (agent) => of(agent.machine).layout(agent),
+    deliverCredentials: (agent, credentials) =>
+      of(agent.machine).deliverCredentials(agent, credentials),
     open: (ask, use) => of(ask.agent.machine).open(ask, use),
     resume: (found, agent) => of(found.machine).resume(found, agent),
     checkOutExtras: (place, target, agent, shared) =>
