@@ -68,10 +68,23 @@ const INVITATION_BOUNDS = {
   MAX_EMAIL_CHARS: 254,
 } as const;
 
+/**
+ * Whether an address's domain is dotted: a dot after its first character
+ * and before its last. Note that this is read by hand beside a pattern that
+ * only splits the address at its one `@`, because the single pattern that
+ * says both backtracks on a long domain with no dot, and what is checked
+ * here is pasted text.
+ */
+function dottedDomain(address: string): boolean {
+  const domain = address.slice(address.indexOf("@") + 1);
+  return domain.slice(1, -1).includes(".");
+}
+
 /** One address, its ends trimmed: something before an `@` and a dotted domain after it. */
 const invitedEmailSchema = EffectSchema.Trim.check(
   EffectSchema.isMaxLength(INVITATION_BOUNDS.MAX_EMAIL_CHARS),
-  EffectSchema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/u),
+  EffectSchema.isPattern(/^[^\s@]+@[^\s@]+$/u),
+  EffectSchema.makeFilter(dottedDomain),
 );
 
 const invitationRoleSchema = EffectSchema.Literals(Object.values(INVITATION_ROLE));
@@ -94,18 +107,95 @@ export interface TypedInvitee {
   readonly invitable: boolean;
 }
 
-/**
- * Where one typed address ends and the next begins: a quoted or bare name
- * before an address in angle brackets is kept whole, as an email's To line
- * writes it, and anything else ends at a comma, a semicolon, or a space.
- */
-const TYPED_ADDRESS = /"[^"]*"\s*<[^>]*>|[^\s,;<>"@]+(?:\s+[^\s,;<>"@]+)*\s*<[^>]*>|[^\s,;]+/gu;
-
-/** A name and the address it stands before, in angle brackets. */
-const NAMED_ADDRESS = /^"?(.*?)"?\s*<([^>]*)>$/u;
-
 /** A link's scheme pasted before an address. */
-const MAILTO = /^mailto:/iu;
+const MAILTO = "mailto:";
+
+/** One word of what was typed, or the end of an entry a comma or a semicolon makes. */
+type TypedWord = string | typeof ENTRY_END;
+
+const ENTRY_END = Symbol("entry end");
+
+/**
+ * The words of `text`, split at spaces, commas, and semicolons outside a
+ * quoted name or an address in angle brackets, with each comma or semicolon
+ * marked. Note that this is one pass over the text rather than a regular
+ * expression, because pasted text is anyone's and a backtracking pattern
+ * over it can be made to run for as long as its author likes.
+ */
+function wordsOf(text: string): readonly TypedWord[] {
+  const words: TypedWord[] = [];
+  let word = "";
+  let quoted = false;
+  let bracketed = false;
+  const end = () => {
+    if (word !== "") words.push(word);
+    word = "";
+  };
+  for (const char of text) {
+    const open = quoted || bracketed;
+    if (!open && (char === "," || char === ";")) {
+      end();
+      words.push(ENTRY_END);
+    } else if (!open && char.trim() === "") {
+      end();
+    } else {
+      if (char === '"' && !bracketed) quoted = !quoted;
+      if (char === "<" && !quoted) bracketed = true;
+      if (char === ">" && !quoted) bracketed = false;
+      word += char;
+    }
+  }
+  end();
+  return words;
+}
+
+/** Strips a name's quotes and the spaces around it; nothing where it says nothing. */
+function nameOf(words: readonly string[]): string | undefined {
+  const name = words.join(" ").replaceAll('"', "").trim();
+  return name === "" ? undefined : name;
+}
+
+/**
+ * The entries of `text` as an email's To line writes them: a quoted or bare
+ * name before an address in angle brackets kept whole, and any other word an
+ * entry of its own.
+ */
+function entriesOf(text: string): readonly { address: string; name?: string; typed: string }[] {
+  const entries: { address: string; name?: string; typed: string }[] = [];
+  let names: string[] = [];
+  const unnamed = () => {
+    for (const word of names) entries.push({ address: word, typed: word });
+    names = [];
+  };
+  for (const word of wordsOf(text)) {
+    if (word === ENTRY_END) {
+      unnamed();
+      continue;
+    }
+    const open = word.indexOf("<");
+    if (open === -1) {
+      // Note that a word holding an address ends any name before it, which had no address of its own.
+      if (word.includes("@")) {
+        unnamed();
+        entries.push({ address: word, typed: word });
+      } else names.push(word);
+      continue;
+    }
+    const before = word.slice(0, open);
+    const close = word.indexOf(">", open);
+    const address = word.slice(open + 1, close === -1 ? undefined : close).trim();
+    const name = nameOf(before === "" ? names : [...names, before]);
+    entries.push({
+      address,
+      ...(name === undefined ? {} : { name }),
+      // Note that the words put back to edit it keep the name's quotes, so a comma inside them still holds it whole.
+      typed: [...names, word].join(" "),
+    });
+    names = [];
+  }
+  unnamed();
+  return entries;
+}
 
 /**
  * The distinct addresses in `text`, in the order typed, each with the name
@@ -116,17 +206,16 @@ const MAILTO = /^mailto:/iu;
 export function inviteesOf(text: string): readonly TypedInvitee[] {
   const seen = new Set<string>();
   const invitees: TypedInvitee[] = [];
-  for (const typed of text.match(TYPED_ADDRESS) ?? []) {
-    const named = NAMED_ADDRESS.exec(typed);
-    const email = (named?.[2] ?? typed).trim().replace(MAILTO, "");
+  for (const entry of entriesOf(text)) {
+    const mailto = entry.address.toLowerCase().startsWith(MAILTO);
+    const email = mailto ? entry.address.slice(MAILTO.length) : entry.address;
     const key = email.toLowerCase();
     if (email === "" || seen.has(key)) continue;
     seen.add(key);
-    const name = named?.[1]?.trim();
     invitees.push({
       email,
-      name: name === undefined || name === "" ? undefined : name,
-      typed: typed.trim(),
+      name: entry.name,
+      typed: entry.typed,
       invitable: isInvitableEmail(email),
     });
   }

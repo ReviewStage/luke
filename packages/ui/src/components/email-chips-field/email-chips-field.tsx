@@ -58,17 +58,31 @@ export interface EmailChip {
 }
 
 /**
- * Words that end an address being typed, where no name's bracket or quote is
- * still open: a comma or a semicolon, or a space once the words hold an
- * address, so a name typed before its address in brackets stays whole.
+ * Whether typed words end an address, where no name's bracket or quote is
+ * still open: at a comma or a semicolon, or at a space once the last word
+ * holds an address, so a name typed before its address in brackets stays
+ * whole. Note that this reads the words by hand rather than by a regular
+ * expression, because a backtracking pattern over what anyone types or
+ * pastes can be made slow.
  */
-const ADDRESS_END = /[,;]$|@\S*\s$/u;
+function endsAddress(words: string): boolean {
+  if (words.lastIndexOf("<") > words.lastIndexOf(">")) return false;
+  if ((words.split('"').length - 1) % 2 === 1) return false;
+  const last = words.at(-1);
+  if (last === "," || last === ";") return true;
+  if (last === undefined || last.trim() !== "") return false;
+  const kept = words.trimEnd();
+  const lastWord = kept.slice(
+    Math.max(kept.lastIndexOf(" "), kept.lastIndexOf("\t"), kept.lastIndexOf("\n")) + 1,
+  );
+  return lastWord.includes("@");
+}
 
-/** Pasted words that hold more than one word, a list or a To line, rather than part of one address. */
-const PASTED_LIST = /[\s,;]/u;
-
-/** A name's bracket or quote still open in what is typed. */
-const STILL_OPEN = /<[^>]*$|^[^"]*"[^"]*$/u;
+/** Whether pasted words hold more than one word, a list or a To line, rather than part of one address. */
+function pastedList(pasted: string): boolean {
+  const kept = pasted.trim();
+  return [" ", "\t", "\n", ",", ";"].some((mark) => kept.includes(mark));
+}
 
 /** The field's well: a control's, holding its chips in lines up to a grown note's height and scrolling past it, lighting while it holds the caret. */
 const WELL =
@@ -217,7 +231,7 @@ export function EmailChipsField({
   // Note that a paste of part of one address is the browser's own, and a list replaces what is selected and lands as chips at once.
   const onPaste = (event: ClipboardEvent<HTMLInputElement>) => {
     const pasted = event.clipboardData.getData("text");
-    if (!PASTED_LIST.test(pasted.trim())) return;
+    if (!pastedList(pasted)) return;
     event.preventDefault();
     const { selectionStart, selectionEnd } = event.currentTarget;
     const before = typed.slice(0, selectionStart ?? typed.length);
@@ -264,7 +278,7 @@ export function EmailChipsField({
           aria-invalid={wrong.length > 0 || field?.["aria-invalid"] === true ? true : undefined}
           onChange={(event) => {
             const words = event.target.value;
-            if (ADDRESS_END.test(words) && !STILL_OPEN.test(words)) take(words);
+            if (endsAddress(words)) take(words);
             else onTyped(words);
           }}
           onKeyDown={onKeyDown}
