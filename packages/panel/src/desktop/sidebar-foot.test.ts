@@ -272,7 +272,11 @@ test("Left or Escape closes Contact us's menu alone, and choosing in it closes b
     );
     assert.equal(contactMenu(), null, `${key} closes the submenu`);
     assert.ok(accountMenu(), `and ${key} leaves the account's menu standing`);
-    assert.equal(document.activeElement, accountItem("Contact us"), "focus back on Contact us");
+    assert.equal(
+      document.activeElement === accountItem("Contact us"),
+      true,
+      "focus back on Contact us",
+    );
   }
 
   act(() => accountItem("Contact us").click());
@@ -351,7 +355,7 @@ test("Sign out signs the account out on the press, with no question first", asyn
   await act(async () => accountItem("Sign out").click());
 
   assert.equal(signOuts, 1);
-  assert.equal(document.querySelector('[role="alertdialog"], [role="dialog"]'), null);
+  assert.equal(document.querySelector('[role="alertdialog"], [role="dialog"]') === null, true);
 });
 
 test("a Sign out that fails says so in a toast, and the account is still signed in", async () => {

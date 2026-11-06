@@ -269,8 +269,8 @@ test("leaving Settings gives the keyboard back to the control that held it as Se
 
   draw(PANEL_TAB.SETTINGS);
   assert.equal(
-    document.activeElement,
-    document.body,
+    document.activeElement === document.body,
+    true,
     "Settings draws over the window, the keyboard nowhere",
   );
   draw(PANEL_TAB.TASKS);
@@ -292,7 +292,7 @@ test("leaving Settings where the control that held the keyboard is gone leaves i
   opener.remove();
 
   assert.doesNotThrow(() => draw(PANEL_TAB.TASKS));
-  assert.equal(document.activeElement, document.body);
+  assert.equal(document.activeElement === document.body, true);
 });
 
 test("leaving Settings hands the keyboard to no control of a name several share, as a row's Pin is, rather than to the wrong row's", () => {
@@ -313,7 +313,7 @@ test("leaving Settings hands the keyboard to no control of a name several share,
   document.body.append(pin(), pin());
   draw(PANEL_TAB.TASKS);
 
-  assert.equal(document.activeElement, document.body);
+  assert.equal(document.activeElement === document.body, true);
 });
 
 test("leaving Settings does not hand the keyboard to the one control left of a name several shared as Settings opened", () => {
@@ -334,7 +334,7 @@ test("leaving Settings does not hand the keyboard to the one control left of a n
   document.body.append(pin());
   draw(PANEL_TAB.TASKS);
 
-  assert.equal(document.activeElement, document.body);
+  assert.equal(document.activeElement === document.body, true);
 });
 
 /**
@@ -955,7 +955,11 @@ test("while the Automations pages are still loading their frame stands the list 
   const wait = loading.querySelector("[role=status]");
   assert.equal(wait?.textContent, "Reading your automations…", "the list stands as quiet rows");
   assert.ok((wait?.querySelectorAll(".ui-skeleton").length ?? 0) > 0);
-  assert.equal(loading.querySelector("[role=switch]"), null, "their chunk has not loaded yet");
+  assert.equal(
+    loading.querySelector("[role=switch]") === null,
+    true,
+    "their chunk has not loaded yet",
+  );
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS), "Automations' way out is offered");
   });
@@ -970,7 +974,11 @@ test("while a version history's chunk is still loading, its Back row and Escape 
   const page = mount(false, { history });
   const versions = page.querySelector<HTMLElement>("nav[aria-label=Versions]");
   assert.ok(versions, "the versions' column stands");
-  assert.equal(versions.querySelector("[role=listbox], ul"), null, "its chunk has not loaded yet");
+  assert.equal(
+    versions.querySelector("[role=listbox], ul") === null,
+    true,
+    "its chunk has not loaded yet",
+  );
   const back = [...versions.querySelectorAll("button")].find(
     (button) => button.textContent?.trim().startsWith("Back") === true,
   );
@@ -1321,11 +1329,11 @@ test("Admin stands in the plan's place beside the sidebar, its row marked, with 
   );
   const main = page.querySelector(".desktop-main") ?? assert.fail("the work column");
   assert.ok(main.querySelector("section[aria-label=Admin]"), "Admin stands in the plan's place");
-  assert.deepEqual(
+  assert.equal(
     [...main.querySelectorAll("button")].filter((button) =>
       /^Back\b/u.test(button.getAttribute("aria-label") ?? button.textContent ?? ""),
-    ),
-    [],
+    ).length,
+    0,
   );
 });
 
@@ -1428,7 +1436,7 @@ test("on a phone an open task leads its own row with the way back the window's h
   const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);
   await settle();
   assert.equal(back(fromInbox).textContent, "Inbox");
-  assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls"), null);
+  assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls") === null, true);
   act(() => back(fromInbox).click());
   assert.deepEqual(left, ["left"]);
   act(() => root?.unmount());
@@ -1442,7 +1450,7 @@ test("on a phone an open task leads its own row with the way back the window's h
 
   const wide = render({ title: { label: "Inbox" } }, SHELL_ROOM.WIDE);
   await settle();
-  assert.equal(wide.querySelector(".task-head"), null);
+  assert.equal(wide.querySelector(".task-head") === null, true);
   assert.ok(
     wide.querySelector(".desktop-shell > .title-bar-controls"),
     "the sidebar's toggle stands",
@@ -1469,7 +1477,7 @@ test("on a phone an open task, which draws no sidebar toggle, still answers the 
     ),
   );
   await settle();
-  assert.equal(container.querySelector(".desktop-shell > .title-bar-controls"), null);
+  assert.equal(container.querySelector(".desktop-shell > .title-bar-controls") === null, true);
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDEBAR));
   assert.equal(toggled, 1);
 });
@@ -1527,7 +1535,7 @@ test("on a phone no page draws the title bar's controls over its own head, an ag
     agentView: { ...tasksControl().agentView, agentId: "agent-1" },
     sidePanel,
   });
-  assert.equal(agentPage.querySelector(".desktop-shell > .title-bar-controls"), null);
+  assert.equal(agentPage.querySelector(".desktop-shell > .title-bar-controls") === null, true);
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL));
   assert.equal(toggled, 1, "the panel's chord answers on the agent's page");
   act(() => root?.unmount());
@@ -1537,8 +1545,8 @@ test("on a phone no page draws the title bar's controls over its own head, an ag
     automationsView: { ...tasksControl().automationsView, open: true },
   });
   assert.equal(
-    automations.querySelector(".desktop-shell > .title-bar-controls"),
-    null,
+    automations.querySelector(".desktop-shell > .title-bar-controls") === null,
+    true,
     "nor over the Automations list",
   );
   act(() => root?.unmount());

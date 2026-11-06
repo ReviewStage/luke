@@ -462,7 +462,7 @@ test("on Vespin's key the resting Fast row says the same and links nowhere, sinc
     note.textContent ?? "",
     /Fast isn't enabled for this key's Anthropic organization\./u,
   );
-  assert.equal(note.querySelector("a"), null);
+  assert.equal(note.querySelector("a") === null, true);
 });
 
 test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place, which stores the version chosen", async () => {
@@ -479,7 +479,7 @@ test("a GPT model with an Ultrafast version draws a Speed choice in Fast's place
   ];
   stored = { model: sol.id, effort: "high" };
   const page = await mount();
-  assert.equal(page.querySelector('[role="switch"][aria-label="Fast"]'), null);
+  assert.equal(page.querySelector('[role="switch"][aria-label="Fast"]') === null, true);
   const speed = segmentedGroup(page, "Speed");
   assert.deepEqual(readSegmented(speed), {
     options: ["Standard", "Fast", "Ultrafast"],

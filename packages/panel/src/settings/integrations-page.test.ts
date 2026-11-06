@@ -1039,7 +1039,7 @@ test("a query that finds nothing says so, and clearing it brings every row back"
   await settle();
 
   assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
-  assert.equal(document.activeElement, searchField(page));
+  assert.equal(document.activeElement === searchField(page), true);
   assert.equal(announcedPolitely(), "", "the words go once the rows are back");
 });
 
@@ -1059,7 +1059,7 @@ test("while where the providers stand is read, the search stands usable above pl
   await readMoves();
 
   await vi.waitFor(() => assert.equal(readSettled(page), true));
-  assert.equal(page.querySelector('[role="status"]'), null);
+  assert.equal(page.querySelector('[role="status"]') === null, true);
   assert.deepEqual(rowNames(page), ["Linear"]);
 });
 
@@ -1081,17 +1081,17 @@ test("Command-F lands in the page's search, and Escape clears it, then lets go o
     offered = runAppCommand(APP_COMMAND.FIND);
   });
   assert.equal(offered, true);
-  assert.equal(document.activeElement, searchField(page));
+  assert.equal(document.activeElement === searchField(page), true);
 
   await searchFor(page, "deploy");
   pressEscape();
   await settle();
   assert.equal(searchField(page).value, "");
-  assert.equal(document.activeElement, searchField(page));
+  assert.equal(document.activeElement === searchField(page), true);
   assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
 
   pressEscape();
-  assert.notEqual(document.activeElement, searchField(page));
+  assert.equal(document.activeElement !== searchField(page), true);
   window.removeEventListener("keydown", listen);
   assert.deepEqual(reachedWindow, []);
 });
@@ -1260,8 +1260,9 @@ test("Return hands the focus to the held tool's page, and Escape or Left hands i
     for (const back of ["Escape", "ArrowLeft"]) {
       keyAtFocus("Enter");
       assert.equal(
-        document.activeElement,
-        page.querySelector(".integration-tool-detail-body")?.parentElement,
+        document.activeElement ===
+          page.querySelector(".integration-tool-detail-body")?.parentElement,
+        true,
       );
       assert.equal(keyAtFocus(back), true, back);
       assert.equal(toolName(document.activeElement), "get_deployment");
@@ -1341,10 +1342,10 @@ test("a tool its server says nothing of has a page that says so", async () => {
   const page = await mount();
   openRow(page, "Vercel");
 
-  assert.equal(page.querySelector(".ui-list-row-description"), null);
+  assert.equal(page.querySelector(".ui-list-row-description") === null, true);
   assert.equal(page.querySelector(".integration-tool-detail-body")?.textContent, "No description.");
-  assert.equal(page.querySelector(".integration-tool-hints"), null);
-  assert.equal(page.querySelector(".integration-tool-parameters"), null);
+  assert.equal(page.querySelector(".integration-tool-hints") === null, true);
+  assert.equal(page.querySelector(".integration-tool-parameters") === null, true);
 });
 
 test("two accounts at a provider stand as two rows named by their labels, each offering Rename and Add another account", async () => {
@@ -1450,7 +1451,7 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
 
   await choose(rowOf("Acme"), "Rename");
   const opened = field() ?? assert.fail("Rename opens the name's field");
-  assert.equal(document.activeElement, opened);
+  assert.equal(document.activeElement === opened, true);
   assert.equal(opened.value, "Acme");
   press("Escape");
   await settle();
@@ -1819,7 +1820,7 @@ test("a row's tools unroll under one chevron that turns, and roll up as it turns
 
     assert.equal(toolsChevron(page, "Linear").dataset.open, "true");
     const box = rowNamed(page, "Linear").closest("[data-motion-key]")?.querySelector(".ui-reveal");
-    assert.notEqual(box?.querySelector(".integration-tools-panel"), null);
+    assert.equal(box?.querySelector(".integration-tools-panel") !== null, true);
     assert.deepEqual(motionsOn(motions, box).at(-1), [
       { clipPath: "inset(0 0 100% 0)" },
       { clipPath: "inset(0)" },
@@ -1858,11 +1859,11 @@ test("with motion held still, a row's tools show at once and fold at once", asyn
     openRow(page, "Linear");
     await settle();
 
-    assert.notEqual(
+    assert.equal(
       rowNamed(page, "Linear")
         .closest("[data-motion-key]")
-        ?.querySelector(".integration-tools-panel"),
-      null,
+        ?.querySelector(".integration-tools-panel") != null,
+      true,
     );
     assert.deepEqual(
       motions.played.map((each) => each.keyframes),
@@ -1875,8 +1876,8 @@ test("with motion held still, a row's tools show at once and fold at once", asyn
     assert.equal(
       rowNamed(page, "Linear")
         .closest("[data-motion-key]")
-        ?.querySelector(".integration-tools-panel"),
-      null,
+        ?.querySelector(".integration-tools-panel") == null,
+      true,
     );
   } finally {
     motions.remove();

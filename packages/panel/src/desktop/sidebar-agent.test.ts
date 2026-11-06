@@ -213,7 +213,7 @@ test("an agent at rest is archived from its row's right-click at once, once its 
   await settle();
 
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
-  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.equal(document.querySelector('[role="alertdialog"]') === null, true, "nothing was asked");
 });
 
 test("the reader's own working agent is archived at once from its row, asking nothing, since its toast's Undo brings it back", async () => {
@@ -223,7 +223,7 @@ test("the reader's own working agent is archived at once from its row, asking no
   await act(async () => archive.click());
   await settle();
 
-  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.equal(document.querySelector('[role="alertdialog"]') === null, true, "nothing was asked");
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
 });
 

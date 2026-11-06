@@ -135,6 +135,6 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
   await vi.waitFor(() => assert.equal(finishStands(), true));
   act(() => button("Finish").click());
 
-  assert.equal(document.querySelector(".desktop-settings"), null, "Settings is gone");
+  assert.equal(document.querySelector(".desktop-settings") === null, true, "Settings is gone");
   assert.ok(document.querySelector(".home-composer"), "Home stands");
 });

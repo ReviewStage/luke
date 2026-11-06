@@ -156,8 +156,8 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
   assert.ok(pageText().includes("Disconnected. Its access ends within 15 minutes."), pageText());
   assert.ok(!pageText().includes("didn't finish"), pageText());
   assert.equal(
-    container.querySelector('button[aria-haspopup="menu"]'),
-    null,
+    container.querySelector('button[aria-haspopup="menu"]') === null,
+    true,
     "a disconnected agent offers no Disconnect",
   );
   assert.deepEqual(asked, [CLAUDE.clientId, CLAUDE.clientId]);

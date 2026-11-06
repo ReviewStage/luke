@@ -423,7 +423,11 @@ test("each harness's row names the credential in use, then what is wrong with it
     sent.filter((each) => each.kind === ACT_KIND.WEB_OPEN).map((each) => each.payload),
     [{ url: "https://chatgpt.com/settings/usage" }],
   );
-  assert.equal(document.querySelector('[role="dialog"]'), null, "Manage usage opens no dialog");
+  assert.equal(
+    document.querySelector('[role="dialog"]') === null,
+    true,
+    "Manage usage opens no dialog",
+  );
 });
 
 test("each harness's row stands where a link to its section lands", async () => {
@@ -439,7 +443,11 @@ test("while both credentials are saved, the dialog's own default control picks t
   held = { keys: [], subscriptions: [CLAUDE_PLAN] };
   const page = await mount();
   let dialog = await open(page, "Claude");
-  assert.equal(dialog.querySelector('[role="radio"]'), null, "one credential is the one used");
+  assert.equal(
+    dialog.querySelector('[role="radio"]') === null,
+    true,
+    "one credential is the one used",
+  );
   await press(dialog, "Done");
 
   held = { keys: [ANTHROPIC_KEY], subscriptions: [CLAUDE_PLAN] };
@@ -506,7 +514,11 @@ test("an API key is pasted into a masked field with an eye under its row, sent o
   await vi.waitFor(() =>
     assert.deepEqual(lineOf(row(dialog, "Anthropic API key")), connectedWith("Saved sk-ant-…wxyz")),
   );
-  assert.equal(row(dialog, "Anthropic API key").querySelector("input"), null, "the field closes");
+  assert.equal(
+    row(dialog, "Anthropic API key").querySelector("input") === null,
+    true,
+    "the field closes",
+  );
   assert.deepEqual(rowState(page, "Claude"), connectedWith("Anthropic API key sk-ant-…wxyz"));
   assert.ok(!document.body.innerHTML.includes(KEY), "the key stands nowhere once kept");
   for (const spy of logged) {
@@ -556,7 +568,7 @@ test("replacing a saved API key opens a New key field showing Saved where the ke
   paste(field, KEY);
   assert.equal(button(keyCard, "Show").disabled, false);
   await press(keyCard, "Cancel");
-  assert.equal(keyCard.querySelector("input"), null, "Cancel closes the field");
+  assert.equal(keyCard.querySelector("input") === null, true, "Cancel closes the field");
   assert.ok(!document.body.innerHTML.includes(KEY), "and drops what was pasted");
 });
 
@@ -733,7 +745,7 @@ test("setup connects Claude in place, with no dialog: Connect opens one row at a
   assert.match(row(page, "Codex").textContent ?? "", /ChatGPT plan or OpenAI API key/u);
 
   await press(row(page, "Claude"), "Connect Claude");
-  assert.equal(document.querySelector('[role="dialog"]'), null, "the row opens in place");
+  assert.equal(document.querySelector('[role="dialog"]') === null, true, "the row opens in place");
   assert.equal(choice(page, "Claude plan").getAttribute("aria-checked"), "true");
   const field = labeled(row(page, "Claude"), "Claude setup-token");
   assert.ok(document.activeElement === field, "the setup-token's field has focus");
@@ -747,9 +759,13 @@ test("setup connects Claude in place, with no dialog: Connect opens one row at a
   assert.ok(labeled(row(page, "Claude"), "Anthropic API key"));
 
   await press(row(page, "Codex"), "Connect Codex");
-  assert.equal(row(page, "Claude").querySelector("input"), null, "one row stands open");
+  assert.equal(row(page, "Claude").querySelector("input") === null, true, "one row stands open");
   await press(row(page, "Codex"), "Cancel");
-  assert.equal(row(page, "Codex").querySelector("input, [role='radio']"), null, "Cancel closes it");
+  assert.equal(
+    row(page, "Codex").querySelector("input, [role='radio']") === null,
+    true,
+    "Cancel closes it",
+  );
   assert.ok(document.activeElement === button(page, "Connect Codex"), "and hands focus back");
 
   await press(row(page, "Claude"), "Connect Claude");

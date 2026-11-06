@@ -310,7 +310,7 @@ test("the card, named New task, holds the composer with its words focused, the r
   const head = card.dialog()?.querySelector(".new-task-head");
   const foot = card.dialog()?.querySelector(".ui-composer-foot");
 
-  assert.equal(document.activeElement, card.field());
+  assert.equal(document.activeElement === card.field(), true);
   assert.equal(card.placeholder(), "Describe the task");
   assert.equal(controls.includes("Plan with Vespin first"), false, "no Plan toggle stands");
   for (const each of ["Add files and more", "acme/web", "Start a task with no agent"]) {
@@ -319,10 +319,14 @@ test("the card, named New task, holds the composer with its words focused, the r
   const name = card.dialog()?.getAttribute("aria-labelledby") ?? assert.fail("the card is named");
   assert.equal(document.getElementById(name)?.textContent, "New task");
   assert.equal(head?.querySelector(".repository-chip")?.textContent, "acme/web");
-  assert.equal(foot?.querySelector(".repository-chip"), null, "the foot holds no repository chip");
   assert.equal(
-    document.querySelector('[aria-label^="Workspace"]'),
-    null,
+    foot?.querySelector(".repository-chip") === null,
+    true,
+    "the foot holds no repository chip",
+  );
+  assert.equal(
+    document.querySelector('[aria-label^="Workspace"]') === null,
+    true,
     "the card offers no workspace picker",
   );
   await vi.waitFor(() =>
@@ -682,7 +686,7 @@ test("Escape puts the card away with nothing started, and focus goes back to wha
   const card = await mount();
   await card.key("Escape");
   assert.equal(card.dialog(), null);
-  assert.equal(document.activeElement, card.opener);
+  assert.equal(document.activeElement === card.opener, true);
   assert.deepEqual(card.starts, []);
 });
 
@@ -751,7 +755,7 @@ test("Escape in the repository menu closes the menu and leaves the dialog standi
   );
   assert.ok(search, "the chip's menu opens");
   await card.press("Escape", search);
-  assert.equal(document.querySelector('input[aria-label="Search repositories"]'), null);
+  assert.equal(document.querySelector('input[aria-label="Search repositories"]') === null, true);
   assert.ok(card.dialog(), "the dialog still stands");
 });
 

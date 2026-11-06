@@ -274,8 +274,8 @@ test("This Mac stands first on the row of the machine it is, its switch on, with
     (row) => row.textContent?.includes("This Mac") ?? false,
   );
   assert.equal(
-    thisMacRow?.querySelector('button[aria-haspopup="menu"]') ?? null,
-    null,
+    (thisMacRow?.querySelector('button[aria-haspopup="menu"]') ?? null) === null,
+    true,
     "This Mac's row offers no Remove",
   );
 });
