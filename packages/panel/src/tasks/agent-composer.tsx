@@ -59,7 +59,7 @@ import { AgentModelChip } from "./agent-model-chip.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
 import { type AgentServersControl, serversMenuPanel } from "./agent-servers.js";
 import { AttachFilesButton, type AttachPicker, attachmentRow } from "./attach-files-button.js";
-import { AttachedFileChips, attachmentChips, type PutBack } from "./attached-file-chips.js";
+import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
@@ -134,8 +134,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * Attachment opens the system's file picker, an image pasted into the box
  * is taken, so are words pasted long enough to bury the message, as a text
  * file, and files dropped on the card are, each drawn as a chip over
- * the foot's bar with its way off (`attached-file-chips.tsx`); a text
- * file's viewer puts its words back into the box where they fit. A file that
+ * the foot's bar with its way off (`attached-file-chips.tsx`). A file that
  * cannot come says why under the bar while the rest still come
  * (`use-attached-files.ts`). A message is words, files, or both, as the wire
  * takes it (`hasWordsOrFiles`), so files alone send too.
@@ -580,13 +579,6 @@ export function AgentComposer({
       setFilesRefused(words !== undefined);
     },
   });
-  // A text file's words back where the caret stood, spaced from the words beside them, and the file off once they land.
-  const putBack: PutBack = {
-    room: maxLength - composer.draft.length - 2,
-    onPutBack: (index, words) => {
-      if (editor.current?.mark().insert(words) === true) files.remove(index);
-    },
-  };
   const editingQueued = queueing?.editing === true;
   // Whether Send takes nothing now: the box held, unable to send, or still reading a file handed to it.
   const sendHeld = held || !sendable || files.reading;
@@ -859,7 +851,6 @@ export function AgentComposer({
             <AttachedFileChips
               files={attachmentChips(composer.attachments)}
               onRemove={held ? undefined : files.remove}
-              putBack={held ? undefined : putBack}
             />
           }
         >

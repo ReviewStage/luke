@@ -623,16 +623,7 @@ function AnswerCard({
         messages
         controls={asks ? controls : undefined}
         chips={
-          <AttachedFileChips
-            files={attachmentChips(files.attachments)}
-            onRemove={files.remove}
-            putBack={{
-              room: INBOX_BOUNDS.MAX_MESSAGE_CHARS - draft.note.length - 2,
-              onPutBack: (index, words) => {
-                if (field.editor.current?.mark().insert(words) === true) files.remove(index);
-              },
-            }}
-          />
+          <AttachedFileChips files={attachmentChips(files.attachments)} onRemove={files.remove} />
         }
         note={draft.note}
         onNote={(text) => {

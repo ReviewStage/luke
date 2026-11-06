@@ -163,8 +163,7 @@ const VIEWER_CHORD = {
 const NO_NOTES: readonly WholeFileNote[] = [];
 
 /**
- * One more thing the viewer's picture or video, or the files its place says
- * (`offeredFor`), may be given to: its button's
+ * One more thing the viewer's picture or video may be given to: its button's
  * words and glyph, and what a press does with the file shown, an act of the
  * window's (`onPress`), or opening a page outside it, which it draws as the
  * link it is (`address`, the page the file shown goes to, if it has one, and
@@ -173,8 +172,6 @@ const NO_NOTES: readonly WholeFileNote[] = [];
 export type ViewerAction = {
   readonly label: string;
   readonly icon: React.ReactNode;
-  /** Whether the action is offered for the file shown; for a picture or a video where none is given. */
-  readonly offeredFor?: ((file: FileChip) => boolean) | undefined;
 } & (
   | { readonly onPress: (file: FileChip) => void; readonly address?: undefined }
   | {
@@ -295,14 +292,14 @@ function viewerGroups(input: {
   readonly picture: string | undefined;
   /** Whether the window holds the file's bytes, which alone are copied and saved (`heldBytes`). */
   readonly held: boolean;
-  /** Whether the place's action is offered for the file shown. */
-  readonly offered: boolean;
+  /** Whether the file is a picture or a video, which the place's action is offered for. */
+  readonly media: boolean;
   readonly zoom: ImageZoom;
   readonly action: ViewerAction | undefined;
   readonly copyText: (words: string, label: string) => void;
   readonly copyImage: (url: string, label: string) => void;
 }): MenuAction[][] {
-  const { file, at, count, walk, text, picture, held, offered, zoom, action } = input;
+  const { file, at, count, walk, text, picture, held, media, zoom, action } = input;
   const place = `${String(at + 1)} of ${String(count)}`;
   const walking: MenuAction[] =
     count > 1
@@ -356,7 +353,7 @@ function viewerGroups(input: {
       : []),
   ];
   const keeping: MenuAction[] = [
-    ...(action === undefined || !offered ? [] : actionItems(action, file)),
+    ...(action === undefined || !media ? [] : actionItems(action, file)),
     ...(held
       ? [
           {
@@ -544,9 +541,8 @@ export function AttachmentViewer({
   const image = picture !== undefined;
   const held = heldBytes(file);
   const video = view === ATTACHMENT_VIEW.VIDEO;
-  // The place's own action takes the file itself, so it is offered for a picture or a video, never a diagram's code, unless the place says which files it takes.
+  // The place's own action takes the file itself, so it is offered for a picture or a video, never a diagram's code.
   const media = view === ATTACHMENT_VIEW.IMAGE || video;
-  const offered = action !== undefined && (action.offeredFor?.(file) ?? media);
   // A phone walks the files from its ⋯ and the arrow keys, with no room beside the card for the arrows or under it for the strip.
   const walking = !phone && files.length > 1;
   // A video takes a card of its own shape, so no ground stands beside it; a phone's fills the screen as its header does.
@@ -652,7 +648,7 @@ export function AttachmentViewer({
                           text: words,
                           picture,
                           held,
-                          offered,
+                          media,
                           zoom,
                           action,
                           copyText,
@@ -701,7 +697,7 @@ export function AttachmentViewer({
                       />
                     </>
                   )}
-                  {action === undefined || !offered ? null : action.address === undefined ? (
+                  {action === undefined || !media ? null : action.address === undefined ? (
                     <Button icon={action.icon} onClick={() => action.onPress(file)}>
                       {action.label}
                     </Button>
