@@ -85,4 +85,18 @@ it.layer(getTestDB())("the workspace environment store", (it) => {
       assert.deepEqual(yield* openWorkspaceEnvironment(ring, theirs), { SECRET: "theirs" });
     }),
   );
+
+  it.effect("a value sealed for another workspace or another name is left out, not opened", () =>
+    Effect.gen(function* () {
+      const mine = yield* openOwnedWorkspace;
+      const theirs = yield* openOwnedWorkspace;
+      const sealedFor = (organizationId: string, name: string) =>
+        sealWorkspaceVariable(ring, { organizationId, name }, Redacted.make("moved"));
+      yield* setWorkspaceVariable(mine, "FROM_THEIRS", sealedFor(theirs, "FROM_THEIRS"), AT);
+      yield* setWorkspaceVariable(mine, "RENAMED", sealedFor(mine, "ORIGINAL"), AT);
+      yield* set(mine, "KEPT", "kept", AT);
+
+      assert.deepEqual(yield* openWorkspaceEnvironment(ring, mine), { KEPT: "kept" });
+    }),
+  );
 });
