@@ -7,7 +7,6 @@ import {
   GroupHeader,
   Inline,
   LIST_DENSITY,
-  LIST_ROW_META,
   List,
   ListRow,
   RowHint,
@@ -20,7 +19,7 @@ import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { useChangesPeople } from "../tasks/changes-people.js";
-import { awaitsNod, NEEDS_YOU, threadsWaitingWords } from "../tasks/inbox-model.js";
+import { NEEDS_YOU, threadsWaitingWords } from "../tasks/inbox-model.js";
 import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { RunsOnPlace } from "../tasks/runs-on.js";
@@ -53,10 +52,9 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * tab; it is still a link to its page, so a right-click offers its address.
  * An agent with a thread waiting on the developer is marked as that
  * thread's Inbox row is: the attention mark at its end, before where it
- * runs, and the thread's title, a question before a notice, as its
- * description, on a line of its own under the name, the group's rows then
- * compact rather than dense, so a task opened on its plan says what waits
- * and on which agent, with no pill or word beside the mark for the eye.
+ * runs, so a task opened on its plan says which agent waits, with no pill
+ * or word beside the mark for the eye; the thread itself, title and all,
+ * is the Inbox's to say, so the row stays one dense line.
  * Those agents come first, then those at work, then the newest started; an
  * archived agent is not listed. New agent follows them at every width, as
  * the strip's "+" offers it (`newAgentStarts`), so the group stands even on a
@@ -103,17 +101,10 @@ function listedOrder(
   );
 }
 
-/** The title of the thread a waiting agent's row names: its first question, else its first notice. */
-function waitingTitle(items: readonly InboxItem[] | undefined): string | undefined {
-  return items === undefined
-    ? undefined
-    : (items.find((item) => !awaitsNod(item)) ?? items[0])?.title;
-}
-
-/** One agent's row: its tab's look, the thread it waits on the developer in, where it runs, its failed mark, and its pull request's chip where it opened one. */
+/** One agent's row: its tab's look, whether a thread of it waits on the developer, where it runs, its failed mark, and its pull request's chip where it opened one. */
 function PlanAgentRow({
   entry,
-  waitingOn,
+  waits,
   pullRequest,
   agents,
   held,
@@ -121,8 +112,8 @@ function PlanAgentRow({
   onOpenPullRequest,
 }: {
   entry: AddEntry;
-  /** The title of the thread it waits on the developer in, where one waits. */
-  waitingOn: string | undefined;
+  /** Whether a thread of it waits on the developer. */
+  waits: boolean;
   pullRequest: AgentPullRequest | undefined;
   agents: AgentsControl;
   held: HeldTranscripts;
@@ -140,13 +131,10 @@ function PlanAgentRow({
         motionKey={row.id}
         leading={<span className={SUMMARY_GLYPH}>{row.icon}</span>}
         title={<ReplayMask>{row.label}</ReplayMask>}
-        description={waitingOn}
-        descriptionReplayMasked
-        metaAt={LIST_ROW_META.TITLE}
         hint={card === undefined ? undefined : { Hint: RowHint, label: row.label }}
         meta={
           <Inline gap={GAP.ITEM} wrap={false}>
-            {waitingOn === undefined ? null : (
+            {!waits ? null : (
               <>
                 <AttentionMark />
                 <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
@@ -241,7 +229,6 @@ export function PlanAgents({
   const grouped = entries.length > 0 || starts.length > 0 || archived > 0;
   // Note that a phone's Inbox row counts only what no listed agent's row marks already.
   const listed = new Set(entries.map((entry) => entry.row.id));
-  const marked = entries.some((entry) => waiting.has(entry.row.id));
   let unmarked = 0;
   for (const [agentId, items] of waiting) if (!listed.has(agentId)) unmarked += items.length;
   const inboxRow = phone !== undefined && unmarked > 0 ? phone : undefined;
@@ -266,16 +253,12 @@ export function PlanAgents({
             fold={{ defaultOpen: !folded }}
           >
             {entries.length + starts.length === 0 ? null : (
-              <List
-                label={AGENTS_LIST}
-                density={marked ? LIST_DENSITY.COMPACT : LIST_DENSITY.DENSE}
-                moves
-              >
+              <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
                 {listedOrder(entries, waiting).map((entry) => (
                   <PlanAgentRow
                     key={entry.row.id}
                     entry={entry}
-                    waitingOn={waitingTitle(waiting.get(entry.row.id))}
+                    waits={waiting.has(entry.row.id)}
                     pullRequest={agents.pullRequests.get(entry.row.id)}
                     agents={agents}
                     held={held}
