@@ -1211,7 +1211,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   /**
-   * The owner's plan written twice, far enough apart to be two revisions:
+   * The owner's description written twice, far enough apart to be two revisions:
    * the context first, then the goal.
    */
   const twoRevisions = (userId: string, taskId: string) =>
@@ -1222,7 +1222,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
     });
 
   it.effect(
-    "another account reads no history of the plan, no revision of it, and restores none",
+    "another account reads no history of the description, no revision of it, and restores none",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask } = yield* openAccounts();
@@ -1364,7 +1364,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "the developer's edit of a plan saves their text as a revision of theirs, naming them on the sections it moved alone",
+    "the developer's edit of a description saves their text as a revision of theirs, naming them on the sections it moved alone",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -1490,7 +1490,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
 
         const theirs = INVITATIONS_TEXT.replace("Only an admin", "Only an owner");
         yield* edit(other, INVITATIONS_TEXT, theirs);
-        // The owner's own later save of another section is the plan's newest revision.
+        // The owner's own later save of another section is the description's newest revision.
         const goal = theirs.replace("invite a teammate", "invite a teammate or a guest");
         yield* edit(owner, theirs, goal);
         const conflicted = yield* edit(

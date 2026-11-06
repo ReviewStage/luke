@@ -185,7 +185,7 @@ describe("a delivery that crosses the wire", () => {
     ...document,
     tasks: { ...document.tasks, tasks, activeTaskId: openDescription.id },
   });
-  const plans = (held: AppDescriptionDocuments): AppStateSnapshot => ({
+  const descriptions = (held: AppDescriptionDocuments): AppStateSnapshot => ({
     ...document,
     [LIVE_READ.DESCRIPTION_DOCUMENT]: held,
   });
@@ -212,7 +212,7 @@ describe("a delivery that crosses the wire", () => {
     [LIVE_READ.TRANSCRIPT]: { "agent-1": { [OWN_TRANSCRIPT]: { rows: own } } },
   });
   const quietLine = line("m-1", "Read the invites.");
-  /** A plan's document holding `body` alone. */
+  /** A task's description holding `body` alone. */
   const draft = (body: string): Task["document"] => ({ body, assumptions: [] });
   const quietList = [quietItem];
   const quietInbox = { rows: quietList };
@@ -279,13 +279,13 @@ describe("a delivery that crosses the wire", () => {
       quiet: [billing.name],
     },
     {
-      name: "the held plans, a task's saved, one let go, and one kept",
-      sent: plans({
+      name: "the held descriptions, a task's saved, one let go, and one kept",
+      sent: descriptions({
         quiet: quietDescription,
         moved: { rows: { task: { ...summary("moved", "Rollout"), document: draft("# Draft") } } },
         gone: { failed: true },
       }),
-      next: plans({
+      next: descriptions({
         quiet: quietDescription,
         moved: { rows: { task: { ...summary("moved", "Rollout"), document: draft("# Final") } } },
       }),

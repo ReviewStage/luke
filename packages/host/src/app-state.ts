@@ -88,7 +88,7 @@ export const RUN_PROFILE = {
   TASKS_TRANSCRIPT: "tasks-transcript",
   /** The same task mid-call, opened at launch on the work its agent did on its calls. */
   TASKS_WORK: "tasks-work",
-  /** The same task beside its coding agent, opened at launch on its plan, whose words hold comment threads: one answered, one its agent started, one on a whole block, and one resolved. */
+  /** The same task beside its coding agent, opened at launch on its description, whose words hold comment threads: one answered, one its agent started, one on a whole block, and one resolved. */
   TASKS_COMMENTS: "tasks-comments",
   /** A synthetic account signed in, its tasks holding Inbox items: an ask of each kind, a form, a notice with code, a long thread, an answered item, and a closed one. */
   INBOX: "inbox",
@@ -677,14 +677,14 @@ export type AppMemories = AppHeldById<readonly MemorySummary[]>;
 export type AppInstalledSkills = AppHeldById<readonly InstalledSkillSummary[]>;
 
 /**
- * Each task's plan the host holds for the windows (`compose-tasks.ts`): the
+ * Each task's description the host holds for the windows (`compose-tasks.ts`): the
  * tasks a window opened, and the few it opened lately, by the task's id,
  * each as its read and the writes since stand.
  */
 export type AppDescriptionDocuments = AppHeldById<HeldDescriptionDocument>;
 
 /**
- * Each task's plan history the host holds for the windows
+ * Each task's description history the host holds for the windows
  * (`compose-tasks.ts`): the tasks whose version history a window showed, and
  * the few it showed lately, by the task's id, each its newest page as its
  * read stands and the older pages read past it laid after it.
@@ -705,7 +705,7 @@ export type AppPullRequestParts = Pick<
   (typeof PULL_REQUEST_PART_READ)[keyof typeof PULL_REQUEST_PART_READ]
 >;
 
-/** What a task's comment threads stand on: its plan, or one of its pages. */
+/** What a task's comment threads stand on: its description, or one of its pages. */
 type CommentSubjectKind = (typeof COMMENT_SUBJECT)[keyof typeof COMMENT_SUBJECT];
 
 /** One subject's comment threads, as the host's read of them stands: every thread, the oldest started first, resolved ones among them, once it answered, with the windows' writes laid over them until the read holds them. */
@@ -713,7 +713,7 @@ type AppSubjectComments = AppHostRead<readonly DescriptionCommentThread[]>;
 
 /**
  * Each task's comments the host holds for the windows
- * (`description-comment-reads.ts`): a plan's own threads by its task's id, and a
+ * (`description-comment-reads.ts`): a description's own threads by its task's id, and a
  * page's by the page's id, never its version, those a window chose and the
  * few let go lately, each as its own read stands. One absent is held by
  * nobody.
@@ -722,7 +722,7 @@ export type AppDescriptionComments = {
   readonly [Kind in CommentSubjectKind]: Readonly<Record<string, AppSubjectComments>>;
 };
 
-/** No comments held, as the host stands before any window shows a plan or a page and after the session ends. */
+/** No comments held, as the host stands before any window shows a description or a page and after the session ends. */
 export const NO_DESCRIPTION_COMMENTS: AppDescriptionComments = {
   [COMMENT_SUBJECT.PLAN]: {},
   [COMMENT_SUBJECT.PAGE]: {},
@@ -866,7 +866,7 @@ export interface AppState {
   audio: AppAudioSlice;
   /**
    * The Tasks tab's named tasks as the host's reads of the service
-   * hold them: the list and the one active task, whose plan is held apart
+   * hold them: the list and the one active task, whose description is held apart
    * (`LIVE_READ.DESCRIPTION_DOCUMENT`). Only the panel's Tasks tab draws it.
    */
   tasks: TasksView;
@@ -946,11 +946,11 @@ export interface AppState {
   [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: AppHeldById<readonly AutomationWorkspaceRun[]>;
   /** Each automation's runs the windows chose, by the automation, newest fired first, held as the automations are: what its editor and an agent its run started read. */
   [LIVE_READ.AUTOMATION_RUNS]: AppHeldById<readonly AutomationRunSummary[]>;
-  /** Each plan's or page's comment threads the windows show, held while a window holds them and a while after: what a plan's margin, its Comments tab, its summary, and a page's tab draw. */
+  /** Each description's or page's comment threads the windows show, held while a window holds them and a while after: what a description's margin, its Comments tab, its summary, and a page's tab draw. */
   [LIVE_READ.DESCRIPTION_COMMENTS]: AppDescriptionComments;
-  /** Each task's plan history the windows showed, held while a version history shows it and a while after: what the version history lists. */
+  /** Each task's description history the windows showed, held while a version history shows it and a while after: what the version history lists. */
   [LIVE_READ.HISTORY]: AppHistories;
-  /** Each task's plan the windows opened, held while a window has it open and a while after: what the task's page, a section's chip, and a mention's saved text draw. */
+  /** Each task's description the windows opened, held while a window has it open and a while after: what the task's page, a section's chip, and a mention's saved text draw. */
   [LIVE_READ.DESCRIPTION_DOCUMENT]: AppDescriptionDocuments;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
@@ -1064,7 +1064,7 @@ interface HostReadSliceEntry {
  * key's rows that moved rather than the key whole. The held reads stand
  * here, and the task list's view, keyed by part, whose lists of tasks,
  * agents, and pull requests cross as their rows, since every agent's turn
- * and every plan saved moves a row of them, and the open plan's document
+ * and every description saved moves a row of them, and the open task's description
  * crosses only where it moved.
  */
 export const HOST_READ_SLICE = {
@@ -1162,7 +1162,7 @@ export const HOST_READ_SLICE = {
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof AutomationRunSummary,
   },
-  // Note that a plan crosses whole, since each save replaces it.
+  // Note that a description crosses whole, since each save replaces it.
   [LIVE_READ.DESCRIPTION_DOCUMENT]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
 } as const satisfies { readonly [Slice in keyof AppState]?: HostReadSliceEntry };
 

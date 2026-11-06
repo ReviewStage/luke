@@ -77,7 +77,7 @@ it.effect(
 
       yield* tab.answer();
       tab.seen.asks[0]?.();
-      // The browser asked about the plan's words before reloading, and the developer stayed.
+      // The browser asked about the description's words before reloading, and the developer stayed.
       expect(tab.seen.reloads).toBe(1);
 
       yield* tab.answer();

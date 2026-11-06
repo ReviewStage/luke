@@ -10,7 +10,7 @@ import { Data, Effect, MutableHashMap, Option } from "effect";
 /**
  * kept-content.ts -- content the service answers under a key it never changes under, kept in this process alone so a thing shown again asks the service nothing.
  *
- * A picture a tool answered an agent, an inbox item's attachment, a plan's
+ * A picture a tool answered an agent, an inbox item's attachment, a description's
  * picture or a comment's file, a page's version, a file of a repository read
  * at a commit, and an image of a pull request that is an upload or a file at
  * a commit are each read once per account and answered from here after
@@ -60,7 +60,7 @@ export class InboxAttachmentKey extends Data.TaggedClass(KEPT_KIND.INBOX_ATTACHM
   readonly attachmentId: string;
 }> {}
 
-/** A picture of a plan, or a file one of its comments carries: each upload is given an id of its own. */
+/** A picture of a description, or a file one of its comments carries: each upload is given an id of its own. */
 export class DescriptionPictureKey extends Data.TaggedClass(KEPT_KIND.DESCRIPTION_PICTURE)<{
   readonly planId: string;
   readonly attachmentId: string;
@@ -172,7 +172,7 @@ export function keptOfAgent(agentId: string): (key: KeptKey) => boolean {
   };
 }
 
-/** Whether a key names content of the task: its plan's pictures and its comments' files, its pages, and the files read through it. */
+/** Whether a key names content of the task: its description's pictures and its comments' files, its pages, and the files read through it. */
 export function keptOfTask(taskId: string): (key: KeptKey) => boolean {
   return (key) => {
     switch (key._tag) {

@@ -90,7 +90,7 @@ function sectionAt(text: string, offset: number): string {
   return descriptionSections(text).findLast((section) => section.from <= offset)?.heading ?? "";
 }
 
-/** Where a thread being started stands, as the service will place it: on the plan's words its start measured, or on its page's element, or the whole page. */
+/** Where a thread being started stands, as the service will place it: on the description's words its start measured, or on its page's element, or the whole page. */
 function placed(start: DescriptionCommentStart) {
   if (!("page" in start)) {
     return {

@@ -46,16 +46,16 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 
 /**
- * A plan's pictures through the routes a desktop calls, over a real
- * dialect: a member keeps a picture on a teammate's plan and every member
+ * A description's pictures through the routes a desktop calls, over a real
+ * dialect: a member keeps a picture on a teammate's description and every member
  * of the workspace reads its bytes back under the type they were sniffed
  * to be, never cached on the way; an account outside the workspace keeps
  * and reads nothing, exactly as for a plan that does not exist; bytes that
  * are not the image their label names are refused; a recording is kept as
  * it was sent and served as a video, up to a sent video's bound and the
- * plan's count of videos; and a plan at its bound refuses in band. An upload is answered by the hosted oRPC router at the
+ * description's count of videos; and a description at its bound refuses in band. An upload is answered by the hosted oRPC router at the
  * plan's public path, and refuses exactly as the old route did. A file a
- * comment on the plan carries is served at the same path, under the type
+ * comment on the description carries is served at the same path, under the type
  * it traveled as, to the same members alone.
  *
  * Synthetic accounts, bearers, and pictures throughout.
@@ -172,7 +172,7 @@ const openSharedTask = Effect.gen(function* () {
   return { owner, teammate, outsider, planId: taskId };
 });
 
-it.layer(getTestDB())("a plan's picture routes", (it) => {
+it.layer(getTestDB())("a description's picture routes", (it) => {
   it.effect(
     "a file a teammate's comment carries is served to every member as its bytes, and to nobody else",
     () =>
@@ -221,7 +221,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
   );
 
   it.effect(
-    "a picture a teammate keeps on the plan is served to every member as its bytes, and to nobody else",
+    "a picture a teammate keeps on the description is served to every member as its bytes, and to nobody else",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, outsider, planId: taskId } = yield* openSharedTask;
@@ -318,7 +318,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
       }),
   );
 
-  it.effect("a plan holding its bound of pictures refuses one more in band", () =>
+  it.effect("a description holding its bound of pictures refuses one more in band", () =>
     Effect.gen(function* () {
       const { owner, planId: taskId } = yield* openSharedTask;
       const db = yield* Database;
@@ -341,7 +341,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
   );
 
   it.effect(
-    "a recording a member keeps is served as the video it was sent, and one past a sent video's bound, or past the plan's videos, is not kept",
+    "a recording a member keeps is served as the video it was sent, and one past a sent video's bound, or past the description's videos, is not kept",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, planId: taskId } = yield* openSharedTask;

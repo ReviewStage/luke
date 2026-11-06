@@ -76,7 +76,7 @@ function returnPresses(question: LeaveQuestion): string | undefined {
 /** Lets the question's answer reach whoever waits on it: every promise it settles runs before the next turn. */
 const settled = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-it("a quit with unsaved plan words asks first, with Cancel what Return and Esc press, and quits only once told to", async () => {
+it("a quit with unsaved description words asks first, with Cancel what Return and Esc press, and quits only once told to", async () => {
   const { quit, asked, quitsAgain, tell } = composedQuit();
   tell(true);
 

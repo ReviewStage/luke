@@ -14,7 +14,7 @@ sidebar, one page at a time:
 ```
  ┌──────────────────────────────────────────────────────────────┐
  │  [ Tasks ]   Settings                                        │
- │  [ Plan ]  Inbox  Comments  +                         [ ⋯ ]  │
+ │  [ Description ]  Inbox  Comments  +                  [ ⋯ ]  │
  │ ──────────────────────────────────────────────────────────── │
  │  acme/relay  ›  ACME-42                                      │
  │  # Teammate invitations                          (scrolls)   │
