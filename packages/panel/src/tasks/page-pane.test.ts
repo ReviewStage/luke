@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import {
+  DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_ENTRY,
   DESCRIPTION_COMMENT_SCOPE,
@@ -598,6 +599,58 @@ test("Comment asks the frame for an element, an element holding threads is pinne
   assert.ok(standing === null, "the comment being started goes");
 });
 
+/** The page's pane over `control`, an element of it picked and `words` held on it in the reader's review, as the reader would. */
+function holdOnElement(control: DescriptionCommentsControl, words: string) {
+  const mounted = mount(
+    FUNNEL,
+    readSource,
+    true,
+    { taskId: TASK },
+    {
+      control,
+      doors: { agents: undefined, me: "u-dean" },
+    },
+  );
+  const { container, frame } = mounted;
+  const box = { left: 10, top: 20, right: 200, bottom: 40 };
+  act(() => {
+    frame().dispatchEvent(new Event("load"));
+  });
+  act(() => buttonLabeled(container, "Comment on the page").click());
+  // Note that the summary's editor reads the platform off the navigator, so the stand-in keeps it.
+  vi.stubGlobal("navigator", {
+    ...navigator,
+    platform: navigator.platform,
+    userAgent: navigator.userAgent,
+    userActivation: { isActive: true },
+  });
+  postFrom(frame().contentWindow, {
+    type: PAGE_PICK_TYPE,
+    picked: { path: "body > h2:nth-of-type(1)", quote: "Totals", section: "", box },
+  });
+  const field = container.querySelector<HTMLTextAreaElement>(
+    'textarea[aria-label="Add a comment"]',
+  );
+  assert.ok(field, "the comment is started by the element");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      field,
+      words,
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => buttonNamed(container, "Start a review").click());
+  return mounted;
+}
+
+/** The button inside `within` named `label`. */
+function buttonLabeled(within: ParentNode, label: string): HTMLButtonElement {
+  return (
+    within.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`) ??
+    assert.fail(`a button labeled ${label}`)
+  );
+}
+
 test("a comment held in a review stands in the Review panel under its element's words, never in the comments column; Send review starts it held, then the summary naming it along, and a summary refused leaves the comment posted fixed, so Retry sends the summary alone and closes the panel", async () => {
   const starts: DescriptionCommentStart[] = [];
   // Note that the service refuses the summary the first time it is sent.
@@ -631,44 +684,7 @@ test("a comment held in a review stands in the Review panel under its element's 
     },
     act: async () => true,
   };
-  const { container, frame, press } = mount(
-    FUNNEL,
-    readSource,
-    true,
-    { taskId: TASK },
-    {
-      control,
-      doors: { agents: undefined, me: "u-dean" },
-    },
-  );
-  const box = { left: 10, top: 20, right: 200, bottom: 40 };
-  act(() => {
-    frame().dispatchEvent(new Event("load"));
-  });
-  await press("Comment on the page");
-  // Note that the summary's editor reads the platform off the navigator, so the stand-in keeps it.
-  vi.stubGlobal("navigator", {
-    ...navigator,
-    platform: navigator.platform,
-    userAgent: navigator.userAgent,
-    userActivation: { isActive: true },
-  });
-  postFrom(frame().contentWindow, {
-    type: PAGE_PICK_TYPE,
-    picked: { path: "body > h2:nth-of-type(1)", quote: "Totals", section: "", box },
-  });
-  const field = container.querySelector<HTMLTextAreaElement>(
-    'textarea[aria-label="Add a comment"]',
-  );
-  assert.ok(field, "the comment is started by the element");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
-      field,
-      "Per week?",
-    );
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(async () => buttonNamed(container, "Start a review").click());
+  const { container, press } = holdOnElement(control, "Per week?");
 
   await press("Show comments");
   const column = container.querySelector(".page-comments-column");
@@ -759,3 +775,62 @@ function buttonNamed(within: ParentNode, words: string): HTMLButtonElement {
   );
   return found ?? assert.fail(`a button named ${words}`);
 }
+
+test("Discard after a send that stopped part way deletes the threads it posted already, so the review leaves nothing behind", async () => {
+  const starts: DescriptionCommentStart[] = [];
+  const acted: [string, unknown][] = [];
+  const control: DescriptionCommentsControl = {
+    planId: TASK,
+    threads: [],
+    read: true,
+    failed: false,
+    onRetry: () => undefined,
+    notes: new Map(),
+    start: async (start) => {
+      starts.push(start);
+      // Note that the service takes the held comment and refuses the summary that sends the review.
+      if (start.words === "That's all.") return { note: "The service is unavailable." };
+      return {
+        thread: {
+          id: start.clientKey,
+          scope: DESCRIPTION_COMMENT_SCOPE.ELEMENT,
+          quote: "Totals",
+          section: "",
+          status: DESCRIPTION_COMMENT_STATUS.OPEN,
+          entries: [],
+          createdAt: 1,
+          updatedAt: 1,
+          revision: 1,
+        },
+      };
+    },
+    act: async (threadId, action) => {
+      acted.push([threadId, action]);
+      return true;
+    },
+  };
+  const { press } = holdOnElement(control, "Per week?");
+  await press("Review, 1 pending comment");
+  const panel = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
+  const summary = await vi.waitFor(
+    () =>
+      panel.querySelector<TiptapEditorHTMLElement>(
+        `${EDITOR_ROOT_SELECTOR}[aria-label="Review comment"]`,
+      )?.editor ?? assert.fail("the panel takes a summary"),
+  );
+  act(() => {
+    summary.commands.setContent("That's all.", { contentType: "markdown" });
+  });
+  await act(async () => buttonNamed(panel, "Send review").click());
+  await vi.waitFor(() => assert.match(panel.textContent ?? "", /could not be sent/u));
+
+  await act(async () => buttonNamed(panel, "Discard").click());
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
+    assert.fail("Discard asks first");
+  await act(async () => buttonNamed(question, "Discard review").click());
+
+  assert.deepEqual(acted, [
+    [starts[0]?.clientKey, { action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD }],
+  ]);
+});

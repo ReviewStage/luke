@@ -3690,6 +3690,7 @@ export function PageCommentLayer({
                 stands={pinStands(box)}
                 onOpen={() => {
                   onOpen(undefined);
+                  if (review.editing && heldOpen === path) return;
                   setHeldOpen(heldOpen === path ? undefined : path);
                 }}
                 onHint={(over) => onHint(over ? path : undefined)}
@@ -3756,7 +3757,10 @@ export function PageCommentLayer({
           )
         }
         side={POPOVER_SIDE.BELOW}
-        onPressAway={() => setHeldOpen(undefined)}
+        // Note that an edit standing open in the card holds it, so its words are never lost to a stray press.
+        onPressAway={() => {
+          if (review?.editing !== true) setHeldOpen(undefined);
+        }}
         holds={keepsPageCardOpen}
       >
         {review === undefined ? null : (

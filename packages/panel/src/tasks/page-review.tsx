@@ -1,6 +1,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { AgentAttachment } from "@repo/features/agent-wire";
 import {
+  DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_BOUNDS,
   type DescriptionCommentStart,
 } from "@repo/features/description-comment-wire";
@@ -310,6 +311,14 @@ export function usePageReview(
     remove,
     discard: () => {
       setFailed(false);
+      // Note that a thread a stopped send posted already is deleted with the rest, so a discarded review leaves nothing behind, as its question says.
+      for (const comment of held) {
+        if (comment.landed === true) {
+          void control?.act(comment.clientKey, {
+            action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD,
+          });
+        }
+      }
       drop((comment) => !heldOn(comment, planId, pageId));
     },
     send,
