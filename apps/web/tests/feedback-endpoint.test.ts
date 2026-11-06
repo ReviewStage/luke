@@ -24,7 +24,7 @@ function mailService() {
   vi.stubEnv("RESEND_API_KEY", "re_test");
   vi.stubEnv("FEEDBACK_TO", "founders@app.test");
   vi.stubEnv("FEEDBACK_FROM", "Vespin <feedback@app.test>");
-  const mailed: { subject?: unknown }[] = [];
+  const mailed: { from?: unknown; subject?: unknown }[] = [];
   const recorded: { url: string; body: string }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
     if (new URL(String(url)).origin === POSTHOG_HOST) {
@@ -60,6 +60,7 @@ test("a note about an experiment is mailed under a subject naming it", async () 
   const answered = await POST(note({ experiment: "browser" }));
 
   assert.equal(answered.status, 200);
+  assert.equal(mailed[0]?.from, "Vespin <feedback@app.test>");
   assert.deepEqual(
     mailed.map((mail) => mail.subject),
     ["Feedback on the browser experiment"],
