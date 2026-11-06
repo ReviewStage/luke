@@ -121,7 +121,7 @@ import {
   XIcon,
 } from "@repo/ui/icons";
 import { landedMark } from "@repo/ui/landed";
-import { PICTURE_STATE, usePicture } from "@repo/ui/picture-cache";
+import { PICTURE_STATE, usePicture } from "@repo/ui/picture-read";
 import {
   VIRTUAL_ROWS_ANCHOR,
   type VirtualRowPlace,
@@ -159,6 +159,7 @@ import {
 import { failureShown, pictureUnread } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { lazyRoute } from "../lazy-route.js";
+import { pictureQuery } from "../picture-query.js";
 import { scrollerOf } from "../scroll-within.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext, usePhoneRoom } from "../stage-room.js";
@@ -756,7 +757,7 @@ function ProxiedCheckAvatar({
   name: string;
   src: string;
 }): React.JSX.Element {
-  const state = usePicture(agentId, src, useGitHubImageRead(), pictureUnread);
+  const state = usePicture(pictureQuery(agentId, src, useGitHubImageRead()), pictureUnread);
   return (
     <CheckSquare name={name} src={state.kind === PICTURE_STATE.READY ? state.url : undefined} />
   );
@@ -2794,7 +2795,7 @@ function ConversationView({
   );
 }
 
-/** One of the overview's reads, as `useAgentRead` holds it, and whether it has been asked yet. */
+/** One of the overview's reads, as `useChangesReads` holds the changes, and whether it has been asked yet. */
 function askedYet(read: { readonly answer: unknown; readonly out: boolean }): boolean {
   return read.answer !== undefined || read.out;
 }

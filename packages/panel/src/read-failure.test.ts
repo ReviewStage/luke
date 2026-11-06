@@ -14,7 +14,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { DesktopInbox } from "./desktop/desktop-inbox.js";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop/desktop-version-history.js";
@@ -25,7 +25,12 @@ import { WorkspacePage } from "./settings/workspace-page.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { HISTORY_READ } from "./tasks/use-plan-history.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
-import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "./testing/app-bridge.js";
+import {
+  answeringChanges,
+  fakeActPort,
+  fakeActPortCalls,
+  fakeAppBridge,
+} from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { handHostReads, handInboxItems, handState } from "./testing/app-state.js";
 import { ChangesTabReading } from "./testing/changes-tab.js";
@@ -235,20 +240,28 @@ test("a side panel tab whose read failed says so alike, and Retry reads them aga
     reads += 1;
     return Promise.resolve(reads === 1 ? UNANSWERED : { pullRequest: null });
   };
+  fakeActPort({ ...fakeActPortCalls(), ...answeringChanges(readChanges) });
   const page = await mount(
     createElement(ChangesTabReading, {
       agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-      control: agentsControl({ readChanges }),
+      control: agentsControl({}),
       shown: true,
       repository: null,
       tree: { open: false, onToggle: ignore },
     }),
   );
+  // Note that the changes land through a query, so the failure is read once it is drawn.
+  await vi.waitFor(() => assert.equal(page.querySelector('[role="alert"]') !== null, true));
   const failure = readFailure(page);
   assertSaidAlike(failure, "The changes could not be read.");
   failure.retry();
-  await settle();
-  assert.equal(page.querySelector('[role="alert"]'), null, "the read landed, so nothing fails");
+  await vi.waitFor(() =>
+    assert.equal(
+      page.querySelector('[role="alert"]') === null,
+      true,
+      "the read landed, so nothing fails",
+    ),
+  );
 });
 
 test("Settings says a page's failed read alike in its card's place, the keys and the workspaces both, and Retry reads again", async () => {
@@ -262,11 +275,18 @@ test("Settings says a page's failed read alike in its card's place, the keys and
     },
   });
   const keys = await mount(createElement(AgentAuthSection, { signedIn: true, onKeys: ignore }));
-  const keysFailure = readFailure(keys);
+  // Note that the failure, and then the keys read again, stand once they reach the keys' query.
+  const keysFailure = await vi.waitFor(() => readFailure(keys));
   assertSaidAlike(keysFailure, "Your keys could not be read.");
   keysFailure.retry();
   await settle();
-  assert.equal(keys.querySelector('[role="alert"]'), null, "the keys were read, so nothing fails");
+  await vi.waitFor(() =>
+    assert.equal(
+      keys.querySelector('[role="alert"]') === null,
+      true,
+      "the keys were read, so nothing fails",
+    ),
+  );
 
   let retried = 0;
   const workspaces = await mount(

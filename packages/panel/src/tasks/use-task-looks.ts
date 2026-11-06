@@ -8,11 +8,12 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { useMutation } from "@tanstack/react-query";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Atom } from "effect/reactivity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actMutation, pressMutation } from "../act-mutations.js";
-import { APP_SLICE } from "../use-app-state.js";
+import { appStateQuery, memoizedSelect } from "../use-app-state.js";
 
 /**
  * use-task-looks.ts -- what changed since the developer last looked at a task: the open plan's sections, and the sidebar's unread tasks and agents.
@@ -73,20 +74,18 @@ export const NO_LOOKS: TaskLooks = { changed: NOTHING_CHANGED, dismiss: () => un
 /** The task the developer is looking at now: open, so every save that lands on it is seen. */
 const watchedAtom = Atom.make<string | undefined>(undefined);
 
-/** The ids of the tasks and the agents with no task the reader marked unread by hand, as the list carries them. */
-const markedUnreadIdsAtom = Atom.map(
-  APP_SLICE.TASKS,
-  (tasks): ReadonlySet<string> =>
+/** No marks by hand, before the first document arrives. */
+const NONE_MARKED: ReadonlySet<string> = new Set();
+
+/** The ids of the tasks and the agents with no task the reader marked unread by hand, as the list carries them, made once per move of the lists for every reader. */
+const selectMarkedUnreadIds = memoizedSelect(
+  (state) => [state.tasks.tasks, state.tasks.tasklessAgents],
+  (tasks, tasklessAgents): ReadonlySet<string> =>
     new Set(
-      [...(tasks?.tasks ?? []), ...(tasks?.tasklessAgents ?? [])]
+      [...tasks, ...(tasklessAgents ?? [])]
         .filter((row) => row.markedUnread === true)
         .map((row) => row.id),
     ),
-);
-
-/** Whether one task or agent is marked unread by hand, so a row reading it draws again only as its own mark moves, never another's. */
-const markedUnreadAtom = Atom.family((id: string) =>
-  Atom.map(markedUnreadIdsAtom, (marked) => marked.has(id)),
 );
 
 /** The save that last changed each of the plan's sections, each by its heading. */
@@ -311,15 +310,19 @@ function useMarkTask(): ReadMarks["mark"] {
 
 /** The marks by hand, which every menu offering Mark as unread or Mark as read writes through. */
 export function useReadMarks(): ReadMarks {
-  const marked = useAtomValue(markedUnreadIdsAtom);
+  const marked = useQuery({ ...appStateQuery, select: selectMarkedUnreadIds }).data ?? NONE_MARKED;
   const watched = useAtomValue(watchedAtom);
   const mark = useMarkTask();
   return { watched, markedUnread: (taskId) => marked.has(taskId), mark };
 }
 
-/** Whether the developer marked a plan unread by hand, as its row reads it (`markedUnreadAtom`). */
+/** Whether the developer marked a plan unread by hand, as its row reads it, so the row draws again only as its own mark moves, never another's. */
 export function useMarkedUnread(taskId: string): boolean {
-  return useAtomValue(markedUnreadAtom(taskId));
+  const select = useCallback(
+    (state: AppStateSnapshot) => selectMarkedUnreadIds(state).has(taskId),
+    [taskId],
+  );
+  return useQuery({ ...appStateQuery, select }).data === true;
 }
 
 /**

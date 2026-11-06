@@ -9,6 +9,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { pageResetControl } from "./reset.js";
@@ -55,16 +56,18 @@ test("a refused reset says why in a toast and can be pressed again", async () =>
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        "div",
-        null,
-        pageResetControl(
-          SETTINGS_VIEW.APPEARANCE,
-          settings,
-          writes,
-          rowsOn(settings, DESKTOP_CAPABILITIES),
+      withQueryClient(
+        createElement(
+          "div",
+          null,
+          pageResetControl(
+            SETTINGS_VIEW.APPEARANCE,
+            settings,
+            writes,
+            rowsOn(settings, DESKTOP_CAPABILITIES),
+          ),
+          createElement(ToastHost),
         ),
-        createElement(ToastHost),
       ),
     ),
   );
@@ -138,11 +141,13 @@ test("a browser's Appearance reset returns the theme it draws to its default and
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        "div",
-        null,
-        pageResetControl(SETTINGS_VIEW.APPEARANCE, start, store.writes, rowsOn(start, browser)),
-        createElement(ToastHost),
+      withQueryClient(
+        createElement(
+          "div",
+          null,
+          pageResetControl(SETTINGS_VIEW.APPEARANCE, start, store.writes, rowsOn(start, browser)),
+          createElement(ToastHost),
+        ),
       ),
     ),
   );
@@ -170,11 +175,13 @@ test("Undo after a browser's reset puts back the theme it reset and leaves the z
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        "div",
-        null,
-        pageResetControl(SETTINGS_VIEW.APPEARANCE, start, store.writes, rowsOn(start, browser)),
-        createElement(ToastHost),
+      withQueryClient(
+        createElement(
+          "div",
+          null,
+          pageResetControl(SETTINGS_VIEW.APPEARANCE, start, store.writes, rowsOn(start, browser)),
+          createElement(ToastHost),
+        ),
       ),
     ),
   );

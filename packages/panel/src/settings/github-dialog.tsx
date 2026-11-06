@@ -39,7 +39,7 @@ import {
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation } from "@tanstack/react-query";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
@@ -264,6 +264,13 @@ export function GitHubTokenDialog({
   );
   const openLink = useOpenLink();
   const field = useRef<HTMLInputElement | null>(null);
+  // Note that a token leaving while the card stands puts focus in the form it brings back, since its read can land after Disconnect's question handed focus back.
+  const held = token !== null;
+  const wasHeld = useRef(held);
+  useEffect(() => {
+    if (open && wasHeld.current && !held) field.current?.focus();
+    wasHeld.current = held;
+  }, [open, held]);
 
   const save = (pasted: string): Promise<ReactNode> =>
     sendGithubTokenSave({ token: pasted })

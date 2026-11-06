@@ -511,6 +511,10 @@ export const selectNotifications = (state: AppStateSnapshot) => state.notificati
 export const selectNetwork = (state: AppStateSnapshot) => state.network;
 export const selectSessionReplay = (state: AppStateSnapshot) => state.sessionReplay;
 export const selectWindow = (state: AppStateSnapshot) => state.window;
+export const selectPortForwarding = (state: AppStateSnapshot) => state.portForwarding;
+
+/** The account's workspaces, which tell their readers only as the list moves, not as the tasks beside it do. */
+export const selectWorkspaces = (state: AppStateSnapshot) => state.tasks.workspaces;
 
 /** Whether the document holds settings: nothing is drawn over one without them (`SETTINGS_HELD`). */
 export const selectSettingsHeld = (state: AppStateSnapshot): boolean =>
@@ -562,4 +566,29 @@ export function selectCapability(capability: HostCapability): (state: AppStateSn
   const select = (state: AppStateSnapshot): boolean => state.run.capabilities.includes(capability);
   capabilitySelects.set(capability, select);
   return select;
+}
+
+/**
+ * A `select` whose answer is made once per change to the parts of the
+ * document it reads, for every reader: `inputs` names those parts, and
+ * `derive` is run again only when one of them is a new object. Note that
+ * the last answer is kept rather than one per reader, because every reader
+ * of a window reads the one document, so a delivery that moved none of the
+ * parts hands each the same object. For an answer Query's structural
+ * sharing cannot keep, such as a `Map` or a `Set`, which would otherwise be
+ * made anew, and redraw its reader, on every delivery to any slice.
+ */
+export function memoizedSelect<Inputs extends unknown[], A>(
+  inputs: (state: AppStateSnapshot) => [...Inputs],
+  derive: (...inputs: Inputs) => A,
+): (state: AppStateSnapshot) => A {
+  let held: { readonly inputs: Inputs; readonly answer: A } | undefined;
+  return (state) => {
+    const next = inputs(state);
+    if (held !== undefined && next.every((input, at) => input === held?.inputs[at])) {
+      return held.answer;
+    }
+    held = { inputs: next, answer: derive(...next) };
+    return held.answer;
+  };
 }

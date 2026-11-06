@@ -62,6 +62,8 @@ let sent: { kind: PortActKind; payload: unknown }[] = [];
 let refuseSave: GitHubTokenRejection | undefined;
 /** How many of the next reads go unanswered. */
 let unansweredReads = 0;
+/** Whether the host holds no read of the token at all, as after a sign-out. */
+let cleared = false;
 /** Lays the token on the window's document, as the host lays its read and each write's answer. */
 let layToken: () => void = () => undefined;
 /** Every place in Settings the window was asked to open, in order. */
@@ -75,10 +77,12 @@ beforeEach(() => {
   sent = [];
   refuseSave = undefined;
   unansweredReads = 0;
+  cleared = false;
   opened = [];
   handState({}, { account: ADA });
   // Note that the token is laid as the host holds it, and a write's answer is laid before it answers.
   layToken = holdGitHubToken(() => {
+    if (cleared) return undefined;
     if (unansweredReads === 0) return { rows: { token: stored } };
     unansweredReads -= 1;
     return { failed: true };
@@ -138,6 +142,15 @@ async function mountAndOpen(open = true): Promise<void> {
     ),
   );
   await settle();
+  // Note that the row draws its press, or its Retry, once the token the host holds reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(
+      [...document.querySelectorAll("button")].some((each) =>
+        ["Add", "Manage", "Retry"].includes(each.textContent ?? ""),
+      ),
+      true,
+    ),
+  );
   if (!open) return;
   act(() => button(stored === null ? "Add" : "Manage").click());
   await settle();
@@ -183,7 +196,8 @@ test("with no token the row offers Add, and a token pasted into the unrecorded f
     sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_SAVE).map((each) => each.payload),
     [{ token: PASTED }],
   );
-  assert.equal(tokenField(), null);
+  // Note that the form gives way once the token the host lays after the save reaches its query.
+  await vi.waitFor(() => assert.equal(tokenField() === null, true, "the field closes"));
   act(() => button("Done").click());
   assert.match(
     document.body.textContent ?? "",
@@ -216,7 +230,7 @@ test("the dialog opens with the token field focused, and Disconnect's question g
 
   act(() => button("Manage").click());
   await settle();
-  assert.equal(tokenField(), null);
+  assert.equal(tokenField() === null, true);
   act(() => {
     button("Disconnect", dialog()).focus();
     button("Disconnect", dialog()).click();
@@ -229,13 +243,16 @@ test("the dialog opens with the token field focused, and Disconnect's question g
     ).click(),
   );
   await settle();
-  assert.ok(document.activeElement === tokenField(), "the form drawn again has focus");
+  // Note that the form stands once the token the host lays after the removal reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(document.activeElement === tokenField(), true, "the form drawn again has focus"),
+  );
 });
 
 test("a saved token's Manage opens it with Disconnect, which asks at the dialog's foot, then takes it away", async () => {
   stored = KEPT;
   await mountAndOpen();
-  assert.equal(tokenField(), null);
+  assert.equal(tokenField() === null, true);
   const asked = () => dialog().querySelector<HTMLElement>('[role="group"]');
 
   // Note that the press is made from Disconnect holding focus, as a pointer's or a key's press is.
@@ -267,7 +284,7 @@ test("a saved token's Manage opens it with Disconnect, which asks at the dialog'
   act(() => button("Disconnect token", asked() ?? assert.fail()).click());
   await settle();
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 1);
-  assert.ok(tokenField(), "the field stands again");
+  await vi.waitFor(() => assert.equal(tokenField() !== null, true, "the field stands again"));
 });
 
 test("each refused save says why and what to do next, and keeps the field", async () => {
@@ -327,7 +344,25 @@ test("a read that went unanswered says so as an alert with Retry in place of Add
 
   act(() => button("Retry").click());
   await settle();
-  button("Add");
+  // Note that Add stands once the token read again reaches its query.
+  await vi.waitFor(() => button("Add"));
+});
+
+test("a token the host clears, as a sign-out does, is drawn no more", async () => {
+  stored = KEPT;
+  await mountAndOpen(false);
+  button("Manage");
+
+  cleared = true;
+  act(() => layToken());
+  await settle();
+  await vi.waitFor(() =>
+    assert.equal(
+      [...document.querySelectorAll("button")].some((each) => each.textContent === "Manage"),
+      false,
+    ),
+  );
+  assert.ok(!(document.body.textContent ?? "").includes("octo-member"), "the token is gone");
 });
 
 test("the row draws no other account's token when Profile is drawn for another account", async () => {
@@ -358,7 +393,7 @@ test("the row draws no other account's token when Profile is drawn for another a
     );
   draw(ADA.id);
   await settle();
-  button("Manage");
+  await vi.waitFor(() => button("Manage"));
 
   draw("user-bea");
   await settle();

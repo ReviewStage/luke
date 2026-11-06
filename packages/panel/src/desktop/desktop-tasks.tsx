@@ -56,6 +56,7 @@ import { type SentLine, startsOwnAgents } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton, type ComposerModel } from "../tasks/agent-tab-skeleton.js";
+import { useChangesPeopleOf } from "../tasks/changes-people.js";
 import { startCloudDraft, useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
 import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
 import {
@@ -662,6 +663,10 @@ function PlanDocument({
     return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
   };
   // A pull request one of the task's agents opened hangs its Pull request tab's card wherever a link names it.
+  const agentPullRequests = agents.pullRequests;
+  const changesPeople = useChangesPeopleOf(
+    useMemo(() => [...agentPullRequests.keys()], [agentPullRequests]),
+  );
   const pullRequestCard = (url: string) => {
     const owned = [...agents.pullRequests].map(([agentId, each]) => ({ agentId, url: each.url }));
     // A page under an agent's pull request, as its files, is still that pull request, as its press says.
@@ -681,7 +686,7 @@ function PlanDocument({
       subject: agentSubject(agents, agentId, views.held, false),
       models: agents.models,
       pullRequest,
-      people: peopleOf(agents.changesPeople.get(agentId), pullRequest),
+      people: peopleOf(changesPeople.get(agentId), pullRequest),
       onOpenAgent: () => openAgentColumn(agentId),
     });
     return card ?? undefined;

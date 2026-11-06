@@ -5,6 +5,7 @@ import { it } from "@effect/vitest";
 import { MOTION_DELAY_MS } from "@repo/brand";
 import {
   AGENT_CALL_FAILURE,
+  type AgentChangesAnswerView,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
@@ -80,7 +81,13 @@ import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  answeringChanges,
+  fakeActPort,
+  fakeActPortCalls,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import {
   handHostReads,
@@ -384,11 +391,14 @@ interface OverviewReads {
 /** A read of the options or the marks the service did not answer. */
 const unanswered = () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED } as const);
 
+/** An agent's changes as the service answers them, by the agent and the number a tab names. */
+type ReadChanges = (agentId: string, number?: number) => Promise<AgentChangesAnswerView>;
+
 /** The plan's agents, the one whose pull request it is among them, its parts held by the host and answering as given and the fixtures otherwise. */
 function controlAnswering(
   reads: OverviewReads = {},
   state: PullRequestState = PULL_REQUEST_STATE.OPEN,
-  readChanges: AgentsControl["readChanges"] = () =>
+  readChanges: ReadChanges = () =>
     Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } }),
 ): AgentsControl {
   const answers: PullRequestPartAnswers = {
@@ -405,12 +415,20 @@ function controlAnswering(
     agentIds: [AGENT.id],
     models: [],
     pullRequests: new Map([[AGENT.id, published(state)]]),
-    readChanges,
   });
   partsOf.set(control, answers);
   drawnParts = answers;
+  changesOf.set(control, readChanges);
+  drawnChanges = readChanges;
   return control;
 }
+
+/** How the service answers each control's changes, which a test drawing several controls in turn answers as it draws each. */
+const changesOf = new WeakMap<AgentsControl, ReadChanges>();
+
+/** How the service answers the changes of the control made or drawn last. */
+let drawnChanges: ReadChanges = () =>
+  Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } });
 
 /** How the host answers each control's parts, which a test drawing several controls in turn answers as it draws each. */
 const partsOf = new WeakMap<AgentsControl, PullRequestPartAnswers>();
@@ -434,6 +452,10 @@ function holdDrawnParts(): void {
       (drawnParts[PULL_REQUEST_PART.REVIEW_OPTIONS] ?? unanswering)(agentId, number),
     [PULL_REQUEST_PART.VIEWED]: (agentId, number) =>
       (drawnParts[PULL_REQUEST_PART.VIEWED] ?? unanswering)(agentId, number),
+  });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    ...answeringChanges((agentId, number) => drawnChanges(agentId, number)),
   });
 }
 
@@ -564,6 +586,7 @@ async function draw(
   openPlace?: (link: ReadLink) => void,
 ) {
   drawnParts = partsOf.get(control) ?? drawnParts;
+  drawnChanges = changesOf.get(control) ?? drawnChanges;
   return drawn(createElement(Switching, { control, first }), registry, github, openPlace);
 }
 
@@ -634,6 +657,15 @@ function checksGlyph(tab: HTMLElement): string | null | undefined {
 async function choose(tab: HTMLElement, name: string): Promise<void> {
   act(() => option(tab, name).click());
   await settle();
+  // Note that Files changed reads its changes through a query, so it is chosen once it no longer reads them.
+  if (name === "Files changed") await vi.waitFor(() => assert.equal(readingChanges(tab), false));
+}
+
+/** Whether Files changed still says it is reading the changes. */
+function readingChanges(tab: HTMLElement): boolean {
+  return [...tab.querySelectorAll('[role="status"]')].some((status) =>
+    status.textContent?.includes("Reading changes"),
+  );
 }
 
 /** What every skeleton on screen says it stands for, those of a hidden tab left out. */
@@ -885,6 +917,10 @@ test("a picture GitHub linked to itself opens over the window rather than in the
   await settle();
   const description =
     tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
+  // Note that a picture is drawn once its query hands its read to React, a tick after it lands.
+  await vi.waitFor(() =>
+    assert.equal(description.querySelector('img[alt="before and after"]') === null, false),
+  );
   assert.equal(
     description.querySelector('img[alt="before and after"]')?.closest("a"),
     null,
@@ -943,6 +979,9 @@ test("in the viewer, Open on GitHub opens the upload GitHub linked a picture to,
   const description =
     tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
   assert.equal(description.querySelector('[aria-label="Enlarge Overview"]'), null);
+  await vi.waitFor(() =>
+    assert.equal(description.querySelector('[aria-label="Enlarge upload"]') === null, false),
+  );
   act(() =>
     (
       description.querySelector<HTMLButtonElement>('[aria-label="Enlarge upload"]') ??
@@ -4401,7 +4440,7 @@ test("the title's edit is kept as the focus leaves its field, as it is on Enter"
 
 test("Refresh, the one its screen offers, reads Files changed again once the view was shown", async () => {
   let changeReads = 0;
-  const readChanges: AgentsControl["readChanges"] = () => {
+  const readChanges: ReadChanges = () => {
     changeReads += 1;
     return Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } });
   };
@@ -4410,8 +4449,7 @@ test("Refresh, the one its screen offers, reads Files changed again once the vie
   await settle();
   assert.equal(changeReads, 0, "Files changed is not read before it is shown");
 
-  await act(async () => option(tab, "Files changed").click());
-  await settle();
+  await choose(tab, "Files changed");
   assert.equal(changeReads, 1);
   await pressToolbar(tab, "Refresh");
   await settle();
@@ -4429,7 +4467,7 @@ test("Files changed draws each review thread under its line, its comments throug
     url: `${PAGE}#pullrequestreview-9`,
     threads: [thread()],
   } as const;
-  const readChanges: AgentsControl["readChanges"] = () =>
+  const readChanges: ReadChanges = () =>
     Promise.resolve({
       pullRequest: {
         url: PAGE,
@@ -4459,8 +4497,7 @@ test("Files changed draws each review thread under its line, its comments throug
       readChanges,
     ),
   );
-  await act(async () => option(tab, "Files changed").click());
-  await settle();
+  await choose(tab, "Files changed");
   const minimize = async () => {
     act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click());
     const toggle = [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
@@ -4536,8 +4573,7 @@ test("the pointer resting on a review thread in Files changed lights the lines i
         }),
     ),
   );
-  await act(async () => option(tab, "Files changed").click());
-  await settle();
+  await choose(tab, "Files changed");
   const note = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
     INVITE_FILE.path,
     `${PAGE}#discussion_r1`,
@@ -4633,7 +4669,7 @@ test("the pointer resting on a review thread in Files changed lights the lines i
 
 test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {
   const flagged = thread({ id: "PRRT_flag" });
-  const readChanges: AgentsControl["readChanges"] = () =>
+  const readChanges: ReadChanges = () =>
     Promise.resolve({
       pullRequest: {
         url: PAGE,
@@ -4658,8 +4694,7 @@ test("a review thread on its line in Files changed is replied on and resolved fr
       readChanges,
     ),
   );
-  await act(async () => option(tab, "Files changed").click());
-  await settle();
+  await choose(tab, "Files changed");
   const drawn = lists.at(-1) ?? assert.fail("the files are drawn");
   assert.ok(
     drawn.files.some((file) => file.annotations.some((one) => one.line === 13)),
@@ -4810,13 +4845,14 @@ async function drawCommentable(
       },
     ),
   );
-  await act(async () => option(tab, "Files changed").click());
-  await settle();
+  await choose(tab, "Files changed");
   return { tab };
 }
 
 /** Presses the gutter's + on the lines given of the file, as the diff bundle tells the view, and the comment it opened. */
 async function pickLines(selection: DiffListSelection["selection"]): Promise<HTMLElement> {
+  // Note that the changes land through a query, so the files are picked from once they are drawn.
+  await vi.waitFor(() => assert.equal(lists.length > 0, true, "the files are drawn"));
   const drawn = lists.at(-1) ?? assert.fail("the files are drawn");
   const onComment = drawn.onComment ?? assert.fail("the gutter offers a comment");
   act(() => onComment({ path: INVITE_FILE.path, selection }));
@@ -5561,7 +5597,8 @@ test("a thread on a line no hunk shows, and one a later push outdated, land on t
   act(() => headPress(tab).click());
   await settle();
   assert.equal(option(tab, "Files changed").getAttribute("aria-selected"), "true");
-  assert.deepEqual(listReveals, [INVITE_FILE.path]);
+  // Note that the file is revealed once Files changed has read its changes, which land through a query.
+  await vi.waitFor(() => assert.deepEqual(listReveals, [INVITE_FILE.path]));
 
   await choose(tab, "Conversation");
   const folded =
@@ -6018,7 +6055,7 @@ test("the header counts the lines published until Files changed is first opened;
   assert.equal(tabCount(tab, "Files changed"), "3");
 
   await choose(tab, "Files changed");
-  assert.equal(headerLines(tab), "+50 −5 left");
+  await vi.waitFor(() => assert.equal(headerLines(tab), "+50 −5 left"));
   assert.equal(await linesHint(tab), "+60 −7 total");
   assert.equal(tabCount(tab, "Files changed"), "1/3 viewed");
   await choose(tab, "Conversation");
@@ -6082,7 +6119,7 @@ test("once its files are read, the header and Files changed count from them, so 
   assert.equal(headerLines(tab), "+40 −5", "until the files land, what was published");
   assert.equal(tabCount(tab, "Files changed"), "2");
   await choose(tab, "Files changed");
-  assert.equal(headerLines(tab), "+50 −5 left");
+  await vi.waitFor(() => assert.equal(headerLines(tab), "+50 −5 left"));
   assert.equal(await linesHint(tab), "+60 −7 total");
   assert.equal(tabCount(tab, "Files changed"), "1/3 viewed");
 });
@@ -6148,8 +6185,7 @@ test("a pending comment edited and saved untouched sends its Markdown back byte 
         }),
     ),
   );
-  await act(async () => option(tab, "Files changed").click());
-  await settle();
+  await choose(tab, "Files changed");
   const card = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
     INVITE_FILE.path,
     "PRRC_start",
@@ -6191,8 +6227,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
         }),
     ),
   );
-  await act(async () => option(tab, "Files changed").click());
-  await settle();
+  await choose(tab, "Files changed");
 
   const list = lists.at(-1) ?? assert.fail("the files are drawn");
   assert.deepEqual(
@@ -6300,7 +6335,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
 });
 
 test("on a phone no Preview stands beside the title, and Files changed draws no bar: the task's header's ⋯ offers each after the pull request's own, the merge staying in the header", async () => {
-  const readChanges: AgentsControl["readChanges"] = () =>
+  const readChanges: ReadChanges = () =>
     Promise.resolve({
       pullRequest: {
         url: PAGE,

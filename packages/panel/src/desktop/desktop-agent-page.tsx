@@ -52,6 +52,7 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { agentName } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
+import { useChangesPeople } from "../tasks/changes-people.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
@@ -657,6 +658,7 @@ export function DesktopAgentPage({
     sidePanel.onPreviewFile({ path: skill.path }, undefined, fileReads);
   };
   // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
+  const changesPeople = useChangesPeople(agentId);
   const pullRequestCard = useSteadyDoor((url: string) => {
     const pullRequest = control.pullRequests.get(agentId);
     if (pullRequest === undefined) return undefined;
@@ -671,7 +673,7 @@ export function DesktopAgentPage({
       subject: agentSubject(control, agentId, views.held, false),
       models: control.models,
       pullRequest,
-      people: peopleOf(control.changesPeople.get(agentId), pullRequest),
+      people: peopleOf(changesPeople, pullRequest),
       onOpenAgent: () => setDrafting(undefined),
     });
     return card ?? undefined;

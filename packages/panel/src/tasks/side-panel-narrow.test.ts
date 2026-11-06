@@ -12,6 +12,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
+import { answeringChanges, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { ChangesTabReading } from "../testing/changes-tab.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -72,13 +73,10 @@ function unmountTabs(): void {
 }
 
 /** An agent's Changes tab over its pull request's one file, a line removed and two added, with the tree beside every Changes tab held open as the panel holds it. */
-function drawChangesTab(): Promise<HTMLElement> {
-  const control = agentsControl({
-    agents: [AGENT],
-    agentIds: [AGENT.id],
-    models: [],
-    pullRequests: new Map([[AGENT.id, PULL_REQUEST]]),
-    readChanges: () =>
+async function drawChangesTab(): Promise<HTMLElement> {
+  fakeActPort({
+    ...fakeActPortCalls(),
+    ...answeringChanges(() =>
       Promise.resolve({
         pullRequest: {
           url: PULL_REQUEST.url,
@@ -99,8 +97,15 @@ function drawChangesTab(): Promise<HTMLElement> {
           comments: [],
         },
       }),
+    ),
   });
-  return mounted(
+  const control = agentsControl({
+    agents: [AGENT],
+    agentIds: [AGENT.id],
+    models: [],
+    pullRequests: new Map([[AGENT.id, PULL_REQUEST]]),
+  });
+  const tab = await mounted(
     createElement(ChangesTabReading, {
       agentId: AGENT.id,
       control,
@@ -109,6 +114,9 @@ function drawChangesTab(): Promise<HTMLElement> {
       tree: { open: true, onToggle: () => undefined },
     }),
   );
+  // Note that the changes land through a query, so the tab is read once its files are drawn.
+  await vi.waitFor(() => assert.equal(drawnToggles(tab).length > 0, true));
+  return tab;
 }
 
 beforeAll(() => {

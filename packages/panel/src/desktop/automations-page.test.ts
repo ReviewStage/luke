@@ -2641,8 +2641,18 @@ test("a default model that could not be read is said as unknown, and a model can
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  assert.equal(page.querySelector(".agent-model-chip"), null, "no model is drawn as the default");
-  assert.match(page.textContent ?? "", /It runs on your default model, which could not be read\./u);
+  // Note that the default reads as failed once the preferences' failure reaches their query.
+  await vi.waitFor(() =>
+    assert.match(
+      page.textContent ?? "",
+      /It runs on your default model, which could not be read\./u,
+    ),
+  );
+  assert.equal(
+    page.querySelector(".agent-model-chip") === null,
+    true,
+    "no model is drawn as the default",
+  );
   // Note that the menu is hung from the chip by its laid-out boxes, which jsdom draws none of.
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("automation-model-picker"))
@@ -3613,13 +3623,17 @@ test("a model catalog that could not be read says so in the model menu, and Retr
       return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
   });
-  act(() => button("Choose a model").click());
+  // Note that the picker stands once the failed reads reach their queries.
+  const choose = await vi.waitFor(() => button("Choose a model"));
+  act(() => choose.click());
   await settle();
 
   const menu = page.querySelector(".ui-searchable-menu") ?? assert.fail("the model menu opens");
-  assert.equal(
-    menu.querySelector("[role=alert]")?.textContent,
-    "The models could not be read.Retry",
+  await vi.waitFor(() =>
+    assert.equal(
+      menu.querySelector("[role=alert]")?.textContent,
+      "The models could not be read.Retry",
+    ),
   );
   assert.equal(menu.querySelector("[role=status]"), null, "it does not read for ever");
 
@@ -3631,7 +3645,7 @@ test("a model catalog that could not be read says so in the model menu, and Retr
   await settle();
 
   assert.equal(catalogReads, readsBefore + 1, "Retry reads the catalog again");
-  assert.equal(menu.querySelector("[role=alert]"), null);
+  await vi.waitFor(() => assert.equal(menu.querySelector("[role=alert]") === null, true));
   assert.ok(menu.querySelectorAll("[role=option]").length > 0, "the models are listed");
 });
 
@@ -3645,9 +3659,8 @@ test("workspace agents the task list failed to carry say so in the Agent row, an
   assert.match(page.textContent ?? "", /The workspace's agents could not be read\./u);
 
   act(() => button("Retry").click());
-  await settle();
 
-  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  await vi.waitFor(() => assert.doesNotMatch(page.textContent ?? "", /could not be read/u));
   assert.equal(picked(page, "Agent"), "Started by its first run");
 });
 

@@ -1,5 +1,5 @@
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
-import { TASK_CALL_FAILURE, type TasksTreeAnswer } from "@repo/features/tasks-view";
+import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -56,7 +56,13 @@ import {
 } from "./file-tab-model.js";
 import { FileTreePane } from "./file-tree-pane.js";
 import { listingOf } from "./folder-listings.js";
-import { taskFileQueryOptions, taskTreeKey, taskTreeQueryOptions } from "./repository-reads.js";
+import {
+  ReadRefused,
+  refusedAnswer,
+  taskFileQueryOptions,
+  taskTreeKey,
+  taskTreeQueryOptions,
+} from "./repository-reads.js";
 import { linkPressOf } from "./use-open-link.js";
 import {
   FILE_HISTORY_STEP,
@@ -715,7 +721,7 @@ export function FileView({
     (path: string, recursive = false): Promise<TasksTreeAnswer> =>
       queryClient
         .fetchQuery(taskTreeQueryOptions(latestPlace.current, path, recursive))
-        .catch((): TasksTreeAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED })),
+        .catch((error: unknown): TasksTreeAnswer => refusedAnswer(error)),
     [queryClient],
   );
   // The whole repository is listed beside the folders, read once however many File tabs search it.
@@ -746,7 +752,11 @@ export function FileView({
               ...(commit === undefined ? undefined : { ref: commit }),
             }),
           )
-          .then(wholeTextOf, (cause: unknown) => ({ kind: WHOLE_TEXT.UNREAD, cause }));
+          .then(wholeTextOf, (error: unknown) =>
+            error instanceof ReadRefused
+              ? wholeTextOf(error.answer)
+              : { kind: WHOLE_TEXT.UNREAD, cause: error },
+          );
   const fileViewEnd = useFileViewEnd({
     path: file.path,
     ready: read.kind === FILE_READ.READY,

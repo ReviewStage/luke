@@ -72,7 +72,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * `--ui-video-natural-height`, plain numbers the place may fit it by.
  *
  * The bytes arrive as a picture's do, as a `data:` URL the window's picture
- * reads hold (`picture-cache.ts`, the inbox's own), and play
+ * reads hold (`picture-read.ts`, the inbox's own), and play
  * from a `blob:` address made of them here and let go of as the player goes,
  * because neither window's content policy lets media load from a `data:`
  * address, where both allow `blob:`. What holds the player keeps it out of

@@ -13,9 +13,9 @@ import {
 } from "@repo/ui";
 import { useMutation } from "@tanstack/react-query";
 import { FlaskConicalIcon } from "lucide-react";
-import { askActResult } from "../act.js";
 import { actMutation } from "../act-mutations.js";
 import { useOpenFeedback } from "../open-feedback.js";
+import { actionRefused, refusalToast, rowWrite } from "./row-write.js";
 import { SwitchRow } from "./switch-row.js";
 
 /**
@@ -25,7 +25,7 @@ import { SwitchRow } from "./switch-row.js";
  * title and each row's one line are the whole of it. A row's switch writes
  * the account's choice on the service at once, as every Settings switch
  * writes, so the feature appears or goes on every Mac the account opens; a
- * write the service refused is said under the row, and the switch stays. Each
+ * write the service refused puts the switch back and is said in a toast. Each
  * row's Send feedback opens the window's feedback dialog about that
  * experiment. With none standing, the page keeps its place and draws the
  * empty state the empty Inbox draws, so a link or a search result that lands
@@ -47,7 +47,10 @@ const SIGN_IN_NOTE = SIGNED_OUT_WORDS;
 
 /** One experiment's row: its switch, what turning it on brings, and the way to say how it went. */
 function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): React.JSX.Element {
-  const { mutateAsync: sendExperimentSet } = useMutation(actMutation(ACT_KIND.EXPERIMENT_SET));
+  const mutation = useMutation({
+    ...actMutation(ACT_KIND.EXPERIMENT_SET),
+    onSettled: refusalToast(actionRefused),
+  });
   const openFeedback = useOpenFeedback();
   return (
     <SwitchRow
@@ -63,7 +66,11 @@ function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): 
         </>
       }
       checked={on}
-      onChange={(next) => askActResult(sendExperimentSet({ experiment: entry.key, on: next }))}
+      write={rowWrite(mutation, {
+        ask: (next: boolean) => ({ experiment: entry.key, on: next }),
+        refused: actionRefused,
+        drawn: (asked) => asked.on,
+      })}
     />
   );
 }

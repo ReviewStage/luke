@@ -1,10 +1,10 @@
 import { LIVE_READ } from "@repo/features/live-wire";
 import { type RunOnMacReason, runOnMacReason } from "@repo/features/workspace-tools-model";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { HOST_CAPABILITY, MAC_COMMAND_MODE } from "@repo/settings";
 import { useQuery } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
-import { APP_SLICE, appStateQuery, selectCapability, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
@@ -38,10 +38,8 @@ export interface WorkspaceToolsRead {
 }
 
 /** Whether this window's Settings let no agent run commands on its Mac, which tells its readers only as that turns. */
-const MAC_COMMANDS_NEVER = Atom.map(
-  APP_SLICE.SETTINGS,
-  (settings) => settings?.stored.macCommands === MAC_COMMAND_MODE.NEVER,
-);
+const selectMacCommandsNever = (state: AppStateSnapshot): boolean =>
+  state.settings?.stored.macCommands === MAC_COMMAND_MODE.NEVER;
 
 /** The agent's built-in tools, held for as long as the caller is drawn; nothing is held for no agent. */
 export function useWorkspaceTools(door: WorkspaceToolsDoor | undefined): WorkspaceToolsRead {
@@ -49,7 +47,7 @@ export function useWorkspaceTools(door: WorkspaceToolsDoor | undefined): Workspa
   const onMac =
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.MAC_COMMANDS) }).data ===
     true;
-  const never = useAppSlice(MAC_COMMANDS_NEVER);
+  const never = useQuery({ ...appStateQuery, select: selectMacCommandsNever }).data === true;
   return {
     answer: rows,
     failed: status === HOST_READ_STATUS.FAILED,

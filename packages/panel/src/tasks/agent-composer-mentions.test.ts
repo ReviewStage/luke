@@ -69,7 +69,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -1033,10 +1033,13 @@ async function workspaceBox(registry?: AtomRegistry.AtomRegistry) {
     sent.push(text);
     return new Promise<AgentAgentAnswer>(ignore);
   };
+  const on = registry ?? registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  // Note that the test's Query client is handed the bridge's document before the first frame, so the agents' list reads the task list from it rather than racing its read.
+  writeAppState(stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), { tasks: tasksView() }));
   const { container } = drawing(
     createElement(WorkspacePage, null, createElement(Box, { sender, skills: noSkills })),
     undefined,
-    registry,
+    on,
   );
   await settle();
   return { container, sent };

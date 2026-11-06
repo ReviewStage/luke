@@ -67,9 +67,9 @@ import {
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ASSIGNED_TO } from "@repo/ui/task-list-model";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
+import { useQueryClient } from "@tanstack/react-query";
 import { ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -242,9 +242,12 @@ function AgentRow({
   const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
   const card = <AgentCard subject={subject} models={tasks.agents.models} />;
-  const { act } = useAct();
+  const queryClient = useQueryClient();
   // Note that the agent is read again by its own id before a teammate's is archived, because the agents control reads only the open task's.
-  const control = { ...tasks.agents, readAgent: (agentId: string) => readAgentById(act, agentId) };
+  const control = {
+    ...tasks.agents,
+    readAgent: (agentId: string) => readAgentById(queryClient, agentId),
+  };
   const actions = useAgentActions({ ...agent, planId: task.id }, control, {
     label: subject.name,
     shown: tasks.shown,

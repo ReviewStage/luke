@@ -214,6 +214,28 @@ test("a File tab opened again whose head read then fails asks for the head again
   assert.equal(heads.length, 3, "the head is read on opening, on opening again, and on Retry");
 });
 
+test("a File tab pinned to a commit whose read the service refused reads it again when opened again", async () => {
+  const asked: TaskFileRequest[] = [];
+  const read = service(asked);
+  const file = { path: PATH, range: undefined, opened: 1, commit: PINNED };
+  const refusing = (request: TaskFileRequest) => {
+    asked.push(request);
+    return Promise.resolve({ refusal: TASK_FILE_REFUSAL.UNAVAILABLE, branch: "main" });
+  };
+  const first = drawTab(file, (request) => refusing({ ...request, ref: PINNED }));
+  await vi.waitFor(() =>
+    assert.equal(
+      [...first.querySelectorAll("button")].some((button) => button.textContent === "Retry"),
+      true,
+    ),
+  );
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.replaceChildren();
+
+  await tab(file, (request) => read({ ...request, ref: PINNED }));
+  assert.equal(asked.length, 2, "the refused read is asked again rather than served from before");
+});
+
 test("the lines a File tab was opened on are lit", async () => {
   const container = await tab(
     { path: PATH, range: { startLine: 1, endLine: 1 }, opened: 1 },

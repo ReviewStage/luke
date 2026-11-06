@@ -59,14 +59,14 @@ import {
 import { networkConnected } from "@repo/host/app-state";
 import { ACT_ERROR, type PortActKind } from "@repo/host/contract";
 import type { ConfirmFailure } from "@repo/ui/confirm-state";
-import type { PictureUnread } from "@repo/ui/picture-cache";
+import type { PictureUnread } from "@repo/ui/picture-read";
 import type { ReportedFailure, ShownError } from "@repo/ui/reported-failure";
-import type { SettingRefusal } from "@repo/ui/use-setting-write";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Clock, Context, Predicate } from "effect";
 import type { ReactNode } from "react";
 import { appPlatform } from "./app-platform.js";
 import { rendererServicesNow } from "./renderer-runtime.js";
+import type { SettingRefusal } from "./settings/row-write.js";
 import { appStateNow } from "./use-app-state.js";
 
 /**

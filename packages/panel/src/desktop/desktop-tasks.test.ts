@@ -195,7 +195,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
 
-  act(() => root.render(withQueryClient(opened({ kind: DOCUMENT_REGION.READING }))));
+  act(() => root.render(opened({ kind: DOCUMENT_REGION.READING })));
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
@@ -203,12 +203,10 @@ test("a task's comments are held from its open, so its first ready frame marks t
 
   act(() =>
     root.render(
-      withQueryClient(
-        opened({
-          kind: DOCUMENT_REGION.READY,
-          task: { ...TASK, document: { body, assumptions: [] } },
-        }),
-      ),
+      opened({
+        kind: DOCUMENT_REGION.READY,
+        task: { ...TASK, document: { body, assumptions: [] } },
+      }),
     ),
   );
   assert.equal(

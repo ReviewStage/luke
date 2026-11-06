@@ -22,8 +22,8 @@ import {
   useFilePicker,
 } from "@repo/ui";
 import { CaptionsIcon, GLYPH, Maximize2Icon, TextCursorInputIcon } from "@repo/ui/icons";
-import { keepPictureRead, PICTURE_STATE, usePicture } from "@repo/ui/picture-cache";
-import { useMutation } from "@tanstack/react-query";
+import { PICTURE_STATE, usePicture } from "@repo/ui/picture-read";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { actMutation } from "../act-mutations.js";
@@ -37,6 +37,7 @@ import {
   PICTURE_PENDING_CLASS,
   PictureBlock,
 } from "../picture-block.js";
+import { keepPictureRead, pictureQuery } from "../picture-query.js";
 import type {
   PictureNode,
   PictureNodeDoors,
@@ -330,9 +331,7 @@ function KeptPicture({
   const { picture, selected, doors } = drawn;
   const named = planAttachmentOf(picture.src);
   const state = usePicture(
-    named?.taskId ?? "",
-    named?.attachmentId ?? "",
-    door.read,
+    pictureQuery(named?.taskId ?? "", named?.attachmentId ?? "", door.read),
     pictureUnread,
   );
   const [describing, setDescribing] = useState<Describing | undefined>(undefined);
@@ -410,6 +409,7 @@ export function useEditorPictures(
   handle: React.RefObject<PlanEditorHandle | undefined>,
 ): EditorPictures {
   const { mutateAsync: sendKeep } = useMutation(actMutation(ACT_KIND.TASKS_PICTURE_KEEP));
+  const queryClient = useQueryClient();
   const door = usePlanPicturesDoor();
   const [drawn, setDrawn] = useState<readonly DrawnPicture[]>([]);
   const [uploads, setUploads] = useState<ReadonlyMap<string, Upload>>(new Map());
@@ -432,14 +432,14 @@ export function useEditorPictures(
         settled(taken.upload, { kind: UPLOAD.FAILED, url, reason, taken });
       const kept = await sendKeep({ planId: taskId, picture: url }).catch(() => undefined);
       if (kept === undefined || "failure" in kept) return failed(keepFailedWords(kept?.failure));
-      keepPictureRead(taskId, kept.id, url);
+      keepPictureRead(queryClient, taskId, kept.id, url);
       handle.current?.settlePicture(
         taken.upload,
         planAttachmentAddress({ taskId, attachmentId: kept.id }, workspace),
       );
       settled(taken.upload, undefined);
     },
-    [sendKeep, handle, taskId, settled, workspace],
+    [sendKeep, queryClient, handle, taskId, settled, workspace],
   );
   // Note that a picture of another plan is read as that plan's before it is kept again.
   const begin = useCallback(

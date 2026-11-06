@@ -24,7 +24,7 @@ import {
   refusalLine,
   refusalPasses,
 } from "./file-tab-model.js";
-import { taskFileQueryOptions } from "./repository-reads.js";
+import { ReadRefused, taskFileQueryOptions } from "./repository-reads.js";
 import { useMentionDrop, useTaskMentions } from "./task-mentions.js";
 import type { FileReadPlace, OpenFile } from "./use-side-panel.js";
 import { WholeFile, type WholeFileHandle, type WholeFileNote } from "./whole-file.js";
@@ -57,6 +57,11 @@ import { WholeFile, type WholeFileHandle, type WholeFileNote } from "./whole-fil
 /** The first line of a file, the one read to learn the commit the head stands at. */
 const FIRST_LINE = { firstLine: 1, lastLine: 1 } as const;
 
+/** The read a failed query stands for: the refusal the service answered, or a read that never arrived. */
+function failedRead(error: unknown): FileRead {
+  return error instanceof ReadRefused ? notRead(error.answer) : { kind: FILE_READ.FAILED };
+}
+
 /** The read a refusal or a failure stands for, from an answer that carried no file. */
 function notRead(answer: TasksFileAnswer): FileRead {
   if ("refusal" in answer) {
@@ -77,6 +82,8 @@ interface ReadStanding {
   readonly status: (typeof QUERY_STATUS)[keyof typeof QUERY_STATUS];
   readonly fetching: boolean;
   readonly data: TasksFileAnswer | undefined;
+  /** Why the read failed, a refusal the service answered among them. */
+  readonly error: unknown;
 }
 
 /**
@@ -92,13 +99,13 @@ function wholeTextRead(
 ): FileRead {
   if (pinned === undefined) {
     if (head.status === QUERY_STATUS.PENDING || head.fetching) return { kind: FILE_READ.READING };
-    if (head.data === undefined || head.status === QUERY_STATUS.ERROR)
-      return { kind: FILE_READ.FAILED };
+    if (head.status === QUERY_STATUS.ERROR) return failedRead(head.error);
+    if (head.data === undefined) return { kind: FILE_READ.FAILED };
     if (!("file" in head.data)) return notRead(head.data);
   }
   if (whole.status === QUERY_STATUS.PENDING || whole.fetching) return { kind: FILE_READ.READING };
-  if (whole.data === undefined || whole.status === QUERY_STATUS.ERROR)
-    return { kind: FILE_READ.FAILED };
+  if (whole.status === QUERY_STATUS.ERROR) return failedRead(whole.error);
+  if (whole.data === undefined) return { kind: FILE_READ.FAILED };
   if (!("text" in whole.data)) return notRead(whole.data);
   const { repository, branch, text } = whole.data.text;
   const commit =
@@ -216,16 +223,31 @@ export function FileTab({
     enabled: pinned !== undefined || headRead,
   });
   // Note that the read is drawn from what each result says rather than the result itself, which is a new object every render.
-  const { status: headStatus, isFetching: headFetching, data: headData } = head;
-  const { status: wholeStatus, isFetching: wholeFetching, data: wholeData } = whole;
+  const { status: headStatus, isFetching: headFetching, data: headData, error: headError } = head;
+  const {
+    status: wholeStatus,
+    isFetching: wholeFetching,
+    data: wholeData,
+    error: wholeError,
+  } = whole;
   const read = useMemo(
     () =>
       wholeTextRead(
         pinned,
-        { status: headStatus, fetching: headFetching, data: headData },
-        { status: wholeStatus, fetching: wholeFetching, data: wholeData },
+        { status: headStatus, fetching: headFetching, data: headData, error: headError },
+        { status: wholeStatus, fetching: wholeFetching, data: wholeData, error: wholeError },
       ),
-    [pinned, headStatus, headFetching, headData, wholeStatus, wholeFetching, wholeData],
+    [
+      pinned,
+      headStatus,
+      headFetching,
+      headData,
+      headError,
+      wholeStatus,
+      wholeFetching,
+      wholeData,
+      wholeError,
+    ],
   );
   // Retry reads again the read that stopped the tab: the head's where it failed or named no file, else the whole text.
   // Note that a head read again that failed keeps the file it named before, so its status is weighed beside its answer.

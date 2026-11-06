@@ -5,7 +5,6 @@ import {
   signedInAccountId,
 } from "@repo/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS, VERB } from "@repo/features/words";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
@@ -28,12 +27,13 @@ import {
 import { accountActor } from "@repo/ui/actor-model";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import type { ActionResult } from "@repo/wire";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import { githubTokenQuery, githubTokenRetryMutation } from "../live-reads.js";
 import { showToast, TOAST_HOLD } from "../toast.js";
 import { useHeldThroughExit } from "../use-held-through-exit.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useBusyPress } from "./busy-press.js";
 import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
 
@@ -79,8 +79,9 @@ export async function signOutSayingFailure(onSignOut: () => Promise<void>): Prom
  * neither Add nor Manage, since what stands is unknown.
  */
 function GitHubTokenRow({ accountId }: { accountId: string | undefined }): React.JSX.Element {
-  const { rows, status, retry } = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
-  const token = rows?.token;
+  const read = useQuery(githubTokenQuery(accountId));
+  const retry = useMutation(githubTokenRetryMutation());
+  const token = read.data?.token;
   const [managing, setManaging] = useState(false);
   // Note that the card is drawn for the token it opened over until its fade has run, so it does not change under its own exit.
   const { held: drawn, onExited } = useHeldThroughExit(
@@ -99,11 +100,11 @@ function GitHubTokenRow({ accountId }: { accountId: string | undefined }): React
         description={token ? <TokenFacts token={token} /> : undefined}
         // Note that a row with nothing below draws no `below` at all, since its box keeps a margin.
         below={
-          status === HOST_READ_STATUS.FAILED
+          read.isError
             ? () => (
                 <FailureNote
                   failure={unreadShown(FAILURE_SURFACE.ACCOUNT_TOKEN_READ)}
-                  onRetry={retry}
+                  onRetry={() => retry.mutate()}
                 >
                   {TOKEN_READ_FAILED}
                 </FailureNote>
