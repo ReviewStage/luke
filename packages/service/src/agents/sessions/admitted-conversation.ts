@@ -1,12 +1,9 @@
+/**
+ * admitted-conversation.ts -- the conversation an agent's call was admitted to, or why it was not.
+ */
+
 import type { ConversationTarget } from "@repo/database/models/writer";
 import type { Result } from "effect";
-import type { EveHostRefusal } from "./bounds.js";
-
-export {
-  claimRuntimeSession,
-  conversationReachableBy,
-  runtimeSessionReachableBy,
-} from "@repo/database/models/recorded-session";
 
 /**
  * The conversation an agent's call was admitted to (`../workspace-mcp/bearer.ts`
@@ -25,5 +22,12 @@ export interface AdmittedConversation {
   readonly timeZone: string | undefined;
 }
 
+/** Why a call was not admitted to a conversation, in words the model or a route can read. */
+export const ADMISSION_REFUSAL = {
+  NOT_OWNER: "Not run: this conversation belongs to another account.",
+} as const;
+
+type AdmissionRefusal = (typeof ADMISSION_REFUSAL)[keyof typeof ADMISSION_REFUSAL];
+
 /** The conversation the session was admitted to, or the one word for why it was not. */
-export type ConversationAdmission = Result.Result<AdmittedConversation, EveHostRefusal>;
+export type ConversationAdmission = Result.Result<AdmittedConversation, AdmissionRefusal>;

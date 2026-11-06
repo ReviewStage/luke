@@ -609,7 +609,7 @@ it.effect(
 );
 
 it.effect(
-  "a message outlasts the service's wait for the agent's conversation and its thirty-second hand-over to eve, so one that lands slowly answers as sent, and is unanswered only past its own deadline",
+  "a message outlasts the service's wait for the agent's conversation and its thirty-second hand-over to the agent's session, so one that lands slowly answers as sent, and is unanswered only past its own deadline",
   () =>
     Effect.gen(function* () {
       const request = { text: "Also the emails.", clientKey: "key-1" };

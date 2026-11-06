@@ -168,7 +168,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const sentry = recordingSentry();
-      // Note that the span is written as eve writes its own agent spans, by its trace policy rather than Sentry's.
+      // Note that the span is written as the retired runtime wrote its own agent spans, by its trace policy rather than Sentry's.
       yield* Effect.void.pipe(
         Effect.withSpan("chat claude", {
           attributes: {
@@ -351,7 +351,7 @@ it.effect(
       const sentry = recordingSentry();
       const callback = "https://app.test/api/auth/callback/github?code=fixture-oauth-code";
       yield* Effect.gen(function* () {
-        // Note that the request is attached as Sentry's HTTP and request-data integrations attach the one an eve root answers.
+        // Note that the request is attached as Sentry's HTTP and request-data integrations attach the one a web function answers.
         yield* Effect.sync(() => {
           Sentry.addIntegration(Sentry.requestDataIntegration());
           Sentry.getIsolationScope().setSDKProcessingMetadata({
@@ -367,10 +367,7 @@ it.effect(
       assert.deepEqual(
         { request: [request.url, request.query_string], breadcrumb: breadcrumbs[0].data.url },
         {
-          request: [
-            "https://app.test/api/auth/callback/github?code=[redacted]",
-            "code=[redacted]",
-          ],
+          request: ["https://app.test/api/auth/callback/github?code=[redacted]", "code=[redacted]"],
           breadcrumb: "https://app.test/api/auth/callback/github?code=[redacted]",
         },
       );

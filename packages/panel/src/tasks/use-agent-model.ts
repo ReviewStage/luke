@@ -29,7 +29,7 @@ export interface AgentModelControl {
   note: string | undefined;
   /** Changes the agent's model, effort, and context window for its next step. */
   choose: (next: ModelChoice) => void;
-  /** The provider's own harness the agent runs on, which narrows what the chip offers; none on eve. */
+  /** The provider's own harness the agent runs on, which narrows what the chip offers; none on the retired runtime. */
   runtime?: AgentRuntime | undefined;
 }
 

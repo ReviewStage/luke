@@ -1049,8 +1049,8 @@ function credentialMissingFailure(
 
 /**
  * The plan that pays for an agent on a provider's own harness, which only
- * its plan runs (`agent-runtime-choice.ts`); none for an agent on eve,
- * which a key pays for.
+ * its plan runs (`agent-runtime-choice.ts`); none for an agent on the
+ * retired runtime, which a key paid for.
  */
 export function planPayerOf(runtime: AgentRuntime | undefined): AgentPayer | undefined {
   if (runtime === AGENT_RUNTIME.CLAUDE_CODE) return AGENT_PAYER.CLAUDE_SUBSCRIPTION;
@@ -1895,7 +1895,7 @@ export function agentPart(part: WireValue): AgentPart {
   }
   if (part.type === AGENT_PART.STEP_START) return { kind: AGENT_PART.STEP_START };
   if (part.type.startsWith(TOOL_PART_TYPE_PREFIX)) {
-    // A native harness's call is read as the eve call that draws it (`native-tool-calls.ts`).
+    // A native harness's call is read as the call of the same kind, which draws it (`native-tool-calls.ts`).
     const call = drawnCall({
       tool: part.type.slice(TOOL_PART_TYPE_PREFIX.length),
       input: part.input,
@@ -2899,7 +2899,7 @@ export function openingLineOf(words: {
 /**
  * The line an agent was started on, while its transcript reads back no line
  * of the developer's. Note that the service writes that first row under a
- * key of its own, or eve under none, so the line is let go by any row of
+ * key of its own, or the retired runtime under none, so the line is let go by any row of
  * theirs rather than by its id, and the first is always that one.
  */
 export function unreadOpeningLine(

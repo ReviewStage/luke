@@ -6,7 +6,7 @@ import { conversations } from "./storage.js";
 /**
  * native-call-key.ts -- the key a native agent's call of one of our tools runs under, kept so the call run again runs under the same one.
  *
- * eve keys a tool call on its own id for the call, so a call run again
+ * Our tools key a call on the key it runs under, so a call run again
  * sends or starts once. A Claude Code or Codex agent reaches our tools
  * over MCP (`packages/service/src/agents/workspace-mcp/`), whose server keeps no
  * session and whose harness names a retry by nothing the first call had, so
@@ -26,7 +26,7 @@ export const nativeCallKey = pgTable(
       .references(() => conversations.id, { onDelete: "cascade" }),
     /** The digest of the tool's name and the call's input, as the server takes them. */
     digest: text("digest").notNull(),
-    /** The key the call runs under, as eve's id for a call is. */
+    /** The key the call runs under, as a call of our tools is keyed. */
     key: text("key").notNull(),
     /** When the key was minted, which bounds the window a call of the same input reads it within. */
     mintedAt: timestamptz("minted_at").notNull(),

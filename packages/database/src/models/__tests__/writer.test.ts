@@ -27,7 +27,7 @@ import { awaitingLinesOf, listMessagesPast, readMessageByClientId } from "../mes
 import { STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
 
 /**
- * The store writer's journal over a real dialect: as eve runs a step again,
+ * The store writer's journal over a real dialect: as the retired runtime ran a step again,
  * the newest step told a second time settles the calls its abandoned
  * attempt asked for, and an older step told again changes nothing; and as a
  * turn fails, a coding agent's journal keeps the words it formed while a
@@ -49,7 +49,7 @@ const openConversation = (kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSA
     return { userId, conversationId };
   });
 
-/** A step eve ran, gave up on, and ran again: the abandoned attempt's words, then the step told again. */
+/** A step the retired runtime ran, gave up on, and ran again: the abandoned attempt's words, then the step told again. */
 const RETRIED_ATTEMPT = [
   { kind: RUN_EVENT.STEP_STARTED, step: 1 },
   {
@@ -69,7 +69,11 @@ const failedTurnJournal = (
     const writer = yield* storeWriter({ tools: TOOLS });
     const turnId = randomUUID();
     const turn = { conversationId: sessionKey(target.conversationId), turnId };
-    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+    yield* writer.enqueueTurn(target, {
+      turnId,
+      origin: TURN_ORIGIN.TYPED,
+      runtimeTurnId: "turn_0",
+    });
     const bodies = [
       {
         kind: RUN_EVENT.TURN_STARTED,
@@ -164,7 +168,7 @@ it.layer(getTestDB())("the store writer's retried steps", (it) => {
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.TYPED,
-          eveTurnId: "turn_0",
+          runtimeTurnId: "turn_0",
         });
         sequence += 1;
         yield* writer.consume(target, {
@@ -204,7 +208,7 @@ it.layer(getTestDB())("the store writer's journal rewrites", (it) => {
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.TYPED,
-          eveTurnId: "turn_0",
+          runtimeTurnId: "turn_0",
         });
         yield* writer.consume(target, {
           ...turn,
@@ -267,7 +271,7 @@ it.layer(getTestDB())("the store writer's failed turns", (it) => {
   );
 
   it.effect(
-    "a coding agent's failed turn keeps the words of the attempt it failed on, never those of an attempt eve ran again, however much longer",
+    "a coding agent's failed turn keeps the words of the attempt it failed on, never those of an attempt the retired runtime ran again, however much longer",
     () =>
       Effect.gen(function* () {
         const parts = yield* failedTurnJournal(CONVERSATION_KIND.AGENT, RETRIED_ATTEMPT);
@@ -308,7 +312,7 @@ it.layer(getTestDB())("the store writer's batches", (it) => {
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.TYPED,
-          eveTurnId: "turn_0",
+          runtimeTurnId: "turn_0",
         });
         yield* writer.consumeAll(target, [
           stamped({
@@ -394,7 +398,7 @@ it.layer(getTestDB())("the store writer's batches", (it) => {
 
 it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
   it.effect(
-    "a send eve refused writes no row, so a retry under its key is handed to eve again, and a send repeated after it landed is answered as repeated without eve hearing it twice",
+    "a send the runtime refused writes no row, so a retry under its key is handed to the runtime again, and a send repeated after it landed is answered as repeated without the runtime hearing it twice",
     () =>
       Effect.gen(function* () {
         const target = yield* openConversation(CONVERSATION_KIND.AGENT);
@@ -435,7 +439,7 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
   );
 
   it.effect(
-    "a line whose hand-over answered nothing reads nowhere and awaits nothing, and a turn eve later hands it to takes the row with the kind and sender it was sent with",
+    "a line whose hand-over answered nothing reads nowhere and awaits nothing, and a turn the runtime later hands it to takes the row with the kind and sender it was sent with",
     () =>
       Effect.gen(function* () {
         const target = yield* openConversation(CONVERSATION_KIND.AGENT);
@@ -461,7 +465,11 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
         assert.equal((yield* awaitingLinesOf(target.userId, [target.conversationId])).size, 0);
 
         const turnId = randomUUID();
-        yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "t_0" });
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          runtimeTurnId: "t_0",
+        });
         const taken = yield* writer.takeAwaitingLine(target, { text, turnId });
         const read = yield* readMessageByClientId(
           target.userId,

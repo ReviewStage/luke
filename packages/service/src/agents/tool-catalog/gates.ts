@@ -24,8 +24,8 @@ import { Effect, Option } from "effect";
 import { CODER_REFUSAL } from "../coder-host/bounds.js";
 import { DESCRIPTION_EDIT_REFUSAL } from "../coder-host/description-edit.js";
 import { descriptionsOnFor } from "../descriptions-on.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { MEMORY_REFUSAL, memoryOnFor } from "../memory-tools.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 
 /** The gates a tool may stand behind; each tool stands behind one at most. */
 export const TOOL_GATE = {

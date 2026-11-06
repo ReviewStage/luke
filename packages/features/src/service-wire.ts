@@ -71,7 +71,7 @@ export const HOSTED_API_ERROR = {
   AGENT_RETIRED: "agent-retired",
   /**
    * The agent runs on a native harness (Claude Code or Codex) that this part
-   * of the app cannot reach yet, such as a call, which runs on eve alone; nothing
+   * of the app cannot reach yet, such as a call; nothing
    * was written or charged. It is reached from the agent's own tab.
    */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",

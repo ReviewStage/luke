@@ -66,6 +66,15 @@ import {
 } from "@repo/features/agent-wire";
 import { automationCreateRequestSchema } from "@repo/features/automation-wire";
 import {
+  DESCRIPTION_COMMENT_ACTION,
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_BOUNDS,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+  descriptionCommentWordsSchema,
+} from "@repo/features/description-comment-wire";
+import { descriptionNotesSchema, locatedPhrase } from "@repo/features/description-notes";
+import {
   githubPullRequestNumberSchema,
   githubRepositoryFullNameSchema,
 } from "@repo/features/github-repositories-wire";
@@ -79,15 +88,6 @@ import {
 import { MEMORY_BOUNDS, memoryIdSchema } from "@repo/features/memory-wire";
 import { agentName } from "@repo/features/model-label";
 import { PAGE_OWNER } from "@repo/features/page-wire";
-import {
-  DESCRIPTION_COMMENT_ACTION,
-  DESCRIPTION_COMMENT_ACTOR,
-  DESCRIPTION_COMMENT_BOUNDS,
-  DESCRIPTION_COMMENT_SCOPE,
-  DESCRIPTION_COMMENT_STATUS,
-  descriptionCommentWordsSchema,
-} from "@repo/features/description-comment-wire";
-import { locatedPhrase, descriptionNotesSchema } from "@repo/features/description-notes";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PULL_REQUEST_ACTION,
@@ -162,6 +162,7 @@ import { productionSummaryModel } from "../agents/coder-host/replay-summary.js";
 import { sessionsRouter } from "../agents/coder-host/runtime-sessions.js";
 import { steerMemberWords } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { descriptionsOnFor } from "../agents/descriptions-on.js";
 import {
   type MemoryCall,
   memoryOnFor,
@@ -170,7 +171,6 @@ import {
   SAVE_MEMORY_TOOL,
   SEARCH_MEMORY_TOOL,
 } from "../agents/memory-tools.js";
-import { descriptionsOnFor } from "../agents/descriptions-on.js";
 import {
   CREATE_SECTION_TOOL,
   DELETE_SECTION_TOOL,
@@ -637,12 +637,12 @@ const MEMBER_WRITER = storeWriter({ tools: CODER_TOOL_SET });
  */
 const memberWriteCall = (read: AgentReadCall) =>
   Effect.gen(function* () {
-    const eveAs = yield* sessionsRouter;
+    const agentSessionsAs = yield* sessionsRouter;
     const environment = yield* HostedEnvironment;
     const call: AgentCall = {
       ...read,
-      eve: eveAs(callerUserId(read.caller)),
-      eveAs,
+      agentSessions: agentSessionsAs(callerUserId(read.caller)),
+      agentSessionsAs,
       writer: MEMBER_WRITER,
       clientKey: randomUUID(),
       summaryModel: (owner, chosen, effort) =>

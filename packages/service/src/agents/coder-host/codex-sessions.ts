@@ -2,7 +2,7 @@
  * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks our token route for, or on its OpenAI API key.
  *
  * The `codex` implementation of `AgentSessions`
- * (`eve-host/eve-sessions.ts`), on the launch machinery every native
+ * (`sessions/agent-sessions.ts`), on the launch machinery every native
  * harness shares (`runner-sessions.ts`). What is Codex's own:
  *
  * - The runner's config names the image's `codex` and carries our coder
@@ -84,8 +84,6 @@ import { ownApiKeyOf } from "../../accounts/own-api-key.js";
 import { HostedEnvironment } from "../../environment.js";
 import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
-import type { EveHostTurn } from "../eve-host/bounds.js";
-import { KEY_REFUSAL, PLAN_REFUSAL, type PlanRefusal } from "../eve-host/eve-sessions.js";
 import {
   CREDENTIAL_RENEWAL,
   LaunchRefused,
@@ -97,6 +95,12 @@ import {
 } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import { LAUNCH_SWAP, type PlaceholderSwap } from "../sandbox-firewall.js";
+import {
+  KEY_REFUSAL,
+  PLAN_REFUSAL,
+  type PlanRefusal,
+  type SessionTurn,
+} from "../sessions/agent-sessions.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
   type HarnessLaunch,
@@ -477,7 +481,7 @@ export const renewPlanSwap = (machine: MachineLifecycle, owner: FirewallOwner, r
   });
 
 /** The sessions for one account, over the calling fiber's services. */
-export const codexSessions = <Turn extends EveHostTurn = EveHostTurn>(
+export const codexSessions = <Turn extends SessionTurn = SessionTurn>(
   options: CodexSessionsOptions,
 ): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(codex(options), options);

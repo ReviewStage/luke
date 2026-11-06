@@ -7,9 +7,9 @@
  * not running has nothing to keep alive, and a stopped one is never resumed
  * here.
  *
- * eve opens one persistent Vercel Sandbox per top-level session, tagged with
- * the session's id, and a worker shares its parent's; a stopped sandbox
- * keeps its checkout in snapshots until Vercel lets them expire. Once we
+ * An agent's session has one persistent Vercel Sandbox (`agent-sandbox-open.ts`),
+ * tagged with the session's id; a stopped sandbox keeps its checkout in
+ * snapshots until Vercel lets them expire. Once we
  * let go of a session for good, its retire's reset, the purge of a deleted
  * task's conversations, or an account's deletion queues it
  * (`session-sandbox-cleanup.ts`), and the scheduled sweep takes the queue a
@@ -25,8 +25,8 @@
  * failure is its status.
  *
  * Credentials are the deployment's own: the function's Vercel OIDC token,
- * which names this project and its team, as eve's own sandboxes are made
- * with (`vercel-sandbox-api.ts`). A deployment without one answers every
+ * which names this project and its team, as the agents' own sandboxes are
+ * made with (`vercel-sandbox-api.ts`). A deployment without one answers every
  * delete as unavailable, and the queue waits for a deployment that has one.
  */
 

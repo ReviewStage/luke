@@ -14,8 +14,8 @@ import {
   sandboxFound,
   sandboxListRefusal,
 } from "../../testing/vercel-sandbox-fake.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { vercelMachineLayer } from "../machine/vercel-machine.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import { agentSandboxDoors, SANDBOX_DOOR_MAX_BYTES } from "./sandbox-door.js";
 
 /**

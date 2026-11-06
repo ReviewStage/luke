@@ -37,7 +37,7 @@ function turn(times: {
     conversationId: "conversation-1",
     id: "turn-1",
     status: times.settledAt === undefined ? "running" : "settled",
-    eveTurnId: null,
+    runtimeTurnId: null,
     failure: null,
     failureDetail: null,
     cancelRequestedAt: null,
@@ -100,7 +100,7 @@ test("a line sent while the newest turn was queued, and never taken, reads the a
   expect(at(9_001 + LINE_GRACE_MS)).toBe(AGENT_STATUS.FAILED);
 });
 
-/** A turn the model call failed, eve's detail as given. */
+/** A turn the model call failed, its failure detail as given. */
 const failedOnModel = (failureDetail: string) => ({
   status: TURN_STATUS.FAILED,
   failure: TURN_FAILURE.MODEL,
@@ -108,7 +108,7 @@ const failedOnModel = (failureDetail: string) => ({
 });
 
 test("a prompt the provider refused as longer than the window reads as a context overflow, any other model failure as the model's", () => {
-  // The words of the continue Anthropic refused in production, as eve keeps them.
+  // The words of the continue Anthropic refused in production, as the retired runtime kept them.
   const refused = failedOnModel(
     "MODEL_CALL_FAILED [statusCode] prompt is too long: 1368155 tokens > 1000000 maximum",
   );

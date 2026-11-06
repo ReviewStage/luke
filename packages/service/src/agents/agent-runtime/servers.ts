@@ -15,8 +15,7 @@
  * whatever its switch says, and to that turn alone: the turn takes the
  * mentions from the row as it reads its standing, and the switch is never
  * written. A worker takes none. A turn already running keeps what it was
- * handed, and eve tells the model at its next step when a connection came or
- * went.
+ * handed.
  *
  * A user account may hold more than one account at a provider (two Notion
  * workspaces), and each is handed as a connection of its own, under the
@@ -69,15 +68,15 @@ import {
   type IntegrationConnectionRow,
   readIntegrationConnections,
 } from "../../integrations/integration-store.js";
-import type { ConversationAdmission } from "../eve-host/conversation.js";
+import type { ConversationAdmission } from "../sessions/admitted-conversation.js";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "./role.js";
 
 /** One connection a turn is handed: one account at a provider, by the name it goes by. */
 interface HandedConnection {
   readonly provider: IntegrationProvider;
-  /** eve's name for the connection, and the switch and mention that name it. */
+  /** The name the connection goes by, and the switch and mention that name it. */
   readonly connectionName: string;
-  /** The account the connection is credentialed for, which eve keys its authorization state by. */
+  /** The account the connection is credentialed for. */
   readonly instanceKey: string;
   /** What the model is told of which account this is, beside the provider's own description, where the provider hands more than one. */
   readonly accountNote?: string;
@@ -224,7 +223,7 @@ export function turnServers(
     const agent = yield* readAgentOfConversation(userId, conversationId);
     if (Option.isNone(agent)) return SERVERS_OFF;
     const { disabledServers } = agent.value;
-    // A native turn took its mentions as it started and names them here (`turnMentions`); an eve turn takes them now.
+    // A native turn took its mentions as it started and names them here (`turnMentions`); those still on the row are taken now.
     const mentioned = [...turnMentions, ...(yield* takenMentions(policy, userId, conversationId))];
     const connections = handed.filter(
       ({ connectionName }) =>

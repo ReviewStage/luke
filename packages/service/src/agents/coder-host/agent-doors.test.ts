@@ -38,7 +38,7 @@ import {
   pictureNotLooked,
 } from "../../tasks/picture-look.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import { runAgentComment, runAgentEditDescription, runAgentLookAtPicture } from "./agent-doors.js";
 import { DESCRIPTION_EDIT_REFUSAL } from "./description-edit.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";

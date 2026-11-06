@@ -66,7 +66,7 @@ import {
  * token belongs to, read on it, where that token is the agent's credential.
  * The repository is reached through the installation connected to the
  * plan's workspace, or the member's token where none reaches it. The sandbox is a
- * double at eve's boundary, GitHub a script, and the store PGlite.
+ * double at the `RepositorySandbox` boundary, GitHub a script, and the store PGlite.
  * Synthetic accounts, repositories, and tokens throughout.
  */
 

@@ -223,7 +223,7 @@ it("a source that never made a branch of its own sends the new agent to the work
   );
 });
 
-it("a native harness's calls replay named as eve's are, its edits by the files they touched", () => {
+it("a native harness's calls replay named as the retired runtime's are, its edits by the files they touched", () => {
   const settled = (tool: string, input: Record<string, unknown>) =>
     callEntry({
       type: `tool-${tool}`,

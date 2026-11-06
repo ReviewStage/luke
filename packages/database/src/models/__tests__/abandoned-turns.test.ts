@@ -75,7 +75,11 @@ const turnIn = (
   Effect.gen(function* () {
     const turnId = randomUUID();
     const turn = { conversationId: sessionKey(target.conversationId), turnId };
-    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+    yield* writer.enqueueTurn(target, {
+      turnId,
+      origin: TURN_ORIGIN.TYPED,
+      runtimeTurnId: "turn_0",
+    });
     if (stands === TURN_STATUS.QUEUED) return turnId;
     yield* writer.consume(target, {
       ...turn,
@@ -384,7 +388,11 @@ it.layer(getTestDB())("the sweep over withdrawn lines", (it) => {
           );
         }
         const turnId = randomUUID();
-        yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "t_0" });
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          runtimeTurnId: "t_0",
+        });
         yield* writer.takeAwaitingLine(target, { text: "Push the branch.", turnId });
         const standing = Effect.map(
           db

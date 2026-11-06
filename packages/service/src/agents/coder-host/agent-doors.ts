@@ -1,13 +1,12 @@
 /**
  * agent-doors.ts -- the doors every runtime's call of one of our tools by a coding agent goes through: the agent the conversation is, then the tool.
  *
- * eve's tool files reach them through the coder host (`host.ts`), and a
- * native harness's runner through our MCP server
- * (`../tool-catalog/catalog.ts`), so both run one implementation, as the inbox's
- * own door does (`inbox-door.ts`). Nothing here imports eve's runtime,
- * because the web function that serves the MCP server bundles no sandbox:
+ * A native harness's runner reaches them through our MCP server
+ * (`../tool-catalog/catalog.ts`), as it reaches the inbox's
+ * own door (`inbox-door.ts`). Nothing here imports a sandbox,
+ * because the web function that serves the MCP server bundles none:
  * a door that reads a file the agent names is handed the door to its
- * sandbox, and one that reaches eve or the store's writer is handed the
+ * sandbox, and one that reaches an agent's session or the store's writer is handed the
  * seams it reads (`AgentDoorSeams`).
  */
 
@@ -42,7 +41,7 @@ import {
   pictureNotLooked,
   runLookAtPicture,
 } from "../../tasks/picture-look.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import {
   DESCRIPTION_EDIT_REFUSAL,

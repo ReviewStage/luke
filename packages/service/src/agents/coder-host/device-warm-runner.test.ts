@@ -32,8 +32,8 @@ import {
   warmLocalAgent,
 } from "../../testing/local-agent.js";
 import { claimedDeviceAgentLine, settledDeviceAgentLine } from "../device-agent.js";
-import { EVE_CANCEL_OUTCOME, EVE_SEND_OUTCOME } from "../eve-host/eve-sessions.js";
 import { MAC_MACHINE } from "../machine/device-machine.js";
+import { SESSION_CANCEL_OUTCOME, SESSION_SEND_OUTCOME } from "../sessions/agent-sessions.js";
 import { runnerIdled } from "./runner-sessions.js";
 
 /** The line a retire writes to a warm runner, as its Mac takes it. */
@@ -84,7 +84,7 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
           );
 
           assert.deepEqual([keptRetired, updatingRetired], [false, true]);
-          assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+          assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
           const lines = yield* linesWaiting(kept);
           assert.equal(lines.length, 1, "one message line, to the launch its Start made");
           assert.ok(lines[0]?.includes("Now the emails."));
@@ -104,7 +104,7 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
           const canceled = yield* stopped(warm, warm.turnId);
           yield* warm.sessions.send(warm.sessionId, typedMessage(warm.agent, "Now the emails."));
 
-          assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
+          assert.equal(canceled.outcome, SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN);
           const lines = yield* linesWaiting(warm);
           assert.equal(lines.length, 1, "the message alone, to the running launch");
           assert.ok(lines[0]?.includes("Now the emails."));
@@ -148,8 +148,8 @@ it.layer(Layer.mergeAll(getTestDB(), LOCAL_AGENT_ENVIRONMENT, noNetwork))(
             typedMessage(warm.agent, "And the tests."),
           );
 
-          assert.equal(canceled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
-          assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+          assert.equal(canceled.outcome, SESSION_CANCEL_OUTCOME.ACCEPTED);
+          assert.equal(sent.outcome, SESSION_SEND_OUTCOME.ACCEPTED);
           assert.deepEqual(yield* linesWaiting(warm), [
             DEVICE_AGENT_LINE_KIND.STOP,
             DEVICE_AGENT_LINE_KIND.LAUNCH,

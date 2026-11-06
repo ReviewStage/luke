@@ -128,7 +128,7 @@ export interface BrowserLiveDependencies {
     place: BrowserTabsPlace,
     tabId: string,
   ) => Effect.Effect<Option.Option<ReachedBrowserTab>, unknown>;
-  /** The eve session the agent's sandbox is tagged with; none before the agent first ran. */
+  /** The session the agent's sandbox is tagged with; none before the agent first ran. */
   readonly sessionOf: (conversationId: string) => Effect.Effect<Option.Option<string>, unknown>;
   /**
    * Connects to the browser in the sandbox the session names, for the
@@ -165,7 +165,7 @@ export interface BrowserLiveDependencies {
     page: { readonly address: string; readonly title: string },
   ) => Effect.Effect<void>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
-  /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
+  /** Keeps the running sandbox the session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
   readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
 }
 
