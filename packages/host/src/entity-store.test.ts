@@ -52,10 +52,12 @@ const RENAME: QueuedEntry = {
   input: { taskId: INVITES, name: "Invitations" },
 };
 
-/** A store opened over `directory` for `accountId` in a scope of its own, which the test closes as a quit does. */
+/** A store opened over `directory` for `accountId` in a scope of its own, which the test closes as a quit does, and which closes before the test's folder goes in any case. */
 function opened(directory: string, accountId: string, options: Partial<EntityStoreOptions> = {}) {
   return Effect.gen(function* () {
     const scope = yield* Scope.make();
+    // Note that the store closes before its folder is removed, whatever the assertions find.
+    yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     const store = yield* Scope.provide(scope)(
       openEntityStore({
         directory,
