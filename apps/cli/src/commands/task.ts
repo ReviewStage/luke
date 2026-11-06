@@ -30,7 +30,7 @@ import { askService, session } from "../session.js";
 import { resolveTaskId, signedInMemberId } from "../tasks.js";
 import { resolveWorkspace } from "../workspace.js";
 import { agentLines, startAgent, startedLines } from "./agent.js";
-import { writeDescription } from "./plan.js";
+import { writeDescription } from "./description.js";
 
 /** What `--assignee` takes to assign the task to nobody, and to the signed-in member. */
 const ASSIGNEE_WORD = { NONE: "none", ME: "me" } as const;

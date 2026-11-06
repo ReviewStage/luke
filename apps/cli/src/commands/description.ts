@@ -1,15 +1,11 @@
 /**
- * plan.ts -- `vespin description show` and `description edit`: a task's description printed as the Markdown it is, and written whole from a file or stdin.
+ * description.ts -- `vespin description show` and `description edit`: a task's description printed as the Markdown it is, and written whole from a file or stdin.
  *
  * A description is one Markdown text (`description-edit.ts`). `edit` writes it
  * through the procedure the app's description editor saves with,
  * `plans.editDescription`, naming the text it read just before as the base, so a write
  * an agent made in between is kept where the two do not touch the same
  * lines, and is refused as a conflict where they do, with nothing changed.
- *
- * `vespin plan`, the group's name before the rename, is still read as
- * `vespin description` (`currentCommandLine`), and listed nowhere, so a
- * script written against it keeps working.
  */
 
 import { CLI_EXIT } from "@repo/features/cli-exit";
@@ -20,13 +16,6 @@ import { Argument, Command, Flag } from "effect/cli";
 import { answer, CommandFailed, readInput } from "../output.js";
 import { askService, session } from "../session.js";
 import { resolveTaskId } from "../tasks.js";
-
-/** The group's name, and its name before the rename, which a command line may still lead with. */
-const CURRENT_GROUP_NAME = "description";
-const RETIRED_GROUP_NAME = "plan";
-
-/** The global flags that take the word after them as their value (`flags.ts`), so it is no command's name. */
-const VALUE_FLAGS: ReadonlySet<string> = new Set(["--url", "--workspace", "-w"]);
 
 /**
  * A task's description written whole: `value` laid over `base`, the text
@@ -118,26 +107,10 @@ const editCommand = Command.make(
 );
 
 /** The description group: show and edit. */
-export const descriptionCommand = Command.make(CURRENT_GROUP_NAME).pipe(
+export const descriptionCommand = Command.make("description").pipe(
   Command.withDescription("Print or write a task's description"),
   Command.withSubcommands([showCommand, editCommand]),
   Command.withExamples([
     { command: "vespin description show ACME-42", description: "Print the description" },
   ]),
 );
-
-/**
- * A command line as this build reads it: one leading with the group's name
- * before the rename, `plan`, read as `description`. Note that we rename here
- * rather than with `Command.withAlias`, because an alias is listed in
- * `--help` beside the name, and the old name should be listed nowhere. The
- * group's name is the first word that is neither a flag nor the value a
- * global flag before it takes.
- */
-export function currentCommandLine(args: ReadonlyArray<string>): ReadonlyArray<string> {
-  const at = args.findIndex(
-    (word, index) => !word.startsWith("-") && !VALUE_FLAGS.has(args[index - 1] ?? ""),
-  );
-  if (args[at] !== RETIRED_GROUP_NAME) return args;
-  return args.with(at, CURRENT_GROUP_NAME);
-}

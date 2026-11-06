@@ -1,6 +1,6 @@
 {
   "name": "@repo/vespin-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Vespin's command-line tool, `vespin`: a first-party client of the hosted API for people in a terminal and for coding agents calling from a shell",
