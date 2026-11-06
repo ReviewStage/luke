@@ -1,4 +1,5 @@
 import { Comment, type CommentAuthor, cn } from "@repo/ui";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 
 /**
@@ -57,6 +58,7 @@ export function InboxComment({
   now,
   trailing,
   messageId,
+  place,
   children,
 }: {
   kind: CommentKind;
@@ -72,10 +74,12 @@ export function InboxComment({
   trailing?: React.ReactNode;
   /** The message a thread's message comment draws, which a send scrolls to. */
   messageId?: string | undefined;
+  /** Where it stands in the thread's run of rows (`ConversationRows`). */
+  place: VirtualRowPlace;
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <li className={INBOX_COMMENT} data-inbox-comment={kind} data-message-id={messageId}>
+    <li {...place} className={INBOX_COMMENT} data-inbox-comment={kind} data-message-id={messageId}>
       <Comment author={author} nameRef={nameRef} said={said} at={at} now={now} trailing={trailing}>
         {children === undefined ? undefined : (
           // Note that the reader's draft reply lets what stands over its box's field, its @ and / lists, run past the comment.
