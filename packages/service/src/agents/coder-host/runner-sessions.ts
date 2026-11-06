@@ -1712,11 +1712,10 @@ export const runnerSessions = <
     /**
      * A queued message's hand-on (`handedOn`) run past the answer, under the
      * lease, waiting on it as long as a lease can stand, so it outlasts a
-     * launch it is behind: a fresh sandbox that finds the image still being
-     * prepared waits on its build, and a hand-on that fails takes its message
-     * back, where no runner took it, and is written as the agent's failed turn,
-     * as a Start's launch is (`launchedAfterStart`), so a later launch never
-     * runs a message the developer was told failed.
+     * launch it is behind; a fresh sandbox that finds the image still being
+     * prepared waits on its build. Note that a hand-on that fails is only
+     * logged, and its line read as failed once it has waited past
+     * `CODER.LINE_GRACE`, which offers Continue.
      */
     const handedOnAfter = (
       sessionId: string,
@@ -1731,13 +1730,6 @@ export const runnerSessions = <
             agent.id,
             handedOn(sessionId, agent, lineId, handed),
             CODER.RUNNER_LEASE.HOLD,
-          ),
-        ).pipe(
-          Effect.catch((failure) =>
-            Effect.andThen(
-              Effect.ignore(withdrawRunnerLine(userId, agent.id, lineId)),
-              launchFailed(agent, sessionId)(failure),
-            ),
           ),
         ),
       );
