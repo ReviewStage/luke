@@ -669,8 +669,8 @@ by `src/github/github-token-procedures.ts`) the same way, and answers counts: th
 moved, already current, changed meanwhile, and unreadable. Run it again
 until nothing is changed meanwhile; once nothing names the old version,
 and a day and an hour has passed since, drop it from the list and redeploy.
-The wait is for what stands at a sandbox's firewall (`sandbox_firewall`),
-sealed under the ring for as long as its session runs, which the rewrap
+The wait is for the swaps a runner's launch keeps at its sandbox's firewall
+(`sandbox_firewall`), sealed under the ring for as long as the launch runs, which the rewrap
 does not move and the sweep drops a day and an hour after its last write. A row counted unreadable reads
 `unreadable` to its account, which is told to replace it. It is not a
 migration, since a migration holds no key and runs before the deployment
@@ -1420,10 +1420,14 @@ first words of their opening's first line, with no model call, and its
 replays carried without a summary.
 
 The sandbox is one Vercel Sandbox per agent
-(`src/agents/machine/vercel-machine.ts`), opened from Vespin's own template
-of the agent's image (`src/agents/native-sandbox-template.ts`, prepared with
-the code tooling, pnpm, and Python beside the image's Node and git), and kept
-alive while the runner reports. As it opens, the agent's repository is
+(`src/agents/machine/vercel-machine.ts`), booted from the agents' custom image
+(`apps/web/agent-image/Dockerfile`: Node, git, pnpm, Python, Playwright's
+Chromium, Claude Code, Codex, `gh`, and the runner itself), which CI pushes
+to the project's registry before the deploy that names it, and kept alive
+while the runner reports. The runner starts as the SDK's own `agent` user
+(`createUser`, `asUser`), whose environment the SDK writes on `sudo`'s
+command line, so the placeholders in it are readable there by any process in
+the sandbox while it runs. As it opens, the agent's repository is
 checked out at its default branch, from the workspace's snapshot of the
 repository where one stands or by a whole clone through the firewall-scoped
 clone of `repository-shell.ts` (`cloneRepository`), on a token
@@ -2605,7 +2609,6 @@ the rest still run, and any failure fails the cron's check-in. In order:
   GitHub token, which no webhook reaches, read on that token, their reviews,
   comments, and checks among them, and the agent woken with what changed
   (`src/github/token-pull-request-sweep.ts`).
-- `imageTemplates`: the native agents' image template moved on.
 - `agentQueues`: unpaused queues of idle agents handed on.
 - `hostPairings`: lapsed host pairings, and approved hosts that never
   collected their secret, deleted.

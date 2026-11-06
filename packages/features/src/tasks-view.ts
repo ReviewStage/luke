@@ -2,6 +2,7 @@ import { Schema as EffectSchema } from "effect";
 import { agentBrowserTabAnswerSchema, browserTabsPlaceSchema } from "./agent-browser-tab-wire.js";
 import { agentAgentAnswerSchema } from "./agent-view.js";
 import {
+  AGENT_STATUS,
   type ListedAgent,
   listedAgentSchema,
   localAgentRefusalSchema,
@@ -232,6 +233,19 @@ export const IDLE_TASKS_VIEW: TasksView = {
   listStatus: TASKS_READ.IDLE,
   workspaces: [],
 };
+
+/**
+ * How many of the agents the view lists are working, starting or running a
+ * turn, on a plan or with none. Note that the agents on plans are listed
+ * only while the list is followed live, so before then this counts the
+ * agents with no plan alone.
+ */
+export function workingAgentCount(view: TasksView): number {
+  const listed = [...(view.taskAgents ?? []), ...(view.tasklessAgents ?? [])];
+  return listed.filter(
+    (agent) => agent.status === AGENT_STATUS.STARTING || agent.status === AGENT_STATUS.RUNNING,
+  ).length;
+}
 
 /** An agent with no plan as a plan's agents are named, with its workspace and repository, which names an automation only where one started it. */
 export function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): ListedAgent {

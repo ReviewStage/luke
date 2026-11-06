@@ -2,6 +2,8 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
+import { rendererRegistry } from "../renderer-runtime.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { type AdminDoors, AdminDoorsProvider, type AdminReads } from "./admin-doors.js";
 import { AccountScreen } from "./screens/account.js";
 import { CostScreen } from "./screens/cost.js";
@@ -68,7 +70,11 @@ async function draw(
   const page = document.body.appendChild(document.createElement("div"));
   const root = createRoot(page);
   roots.push(root);
-  await act(async () => root.render(createElement(AdminDoorsProvider, { value: doors }, screen)));
+  await act(async () =>
+    root.render(
+      onRegistry(rendererRegistry, createElement(AdminDoorsProvider, { value: doors }, screen)),
+    ),
+  );
   return page;
 }
 

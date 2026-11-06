@@ -48,6 +48,7 @@ Element.prototype.scrollIntoView ??= () => undefined;
 /** Stands in for the browser's ResizeObserver, which jsdom lacks, since the popover and every row's words measure themselves. */
 class StandInResizeObserver {
   observe(): void {}
+  unobserve(): void {}
   disconnect(): void {}
 }
 

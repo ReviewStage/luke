@@ -20,7 +20,7 @@
  *   the host's queue. In a sandbox no token enters it at all: the command
  *   answers a placeholder minted for the launch, and the launch sets the
  *   swap that puts the token in its place at the sandbox's firewall
- *   (`HarnessLaunch`'s `held`, `FIREWALL_SLOT.OPENAI_PLAN`), which the
+ *   (`HarnessLaunch`'s `held`, `LAUNCH_SWAP.OPENAI_PLAN`), which the
  *   scheduled sweep renews while it stands (`renewPlanSwap`), so a turn
  *   outlives the hour a token lives. The swap stands on Codex's ChatGPT
  *   backend, which the runner is told to send its requests to
@@ -37,7 +37,7 @@
  *   `OPENAI_API_KEY`, which the runner names as app-server's provider
  *   `env_key` in place of the token command: on a Mac the key opened, and in
  *   a sandbox a placeholder minted for the launch, the key swapped in for it
- *   at the firewall as the plan's token is (`FIREWALL_SLOT.OPENAI_KEY`). It
+ *   at the firewall as the plan's token is (`LAUNCH_SWAP.OPENAI_KEY`). It
  *   never asks the plan, and a key gone or unreadable refuses the launch.
  * - A `model` line with the agent's model and effort as they stand goes
  *   ahead of every message, as on Claude Code.
@@ -70,7 +70,7 @@ import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { MODEL_PROVIDER, MODEL_SPEED } from "@repo/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
-import { Duration, Effect, Option, Redacted, Ref, Result } from "effect";
+import { Duration, Effect, Option, Redacted, Result } from "effect";
 import {
   CHATGPT_ACCESS,
   type ChatGptPlanIdentity,
@@ -84,15 +84,16 @@ import { KEY_REFUSAL, PLAN_REFUSAL, type PlanRefusal } from "../eve-host/eve-ses
 import { LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import {
-  FIREWALL_SLOT,
   type FirewallSession,
-  type FirewallSlot,
+  LAUNCH_SWAP,
+  type LaunchSwapKind,
   newPlaceholder,
   type PlaceholderSwap,
   placeholderSwap,
   renewedSwap,
   type SandboxFirewall,
 } from "../sandbox-firewall.js";
+import { firewallSourcesOfAgent } from "./checkout.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
   type HarnessLaunch,
@@ -108,7 +109,7 @@ export interface CodexSessionsOptions extends RunnerSessionsOptions {
   readonly tokenUrl: string;
 }
 
-/** Where the image keeps Codex (`agent-runtime/sandbox-image.ts`'s `INSTALL_CODEX`): the binary, and the `CODEX_HOME` it made for `agent`. */
+/** Where the image keeps Codex (`apps/web/agent-image/Dockerfile`), and the `CODEX_HOME` a sandbox makes in `agent`'s home. */
 const CODEX_PATH = { EXECUTABLE: CODEX_PIN.LINK, HOME: CODEX_PIN.HOME } as const;
 
 const CODEX_HOME_ENV = "CODEX_HOME";
@@ -169,11 +170,11 @@ function bearerOf(token: string): Redacted.Redacted {
 
 /**
  * A credential held at a sandbox's firewall for one launch: a placeholder
- * minted for it in the variable Codex reads, and the swap in its slot that
+ * minted for it in the variable Codex reads, and the swap of its kind that
  * sets the real bearer in its place where the target says.
  */
 function heldAtFirewall(
-  slot: FirewallSlot,
+  kind: LaunchSwapKind,
   target: SwapTarget,
   variable: string,
   credential: Redacted.Redacted<string>,
@@ -188,7 +189,7 @@ function heldAtFirewall(
   });
   return {
     env: { [variable]: placeholder },
-    slot,
+    kind,
     entry,
     ...(fingerprint === undefined ? undefined : { fingerprint }),
   };
@@ -340,7 +341,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
           : {
               env: homeOf(agent),
               held: heldAtFirewall(
-                FIREWALL_SLOT.OPENAI_KEY,
+                LAUNCH_SWAP.OPENAI_KEY,
                 OPENAI_API,
                 RUNNER_ENV.OPENAI_API_KEY,
                 key,
@@ -364,7 +365,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         : {
             env,
             held: heldAtFirewall(
-              FIREWALL_SLOT.OPENAI_PLAN,
+              LAUNCH_SWAP.OPENAI_PLAN,
               PLAN_TARGET,
               RUNNER_ENV.CODEX_TOKEN,
               token,
@@ -464,48 +465,50 @@ export const PLAN_RENEWAL = {
 
 /**
  * The plan's token behind a sandbox session's standing swap renewed, where
- * the swap still stands: the account's token as it stands, renewed first
- * where less than the token margin is left of it, set behind the same
- * placeholder where it is not what the swap already sets. A sign-in that no
- * longer answers a token leaves the swap as it stands, which OpenAI refuses
- * once its token lapses, as the route refused a Mac's command. So does a
- * swap a launch on the retired third-party sign-in set on another host,
- * which the plan's token is never sent to.
+ * the launch kept for the session still holds one: the account's token as
+ * it stands, renewed first where less than the token margin is left of it,
+ * set behind the same placeholder where it is not what the swap already
+ * sets, and the session's whole policy sent with the agent's repository
+ * credential minted afresh beside it, since every write is whole
+ * (`firewallSourcesOfAgent`). A sign-in that no longer answers a token, or a
+ * credential that could not be minted, leaves the swap as it stands, which
+ * OpenAI refuses once its token lapses, as the route refused a Mac's command.
+ * So does a swap a launch on the retired third-party sign-in set on another
+ * host, which the plan's token is never sent to.
  */
 export const renewPlanSwap = (firewall: SandboxFirewall, session: FirewallSession, ring: KeyRing) =>
   Effect.gen(function* () {
-    const unanswered = yield* Ref.make(false);
-    const wrote = yield* firewall.renew(session, FIREWALL_SLOT.OPENAI_PLAN, (standing) =>
-      Effect.gen(function* () {
-        const access = yield* refreshChatGptAccess(session.userId, ring, CODEX_TOKEN_MARGIN);
-        if (access.outcome !== CHATGPT_ACCESS.READY) {
-          yield* Ref.set(unanswered, true);
-          yield* Effect.logWarning(
-            `a Codex plan's swap was not renewed: ChatGPT sign-in ${access.outcome}`,
-          );
-          return undefined;
-        }
-        if (!Redacted.value(standing.rules).every(([swapped]) => swapped === PLAN_TARGET.domain)) {
-          yield* Effect.logWarning(
-            "a Codex plan's swap was not renewed: it stands on another host than the plan's",
-          );
-          return undefined;
-        }
-        return renewedSwap(standing, bearerOf(Redacted.value(access.accessToken)));
-      }).pipe(
-        Effect.catch((failure) =>
-          Effect.as(
-            Effect.andThen(
-              Ref.set(unanswered, true),
-              Effect.logWarning(`a Codex plan's swap was not renewed: ${failure._tag}`),
-            ),
-            undefined,
-          ),
+    const launch = yield* firewall.launchOf(session);
+    const standing = launch?.swaps.get(LAUNCH_SWAP.OPENAI_PLAN);
+    if (launch === undefined || standing === undefined) return PLAN_RENEWAL.LEFT;
+    const next = yield* Effect.gen(function* () {
+      const access = yield* refreshChatGptAccess(session.userId, ring, CODEX_TOKEN_MARGIN);
+      if (access.outcome !== CHATGPT_ACCESS.READY) {
+        yield* Effect.logWarning(
+          `a Codex plan's swap was not renewed: ChatGPT sign-in ${access.outcome}`,
+        );
+        return PLAN_RENEWAL.UNANSWERED;
+      }
+      if (!Redacted.value(standing.rules).every(([swapped]) => swapped === PLAN_TARGET.domain)) {
+        yield* Effect.logWarning(
+          "a Codex plan's swap was not renewed: it stands on another host than the plan's",
+        );
+        return PLAN_RENEWAL.LEFT;
+      }
+      const entry = renewedSwap(standing, bearerOf(Redacted.value(access.accessToken)));
+      if (entry === undefined) return PLAN_RENEWAL.LEFT;
+      return { entry, sources: yield* firewallSourcesOfAgent(session.userId, launch.agentId) };
+    }).pipe(
+      Effect.catch((failure) =>
+        Effect.as(
+          Effect.logWarning(`a Codex plan's swap was not renewed: ${failure._tag}`),
+          PLAN_RENEWAL.UNANSWERED,
         ),
       ),
     );
-    if (wrote) return PLAN_RENEWAL.RENEWED;
-    return (yield* Ref.get(unanswered)) ? PLAN_RENEWAL.UNANSWERED : PLAN_RENEWAL.LEFT;
+    if (typeof next === "string") return next;
+    yield* firewall.renew(session, launch, LAUNCH_SWAP.OPENAI_PLAN, next.entry, next.sources);
+    return PLAN_RENEWAL.RENEWED;
   });
 
 /** The sessions for one account, over the calling fiber's services. */

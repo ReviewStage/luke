@@ -1,0 +1,1 @@
+ALTER TABLE "sandbox_firewall" ADD COLUMN IF NOT EXISTS "agent_id" text;

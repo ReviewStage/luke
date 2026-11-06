@@ -1,18 +1,19 @@
 /**
  * repository-snapshot.ts -- a workspace's repository cloned once into a snapshot of the native agents' image, which a native agent's sandbox opens from instead of cloning.
  *
- * A native harness's sandbox opens from the coding agent's image
- * (`native-sandbox-template.ts`) and clones its repository whole before the
+ * A native harness's sandbox opens from the agents' image
+ * (`coder-host/agent-image.ts`) and clones its repository whole before the
  * runner starts (`coder-host/runner-sessions.ts`), which is most of the time
  * a new agent takes to say anything. A repository snapshot is that clone
- * done once: a persistent sandbox opened from the image's snapshot, the
- * repository's default branch cloned whole into it as an agent's checkout
- * stands (`repository-shell.ts`'s `cloneRepository`, the token at the
- * firewall for the clone alone, so the snapshot holds no credential), and
- * snapshotted. A launch that finds one ready opens from it and fetches only
- * what landed since (`refreshRepository`).
+ * done once: a persistent sandbox opened from the image, the `agent` user
+ * made in it as the SDK makes one, the repository's default branch cloned
+ * whole into it as an agent's checkout stands (`repository-shell.ts`'s
+ * `cloneRepository`, the token at the firewall for the clone alone, so the
+ * snapshot holds no credential), and snapshotted. A launch that finds one
+ * ready opens from it, the user already made, and fetches only what landed
+ * since (`refreshRepository`).
  *
- * Its key is the digest of the image snapshot it was made from, the
+ * Its key is the digest of the image it was made from, the
  * workspace, the repository as GitHub spells it, and the default branch, so
  * a new image, a renamed repository, or a moved default branch is another
  * snapshot, and none is ever opened on an image or branch it was not made
@@ -20,7 +21,7 @@
  * and only by a launch that has just confirmed the workspace's installation
  * reaches the repository, whose own token then fetches the branch.
  *
- * Like the template, the sandbox's name is the lock: of launches that find
+ * The sandbox's name is the lock: of launches that find
  * none at once, Vercel lets one create it and refuses the rest with a 409.
  * The build is marked built only once the clone ended well, before the
  * snapshot is taken, so a snapshot of a half-made checkout is never opened.
@@ -34,6 +35,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { AGENT_USER, CODEX_PIN } from "@repo/agent-runner/pins";
 import { Clock, Duration, Effect, Option, type Redacted } from "effect";
 import type { GitHubTokenAccess } from "../github/github-app.js";
 import { CODER } from "./coder-host/bounds.js";
@@ -65,6 +67,9 @@ const SNAPSHOT_TAG = {
 /** Vercel's refusal of a name already taken: another launch's build. */
 const CONFLICT_STATUS = 409;
 
+/** The folders the `agent` user's home holds from its making, as an agent's own sandbox makes them: Codex's `CODEX_HOME`. */
+const AGENT_HOME_FOLDERS = [CODEX_PIN.HOME];
+
 /**
  * How long after its last use Vercel keeps a repository snapshot: as long as
  * it is opened from, and its build's grace. Note that every sandbox opened
@@ -90,9 +95,10 @@ export type RepositorySnapshotLookup =
       readonly stale?: ListedSandbox;
     };
 
-/** What a repository snapshot is of: the image snapshot it opens on, the workspace, and the repository and branch it holds. */
+/** What a repository snapshot is of: the image it opens on, the workspace, and the repository and branch it holds. */
 export interface RepositorySnapshotOf {
-  readonly imageSnapshotId: string;
+  /** The image as a sandbox's `image` names it: its repository and tag. */
+  readonly image: string;
   readonly workspaceId: string;
   /** The repository as GitHub spells it. */
   readonly fullName: string;
@@ -108,12 +114,7 @@ export interface RepositorySnapshotCredential {
 /** The snapshot's sandbox's name: the prefix and a digest of what it is of, every field ended by a NUL so none runs into the next. */
 export function repositorySnapshotName(of: RepositorySnapshotOf): string {
   const digest = createHash("sha256");
-  for (const field of [
-    of.imageSnapshotId,
-    of.workspaceId,
-    snapshotRecordOf(of.fullName),
-    of.defaultBranch,
-  ]) {
+  for (const field of [of.image, of.workspaceId, snapshotRecordOf(of.fullName), of.defaultBranch]) {
     digest.update(field).update("\0");
   }
   return `${REPOSITORY_SNAPSHOT.NAME_PREFIX}${digest.digest("hex").slice(0, 32)}`;
@@ -187,8 +188,8 @@ const deleteIfStill = (api: VercelSandboxApi, read: ListedSandbox) =>
 
 /**
  * The repository snapshot built: whatever stale sandbox the read found
- * deleted, the sandbox created from the image's snapshot under the name,
- * the default branch cloned whole into it through the token at the firewall
+ * deleted, the sandbox created from the image under the name, the `agent`
+ * user made in it, the default branch cloned whole into it through the token at the firewall
  * for the clone alone, the build marked, and the snapshot taken, which
  * stops it. A name another launch took first is that launch's build, and
  * this one does nothing. A build that fails or outlasts `BUILD_TIMEOUT`
@@ -209,7 +210,7 @@ export const buildRepositorySnapshot = Effect.fn("web/buildRepositorySnapshot")(
   const created = yield* api
     .create({
       name,
-      snapshotId: of.imageSnapshotId,
+      from: { image: of.image },
       tags: { [SNAPSHOT_TAG.KEY]: key },
       timeoutMs: Duration.toMillis(REPOSITORY_SNAPSHOT.BUILD_TIMEOUT),
       vcpus: CODER.SANDBOX_VCPUS,
@@ -231,6 +232,7 @@ export const buildRepositorySnapshot = Effect.fn("web/buildRepositorySnapshot")(
   yield* Effect.gen(function* () {
     const running = created.value.currentSessionId;
     if (running === undefined) return yield* new SandboxUnavailable({});
+    yield* api.createUser(name, AGENT_USER, AGENT_HOME_FOLDERS);
     yield* cloneRepository(
       open(running),
       {

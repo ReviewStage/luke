@@ -95,13 +95,14 @@ const DESKTOP_WINDOW = {
 
 /**
  * The sidebar material, as a window before Tahoe is created on and as one
- * whose glass could not be laid falls back to. Note that it stays frosted
- * while the window is in the background, as Finder's sidebar does, rather
- * than going flat gray.
+ * whose glass could not be laid falls back to. Note that it follows the
+ * window, as a native window's material does: live while the window is key,
+ * and flat once another app is in front, so WindowServer stops blending the
+ * desktop behind a window no one is working in.
  */
 const SIDEBAR_VIBRANCY = {
   vibrancy: DESKTOP_WINDOW.MATERIAL,
-  visualEffectState: "active",
+  visualEffectState: "followWindow",
 } as const satisfies BrowserWindowConstructorOptions;
 
 /**
@@ -368,9 +369,9 @@ export class PanelManager {
       // On Tahoe the window is clear for the Liquid Glass laid behind its
       // page once it loads; before it, it is drawn on the sidebar material
       // (`window-material.ts`). Note that the glass window still names the
-      // material's active state, because Electron keeps it from construction
-      // and has no setter: the sidebar material a failed lay falls back to
-      // then stays frosted behind other apps too.
+      // material's state, because Electron keeps it from construction and has
+      // no setter: the sidebar material a failed lay falls back to then
+      // follows the window too.
       ...(material === WINDOW_MATERIAL.LIQUID_GLASS
         ? { transparent: true, visualEffectState: SIDEBAR_VIBRANCY.visualEffectState }
         : SIDEBAR_VIBRANCY),

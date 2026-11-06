@@ -3558,6 +3558,30 @@ async function pressItem(words: string): Promise<void> {
   await settle();
 }
 
+/** The rows of the picker standing open, by their words and whether each is checked. */
+function pickerRows(): { readonly label: string; readonly checked: boolean }[] {
+  return [...document.querySelectorAll<HTMLElement>('[role="option"]')].map((row) => ({
+    label: row.querySelector(".ui-combobox-option-label")?.textContent ?? "",
+    checked: row.getAttribute("aria-current") === "true",
+  }));
+}
+
+/** The picker's row whose label begins with the words given. */
+function pickerRow(words: string): HTMLElement {
+  return (
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((row) =>
+      row.querySelector(".ui-combobox-option-label")?.textContent?.startsWith(words),
+    ) ?? assert.fail(`the picker offers ${words}`)
+  );
+}
+
+/** Picks the picker's row whose label begins with the words given. */
+async function pickRow(words: string): Promise<void> {
+  const row = pickerRow(words);
+  act(() => row.click());
+  await settle();
+}
+
 test("the reviewer picker lists the repository's teams then its people, the author left out and those asked checked; choosing one asks a review of them as the member, and the picker waits on the pull request's read before it opens again, then checks them", async () => {
   let asked: readonly GitHubPerson[] = [CHARLES_ON_GITHUB];
   const reread = held<{ pullRequest: AgentOverviewPullRequest }>();
@@ -3596,16 +3620,13 @@ test("the reviewer picker lists the repository's teams then its people, the auth
 
   act(() => picker().click());
   await settle();
-  assert.deepEqual(menuItems(), [
-    { label: "Platform", checked: "true" },
-    { label: "Design", checked: "false" },
-    { label: "charlespan", checked: "true" },
-    { label: "priyan", checked: "false" },
+  assert.deepEqual(pickerRows(), [
+    { label: "Platform", checked: true },
+    { label: "Design", checked: false },
+    { label: "charlespan", checked: true },
+    { label: "priyan", checked: false },
   ]);
-  const priyan =
-    [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find((item) =>
-      item.querySelector(".ui-menu-item-label")?.textContent?.includes("priyan"),
-    ) ?? assert.fail("priyan is offered");
+  const priyan = pickerRow("priyan");
   assert.equal(
     priyan.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
     "github",
@@ -3614,7 +3635,7 @@ test("the reviewer picker lists the repository's teams then its people, the auth
   restOn(priyan);
   const card = document.querySelector('.ui-tooltip-card [data-actor-card="github"]');
   assert.match(card?.textContent ?? "", /priyan/u);
-  await pressItem("priyan");
+  await pickRow("priyan");
 
   assert.deepEqual(changes, [
     [
@@ -3641,10 +3662,10 @@ test("the reviewer picker lists the repository's teams then its people, the auth
   act(() => picker().click());
   await settle();
   assert.deepEqual(
-    menuItems().find((item) => item.label === "priyan"),
-    { label: "priyan", checked: "true" },
+    pickerRows().find((item) => item.label === "priyan"),
+    { label: "priyan", checked: true },
   );
-  await pressItem("Platform");
+  await pickRow("Platform");
   assert.deepEqual(changes.at(-1), [
     AGENT.id,
     {
@@ -3677,7 +3698,7 @@ test("a picker's choice shows its button busy once the change has waited the set
   await settle();
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
-    await pressItem("docs");
+    await pickRow("docs");
     assert.equal(picker("Updating labels")?.getAttribute("aria-busy"), "true");
     assert.equal(ringed("Updating labels"), false);
     act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE - 1));
@@ -3729,14 +3750,14 @@ test("the label picker lists the repository's labels, those on the pull request 
 
   act(() => picker.click());
   await settle();
-  assert.deepEqual(menuItems(), [
-    { label: "bug", checked: "true" },
-    { label: "docs", checked: "false" },
+  assert.deepEqual(pickerRows(), [
+    { label: "bug", checked: true },
+    { label: "docs", checked: false },
   ]);
-  await pressItem("bug");
+  await pickRow("bug");
   act(() => picker.click());
   await settle();
-  await pressItem("docs");
+  await pickRow("docs");
 
   assert.deepEqual(changes, [
     [AGENT.id, { action: PULL_REQUEST_ACTION.REMOVE_LABEL, label: "bug" }],
@@ -3771,7 +3792,7 @@ test("a reviewer chosen stands in the header before GitHub answers, and goes bac
     ).click(),
   );
   await settle();
-  await pressItem("priyan");
+  await pickRow("priyan");
   assert.deepEqual(
     faces(),
     [...before, "priyan · Review requested"],
@@ -3816,7 +3837,7 @@ test("a label chosen stands under the title before GitHub answers, in the color 
     ).click(),
   );
   await settle();
-  await pressItem("docs");
+  await pickRow("docs");
   assert.deepEqual(labels(), [["docs", "#0075ca"]], "the label is drawn before GitHub answers");
 
   labeled = true;
@@ -3848,15 +3869,19 @@ test("a picker whose repository could not be read offers Retry in its menu, whic
     ).click(),
   );
   await settle();
-  assert.deepEqual(menuItems(), [{ label: "Retry", checked: null }]);
-  assert.match(
-    document.querySelector('[role="menuitem"]')?.textContent ?? "",
-    /The repository could not be read\./u,
-  );
+  const note =
+    document.querySelector<HTMLElement>(".ui-menu-note-row") ??
+    assert.fail("the picker says the repository could not be read in its list's place");
+  assert.deepEqual(pickerRows(), []);
+  assert.match(note.textContent ?? "", /The repository could not be read\./u);
 
-  await pressItem("Retry");
+  const retry =
+    [...note.querySelectorAll("button")].find((button) => button.textContent === "Retry") ??
+    assert.fail("the note offers Retry");
+  act(() => retry.click());
+  await settle();
   assert.equal(reads, 2);
-  assert.deepEqual(menuItems(), [{ label: "priyan", checked: "false" }]);
+  assert.deepEqual(pickerRows(), [{ label: "priyan", checked: false }]);
 });
 
 /** A review carrying the threads given, as the conversation's read answers one. */

@@ -8,15 +8,22 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@repo/features/workspace-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { EXPERIMENT, type ExperimentChoices } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { handMembers, handState, signedInAs } from "../testing/app-state.js";
+import {
+  handMembers,
+  handState,
+  readExperiments,
+  registryWith,
+  signedInAs,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -24,6 +31,11 @@ import { agentsControl } from "../testing/tasks-control.js";
 import type { EditAgents } from "./edit-ref.js";
 import { PlanBody } from "./plan-body.js";
 import type { TaskLooks } from "./use-task-looks.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+// Note that each case starts with the document handing Plans on, whatever an earlier case handed.
+beforeEach(() => handState(experimentsOn(EXPERIMENT.PLANS)));
 
 /**
  * plan-body.test.ts -- the open task's document says who created it and who last wrote it,
@@ -108,17 +120,23 @@ interface Drawn {
   readonly account?: { readonly id: string; readonly email: string; readonly name: string };
   /** The task's own page, where each section and the title carry a ⋯. */
   readonly sectionLinks?: NonNullable<React.ComponentProps<typeof PlanBody>["sectionLinks"]>;
+  /** The account's experiments, Plans alone on where none are named. */
+  readonly experiments?: ExperimentChoices;
 }
 
 /** The plan drawn in a workspace whose people the host holds as `MEMBERS` and `FORMER`, as `drawn` says. */
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   fakeAppBridge({});
   fakeActPort({});
-  if (drawn.account !== undefined) handState({}, { account: signedInAs(drawn.account).account });
+  const experiments = drawn.experiments ?? experimentsOn(EXPERIMENT.PLANS);
+  handState(
+    experiments,
+    drawn.account === undefined ? {} : { account: signedInAs(drawn.account).account },
+  );
   handMembers(() => ({ rows: { members: MEMBERS, former: FORMER } }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = mountRoot(container);
-  const { readerId, account: _account, ...rest } = drawn;
+  const { readerId, account: _account, experiments: _experiments, ...rest } = drawn;
   const body = createElement(PlanBody, {
     task,
     reader: { readerId },
@@ -127,7 +145,7 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experiments),
         createElement(MemberDirectory, { workspace: ACME, readerId, children: body }),
       ),
     ),
@@ -212,6 +230,30 @@ test("under its title the plan says who created the task and when, then when it 
     "Created by you · 3d ago",
     "a task named by its owner's id alone is the reader's own",
   );
+});
+
+test("while Plans is off the task's title stands with who created it and none of the plan: no edit, no section, no changed line", async () => {
+  const day = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const edit = { actor: PLAN_ACTOR.DEVELOPER, duringCall: false, by: DEAN, at: now };
+  const edited: Task = {
+    ...TASK,
+    createdAt: now - 3 * day,
+    createdBy: CHARLES,
+    lastEdit: edit,
+    sectionEdits: [{ section: "Goal", ...edit }],
+  };
+  const looks: TaskLooks = { changed: new Set(["Goal"]), dismiss: () => undefined };
+
+  const view = await draw(edited, { readerId: DEAN.userId, looks, experiments: {} });
+
+  const byline = view.querySelector(".plan-byline");
+  assert.equal(byline?.previousElementSibling?.textContent, TASK.name);
+  assert.deepEqual([...(byline?.querySelectorAll(".actor-line") ?? [])].map(lineWords), [
+    "Created by Charles Pan · 3d ago",
+  ]);
+  assert.ok(!view.textContent?.includes("Invite a teammate by email."), "no section is drawn");
+  assert.ok(!view.textContent?.includes("Changed since you last looked"), "no changed line");
 });
 
 test("two members each see the other's edits under the other's name on their face, and only their own as you", async () => {
@@ -432,10 +474,11 @@ test("a save that writes a section above the one the keyboard stands on leaves T
   };
   fakeAppBridge({});
   fakeActPort({});
+  handState(experimentsOn(EXPERIMENT.PLANS));
   handMembers(() => ({ rows: { members: MEMBERS } }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = mountRoot(container);
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   const drawPlan = (task: Task) =>
     act(() =>
       root.render(

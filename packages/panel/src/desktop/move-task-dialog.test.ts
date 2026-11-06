@@ -137,8 +137,8 @@ function openMenu(tasks: TasksControl): void {
     root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
   );
   const more =
-    container.querySelector<HTMLButtonElement>(".desktop-task-main .toolbar-tab-actions button") ??
-    assert.fail("the Plan tab draws the task's ⋯");
+    container.querySelector<HTMLButtonElement>('.task-topbar button[aria-label$=" actions"]') ??
+    assert.fail("the topbar draws the task's ⋯");
   act(() => more.click());
 }
 

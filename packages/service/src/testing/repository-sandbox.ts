@@ -7,8 +7,8 @@
  * keeps between calls, which repository stands checked out and whether it
  * is shallow, and writing
  * down every run and every firewall policy in the order they came, each
- * composed from the entries standing at its firewall as the service
- * composes them (`sandbox-firewall.ts`). A clone
+ * composed from the sources its write named as the service composes them
+ * (`sandbox-firewall.ts`), with no launch kept beside them. A clone
  * is answered as the test scripts it, and a command from the test's own
  * table. Nothing here runs a shell. Synthetic throughout.
  */
@@ -18,11 +18,7 @@ import { Effect } from "effect";
 import type { SandboxCommandResult, SandboxRunOptions } from "eve/sandbox";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
 import type { RepositorySandbox } from "../agents/repository-shell.js";
-import {
-  composePolicy,
-  type FirewallEntry,
-  type FirewallSlot,
-} from "../agents/sandbox-firewall.js";
+import { composePolicy, type FirewallSources } from "../agents/sandbox-firewall.js";
 import { type NetworkPolicy, OPEN_INTERNET_POLICY } from "../agents/vercel-sandbox-api.js";
 
 /** One run as the sandbox saw it. */
@@ -81,11 +77,10 @@ export function sandboxDouble(
 ): SandboxDouble {
   const { PATH, VARIABLE } = REPOSITORY_SANDBOX_CONTRACT;
   let policy: NetworkPolicy = OPEN_INTERNET_POLICY;
-  const standing = new Map<FirewallSlot, FirewallEntry>();
-  /** The policy what stands composes, set and recorded. */
-  const composed = () =>
+  /** The policy the sources compose, set and recorded. */
+  const composed = (sources: FirewallSources) =>
     Effect.sync(() => {
-      policy = composePolicy(standing);
+      policy = composePolicy(sources, new Map());
       double.policies.push(policy);
     });
   const double: SandboxDouble = {
@@ -171,18 +166,7 @@ export function sandboxDouble(
     ...(options.firewall === false
       ? undefined
       : {
-          firewall: {
-            set: (slot: FirewallSlot, entry: FirewallEntry) =>
-              Effect.andThen(
-                Effect.sync(() => standing.set(slot, entry)),
-                composed(),
-              ),
-            withdraw: (slot: FirewallSlot) =>
-              Effect.andThen(
-                Effect.sync(() => standing.delete(slot)),
-                composed(),
-              ),
-          },
+          firewall: { write: composed },
         }),
   };
   return double;

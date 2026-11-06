@@ -90,10 +90,10 @@ const WEB_ADMIN_READS: AdminReads = {
   workspace: (query, signal) =>
     asked<AdminWorkspaceDetail>(() => browserClient.admin.workspace(query, { signal })),
   // A refusal of the star did not land, whatever it was.
-  favorite: (id, favorite, signal) => {
+  favorite: (id, favorite) => {
     const input = { query: { [ADMIN_USER_ID_PARAM]: id } };
     const write = favorite ? browserClient.admin.favorite : browserClient.admin.unfavorite;
-    return write(input, { signal }).then(
+    return write(input).then(
       () => true,
       () => false,
     );

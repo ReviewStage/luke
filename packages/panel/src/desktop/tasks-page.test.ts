@@ -352,12 +352,17 @@ function openOptions(page: HTMLElement, label: string): void {
   act(() => button.click());
 }
 
-/** Presses the open menus' items named `names`, in order: a submenu, then its items. */
+/** Presses the open menus' items named `names`, in order: a submenu, then its items, or a searched panel's rows. */
 function choose(...names: string[]): void {
   for (const name of names) {
     const item = [
-      ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
-    ].find((each) => each.querySelector(".ui-menu-item-label")?.textContent === name);
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="menu"]:not([data-leaving]) .ui-menu-item, [role="option"]',
+      ),
+    ].find(
+      (each) =>
+        each.querySelector(".ui-menu-item-label, .ui-combobox-option-label")?.textContent === name,
+    );
     assert.ok(item, `${name} is in the menu`);
     act(() => item.click());
   }
@@ -690,6 +695,19 @@ test("a row's Priority chip sends the priority picked, and its Status chip the s
   ]);
   assert.deepEqual(opened, [], "a pick opens no task");
 });
+
+/** The rows of the searched panel standing open now: a field's people or repositories. */
+function searchedRows(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+}
+
+/** A searched row's words, and the words beside them. */
+function searchedWords(row: HTMLElement): [string | null | undefined, string | null] {
+  return [
+    row.querySelector(".ui-combobox-option-label")?.textContent,
+    row.querySelector(".ui-combobox-option-detail")?.textContent ?? null,
+  ];
+}
 
 /** The words of the menu items standing open now. */
 function menuLabels(): (string | null)[] {
@@ -1317,11 +1335,9 @@ test("the Filter's Repository names each repository as the repository chip does,
 
   openOptions(page, "Filter");
   choose("Repository");
-  const offered = [
-    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
-  ]
-    .filter((item) => item.querySelector(".ui-menu-item-label")?.textContent === "web")
-    .map((item) => item.querySelector(".ui-menu-item-detail")?.textContent);
+  const offered = searchedRows()
+    .filter((item) => item.querySelector(".ui-combobox-option-label")?.textContent === "web")
+    .map((item) => item.querySelector(".ui-combobox-option-detail")?.textContent);
 
   assert.deepEqual(offered, ["acme", "beta"]);
 });
@@ -1334,9 +1350,9 @@ test("the Filter's Repository rows each hang the repository's card, its name wit
 
   openOptions(page, "Filter");
   choose("Repository");
-  const row = [
-    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
-  ].find((item) => item.querySelector(".ui-menu-item-detail")?.textContent === "beta");
+  const row = searchedRows().find(
+    (item) => item.querySelector(".ui-combobox-option-detail")?.textContent === "beta",
+  );
   restOn(row ?? assert.fail("the Filter offers beta/web"));
   const card = document.querySelector(".ui-tooltip-card [data-repository-card]");
 
@@ -1377,20 +1393,11 @@ test("the Filter's Assignee and Creator list the members as every people menu do
   for (const field of ["Assignee", "Creator"]) {
     openOptions(page, "Filter");
     choose(field);
-    const items = [
-      ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
-        .at(-1)
-        ?.querySelectorAll<HTMLElement>(".ui-menu-item") ?? []),
-    ];
-    offered.push(
-      items.map((item) => [
-        item.querySelector(".ui-menu-item-label")?.textContent,
-        item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
-      ]),
-    );
+    const items = searchedRows();
+    offered.push(items.map(searchedWords));
     restOn(
       items.find(
-        (item) => item.querySelector(".ui-menu-item-label")?.textContent === "Charles Pan",
+        (item) => item.querySelector(".ui-combobox-option-label")?.textContent === "Charles Pan",
       ) ?? assert.fail(`${field} offers Charles Pan`),
     );
     cards.push(document.querySelector(".ui-tooltip-card .ui-hover-card-name")?.textContent);
@@ -1422,38 +1429,37 @@ test("the Filter's Assignee says the members could not be read, with Retry, in t
   const page = await mountPage();
   listWorkspace({ ...ACME, memberCount: 2 });
   await act(async () => undefined);
-  const labels = () =>
-    [
-      ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
-        .at(-1)
-        ?.querySelectorAll<HTMLElement>(".ui-menu-item") ?? []),
-    ].map((item) => [
-      item.querySelector(".ui-menu-item-label")?.textContent,
-      item.querySelector(".ui-menu-item-detail")?.textContent ?? null,
-    ]);
+  const retry = () =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+      (each) => each.textContent === "Retry",
+    );
 
   openOptions(page, "Filter");
   choose("Assignee");
-  const failed = labels();
-  await act(async () => choose("Members could not be read."));
+  const failed = searchedRows().map(searchedWords);
+  const said = document.body.textContent ?? "";
+  await act(async () => (retry() ?? assert.fail("the panel offers Retry")).click());
 
-  assert.deepEqual(failed.at(-1), ["Members could not be read.", "Retry"]);
+  assert.match(said, /Members could not be read\./u);
+  assert.doesNotMatch(said, /Reading members/u, "a failed read is no reading");
   assert.ok(
-    failed.every(([label]) => label !== "Reading members…"),
-    "a failed read is no reading",
+    failed.every(([label]) => label !== "Dean Stratakos"),
+    "no member is listed while they could not be read",
   );
   assert.ok(
-    labels().some(([label]) => label === "Dean Stratakos"),
+    searchedRows()
+      .map(searchedWords)
+      .some(([label]) => label === "Dean Stratakos"),
     "the members are listed once read again, in the menu that stayed",
   );
-  assert.ok(labels().every(([label]) => label !== "Members could not be read."));
+  assert.equal(retry(), undefined);
 });
 
 test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {
   const page = await mountPage();
   const offered = () =>
-    [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item')]
-      .filter((item) => item.querySelector(".ui-menu-item-label")?.textContent === "web")
+    searchedRows()
+      .filter((item) => item.querySelector(".ui-combobox-option-label")?.textContent === "web")
       .map((item) => item.querySelector("img.ui-avatar-picture")?.getAttribute("src"));
 
   openOptions(page, "Filter");

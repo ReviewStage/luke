@@ -84,6 +84,7 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { actorName } from "@repo/ui/actor-model";
+import { FIND_SKIP_ATTRIBUTE } from "@repo/ui/find-skip";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import {
   type ChildTaskCount,
@@ -120,7 +121,6 @@ import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
-import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";

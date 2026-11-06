@@ -105,7 +105,7 @@ export interface RelayAsk {
 
 /** The agent a connection reached: whose agent it is, its conversation, whose lease it holds, and the eve session its sandbox is tagged with, none before it ran. */
 export interface RelayAgent {
-  /** The account whose agent it is, under which its sandbox's firewall record is kept. */
+  /** The account whose agent it is, under which the launch at its sandbox's firewall is kept. */
   readonly userId: string;
   readonly conversationId: string;
   readonly sessionId: string | undefined;

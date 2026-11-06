@@ -10,7 +10,7 @@ import { Context, Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-orpc-route.test.ts -- the Users screen over the hosted oRPC route
@@ -33,7 +33,7 @@ const MEMBER: AdminViewer = { userId: "user-1", role: "user" };
 /** What the page sent, as the route saw it: its method, path, and query. */
 type Sent = string;
 
-/** The admin resource's seams: the viewer given, a roster of one account, and a star that lands. */
+/** The admin resource's seams: the viewer given, a roster of one account, and a star that lands and is read back. */
 function seams(viewer: AdminViewer | null, written: string[]): AdminProcedureSeams {
   const unread = () => Effect.die(new Error("this screen reads only the roster"));
   return {
@@ -55,7 +55,7 @@ function seams(viewer: AdminViewer | null, written: string[]): AdminProcedureSea
                 activeDays: 3,
                 lastActiveDay: null,
                 lastSeenAt: null,
-                favorite: false,
+                favorite: written.includes(`${viewer?.userId} account-ada true`),
               },
             ],
           },
@@ -132,6 +132,7 @@ async function mount(): Promise<HTMLElement> {
       ),
     );
   });
+  await readLanded(page);
   return page;
 }
 
@@ -146,15 +147,21 @@ test("an admin reads the roster through the route and stars an account for thems
   await act(async () => star?.click());
 
   await vi.waitFor(() => expect(written).toEqual(["admin-1 account-ada true"]));
-  expect(
-    page
-      .querySelector('button[aria-label="Unfavorite Ada Lovelace"]')
-      ?.getAttribute("aria-pressed"),
-  ).toBe("true");
-  expect(sent).toEqual([
-    "GET /api/admin/users?scope=all&window=7 include null",
-    "PUT /api/admin/favorite?id=account-ada include null",
-  ]);
+  await vi.waitFor(() =>
+    expect(
+      page
+        .querySelector('button[aria-label="Unfavorite Ada Lovelace"]')
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true"),
+  );
+  // Note that the roster is read again once the star has landed.
+  await vi.waitFor(() =>
+    expect(sent).toEqual([
+      "GET /api/admin/users?scope=all&window=7 include null",
+      "PUT /api/admin/favorite?id=account-ada include null",
+      "GET /api/admin/users?scope=all&window=7 include null",
+    ]),
+  );
 });
 
 test("a signed-in non-admin is refused as before", async () => {

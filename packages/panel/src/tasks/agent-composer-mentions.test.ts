@@ -32,6 +32,8 @@ import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -56,6 +58,7 @@ import {
   holdIntegrations,
   holdIntegrationTools,
   holdMembers,
+  registryWith,
   stateWith,
 } from "../testing/app-state.js";
 import {
@@ -313,7 +316,8 @@ beforeEach(() => {
   fakeAppPlatform(DESKTOP_LINKS);
   fakeActs({
     act: answer,
-    requestAppState: () => Promise.resolve(stateWith({}, { tasks: tasksView() })),
+    requestAppState: () =>
+      Promise.resolve(stateWith(experimentsOn(EXPERIMENT.PLANS), { tasks: tasksView() })),
   });
   // Every connected server lists the same tools, three of them under names a mention cannot carry.
   const reads = handHostReads({});
@@ -394,7 +398,7 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
 function drawing(
   node: ReactNode,
   page: TaskMentionsValue | undefined,
-  registry = AtomRegistry.make(),
+  registry = registryWith(experimentsOn(EXPERIMENT.PLANS)),
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -466,6 +470,13 @@ function groupsListed(container: HTMLElement): [string | null, string[]][] {
 function listed(container: HTMLElement): string[] {
   return [...container.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
     (name) => name.textContent ?? "",
+  );
+}
+
+/** How many rows the menu's one group lists, as a reader hears it, drawn near the view or not. */
+function listedCount(container: HTMLElement): number {
+  return Number(
+    container.querySelector(".mention-menu [role=option]")?.getAttribute("aria-setsize"),
   );
 }
 
@@ -1608,13 +1619,14 @@ test("files found by a word typed on are those the longer word finds, and the wo
   typeInComposer(container, "See @files:invite-");
   await settle();
   const typed = listed(container);
+  const typedCount = listedCount(container);
   typeInComposer(container, "5");
   await settle();
   const typedOn = listed(container);
   eraseInComposer(container, 1);
   await settle();
 
-  assert.equal(typed.length, 50);
+  assert.equal(typedCount, 50);
   assert.deepEqual(
     [...typedOn].sort(),
     ["05", "15", "25", "35", "45", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59"].map(
@@ -1635,7 +1647,7 @@ test("typing @files: narrows the list to the repository's paths, listing up to f
 
   assert.equal(wide?.[1].length, 4);
   assert.equal(crumb(container), "Files and folders");
-  assert.equal(listed(container).length, 50);
+  assert.equal(listedCount(container), 50);
   assert.ok(listed(container).every((name) => name.startsWith("invite-")));
 });
 
@@ -1650,7 +1662,7 @@ test("→ on a folder walks into it, its first row the folder and the rest what 
   highlightRow(container, "apps", "web/");
   pressInComposer(container, "ArrowRight");
   await settle();
-  const inWeb = [crumb(container), listed(container).slice(0, 3), listed(container).length];
+  const inWeb = [crumb(container), listed(container).slice(0, 3), listedCount(container)];
   const keys = footKeys(container);
   pressInComposer(container, "Backspace");
   await settle();

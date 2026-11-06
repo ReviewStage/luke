@@ -39,6 +39,7 @@ import { useCoarsePointer } from "../coarse-pointer.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { lazyRoute } from "../lazy-route.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
+import { NewWorkspaceSteps } from "../onboarding/new-workspace-steps.js";
 import { SETUP_GATE } from "../onboarding/setup-model.js";
 import { SetupSteps, useSetupGate } from "../onboarding/setup-steps.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
@@ -754,8 +755,16 @@ export function DesktopShell({
   const summary = useSummaryPin(sidebar.staged);
   // The box the side panel's toggle stands in, which the panel's "+" menu hangs from where the toggle asks for it with nothing to show.
   const setToggleRoom = usePanelToggleRoom();
-  // Note that setup standing before the app holds the places' chords too, so none lands behind it.
-  usePlaceCommands(!gated && setup === SETUP_GATE.NONE, tab, onTabChange, tasks, settings, history);
+  // Note that setup standing before the app holds the places' chords too, so none lands behind it, as New workspace's cards do.
+  const founding = !gated && tasks.newWorkspace.open;
+  usePlaceCommands(
+    !gated && setup === SETUP_GATE.NONE && !founding,
+    tab,
+    onTabChange,
+    tasks,
+    settings,
+    history,
+  );
   // The Admin place is an admin's alone: an account known to be no admin, or no longer one, is given the task's place back,
   // while one whose access is still being read, as a reloaded Admin address's is, has the place wait on it.
   const adminAccess = useAdminAccess();
@@ -889,6 +898,17 @@ export function DesktopShell({
               <OfflineMark />
             </ReplayUnmask>
           </div>
+        </div>
+      </ScrollArea>
+    );
+  }
+  // New workspace takes the whole window on setup's own ground, its cards being setup's.
+  if (founding) {
+    return (
+      <ScrollArea>
+        <div className="desktop-onboarding relative">
+          <div className="desktop-drag-strip absolute inset-x-0 top-0" />
+          <NewWorkspaceSteps tasks={tasks} onClose={tasks.newWorkspace.onClose} />
         </div>
       </ScrollArea>
     );
@@ -1127,6 +1147,11 @@ export function DesktopShell({
         </MentionedAgents>
       </main>
       {barShown ? <MobileBar tasks={tasks} /> : null}
+      {/* Note that the floating sidebar's title-bar row is claimed back from the work's drag strips here, after the work,
+          because a later drag region wins and the sidebar comes before the work, so its Back and Forward keep their presses. */}
+      {sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED && room === SHELL_ROOM.WIDE ? (
+        <div className="sidebar-float-claim" />
+      ) : null}
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
           a narrow room's drawer opens by its toggle alone, as a phone's does. */}
       {sidebar.collapsed &&

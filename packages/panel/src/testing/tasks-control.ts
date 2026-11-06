@@ -27,7 +27,7 @@ import type { SummaryPin } from "../desktop/task-summary.js";
 import { type AgentsControl, MODELS_READ } from "../tasks/use-agents.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
-import { DRAWN_KINDS, SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
+import { DRAWN_KINDS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   type TasksControl,
@@ -382,7 +382,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     workspace: undefined,
     onChooseWorkspace: ignore,
     onLeftWorkspace: ignore,
-    onCreateWorkspace: () => Promise.resolve(undefined),
+    newWorkspace: { open: false, onOpen: ignore, onClose: ignore },
     onOpenWorkspaceSettings: ignore,
     onOpenWorkspaceGitHub: ignore,
     onMoveTask: () => Promise.resolve(false),
@@ -399,6 +399,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     mainTabs: {
       tabs: [MAIN_TAB.OVERVIEW],
       tab: MAIN_TAB.OVERVIEW,
+      returnTab: undefined,
       openAgents: undefined,
       newTabAsked: false,
       onChoose: ignore,
@@ -434,7 +435,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       pullRequestViews: new Map(),
       onPullRequestView: () => undefined,
       strip: DRAWN_KINDS,
-      tab: SIDE_PANEL_TAB.COMMENTS,
+      tab: undefined,
       preview: undefined,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       opened: 0,

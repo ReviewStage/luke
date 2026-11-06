@@ -42,7 +42,6 @@ interface Recorded {
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
-  imageTemplates: number[];
   hostPairings: number[];
   syncLog: number[];
   staleFirewalls: number[];
@@ -62,7 +61,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     automated: [],
     pictures: [],
     tokenPullRequests: [],
-    imageTemplates: [],
     hostPairings: [],
     syncLog: [],
     staleFirewalls: [],
@@ -127,11 +125,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.tokenPullRequests.push(now);
         return { polled: 2, told: 1 };
       }),
-    sweepImageTemplates: (now) =>
-      Effect.sync(() => {
-        recorded.imageTemplates.push(now);
-        return { current: "ready" as const, deleted: 1 };
-      }),
     sweepAgentQueues: () => Effect.succeed(0),
     sweepHostPairings: (now) =>
       Effect.sync(() => {
@@ -184,7 +177,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       automated: [],
       pictures: [],
       tokenPullRequests: [],
-      imageTemplates: [],
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
@@ -215,7 +207,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       automated: [],
       pictures: [],
       tokenPullRequests: [],
-      imageTemplates: [],
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
@@ -233,7 +224,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       automated: [],
       pictures: [],
       tokenPullRequests: [],
-      imageTemplates: [],
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
@@ -255,7 +245,6 @@ it.effect(
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
-      assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
       assert.equal(answer.body.syncLog, 5);
       assert.equal(answer.body.staleFirewalls, 7);
       assert.deepEqual(answer.body.codexPlanSwaps, { renewed: 2, failed: 0 });
@@ -273,7 +262,6 @@ it.effect(
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],
-        imageTemplates: [instant],
         hostPairings: [instant],
         syncLog: [instant],
         staleFirewalls: [instant],
@@ -307,8 +295,6 @@ it.effect(
       assert.deepEqual(answer.body.abandoned, SWEEP_FAILED);
       assert.deepEqual(answer.body.automations, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
-      assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
-      assert.equal(recorded.imageTemplates.length, 1);
       assert.equal(recorded.hostPairings.length, 1);
       assert.equal(recorded.syncLog.length, 1);
       assert.equal(recorded.staleFirewalls.length, 1);

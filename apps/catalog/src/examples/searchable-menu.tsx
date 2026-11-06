@@ -44,6 +44,8 @@ import { CatalogSection } from "../section";
  * failed, with Retry, and the row a list with nothing to pick for want of
  * a connection holds there, ending in the press that connects it. Each closes on Escape, a pick, a second press of its
  * button, and focus leaving it, and hands the focus back to its button.
+ * Then three hundred reviewers whose picks turn each on or off, several
+ * checked at once and the menu standing through each pick (`checked`).
  * Then a short list of what a pick may do, no field over it, whose choice
  * turns it into a search headed by that choice, led by the folded way
  * back, as Task relation asks for the relation before the task.
@@ -439,6 +441,69 @@ function PhoneSheet(): React.JSX.Element {
   );
 }
 
+/** Synthetic reviewers, as long a list as a large organization's assignable users: three hundred people. */
+const REVIEWERS: readonly MenuRow[] = Array.from({ length: 300 }, (_, at) => ({
+  id: `reviewer-${at + 1}`,
+  label: `reviewer-${String(at + 1).padStart(3, "0")}`,
+}));
+
+/**
+ * A menu whose picks turn rows on and off rather than choose one, as a pull
+ * request's reviewers are asked: the rows on stand checked, several at once,
+ * and the menu stays open through each pick.
+ */
+function Toggled(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
+  const [on, setOn] = useState<ReadonlySet<string>>(() => new Set(["reviewer-2", "reviewer-5"]));
+  const menuId = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  return (
+    <div className="catalog-anchor" ref={root}>
+      <Button
+        ref={trigger}
+        variant={BUTTON_VARIANT.OUTLINE}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen(!open)}
+      >
+        Reviewers
+      </Button>
+      {drawn.mounted && (
+        <SearchableMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
+          id={menuId}
+          label="Request a review"
+          placeholder="Request a review"
+          rows={REVIEWERS}
+          value={undefined}
+          checked={on}
+          noMatch="No one matches"
+          align={POPOVER_ALIGN.START}
+          onPick={(id) =>
+            setOn((was) => {
+              const next = new Set(was);
+              if (!next.delete(id)) next.add(id);
+              return next;
+            })
+          }
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 function SearchableMenuExample(): React.JSX.Element {
   return (
     <>
@@ -500,6 +565,11 @@ function SearchableMenuExample(): React.JSX.Element {
               }}
             />
           </Inline>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="searchable-menu-checked" title="Several checked, three hundred long">
+        <div className="catalog-popover-stage">
+          <Toggled />
         </div>
       </CatalogSection>
       <CatalogSection id="searchable-menu-headed" title="Chosen first, then headed">

@@ -27,7 +27,6 @@ import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { NodeRuntime } from "@effect/platform-node";
-import { PREPARE_SCRIPT } from "@repo/service/agents/agent-runtime/sandbox-image";
 import { isRecord, valueFromJsonText, type WireRecord, type WireValue } from "@repo/wire";
 import { type Command, Sandbox } from "@vercel/sandbox";
 import {
@@ -505,7 +504,7 @@ const resumedLaunch = Effect.fn("probe/resumedLaunch")(function* (
   yield* endDriver(scrub, driver);
 });
 
-/** The image: today's `PREPARE_SCRIPT`, then Claude Code, the checkout, and the probe's files. */
+/** The image: the agents' image's own base, then Claude Code, the checkout, and the probe's files. */
 const prepareSandbox = Effect.fn("probe/prepareSandbox")(function* (
   scrub: Sanitizer,
   settings: Settings,
@@ -514,9 +513,6 @@ const prepareSandbox = Effect.fn("probe/prepareSandbox")(function* (
 ) {
   const defaultUser = yield* run(scrub, recording, sandbox, "the default user", {
     script: "id -un",
-  });
-  yield* run(scrub, recording, sandbox, "today's image (PREPARE_SCRIPT)", {
-    script: PREPARE_SCRIPT,
   });
   yield* run(scrub, recording, sandbox, "Claude Code and the agent user", {
     script: INSTALL_CLAUDE_CODE,
@@ -662,7 +658,7 @@ function writeFixtures(
     pins: { agentSdk: PINS.AGENT_SDK, claudeCode: PINS.CLAUDE_CODE },
     model: settings.model,
     queryOptions: QUERY_OPTIONS,
-    sandbox: { vcpus: PROBE_SANDBOX.VCPUS, runtime: "the SDK's default, as eve's" },
+    sandbox: { vcpus: PROBE_SANDBOX.VCPUS, image: PROBE_SANDBOX.IMAGE },
     nonce: recording.nonce,
     failure: recording.failure ?? null,
     passed: passed(conditions),
@@ -743,6 +739,7 @@ const main = Effect.gen(function* () {
   const sandbox = yield* attempt(scrub, "open the sandbox", () =>
     Sandbox.create({
       name: `agent-probe-${recording.nonce}`,
+      image: PROBE_SANDBOX.IMAGE,
       timeout: PROBE_SANDBOX.TIMEOUT_MS,
       resources: { vcpus: PROBE_SANDBOX.VCPUS },
       persistent: true,

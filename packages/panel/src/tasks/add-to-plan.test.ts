@@ -7,16 +7,22 @@ import { INBOX_IMAGE_TYPE } from "@repo/features/inbox-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import type { PortActKind } from "@repo/host/contract";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { readExperiments } from "../testing/app-state.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
 
 /**
  * add-to-plan.test.ts -- a picture an agent showed, added to its plan from

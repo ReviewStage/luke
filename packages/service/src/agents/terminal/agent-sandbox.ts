@@ -13,19 +13,25 @@
  *
  * The ports a server listens on are read the same way, from the kernel's
  * socket tables in the running session (`listening-ports.ts`), and never
- * from a sandbox that is not running.
+ * from a sandbox that is not running. Turning forwarding on is the one
+ * read that wakes a stopped sandbox, the developer having asked for the
+ * app, and starts the repository's run command (`run-command.ts`) where no
+ * port listens in it yet.
  *
  * The GitHub credential the firewall carries for the agent is set here in
- * the agent's own GitHub slot, in the shape its own session and a copy of
- * its work set it (`../sandbox-firewall.ts`'s `githubEntry`): an
- * installation token on GitHub's two hosts, or a member's own classic token
- * on the agent's one repository's git and REST paths alone, which is taken
- * off again whenever nobody is using it. Whatever else stands at the
- * firewall stays, since every write composes the session's whole policy.
+ * the shape its own session and a copy of its work set it
+ * (`../sandbox-firewall.ts`): an installation token on GitHub's two hosts,
+ * or a member's own classic token on the agent's one repository's git and
+ * REST paths alone, which is taken off again whenever nobody is using it.
+ * The swaps of a launch running there stay, since every write composes the
+ * session's whole policy with them.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import type { ListeningPortsAnswer } from "@repo/features/listening-ports-wire";
+import type {
+  ForwardingStartAnswer,
+  ListeningPortsAnswer,
+} from "@repo/features/listening-ports-wire";
 import {
   SANDBOX_STATE,
   type SandboxState,
@@ -35,9 +41,7 @@ import {
 import { Context, Effect, Layer, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import {
-  FIREWALL_SLOT,
   type FirewallSession,
-  githubEntry,
   type RepositoryCredential,
   sandboxFirewall,
 } from "../sandbox-firewall.js";
@@ -51,6 +55,7 @@ import {
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
 import { listeningPortsOf, readSocketTables } from "./listening-ports.js";
+import { readRunConfig, runCommandOf, startRunCommand } from "./run-command.js";
 import {
   holdsTerminal,
   killTerminal,
@@ -106,6 +111,10 @@ export interface AgentSandboxService {
   readonly listeningPorts: (
     sessionId: string,
   ) => Effect.Effect<ListeningPortsAnswer, SandboxUnavailable>;
+  /** The agent's sandbox woken where it was stopped, and the repository's run command started there where no port listens. */
+  readonly startForwarding: (
+    sessionId: string,
+  ) => Effect.Effect<ForwardingStartAnswer, SandboxUnavailable>;
   /** A new shell in the agent's running sandbox, under the id given, named where the developer named it. */
   readonly start: (
     sessionId: string,
@@ -126,17 +135,16 @@ export interface AgentSandboxService {
   /** A PTY minted on the running sandbox for a command of the caller's own, or where the sandbox stands; a stopped sandbox is never woken here. */
   readonly open: (sessionId: string) => Effect.Effect<SandboxOpen, SandboxUnavailable>;
   /**
-   * A fresh credential set in the GitHub slot of the running sandbox
-   * session's firewall, in the shape the agent's own session sets it
-   * (`githubEntry`), so the shell reaches GitHub as the agent does and never
-   * holds the token's bytes; the session is named with the account whose
-   * agent it is.
+   * A fresh credential set at the running sandbox session's firewall, in the
+   * shape the agent's own session sets it, so the shell reaches GitHub as
+   * the agent does and never holds the token's bytes; the session is named
+   * with the account whose agent it is.
    */
   readonly setCredential: (
     session: FirewallSession,
     credential: RepositoryCredential,
   ) => Effect.Effect<void, SandboxUnavailable>;
-  /** The GitHub credential taken off the running sandbox session's firewall, whatever else stands there staying. */
+  /** The GitHub credential taken off the running sandbox session's firewall, the swaps of a launch running there staying. */
   readonly withdrawCredential: (
     session: FirewallSession,
   ) => Effect.Effect<void, SandboxUnavailable>;
@@ -152,7 +160,7 @@ function stateOf(sandbox: ListedSandbox | undefined): SandboxState {
   return STATE_OF_STATUS.get(sandbox.status ?? "") ?? SANDBOX_STATE.STOPPED;
 }
 
-/** The service over the REST calls the API makes, and the store its firewall's record is kept in. */
+/** The service over the REST calls the API makes, and the store its firewall's launch is read from. */
 function agentSandboxOver(
   api: VercelSandboxApi,
   context: Context.Context<DatabaseServices>,
@@ -188,6 +196,14 @@ function agentSandboxOver(
       ),
     );
 
+  /** The sandbox's running session, woken from its snapshot where it was stopped; none where it was never opened. */
+  const woken = (sessionId: string) =>
+    Effect.gen(function* () {
+      const { sandbox, running } = yield* standing(sessionId);
+      if (sandbox === undefined || running !== undefined) return running;
+      return (yield* api.resume(sandbox.name)).currentSessionId;
+    });
+
   return {
     terminals: (sessionId) =>
       Effect.gen(function* () {
@@ -206,6 +222,18 @@ function agentSandboxOver(
         // Tables the kernel could not be read for are an outage, never a sandbox with no servers.
         if (ports === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
         return { running: true, ports };
+      }),
+    startForwarding: (sessionId) =>
+      Effect.gen(function* () {
+        const running = yield* woken(sessionId);
+        if (running === undefined) return { started: false };
+        const ports = listeningPortsOf(yield* api.run(running, readSocketTables()));
+        if (ports === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
+        if (ports.length > 0) return { started: false };
+        const command = runCommandOf(yield* api.run(running, readRunConfig()));
+        if (command === undefined) return { started: false };
+        yield* api.start(running, { ...startRunCommand(command), sudo: false });
+        return { started: true };
       }),
     start: (sessionId, terminalId, title) =>
       inRunning(sessionId, (running) =>
@@ -257,12 +285,8 @@ function agentSandboxOver(
         return { state: SANDBOX_STATE.RUNNING, shell };
       }),
     setCredential: (session, credential) =>
-      Effect.provideContext(
-        firewall.set(session, FIREWALL_SLOT.GITHUB, githubEntry(credential)),
-        context,
-      ),
-    withdrawCredential: (session) =>
-      Effect.provideContext(firewall.withdraw(session, FIREWALL_SLOT.GITHUB), context),
+      Effect.provideContext(firewall.write(session, { github: credential }), context),
+    withdrawCredential: (session) => Effect.provideContext(firewall.write(session, {}), context),
     resume: (sessionId) =>
       Effect.gen(function* () {
         const { sandbox, state } = yield* standing(sessionId);

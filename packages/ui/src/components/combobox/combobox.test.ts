@@ -38,6 +38,7 @@ const roots: Root[] = [];
 /** Stands in for the browser's ResizeObserver, which jsdom lacks, since every option's name and detail measure whether they are cut short. */
 class StandInResizeObserver {
   observe(): void {}
+  unobserve(): void {}
   disconnect(): void {}
 }
 

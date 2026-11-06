@@ -32,6 +32,7 @@
  * root takes none of them, so such a root adopts its own.
  */
 
+import { FIND_SKIP_ATTRIBUTE } from "@repo/ui/find-skip";
 import { askScroll } from "@repo/ui/scroll-asked";
 
 /** The two highlights every find paints into: each match, and the one it is at, drawn over the rest. */
@@ -79,13 +80,6 @@ const BEFORE_MATCH = "beforematch";
 
 /** The elements whose text is never read as words. */
 const UNREAD_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT"]);
-
-/**
- * The attribute worn by what is drawn among a tab's words and is none of
- * them: the find bar itself, standing inside the tab it searches, and a
- * code line's number in its gutter.
- */
-export const FIND_SKIP_ATTRIBUTE = "data-find-skip";
 
 /**
  * The attribute worn by a host whose open shadow root is searched in its

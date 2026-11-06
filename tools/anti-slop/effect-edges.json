@@ -37,7 +37,6 @@
     "apps/desktop/src/main/services/window-service.ts",
     "apps/desktop/src/main/window/renderer-revival.ts",
     "packages/panel/src/feedback-images.ts",
-    "packages/ui/src/components/menu/touch-hold.ts",
-    "packages/panel/src/admin/use-admin-read.ts"
+    "packages/ui/src/components/menu/touch-hold.ts"
   ]
 }

@@ -112,6 +112,7 @@ function world(options: {
   const sandbox: AgentSandboxService = {
     terminals: () => Effect.die("the relay lists nothing"),
     listeningPorts: () => Effect.die("the relay lists no ports"),
+    startForwarding: () => Effect.die("the relay starts no run command"),
     start: () => Effect.die("the relay starts nothing"),
     rename: () => Effect.die("the relay renames nothing"),
     kill: () => Effect.die("the relay kills nothing"),
@@ -292,7 +293,7 @@ it.effect(
 
       const [start, resize] = texts(pty.sent);
       assert.equal(start.type, "start");
-      assert.equal(start.command, "setpriv", "the shell attaches with every capability dropped");
+      assert.equal(start.command, "sh", "the shell attaches through tmux's script");
       assert.ok(
         start.args.includes(`=terminal-${SHELL}`),
         "the start names the shell's session exactly",

@@ -70,12 +70,6 @@ export const HOSTED_API_ERROR = {
   /** The agent's session has ended for good: its sandbox cannot be reached again, and only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
   /**
-   * The agent runs on a native harness whose sandbox image is still being
-   * prepared, so it could not start or take the message yet; nothing was
-   * written, and the same request a little later, under the same key, is taken.
-   */
-  AGENT_IMAGE_PREPARING: "agent-image-preparing",
-  /**
    * The agent runs on a native harness (Claude Code or Codex) that this part
    * of the app cannot reach yet, such as a call, which runs on eve alone; nothing
    * was written or charged. It is reached from the agent's own tab.
@@ -149,6 +143,8 @@ export const HOSTED_API_ERROR = {
   ALREADY_INVITED: "already-invited",
   /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
   SANDBOX_STOPPED: "sandbox-stopped",
+  /** The coding agent's sandbox can never resume: its snapshot expired or was deleted, its saved files with it, and the agent's next turn starts a fresh one. Nothing was resumed. */
+  SANDBOX_SNAPSHOT_GONE: "sandbox-snapshot-gone",
   /** A skill of that name is already installed in the scope asked: the account's own, or the workspace's. Nothing was installed. */
   SKILL_NAME_TAKEN: "skill-name-taken",
   /** A skill's files were refused: a file past its bound, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */

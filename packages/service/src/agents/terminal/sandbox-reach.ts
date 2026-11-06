@@ -17,7 +17,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import { controlsAgent, reachedAgentById } from "../agent-reach.js";
-import type { SandboxUnavailable } from "../vercel-sandbox-api.js";
+import { type SandboxUnavailable, snapshotGone } from "../vercel-sandbox-api.js";
 
 /** The agent a sandbox route reaches: its conversation, the eve session its sandbox is tagged with, and the machine it runs on. */
 interface ReachedAgentSession {
@@ -54,8 +54,9 @@ export const reachedAgentSession = /* @__PURE__ */ Effect.fnUntraced(function* (
  * A sandbox Vercel could not be asked about, as the upstream's refusal a
  * caller may retry, apart from the store's own unavailable, so the tab can
  * say it was the agent's sandbox that did not answer: Vercel Sandbox's API,
- * or a command in a sandbox that API answered for. The log names the status
- * Vercel answered, where it answered one.
+ * or a command in a sandbox that API answered for. A sandbox whose snapshot
+ * is gone is refused as that, since no retry resumes it. The log names the
+ * status Vercel answered, where it answered one.
  */
 export function sandboxOrUpstream<A, R>(
   effect: Effect.Effect<A, SandboxUnavailable, R>,
@@ -63,7 +64,11 @@ export function sandboxOrUpstream<A, R>(
   return Effect.catch(effect, (failure) =>
     Effect.andThen(
       Effect.logWarning(`an agent's sandbox call failed: ${failure.message}`),
-      Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR),
+      Effect.fail(
+        snapshotGone(failure)
+          ? HOSTED_REFUSAL.SANDBOX_SNAPSHOT_GONE
+          : HOSTED_REFUSAL.UPSTREAM_ERROR,
+      ),
     ),
   );
 }

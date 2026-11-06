@@ -1,5 +1,6 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { TASK_PRIORITY_ORDER, TASK_STATUS_ORDER, type TaskSummary } from "@repo/features/task-wire";
+import { noMatchWords, TERM } from "@repo/features/words";
 import {
   CHIP_LOOK,
   Chip,
@@ -82,7 +83,7 @@ import { Fragment, type ReactNode, type RefCallback, type RefObject, useMemo, us
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { memberReadNotice, memberRows } from "../member-rows.js";
+import { memberReadNote, memberRows } from "../member-rows.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -90,6 +91,7 @@ import {
   TASK_STATUS_WORDS,
 } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { actionSearchPanel } from "./action-search-menu.js";
 import { type MenuAsk, useAskedMenu } from "./phone-head.js";
 
 /**
@@ -426,6 +428,10 @@ function fieldValues(
   }
 }
 
+/** What a searched field's field asks for: a person's, or a repository's. */
+const SEARCH_MEMBERS = "Search members";
+const SEARCH_REPOSITORIES = "Search repositories";
+
 /** The fields that name a person, which a workspace nobody shares has no use for. */
 const PERSON_FIELDS: readonly TasksFilterField[] = [
   TASKS_FILTER_FIELD.ASSIGNEE,
@@ -464,34 +470,37 @@ function filterEntries(
 ): MenuEntry[][] {
   const fields: MenuEntry[] = offeredFields(shared).map((field) => {
     const kept = filterValues(filter, field);
-    return {
-      label: FIELD_WORDS[field],
-      icon: FIELD_ICON[field],
-      items: [
-        ...fieldValues(field, tasks, filter, reader, pictures).map(
-          ({ value, words, label, icon, detail, card }): MenuAction => ({
-            // Note that a value is keyed by itself, because two repositories, or two people, may be named alike.
-            key: value ?? undefined,
-            label: label ?? words,
-            // Note that a person's face draws their letter, so it is masked with their name; none, No assignee or No one, is the app's own.
-            icon:
-              PERSON_FIELDS.includes(field) && value !== null ? (
-                <ReplayMask>{icon}</ReplayMask>
-              ) : (
-                icon
-              ),
-            ...(detail === undefined ? {} : { detail, detailPlace: MENU_DETAIL.BESIDE }),
-            card,
-            checked: kept.includes(value),
-            stays: true,
-            replayMasked: value !== null && namesData(field),
-            onSelect: () => onFilter(toggledFilter(filter, field, value)),
-          }),
-        ),
+    const head = { label: FIELD_WORDS[field], icon: FIELD_ICON[field] };
+    const values = fieldValues(field, tasks, filter, reader, pictures).map(
+      ({ value, words, label, icon, detail, card }): MenuAction => ({
+        // Note that a value is keyed by itself, because two repositories, or two people, may be named alike.
+        key: value ?? undefined,
+        label: label ?? words,
+        // Note that a person's face draws their letter, so it is masked with their name; none, No assignee or No one, is the app's own.
+        icon:
+          PERSON_FIELDS.includes(field) && value !== null ? <ReplayMask>{icon}</ReplayMask> : icon,
+        ...(detail === undefined ? {} : { detail, detailPlace: MENU_DETAIL.BESIDE }),
+        card,
+        checked: kept.includes(value),
+        stays: true,
+        replayMasked: value !== null && namesData(field),
+        onSelect: () => onFilter(toggledFilter(filter, field, value)),
+      }),
+    );
+    // Note that a field naming people or repositories may run to hundreds of values, so it is searched in a panel that draws only those near its view.
+    if (namesData(field)) {
+      const person = PERSON_FIELDS.includes(field);
+      return actionSearchPanel(head, {
+        label: FIELD_WORDS[field],
+        placeholder: person ? SEARCH_MEMBERS : SEARCH_REPOSITORIES,
+        noMatch: noMatchWords(person ? TERM.MEMBER : TERM.REPOSITORY),
+        actions: values,
         // Note that the members are read for the people's fields alone, so no other field says it is reading or could not be read.
-        ...(PERSON_FIELDS.includes(field) ? memberReadNotice(reader) : []),
-      ],
-    };
+        note: person ? memberReadNote(reader) : undefined,
+        replayUnmasked: true,
+      });
+    }
+    return { ...head, items: values };
   });
   return [
     fields,

@@ -4,15 +4,17 @@ import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
 import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { forgetPictures } from "@repo/ui/picture-cache";
 import { MESSAGE_ROLE } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { MarkdownMessage } from "../markdown-message.js";
 import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { registryWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
@@ -81,7 +83,7 @@ function standHost(
 async function drawn(element: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root?.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), element)));
   await settle();
   return container;
 }
@@ -314,7 +316,10 @@ test("a picture whose read went unanswered says it could not be read, with Retry
   const next = `## Approach\n\n![Second mock](${picture(taskId, SECOND)})`;
   act(() =>
     root?.render(
-      onRegistry(AtomRegistry.make(), createElement(PlanBody, { task: taskOf(taskId, next) })),
+      onRegistry(
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        createElement(PlanBody, { task: taskOf(taskId, next) }),
+      ),
     ),
   );
   await settle();

@@ -113,6 +113,8 @@ interface Main {
   createRefused: TerminalRefusal | undefined;
   /** What `terminal.list` answers in place of the list, where the service refuses it. */
   listRefused: TerminalRefusal | undefined;
+  /** What `terminal.resume` answers in place of the sandbox, where the service refuses it. */
+  resumeRefused: TerminalRefusal | undefined;
   /** The answers held back, in the order asked, each landing when the test lets it go. */
   readonly held: (() => void)[];
   /** The kinds whose answers are held back until the test lets them go. */
@@ -160,6 +162,7 @@ beforeEach(() => {
         };
         return main.listed;
       case ACT_KIND.TERMINAL_RESUME:
+        if (main.resumeRefused !== undefined) return { refused: main.resumeRefused };
         main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
         return { sandbox: SANDBOX_STATE.RUNNING };
       default:
@@ -172,6 +175,7 @@ beforeEach(() => {
     down: new Set(),
     createRefused: undefined,
     listRefused: undefined,
+    resumeRefused: undefined,
     held: [],
     holding: new Set(),
     post: (terminalId) => {
@@ -501,6 +505,18 @@ test("a stopped sandbox shows its bar over the dimmed screen and resumes only on
     "terminal.create",
     "terminal.attach",
   ]);
+});
+
+test("a resume whose snapshot is gone says the sandbox shut down and how to start a fresh one", async () => {
+  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
+  main.resumeRefused = TERMINAL_REFUSAL.SANDBOX_SNAPSHOT_GONE;
+  const tab = await mount();
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.equal(
+    tab.bar(),
+    "This sandbox shut down after being idle. Send the agent a message to start a fresh one.",
+  );
 });
 
 test("Return on the stopped bar resumes the sandbox, as its action does", async () => {

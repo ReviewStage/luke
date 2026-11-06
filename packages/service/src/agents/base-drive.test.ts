@@ -10,10 +10,10 @@ import { fixtureToken, runnerSandboxApi } from "../testing/runner-sandbox-fake.j
 import { BASE_DRIVE, type BaseDriveOf, baseDriveName, fillBaseDrive } from "./base-drive.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 import type { RepositorySandbox } from "./repository-shell.js";
-import { composePolicy, type FirewallEntry, type FirewallSlot } from "./sandbox-firewall.js";
+import { composePolicy } from "./sandbox-firewall.js";
 import { type VercelSandboxApi, vercelSandboxApi } from "./vercel-sandbox-api.js";
 
-const IMAGE = "snap_fixture_image";
+const IMAGE = "agent-image:fixture";
 const TOKEN = "ghs_fixtureBaseDriveToken";
 const RELAY: BaseDriveOf = {
   workspaceId: "workspace-relay",
@@ -29,12 +29,9 @@ const fixture = Effect.gen(function* () {
   return { fake, api };
 });
 
-/** The fill's sandbox as the clone reaches it: each run straight to the API, and each policy composed from what stands at its firewall. */
+/** The fill's sandbox as the clone reaches it: each run straight to the API, and each policy composed from the sources its write names. */
 function opener(api: VercelSandboxApi) {
   return (running: string): RepositorySandbox => {
-    const standing = new Map<FirewallSlot, FirewallEntry>();
-    const composed = () =>
-      Effect.suspend(() => api.updateNetworkPolicy(running, composePolicy(standing)));
     return {
       run: (ask) =>
         Effect.runPromise(
@@ -46,16 +43,7 @@ function opener(api: VercelSandboxApi) {
           }),
         ),
       firewall: {
-        set: (slot, entry) =>
-          Effect.andThen(
-            Effect.sync(() => standing.set(slot, entry)),
-            composed(),
-          ),
-        withdraw: (slot) =>
-          Effect.andThen(
-            Effect.sync(() => standing.delete(slot)),
-            composed(),
-          ),
+        write: (sources) => api.updateNetworkPolicy(running, composePolicy(sources, new Map())),
       },
     };
   };
@@ -79,7 +67,7 @@ it.effect(
       assert.deepEqual([...fake.drives], [name]);
       const [sandbox] = fake.sandboxes;
       assert.ok(sandbox !== undefined);
-      assert.equal(sandbox.snapshotId, IMAGE);
+      assert.equal(sandbox.image, IMAGE);
       assert.deepEqual(sandbox.mounts, {
         [BASE_DRIVE.MOUNT_PATH]: { drive: name, mode: "read-write" },
       });

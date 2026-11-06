@@ -459,7 +459,12 @@ function deviceMachineOver(
         yield* queued(pin, { kind: DEVICE_AGENT_LINE_KIND.STOP, payload: {} });
       }),
 
-    firewall: { set: () => Effect.void, withdraw: () => Effect.void, clear: () => Effect.void },
+    firewall: {
+      write: () => Effect.void,
+      keepLaunch: () => Effect.void,
+      endLaunch: () => Effect.void,
+      clear: () => Effect.void,
+    },
 
     // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.
     resume: (found) =>

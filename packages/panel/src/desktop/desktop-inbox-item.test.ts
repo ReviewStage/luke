@@ -39,7 +39,7 @@ import { DocumentIcon } from "@repo/ui";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeAll, onTestFinished, test, vi } from "vitest";
+import { beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import {
@@ -49,7 +49,7 @@ import {
   fakeActs,
   fakeActsAnswer,
 } from "../testing/app-bridge.js";
-import { handState } from "../testing/app-state.js";
+import { handState, readExperiments } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -128,6 +128,11 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { viewerPlace } from "../testing/viewer-place.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+// Note that each case starts with the document handing Plans on, whatever an earlier case handed.
+beforeEach(() => handState(experimentsOn(EXPERIMENT.PLANS)));
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
