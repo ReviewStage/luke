@@ -40,7 +40,12 @@ import {
 import type { DescriptionEditorPlacement } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { type ToastNotice, useToast, useWithdrawToast } from "../toast.js";
-import { appStateQuery, signedInKey } from "../use-app-state.js";
+import {
+  appStateQuery,
+  type SignedInAccount,
+  sameAccount,
+  selectSignedIn,
+} from "../use-app-state.js";
 import type { DescriptionEditMutation } from "./description-edit-mutation.js";
 import { type ConflictWords, conflictWords, type EditPlace } from "./edit-ref.js";
 
@@ -77,7 +82,7 @@ type LeftSave = (request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 const leftUnsavedAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, DocumentEditor>>(new Map()));
 
 /** The account signed in as the window's owner hook last drew it, whose change lets go of the words tasks were left with. */
-const wordsOwnerAtom = Atom.keepAlive(Atom.make<string | undefined>(undefined));
+const wordsOwnerAtom = Atom.keepAlive(Atom.make<SignedInAccount | undefined>(undefined));
 
 /** The tasks whose open editor holds words the service does not hold yet, while it does. */
 const openUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
@@ -118,8 +123,8 @@ const LEFT_UNSAVED = {
 /** What a task's words are saved through once it is left: its id, the account that wrote them and the one signed in as it asks, its save, who its conflict is named for, and where they are kept and said. */
 interface LeftTask {
   readonly taskId: string;
-  readonly owner: string | undefined;
-  readonly signedIn: () => string | undefined;
+  readonly owner: SignedInAccount | undefined;
+  readonly signedIn: () => SignedInAccount | undefined;
   readonly save: LeftSave;
   readonly place: EditPlace;
   readonly registry: AtomRegistry.AtomRegistry;
@@ -151,8 +156,14 @@ function failureOf(answered: object): object | undefined {
  */
 function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol, cause?: unknown): void {
   const { taskId, registry } = left;
-  // Note that a save answered after another account signed in keeps nothing, because its words are no longer the account's signed in.
-  const kept = left.signedIn() === left.owner ? editorLeft(now) : undefined;
+  // Note that a save answered after another account signed in keeps nothing
+  // and lets go of nothing kept, because its words are no longer the account's
+  // signed in and what is kept for the task now is the next account's.
+  if (!sameAccount(left.signedIn(), left.owner)) {
+    mark(registry, savingLeftAtom, saving, false);
+    return;
+  }
+  const kept = editorLeft(now);
   const held = new Map(registry.get(leftUnsavedAtom));
   if (kept === undefined) held.delete(taskId);
   else held.set(taskId, kept);
@@ -206,7 +217,7 @@ function saveLeft(
   cause?: unknown,
 ): void {
   // Note that words are never sent once another account has signed in, because they would save as it.
-  if (left.signedIn() !== left.owner) {
+  if (!sameAccount(left.signedIn(), left.owner)) {
     mark(left.registry, savingLeftAtom, saving, false);
     return;
   }
@@ -281,12 +292,13 @@ export function useDescriptionWordsUnsaved(): boolean {
  * the account from main's document.
  */
 export function useDescriptionWordsOwner(): void {
-  const account = useQuery({ ...appStateQuery, select: signedInKey }).data;
+  const account = useQuery({ ...appStateQuery, select: selectSignedIn }).data;
   const registry = useContext(RegistryContext);
   const withdrawToast = useWithdrawToast();
   useLayoutEffect(() => {
-    if (registry.get(wordsOwnerAtom) === account) return;
+    const held = registry.get(wordsOwnerAtom);
     registry.set(wordsOwnerAtom, account);
+    if (sameAccount(held, account)) return;
     for (const taskId of registry.get(leftUnsavedAtom).keys()) withdrawToast(taskId);
     registry.set(leftUnsavedAtom, new Map());
   }, [registry, withdrawToast, account]);
@@ -329,10 +341,10 @@ export function useDescriptionEditing(
   // Whether the open editor holds words typed since its last hand-over.
   const [holding, setHolding] = useState(false);
   const registry = useContext(RegistryContext);
-  const owner = useQuery({ ...appStateQuery, select: signedInKey }).data;
+  const owner = useQuery({ ...appStateQuery, select: selectSignedIn }).data;
   // Note that whose words are sent is read from main's document as it stands
   // at the send, never as a render drew it, so no order of draws sends them as another.
-  const signedInNow = () => signedInKey(queryClient.getQueryData(appStateQuery.queryKey));
+  const signedInNow = () => selectSignedIn(queryClient.getQueryData(appStateQuery.queryKey));
   // The account signed in as the open editor opened, whose words it holds.
   const wroteAs = useRef(owner);
   const toast = useToast();
@@ -361,7 +373,7 @@ export function useDescriptionEditing(
   // so a pause and a close landing in one flush start one save, not two.
   const send = () => {
     const held = latest.current;
-    if (held === undefined || signedInNow() !== wroteAs.current) return;
+    if (held === undefined || !sameAccount(signedInNow(), wroteAs.current)) return;
     const request = pendingSave(held);
     if (request === undefined) return;
     const sentFrom = opening.current;
@@ -401,8 +413,13 @@ export function useDescriptionEditing(
 
   // Another account signing in closes an editor open on the last one's words,
   // which are never saved as it; a save's answer still out lands on no editor.
+  // The same account read anew, its id among it, is what the editor holds.
   useEffect(() => {
-    if (latest.current === undefined || wroteAs.current === owner) return;
+    if (sameAccount(wroteAs.current, owner)) {
+      wroteAs.current = owner;
+      return;
+    }
+    if (latest.current === undefined) return;
     opening.current += 1;
     latest.current = undefined;
     setEditor(undefined);

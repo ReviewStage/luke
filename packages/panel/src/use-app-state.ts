@@ -440,11 +440,32 @@ export const selectRun = (state: AppStateSnapshot) => state.run;
 export const selectSettings = (state: AppStateSnapshot) => state.settings;
 export const selectAccount = (state: AppStateSnapshot) => state.account;
 
-/** The key of the account signed in, its id or else its address; none while none is. */
-export const signedInKey = (state: AppStateSnapshot | undefined): string | undefined =>
+/** Who is signed in, by the id and the address main's document names; none while none is. */
+export interface SignedInAccount {
+  readonly id: string | undefined;
+  readonly email: string;
+}
+
+/** The account signed in, read for a `select` or from the document as it stands; none while none is. */
+export const selectSignedIn = (state: AppStateSnapshot | undefined): SignedInAccount | undefined =>
   state?.account.status === ACCOUNT_STATUS.SIGNED_IN
-    ? (state.account.id ?? state.account.email)
+    ? { id: state.account.id, email: state.account.email }
     : undefined;
+
+/**
+ * Whether two readings name one account: by id where both name one, else by
+ * address. Note that an account signed in before its id is read names only
+ * its address, so a refresh that brings the id is still that account.
+ */
+export function sameAccount(
+  one: SignedInAccount | undefined,
+  other: SignedInAccount | undefined,
+): boolean {
+  if (one === undefined || other === undefined) return one === other;
+  return one.id !== undefined && other.id !== undefined
+    ? one.id === other.id
+    : one.email === other.email;
+}
 export const selectAccess = (state: AppStateSnapshot) => state.access;
 export const selectUpdate = (state: AppStateSnapshot) => state.update;
 export const selectAudio = (state: AppStateSnapshot) => state.audio;

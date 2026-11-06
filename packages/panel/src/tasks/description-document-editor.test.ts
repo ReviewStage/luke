@@ -225,6 +225,21 @@ function WordsOwner(): null {
   return null;
 }
 
+/** Main's document handed again with the account signed in now naming its id, as a refresh hands it. */
+function accountGainsId(): void {
+  writeAppState(
+    stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
+      account: {
+        status: ACCOUNT_STATUS.SIGNED_IN,
+        id: "user-dev",
+        email: "dev@example.com",
+        name: "Dev",
+        provider: "github",
+      },
+    }),
+  );
+}
+
 /** Main's document handed again with a teammate signed in, as an account switch hands it. */
 function signInTeammate(): void {
   writeAppState(
@@ -1048,6 +1063,25 @@ test("words whose leaving save waits on one still out are not sent once another 
     "the words that waited on it are not sent as the account now signed in",
   );
   assert.equal(unsavedWords(container), false);
+});
+
+test("words a description was left with stay once the account signed in comes to name its id", async () => {
+  const { container, render } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  render(other);
+  await settle();
+
+  accountGainsId();
+  render(other);
+  await settle();
+  const toastStood = newestToastSays() === "Your description edits could not be saved.Retry";
+  render(DOCUMENT_TASK);
+  await settle();
+
+  assert.ok(toastStood, "the toast over them stands");
+  assert.equal(open().markdown, `${BODY}Mine.\n`, "the editor opens on the kept words");
 });
 
 test("words typed and not yet saved are unsaved work, and once they save they are not", async () => {
