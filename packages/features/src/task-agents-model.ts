@@ -10,8 +10,10 @@ import type { TaskAgentsSummary, TaskPullRequestLine } from "./task-wire.js";
  * open or draft one before a merged one, and a merged one before a closed
  * one. A task whose agents finished with nothing published wears none.
  *
- * Note that a question waiting on the reader is no status here, because the
- * Tasks page's badge and the sidebar's Inbox count already say how many wait.
+ * Note that a thread waiting on the reader is no status here, because a
+ * task's row says how many wait in a count of its own, standing before this
+ * status: the sidebar's task row and the Tasks page's row and card alike
+ * (`@repo/panel`'s `WaitingCount`).
  */
 
 /** Where a task's agents stand, most pressing first. */

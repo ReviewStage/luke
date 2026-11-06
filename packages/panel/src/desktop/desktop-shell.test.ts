@@ -938,7 +938,7 @@ function spokenName(item: HTMLElement): string {
   return heard.textContent ?? "";
 }
 
-test("on a phone the bar's Inbox wears the count of what needs the reader, named in the sidebar's words, and none at zero", async () => {
+test("on a phone the bar's Inbox and the task's sidebar row wear the count of what needs the reader, named in the sidebar's words, and none at zero", async () => {
   // Note that main lists the three questions it counts, as its read of the account does.
   const asks = ["q-1", "q-2", "q-3"].map((id) => ({ id, agentId: "a-1", title: id, postedAt: 0 }));
   const listed = {
@@ -958,6 +958,14 @@ test("on a phone the bar's Inbox wears the count of what needs the reader, named
   const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 need you");
   assert.ok(inbox, "the bar's Inbox is named with its count");
   assert.match(inbox.textContent ?? "", /3/u, "the Inbox's count is drawn");
+  const taskRow = [...page.querySelectorAll<HTMLElement>("aside.desktop-sidebar li")].findLast(
+    (row) => row.textContent?.includes(DOCUMENT_NAME),
+  );
+  assert.match(
+    spokenName(taskRow ?? assert.fail("the task's sidebar row stands")),
+    /3 need you/u,
+    "the task's row is heard with its count",
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
