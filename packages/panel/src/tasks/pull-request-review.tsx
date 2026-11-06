@@ -20,12 +20,7 @@ import { confirmFailure } from "../failure-report.js";
 import { overCommentBound } from "./comment-editor.js";
 import type { PendingReview } from "./line-comment.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
-import {
-  REVIEW_PANEL_WORDS,
-  ReviewPress,
-  type ReviewWords,
-  useReviewOpen,
-} from "./review-panel.js";
+import { REVIEW_PANEL_WORDS, ReviewPress, type ReviewWords } from "./review-panel.js";
 
 /**
  * pull-request-review.tsx -- the review a member submits on an agent's pull request from its Pull request tab: the Review press at the end of its tabs' row and the panel it opens (`review-panel.tsx`), as stage-cli's review panel.
@@ -106,12 +101,12 @@ export function PullRequestReview({
   /** Its comments as the panel lists them, under the line counting them; none lists none. */
   pendingList?: ReactNode;
 }): React.JSX.Element {
-  const panel = useReviewOpen();
+  const [open, setOpen] = useState(false);
   const [event, setEvent] = useState<ReviewEvent>(REVIEW_EVENT.COMMENT);
   const [body, setBody] = useState("");
   // Note that the question stands, busy, until GitHub answers the discard, says its refusal in GitHub's words, and holds the panel open meanwhile as a review on its way does.
   const discarding = useConfirmDialog(
-    { subject: pending != null, surfaceOpen: panel.open },
+    { subject: pending != null, surfaceOpen: open },
     writes.confirmAct({ action: PULL_REQUEST_ACTION.DISCARD_REVIEW }),
     confirmFailure(FAILURE_SURFACE.PULL_REQUEST_REVIEW_DISCARD),
   );
@@ -122,7 +117,8 @@ export function PullRequestReview({
         className="pull-request-review"
         words={{ ...REVIEW_WORDS, placeholder: placeholderOf(event) }}
         count={pending?.comments ?? 0}
-        panel={panel}
+        open={open}
+        onOpen={setOpen}
         draft={{ body, setBody, over: overCommentBound(body) }}
         sending={sending}
         pendingList={pendingList}

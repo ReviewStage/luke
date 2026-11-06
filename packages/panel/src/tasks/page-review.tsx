@@ -24,12 +24,8 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { keptLines } from "../composer-drafts.js";
 import { confirmFailure, failureShown } from "../failure-report.js";
 import { undoToast, useToast } from "../toast.js";
-import {
-  REVIEW_PANEL_WORDS,
-  type ReviewOpen,
-  ReviewPress,
-  type ReviewWords,
-} from "./review-panel.js";
+import { PENDING_WORDS } from "./pending-comments.js";
+import { REVIEW_PANEL_WORDS, ReviewPress, type ReviewWords } from "./review-panel.js";
 
 /**
  * page-review.tsx -- a member's review of a page: comments gathered on it and held in this window, unsent, until they send them together from the page's Review press, as a pull request's review is finished from its tab's.
@@ -62,7 +58,6 @@ import {
 export const PAGE_REVIEW_WORDS = {
   START: "Start a review",
   ADD: "Add to review",
-  PENDING: "Pending",
   REMOVED: "Comment removed from your review",
   NOT_SENT: "Some comments could not be sent.",
   /** A held pin's name. */
@@ -336,19 +331,17 @@ export function usePageReview(
  */
 export function PageReviewPress({
   review,
-  panel,
   pendingOf,
 }: {
   review: PageReviewControl;
-  /** The panel's open state, which the page's pending comments open too. */
-  panel: ReviewOpen;
   /** A held comment as the panel lists it, with its Edit and Delete; none while the review is on its way, since a start out may still post it. */
   pendingOf: (comment: HeldComment, busy: boolean) => ReactNode;
 }): React.JSX.Element {
+  const [open, setOpen] = useState(false);
   const [body, setBody] = useState("");
   const count = review.held.length;
   const discarding = useConfirmDialog(
-    { subject: count > 0, surfaceOpen: panel.open },
+    { subject: count > 0, surfaceOpen: open },
     neverBusyAct(() => {
       review.discard();
     }),
@@ -361,7 +354,8 @@ export function PageReviewPress({
         className="page-review"
         words={PAGE_REVIEW_PRESS_WORDS}
         count={count}
-        panel={panel}
+        open={open}
+        onOpen={setOpen}
         draft={{
           body,
           setBody,
@@ -371,7 +365,7 @@ export function PageReviewPress({
         sending={review.sending}
         pendingList={
           count === 0 ? null : (
-            <BlockList as={BLOCK_LIST_ELEMENT.OL} label={PAGE_REVIEW_WORDS.PENDING}>
+            <BlockList as={BLOCK_LIST_ELEMENT.OL} label={PENDING_WORDS.PENDING}>
               {review.held.map((comment) => (
                 <BlockListItem key={comment.clientKey}>
                   {pendingOf(comment, review.sending)}
@@ -386,7 +380,7 @@ export function PageReviewPress({
               // Note that a retry that lands closes the panel, as Send does.
               onRetry={() =>
                 void review.send("").then((sent) => {
-                  if (sent) panel.setOpen(false);
+                  if (sent) setOpen(false);
                 })
               }
               failure={failureShown({

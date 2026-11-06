@@ -97,7 +97,6 @@ import {
 import { type PageReviewControl, PageReviewPress, usePageReview } from "./page-review.js";
 import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import { pageSourceQueryOptions, pageSourcesKey } from "./repository-reads.js";
-import { useReviewOpen } from "./review-panel.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
@@ -734,7 +733,6 @@ export function PagePane({
   const review = usePageReview(comments?.control, page.id, version);
   // Note that a phone draws no bar for the review's press, so its comments post at once and none it holds are drawn.
   const reviewing = phone ? undefined : review;
-  const reviewPanel = useReviewOpen();
   const marks = useMemo(
     () => threadMarks(threads ?? [], reviewing?.held ?? []),
     [threads, reviewing?.held],
@@ -933,7 +931,6 @@ export function PagePane({
                     </Tooltip>
                     <PageReviewPress
                       review={review}
-                      panel={reviewPanel}
                       pendingOf={(held, busy) => (
                         <PendingPageComment
                           comment={held}

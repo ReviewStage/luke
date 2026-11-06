@@ -9,7 +9,7 @@ import {
 } from "@repo/ui";
 import { GLYPH, MessageSquarePlusIcon } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { type ReactNode, useId, useRef, useState } from "react";
+import { type ReactNode, useId, useRef } from "react";
 import { CommentEditor } from "./comment-editor.js";
 import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 
@@ -67,7 +67,7 @@ function overPanel(target: EventTarget | null): boolean {
 }
 
 /** The summary the panel asks for, and what the review says beside it where the caller asks that too. */
-export interface ReviewDraft {
+interface ReviewDraft {
   readonly body: string;
   readonly setBody: (body: string) => void;
   /** Whether the summary may not be sent as it stands, past what a comment carries. */
@@ -165,18 +165,6 @@ function ReviewPanel({
   );
 }
 
-/** Whether the press's panel stands, and what opens and closes it, for an owner that opens it from elsewhere too. */
-export interface ReviewOpen {
-  readonly open: boolean;
-  readonly setOpen: (open: boolean) => void;
-}
-
-/** The panel's open state, held by the surface that draws the press, so a press elsewhere on it opens the same panel. */
-export function useReviewOpen(): ReviewOpen {
-  const [open, setOpen] = useState(false);
-  return { open, setOpen };
-}
-
 /**
  * The Review press and the panel it opens: a narrow row folds the press to a
  * square around its glyph, which wears the count at its corner, so the word
@@ -186,7 +174,8 @@ export function ReviewPress({
   className,
   words,
   count,
-  panel,
+  open,
+  onOpen: setOpen,
   draft,
   sending,
   pendingList,
@@ -200,8 +189,9 @@ export function ReviewPress({
   words: ReviewWords;
   /** How many comments the review holds, worn at the press's corner and said in the lead. */
   count: number;
-  /** The panel's open state, held by the owner where something else opens it too. */
-  panel: ReviewOpen;
+  /** Whether the panel stands, held by the owner, whose discard question and send answer it. */
+  open: boolean;
+  onOpen: (open: boolean) => void;
   draft: Omit<ReviewDraft, "submit">;
   /** Whether the review, or its discard, is on its way, which holds the panel open. */
   sending: boolean;
@@ -216,7 +206,6 @@ export function ReviewPress({
   /** Sends the review, calling `done` once it landed, which closes the panel and lets its summary go. */
   onSent: (done: () => void) => void;
 }): React.JSX.Element {
-  const { open, setOpen } = panel;
   const panelId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);

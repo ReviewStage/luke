@@ -68,7 +68,6 @@ import {
   moreLabel,
   PaneBar,
   POPOVER_SIDE,
-  QuietWords,
   RectFloat,
   SCROLL_FADE,
   SCROLL_OVERSCROLL,
@@ -177,6 +176,7 @@ import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { holderTaskId } from "./mention-holder.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
 import { type HeldComment, PAGE_REVIEW_WORDS, type PageReviewControl } from "./page-review.js";
+import { PendingWords } from "./pending-comments.js";
 import { ComposerQuoteView, pressPlace, ReplyPress } from "./reply-to-selection.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
@@ -694,9 +694,9 @@ function CommentEntry({
     planId: doors.control.planId,
     threadId: thread.id,
   });
-  const menu = useMenu(true);
-  const trigger = menu.trigger();
   const mine = writtenByReader(entry, doors.me);
+  // Note that a page thread's first comment is drawn without the quote its quote line already says.
+  const shown = first ? ownWordsOf(thread, entry.words ?? "") : (entry.words ?? "");
   // Note that a reply copies its thread's link, since a link names a comment thread and no comment of one (`LINK_PLACE.COMMENT`).
   const copies: MenuAction[] = copyLink === undefined ? [] : [copyLink];
   const edits: MenuAction[] = mine
@@ -704,14 +704,7 @@ function CommentEntry({
         {
           label: COMMENT_WORDS.EDIT,
           icon: <GLYPH.RENAME />,
-          onSelect: () =>
-            setEditing(
-              edited.draft.text === ""
-                ? first
-                  ? ownWordsOf(thread, entry.words ?? "")
-                  : (entry.words ?? "")
-                : edited.draft.text,
-            ),
+          onSelect: () => setEditing(edited.draft.text === "" ? shown : edited.draft.text),
         },
       ]
     : [];
@@ -769,8 +762,6 @@ function CommentEntry({
           ),
     [mine, openDate, control, thread.id, entry.id],
   );
-  // Note that a page thread's first comment is drawn without the quote its quote line already says.
-  const shown = first ? ownWordsOf(thread, entry.words ?? "") : (entry.words ?? "");
   const write = (words: string) => {
     setEditing(words);
     // Note that words as the comment holds them, or none, keep no draft, so the box reopens on the comment as it stands.
@@ -823,19 +814,7 @@ function CommentEntry({
                   />
                 </Tooltip>
               ) : null}
-              {/* Note that a comment offering nothing draws no ⋯, rather than one opening an empty menu. */}
-              {groups.length === 0 ? null : (
-                <MoreButton thing={COMMENT_WORDS.THING} size={BUTTON_SIZE.COMPACT} {...trigger} />
-              )}
-              {groups.length === 0 || menu.drawn === undefined ? null : (
-                <ActionMenu
-                  replayUnmasked
-                  label={moreLabel(COMMENT_WORDS.THING)}
-                  menu={menu.drawn}
-                  groups={groups}
-                  onClose={menu.close}
-                />
-              )}
+              <CommentMenu groups={groups} />
             </div>
             <ConfirmDialog
               open
@@ -866,6 +845,27 @@ function CommentEntry({
         )}
       </WrittenComment>
     </div>
+  );
+}
+
+/** A comment's ⋯ and the menu it drops, its writer's acts on it; nothing where it offers none, rather than a ⋯ opening an empty menu. */
+function CommentMenu({ groups }: { groups: readonly MenuAction[][] }): React.JSX.Element | null {
+  const menu = useMenu(true);
+  const trigger = menu.trigger();
+  if (groups.length === 0) return null;
+  return (
+    <>
+      <MoreButton thing={COMMENT_WORDS.THING} size={BUTTON_SIZE.COMPACT} {...trigger} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          replayUnmasked
+          label={moreLabel(COMMENT_WORDS.THING)}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
@@ -3363,6 +3363,23 @@ function firstLine(words: string): string {
   return line ?? words;
 }
 
+/** What the pointer over a pin is told: the first comment's head, as every comment draws it, over its first line. */
+function PinPreview({
+  head,
+  words,
+}: {
+  head: Pick<Parameters<typeof Comment>[0], "author" | "nameRef" | "at" | "now" | "trailing">;
+  words: string;
+}): React.JSX.Element {
+  return (
+    <HoverCard>
+      <Comment {...head}>
+        <div className="comment-clamp line-clamp-2">{firstLine(words)}</div>
+      </Comment>
+    </HoverCard>
+  );
+}
+
 /**
  * The pin of the threads on one element: the bubble wearing the face of
  * whoever started the first, told over it by that comment's writer and
@@ -3388,7 +3405,7 @@ function PagePin({
     (entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT,
   );
   const fallback: DescriptionCommentWriter = { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER };
-  const { author } = useWriter(first?.writer ?? fallback, doors.agents);
+  const { author, nameRef } = useWriter(first?.writer ?? fallback, doors.agents);
   const comments = threads.length;
   return (
     <CommentPin
@@ -3401,11 +3418,7 @@ function PagePin({
       onHover={onHint}
       preview={
         first === undefined ? null : (
-          <HoverCard>
-            <WrittenComment writer={first.writer} agents={doors.agents} at={first.at} now={now}>
-              <div className="comment-clamp line-clamp-2">{firstLine(first.words ?? "")}</div>
-            </WrittenComment>
-          </HoverCard>
+          <PinPreview head={{ author, nameRef, at: first.at, now }} words={first.words ?? ""} />
         )
       }
     />
@@ -3453,8 +3466,6 @@ export function PendingPageComment({
 }): React.JSX.Element {
   const { author, nameRef } = useReaderWriter();
   const [editing, setEditing] = useState<string | undefined>(undefined);
-  const menu = useMenu(true);
-  const trigger = menu.trigger();
   const words = heldWords(comment);
   const open = editing !== undefined;
   const { markEditing } = review;
@@ -3500,23 +3511,12 @@ export function PendingPageComment({
         nameRef={nameRef}
         trailing={
           <>
-            <QuietWords>
-              <ReplayUnmask>{PAGE_REVIEW_WORDS.PENDING}</ReplayUnmask>
-            </QuietWords>
-            {groups.length === 0 || editing !== undefined ? null : (
+            <PendingWords />
+            {editing === undefined ? (
               <div className="comment-tools">
-                <MoreButton thing={COMMENT_WORDS.THING} size={BUTTON_SIZE.COMPACT} {...trigger} />
-                {menu.drawn === undefined ? null : (
-                  <ActionMenu
-                    replayUnmasked
-                    label={moreLabel(COMMENT_WORDS.THING)}
-                    menu={menu.drawn}
-                    groups={groups}
-                    onClose={menu.close}
-                  />
-                )}
+                <CommentMenu groups={groups} />
               </div>
-            )}
+            ) : null}
           </>
         }
       >
@@ -3585,19 +3585,10 @@ function HeldPin({
       onHover={onHint}
       preview={
         first === undefined ? null : (
-          <HoverCard>
-            <Comment
-              author={author}
-              nameRef={nameRef}
-              trailing={
-                <QuietWords>
-                  <ReplayUnmask>{PAGE_REVIEW_WORDS.PENDING}</ReplayUnmask>
-                </QuietWords>
-              }
-            >
-              <div className="comment-clamp line-clamp-2">{firstLine(heldWords(first))}</div>
-            </Comment>
-          </HoverCard>
+          <PinPreview
+            head={{ author, nameRef, trailing: <PendingWords /> }}
+            words={heldWords(first)}
+          />
         )
       }
     />
