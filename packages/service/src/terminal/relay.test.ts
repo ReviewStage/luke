@@ -36,8 +36,8 @@ import {
  * reach is gone, one with no sandbox yet is starting, a stopped sandbox is
  * never woken, and a running one is attached through tmux, typing and
  * resizes reaching the PTY and its output reaching the desktop; the shell's
- * exit ends the connection as exited; nobody typing for the idle bound ends
- * it as idle, and typing keeps it; and the GitHub token at the firewall is
+ * exit ends the connection as exited; an open connection holds and keeps
+ * alive its sandbox, typed in or not; and the GitHub token at the firewall is
  * set when due, once between two connections, or, where it is a member's
  * own, at every check and taken off at the close.
  */
@@ -338,30 +338,36 @@ it.effect("the shell's exit reaches the desktop as exited, and ends the connecti
 );
 
 it.effect(
-  "a connected terminal keeps the agent's sandbox alive from its attach, every keep-alive interval while someone types, and no longer once it closes",
+  "a connected terminal holds and keeps alive the agent's sandbox from its attach for as long as it stands, typed in or not, and no longer once it closes",
   () =>
     Effect.gen(function* () {
       const pty = yield* scriptedSocket;
       const device = yield* scriptedSocket;
-      const typing = world({ pty });
+      const open = world({ pty });
       const every = Duration.toMillis(CODER.SANDBOX_KEEP_ALIVE_EVERY);
 
       const relay = yield* Effect.forkChild(
-        Effect.scoped(relayTerminal(device.socket, ASK, typing.deps)),
+        Effect.scoped(relayTerminal(device.socket, ASK, open.deps)),
       );
-      yield* Effect.yieldNow;
-      // Typing every four minutes, inside the idle bound, for two keep-alive intervals.
-      for (let typed = 0; typed < 2 * every; typed += Duration.toMillis(Duration.minutes(4))) {
-        yield* TestClock.adjust(Duration.minutes(4));
-        yield* device.push({ bytes: encode("x") });
-        yield* Effect.yieldNow;
+      yield* settle;
+      // Nobody types for two keep-alive intervals.
+      for (let minute = 0; minute < 2 * every; minute += 60_000) {
+        yield* TestClock.adjust(Duration.minutes(1));
+        yield* settle;
       }
+      const closedWhileOpen = [...device.closed];
+      const heldPastNow = open.heldUntil() > 2 * every;
       yield* device.leave;
       yield* Fiber.join(relay);
+      const heldAtClose = open.heldUntil();
       yield* TestClock.adjust(CODER.SANDBOX_KEEP_ALIVE_EVERY);
+      yield* settle;
 
+      assert.deepEqual(closedWhileOpen, [], "nobody typing never closes the terminal");
+      assert.equal(heldPastNow, true, "the lease reaches past now while the terminal is open");
+      assert.equal(open.heldUntil(), heldAtClose, "a closed terminal moves the lease on no more");
       assert.deepEqual(
-        typing.asked.keptAlive,
+        open.asked.keptAlive,
         [0, every, 2 * every].map((at) => ({ sessionId: "wrun_1", at })),
       );
     }),
@@ -377,30 +383,6 @@ it.effect("a stopped sandbox is never kept alive by a terminal", () =>
 
     assert.deepEqual(stopped.asked.keptAlive, []);
   }),
-);
-
-it.effect(
-  "a terminal nobody types in closes as idle once the lease lapses, and typing keeps it",
-  () =>
-    Effect.gen(function* () {
-      const pty = yield* scriptedSocket;
-      const device = yield* scriptedSocket;
-
-      const relay = yield* Effect.forkChild(
-        Effect.scoped(relayTerminal(device.socket, ASK, world({ pty }).deps)),
-      );
-      yield* Effect.yieldNow;
-      yield* TestClock.adjust(Duration.minutes(4));
-      yield* device.push({ bytes: encode("x") });
-      yield* Effect.yieldNow;
-      yield* TestClock.adjust(Duration.minutes(4));
-      const keptByTyping = device.closed.length === 0;
-      yield* TestClock.adjust(Duration.minutes(2));
-      yield* Fiber.join(relay);
-
-      assert.equal(keptByTyping, true, "typing four minutes in moves the lease on");
-      assert.deepEqual(device.closed, [TERMINAL_RELAY_CLOSE.IDLE]);
-    }),
 );
 
 it.effect(
@@ -464,72 +446,6 @@ it.effect(
       assert.deepEqual(alone.asked.withdrawn, [SANDBOX_SESSION]);
       assert.deepEqual(beside.asked.policies, [SANDBOX_SESSION]);
       assert.deepEqual(beside.asked.withdrawn, [], "a turn under way keeps the token");
-    }),
-);
-
-it.effect(
-  "a terminal nobody types in closes as idle while a sibling of the same sandbox is typed in",
-  () =>
-    Effect.gen(function* () {
-      const pty = yield* scriptedSocket;
-      const otherPty = yield* scriptedSocket;
-      const typed = yield* scriptedSocket;
-      const untyped = yield* scriptedSocket;
-      const shared = world({ pty });
-
-      const one = yield* Effect.forkChild(
-        Effect.scoped(relayTerminal(typed.socket, ASK, shared.deps)),
-      );
-      const two = yield* Effect.forkChild(
-        Effect.scoped(
-          relayTerminal(untyped.socket, ASK, {
-            ...shared.deps,
-            connect: () => Effect.succeed(otherPty.socket),
-          }),
-        ),
-      );
-      yield* Effect.yieldNow;
-      for (const _minute of [1, 2, 3, 4, 5, 6]) {
-        yield* TestClock.adjust(Duration.minutes(1));
-        yield* typed.push({ bytes: encode("x") });
-        yield* Effect.yieldNow;
-      }
-      yield* Fiber.join(two);
-      const typedStillOpen = typed.closed.length === 0;
-      yield* typed.leave;
-      yield* Fiber.join(one);
-
-      assert.deepEqual(untyped.closed, [TERMINAL_RELAY_CLOSE.IDLE]);
-      assert.equal(typedStillOpen, true);
-    }),
-);
-
-it.effect(
-  "a keystroke between two lease writes keeps its terminal for the whole idle bound, and the lease reaches past it",
-  () =>
-    Effect.gen(function* () {
-      const pty = yield* scriptedSocket;
-      const device = yield* scriptedSocket;
-      const shared = world({ pty });
-
-      const relay = yield* Effect.forkChild(
-        Effect.scoped(relayTerminal(device.socket, ASK, shared.deps)),
-      );
-      yield* Effect.yieldNow;
-      yield* TestClock.adjust(Duration.seconds(59));
-      yield* device.push({ bytes: encode("x") });
-      yield* Effect.yieldNow;
-      yield* TestClock.adjust(Duration.seconds(271));
-      const openPastAttachBound = device.closed.length === 0;
-      yield* TestClock.adjust(Duration.minutes(1));
-      yield* Fiber.join(relay);
-
-      assert.equal(openPastAttachBound, true, "five minutes from the keystroke, not the attach");
-      assert.deepEqual(device.closed, [TERMINAL_RELAY_CLOSE.IDLE]);
-      assert.ok(
-        shared.heldUntil() >= Duration.toMillis(Duration.minutes(5)) + 59_000,
-        "the lease written at the attach reaches past the keystroke's idle bound",
-      );
     }),
 );
 

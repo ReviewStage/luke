@@ -710,12 +710,12 @@ test("a sent message's mention of an MCP server is drawn on a plan's page as a c
   assert.equal(carryingTarget(container), undefined);
 });
 
-test("an @ in the box offers the account's connected integrations, and once a word is typed their tools, a pick sent as its link", async () => {
+test("an @ in the box offers the account's connected MCP servers, and once a word is typed their tools, a pick sent as its link", async () => {
   const { container, sent } = await box(planPage([]));
 
   typeInComposer(container, "Use @");
   await settle();
-  const servers = groupsListed(container).find(([group]) => group === "Integrations");
+  const servers = groupsListed(container).find(([group]) => group === "MCP servers");
   typeInComposer(container, "list");
   await settle();
   const tools = listed(container);
@@ -724,7 +724,7 @@ test("an @ in the box offers the account's connected integrations, and once a wo
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(servers, ["Integrations", ["Linear"]]);
+  assert.deepEqual(servers, ["MCP servers", ["Linear"]]);
   assert.deepEqual(tools, ["Linear · list_issues"]);
   assert.deepEqual(sent, [
     `Use ${mentionMarkdown({ kind: MENTION_KIND.TOOL, provider: INTEGRATION_PROVIDER.LINEAR, tool: "list_issues" }, "Linear · list_issues", PLACE)}`,
@@ -913,7 +913,7 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
     ["Agents", ["Wire the desktop"]],
     ["Description", ["Goal", "Rollout", "Invitations"]],
     ["Pages", ["Invites by week"]],
-    ["Integrations", ["Linear"]],
+    ["MCP servers", ["Linear"]],
     ["Mention from", ["Agents", "Description", "Pages", "Files and folders", "Dates", "Linear"]],
   ]);
   assert.equal(agentGlyph?.className, "state-glyph", "the agent's row leads with its tab's glyph");
@@ -1534,7 +1534,7 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
     ["Pages", "1 page"],
     ["Files and folders", "acme/relay"],
     ["Dates", ""],
-    ["Linear", "Integration"],
+    ["Linear", "MCP server"],
   ]);
   assert.deepEqual(wideKeys, ["↑↓Move", "⏎⇥Mention", "→Open", "EscClose"]);
   assert.equal(crumb(container), "Pages");

@@ -598,7 +598,10 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
       { base: written, value: written.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
     ],
   );
-  assert.equal(nested.getAttribute("aria-checked"), "true", "a saved tick stands");
+  // Note that we wait on the saved tick, because the saves' answers reach the boxes on Query's notify queue, a turn after the requests are sent.
+  await vi.waitFor(() =>
+    assert.equal(nested.getAttribute("aria-checked") === "true", true, "a saved tick stands"),
+  );
   assert.equal(ticked.getAttribute("aria-checked"), "true", "a tick the save refused goes back");
   assert.equal(newestToastSays(), "The description could not be saved.");
   // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.

@@ -25,16 +25,16 @@ import { openerOf } from "../tasks/use-link-standing.js";
 import { SUMMARY_GLYPH } from "./agent-archive.js";
 
 /**
- * agent-list-row.tsx -- one agent as a list of agents draws it, at the head of a task's description and on a person's page alike: its glyph wearing where it stands, its name, the thread it waits on the developer in, where it runs, its failed mark, and its pull request's chip.
+ * agent-list-row.tsx -- one agent as a list of agents draws it, at the head of a task's description and on a person's page alike: its glyph wearing where it stands, its name, whether a thread of it waits on the developer, where it runs, its failed mark, and its pull request's chip.
  *
  * The row is a `ListRow` whose glyph is its tab's (`AgentGlyph`), which
  * gives way to the working mark while the agent works, and whose name is
- * masked in a screen recording. After the name, muted, stands what went
- * wrong with the row, such as a rename refused, else the title of the
- * thread it waits on the developer in, where one waits, else what the
+ * masked in a screen recording. After the name, muted, stands what the
  * place says it is about (`about`), such as the task a person's agent
- * works on. At its end stand, in turn, the attention mark where a thread
- * waits, where it runs (`runs-on.tsx`), Cloud or the device, and its
+ * works on, or, on a line of its own under the name, what went wrong with
+ * the row, such as a rename refused. At its end stand, in turn, the
+ * attention mark where a thread of it waits on the developer, whose title
+ * is the Inbox's to say, where it runs (`runs-on.tsx`), Cloud or the device, and its
  * failed mark once its turn failed, the same at the head of a task's
  * description and on a person's page. Its pull
  * request, where it opened one, stands after them as a chip of GitHub's
@@ -55,7 +55,7 @@ export function AgentListRow({
   models,
   devices,
   pullRequest,
-  waitingOn,
+  waits = false,
   refused,
   about,
   editing = false,
@@ -78,9 +78,9 @@ export function AgentListRow({
   /** The member's devices, which give a device's platform (`RunsOnPlace`). */
   devices: readonly MacOffer[] | undefined;
   pullRequest: AgentPullRequest | undefined;
-  /** The title of the thread it waits on the developer in, where one waits. */
-  waitingOn?: string | undefined;
-  /** What went wrong with the row, said under its name in a waiting thread's place. */
+  /** Whether a thread of it waits on the developer. */
+  waits?: boolean | undefined;
+  /** What went wrong with the row, said on a line of its own under its name. */
   refused?: ReactNode;
   /** What the place says the agent is about, said after its name where nothing else is. */
   about?: string | undefined;
@@ -111,15 +111,15 @@ export function AgentListRow({
         }
         title={title ?? name}
         titleReplayMasked
-        description={refused ?? waitingOn ?? about}
+        description={refused ?? about}
         descriptionReplayMasked={refused === undefined}
-        // Note that a waiting thread or a refusal takes a line of its own under the name, and what the row is about stays on the name's.
-        metaAt={waitingOn === undefined && refused === undefined ? undefined : LIST_ROW_META.TITLE}
+        // Note that a refusal takes a line of its own under the name, and what the row is about stays on the name's.
+        metaAt={refused === undefined ? LIST_ROW_META.MIDDLE : LIST_ROW_META.TITLE}
         hint={card === undefined || editing ? undefined : { Hint: RowHint, label: name }}
         meta={
           editing ? null : (
             <Inline gap={GAP.ITEM} wrap={false}>
-              {waitingOn === undefined ? null : (
+              {!waits ? null : (
                 <>
                   <AttentionMark />
                   <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>

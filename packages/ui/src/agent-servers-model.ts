@@ -13,7 +13,7 @@ import {
   type IntegrationStatus,
   integrationAccountNames,
 } from "@repo/features/integration-wire";
-import { INTEGRATION_LABEL, readFailedWords } from "@repo/features/words";
+import { MCP_SERVER_LABEL, readFailedWords } from "@repo/features/words";
 import { matchIntegration } from "./integration-search.js";
 import { searchTokens } from "./search-tokens.js";
 
@@ -78,7 +78,7 @@ export const SERVER_ACTION = {
 } as const;
 
 /** What the popover and its button are called. */
-export const SERVERS_LABEL = INTEGRATION_LABEL.many;
+export const SERVERS_LABEL = MCP_SERVER_LABEL.many;
 
 /** One server's row. */
 export interface ServerRow {

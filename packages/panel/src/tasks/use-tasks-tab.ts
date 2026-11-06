@@ -203,7 +203,6 @@ import {
 } from "./use-description-history.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
-import { useEndLocal } from "./use-local-session.js";
 import {
   isOverviewTab,
   MAIN_TAB,
@@ -216,7 +215,6 @@ import {
   DRAWN_KINDS,
   drawsChanges,
   drawsSubagent,
-  drawsTerminal,
   isPinnable,
   SIDE_PANEL_TAB,
   type SidebarPin,
@@ -225,6 +223,7 @@ import {
   type TaskHolds,
   useSidePanel,
 } from "./use-side-panel.js";
+import { useEndTerminalTab } from "./use-terminal-session.js";
 import { sayRestored } from "./version-view.js";
 
 /**
@@ -268,7 +267,7 @@ export type InboxChoice =
     // An item a link named by its id alone that the account may not read, which the Inbox says is missing.
     | { readonly itemId: string }
   ) & {
-    /** Whether a link, a notification, or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
+    /** Whether a link or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
     readonly opened?: true;
   };
 
@@ -743,6 +742,8 @@ export interface TasksControl {
   failedRuns: readonly AccountFailedRun[];
   /** The window's Inbox: whether it stands in the task's place, the task chosen in it, and its presses. */
   inboxView: InboxViewControl;
+  /** Says which agent's card in the column shows its threads in its transcript's place (`agent-threads.tsx`), none while it shows its transcript, so main is not told that transcript is on screen. */
+  onThreadsShown: (agentId: string | undefined) => void;
   /** One agent's page: which agent's stands in the task's place, if any, and its presses. */
   agentView: AgentViewControl;
   /** One person's page: whose stands in the plan's place, if anyone's, and its presses (`person-page.tsx`). */
@@ -2001,6 +2002,8 @@ export function useTasksTab(input: {
       discardDraftNow.current(blankDraft);
     }
   }, [draftInView, blankDraft, columnSettled]);
+  // The agent whose card in the column shows its threads rather than its transcript, as the task's page says.
+  const [threadsShown, setThreadsShown] = useState<string | undefined>(undefined);
   // An agent's page stands in the task's place, showing its agent as its tab would.
   // An agent's transcript beside the Inbox shows its agent the same way, while the panel stands open on it.
   const inboxTranscript =
@@ -2012,12 +2015,16 @@ export function useTasksTab(input: {
     isTranscriptTab(sidePanel.tab)
       ? sidePanel.tab.transcript
       : undefined;
+  // Note that an agent's card showing its threads keeps its transcript out of sight, so its end is still unseen.
   const shownAgent =
     stateShown && fixture === undefined && agentView !== undefined
       ? agentView.agentId
       : inboxTranscript !== undefined
         ? inboxTranscript
-        : columnShown && mainTabs.tab !== undefined && isAgentTab(mainTabs.tab)
+        : columnShown &&
+            mainTabs.tab !== undefined &&
+            isAgentTab(mainTabs.tab) &&
+            mainTabs.tab.agent !== threadsShown
           ? mainTabs.tab.agent
           : null;
   const shownInbox =
@@ -3838,15 +3845,16 @@ export function useTasksTab(input: {
     [keepColumnClosed, closeMainTab, dozeMainTab],
   );
   const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
-  const endLocal = useEndLocal();
-  // Note that a Local tab's terminal ends as its tab closes, whichever way it closes, since the tab
+  const endTerminal = useEndTerminalTab();
+  // Note that a terminal tab's shell ends as its tab closes, whichever way it closes, since the tab
   // is the only place it stands, so the tab goes on no stack of closed tabs: nothing opens it again.
   const closeSidePanelTab = useCallback(
     (tab: SidePanelTab) => {
-      if (isLocalTab(tab)) endLocal(tab);
+      const terminal = isTerminalTab(tab) || isLocalTab(tab);
+      if (terminal) endTerminal(tab);
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0 && !isLocalTab(tab)) {
+      if (task !== undefined && at >= 0 && !terminal) {
         const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
         const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, task, tab, at, file };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
@@ -3860,13 +3868,13 @@ export function useTasksTab(input: {
       viewed.activeTaskId,
       setClosedTabs,
       latestClosedTabs,
-      endLocal,
+      endTerminal,
     ],
   );
   // Whether the open task's strips draw a closed tab of it again: an agent's
   // while the agent is not archived, never the Inbox, which the panel
   // draws no more, a Changes tab while its agent is the task's, archived or not,
-  // and a subagent's, a Terminal tab, or a page's on the strip's own
+  // and a subagent's or a page's on the strip's own
   // terms. Note that what the task has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
   // A fixed kind of the side panel draws on every task or on none, so whether it draws again is
@@ -3887,7 +3895,6 @@ export function useTasksTab(input: {
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
     // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
     if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
-    if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);
@@ -3895,8 +3902,8 @@ export function useTasksTab(input: {
   // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
   // pinned, its agent works, waits on the developer, or ended unseen, or nothing could open it again:
   // a draft's, which lets the draft go, a Browser tab's, which takes its
-  // page with it, a cloud Browser tab's, which only the "+" opens again, and a Local tab's,
-  // whose terminal ends as it closes. The side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
+  // page with it, a cloud Browser tab's, which only the "+" opens again, and a terminal tab's,
+  // whose shell ends as it closes. The side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
   const workingAgents = useMemo(
     () =>
       (agents.agents ?? []).flatMap((agent) => (agentStillWriting(agent.status) ? [agent.id] : [])),
@@ -3951,6 +3958,7 @@ export function useTasksTab(input: {
             keeps: (tab) =>
               typeof tab === "string" ||
               isCloudBrowserTab(tab) ||
+              isTerminalTab(tab) ||
               isLocalTab(tab) ||
               pinnedHere(tab),
           },
@@ -4157,6 +4165,7 @@ export function useTasksTab(input: {
     inboxTaskless: input.inboxTaskless,
     inboxAgents: input.inboxAgents,
     failedRuns: input.failedRuns,
+    onThreadsShown: setThreadsShown,
     // The window's Inbox stands over the task's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,

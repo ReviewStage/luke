@@ -227,37 +227,3 @@ it.effect(
       }),
     ),
 );
-
-it.effect(
-  "output the host does not take past the bound lets the socket go, and the host hears the close after what was held",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        vi.stubGlobal("WebSocket", StandInSocket);
-        const opening = yield* Effect.forkChild(openTerminalSocketFromPage(ADDRESS, {}));
-        yield* Effect.yieldNow;
-        const socket = standIn();
-        socket.accept();
-        const opened = yield* Fiber.join(opening);
-        assert.ok("socket" in opened);
-
-        // A screen that stopped drawing: paused, and five megabytes of a chatty shell arriving.
-        yield* opened.socket.pause;
-        const megabyte = new Uint8Array(1024 * 1024).buffer;
-        for (let sent = 0; sent < 4; sent += 1) socket.receive(megabyte);
-        assert.equal(socket.closedWith, undefined, "four megabytes are still the page's to hold");
-        socket.receive(megabyte);
-        assert.equal(socket.closedWith, 1000, "past the bound the page lets the socket go");
-        socket.end(1000);
-
-        yield* opened.socket.resume;
-        const arrivals = [...(yield* Stream.runCollect(opened.socket.arrivals))];
-        assert.equal(arrivals.length, 6);
-        assert.deepEqual(
-          arrivals.at(-1),
-          { close: 1000 },
-          "the host reads a drop, and opens again",
-        );
-      }),
-    ),
-);

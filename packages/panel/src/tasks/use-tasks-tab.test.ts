@@ -2831,7 +2831,9 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
     PULL_REQUEST_VIEW.CHECKS,
   );
   assert.deepEqual(file.control().sidePanel.tab, { file: "src/members/invite.ts" });
-  assert.deepEqual(terminal.control().sidePanel.tab, { terminal: FIXTURE_AGENT_ID });
+  const cloud = terminal.control().sidePanel.tab;
+  assert.ok(cloud instanceof Object && "terminal" in cloud);
+  assert.deepEqual([cloud.terminal, cloud.title], [FIXTURE_AGENT_ID, "Cloud 1"]);
   // Note that the page is held on the task's pages, whose read reaches its query a moment after the document.
   await vi.waitFor(() =>
     assert.deepEqual(page.control().sidePanel.tab, { page: FIXTURE_IDS.PAGE }),
@@ -3848,16 +3850,18 @@ it.effect(
       const file = { file: FILE_REF.path };
       const pulls = { changes: AGENT_ID };
       act(() => panel().onOpenFile(FILE_REF));
+      yield* passing(Duration.seconds(30));
+      // The file is left half a minute after it opened, between any two minutes the window counts.
       act(() => panel().onChoose(pulls));
       act(() => panel().onPin({ task: TASK.id }, pulls, "Pull request"));
       yield* landed;
       const strip = panel().strip;
       assert.deepEqual(strip, [file, pulls]);
 
-      yield* passing(Duration.hours(23));
-      assert.deepEqual(panel().strip, strip, "a tab viewed within the day stays");
+      yield* passing(Duration.subtract(Duration.hours(24), Duration.seconds(30)));
+      assert.deepEqual(panel().strip, strip, "a day has not passed since the file was left");
 
-      yield* passing(Duration.hours(1));
+      yield* passing(Duration.seconds(30));
       assert.deepEqual(
         panel().strip,
         [pulls],

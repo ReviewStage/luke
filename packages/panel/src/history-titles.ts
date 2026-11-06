@@ -9,7 +9,6 @@ import {
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
-  localLabelOf,
   pullRequestLabelOf,
   TAB_WORDS,
 } from "@repo/ui/tab-strip-model";
@@ -90,8 +89,7 @@ function sideTabLabel(tab: SidePanelTab, taskId: string, tasks: StepNameTasks): 
       ? tasks.pages?.find((page) => page.id === tab.page)?.title
       : undefined;
   }
-  if (isTerminalTab(tab)) return TAB_WORDS.TERMINAL;
-  if (isLocalTab(tab)) return localLabelOf(tab);
+  if (isTerminalTab(tab) || isLocalTab(tab)) return tab.title;
   if (isCloudBrowserTab(tab)) return TAB_WORDS.BROWSER;
   if (isSubagentTab(tab)) return "Worker";
   if (isTranscriptTab(tab)) return agentNameNow(tasks, taskId, tab.transcript);

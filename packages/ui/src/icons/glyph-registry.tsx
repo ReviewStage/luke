@@ -26,6 +26,7 @@ import {
   Globe,
   GripVertical,
   Hash,
+  History,
   Layers,
   ListChecks,
   ListEnd,
@@ -189,6 +190,8 @@ export const GLYPH = {
   END_CALL: lucideGlyph(PhoneOff),
   RETRY: RetryIcon,
   GO_BACK: lucideGlyph(RotateCcw),
+  // What was put away and can be opened again: a task's closed and archived agents.
+  HISTORY: lucideGlyph(History),
   // The way back to the place above, which `BackButton` alone draws.
   BACK: BackIcon,
   PIN: lucideGlyph(Pin),

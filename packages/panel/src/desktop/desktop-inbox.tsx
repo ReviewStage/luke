@@ -1,4 +1,5 @@
 import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@repo/features/agent-view";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
 import {
   type DescriptionMention,
@@ -72,6 +73,7 @@ import {
 } from "../tasks/use-side-panel.js";
 import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { useCloudTerminalTab } from "../tasks/use-terminal-session.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
 import {
@@ -95,17 +97,14 @@ import { taskCardOf } from "./task-card.js";
  * It stands in the task's place beside the sidebar, whose Inbox row is
  * marked while it does, the way a mail app's mailbox stands beside its
  * folders. The list (`inbox-list.tsx`) holds the items of each task of the
- * workspace the sidebar lists that main says holds one (the switcher counts
- * what waits in the others), needing the developer or settled, each task read whole
- * as main says it changed (`use-holder-inbox-items.ts`), under its task, its
- * person, its status, or in one run, the latest first or the oldest
- * first, Needs you, the questions alone that wait on their answer, Needs
- * you, the open threads that wait on them, or All,
- * everything, of everyone's, theirs, or one teammate's, as the developer
- * last chose; Needs
- * you is the Inbox's one name for an item not yet answered
- * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
- * same items. A task's status never hides its items: the Inbox is a feed
+ * workspace the sidebar lists that main says holds one, needing the
+ * developer or settled, each task read whole as main says it changed
+ * (`use-holder-inbox-items.ts`), in one run, the latest changed first, in
+ * the scope the developer last chose: Needs you, the questions alone that
+ * wait on their answer; Open, what is not done; All, everything; or
+ * Reminders, of everyone's, theirs, or one teammate's. The sidebar's Inbox
+ * row counts the open threads that wait on the developer, a question or an
+ * update not yet opened (`places-waiting.ts`). A task's status never hides its items: the Inbox is a feed
  * of what the agents got done, so an item of a task done or canceled is
  * listed and counted as any other until it is read or answered, its row
  * wearing its task's status (`inbox-list.tsx`). A press on a row chooses it, and the pane beside the
@@ -282,32 +281,16 @@ export const DesktopInbox = memo(function DesktopInbox({
   // An item's box starts a new thread with its agent, which opens in its place.
   const { startInboxThread } = agents;
   const newThread: InboxNewThread | undefined = tasks.signedIn
-    ? {
-        onStart: (item, start) =>
-          startInboxThread({
-            agentId: item.agentId,
-            text: start.text,
-            ...(start.attachments.length === 0 ? undefined : { attachments: start.attachments }),
-            clientKey: start.clientKey,
-          })
-            .catch(
-              (): AgentInboxMessagedView => ({
-                failure: AGENT_CALL_FAILURE.UNANSWERED,
-              }),
-            )
-            .then((answer) => {
-              if ("failure" in answer) return messageFailureWords(answer.failure);
-              const holder = chosen?.item.id === item.id ? chosen.holder : undefined;
-              view.onChoose({
-                ...(holder?.kind === INBOX_HOLDER.TASK
-                  ? { taskId: holder.task.id }
-                  : { agentId: item.agentId }),
-                itemId: answer.item.id,
-                opened: true,
-              });
-              return undefined;
-            }),
-      }
+    ? startedThreads(startInboxThread, (item, itemId) => {
+        const holder = chosen?.item.id === item.id ? chosen.holder : undefined;
+        view.onChoose({
+          ...(holder?.kind === INBOX_HOLDER.TASK
+            ? { taskId: holder.task.id }
+            : { agentId: item.agentId }),
+          itemId,
+          opened: true,
+        });
+      })
     : undefined;
   const listedWorkspace = tasks.workspace;
   const { sidePanel } = tasks;
@@ -744,6 +727,38 @@ function DraftedInboxPane({
   return <InboxPane {...pane} control={live} />;
 }
 
+/**
+ * What an item's box starts a new thread with instead of a reply: a thread
+ * with the item's agent, its words and files sent under the key the box
+ * minted, opened through `onStarted` once the service took it, or the words
+ * of why it did not, a send no answer came back for among them. An agent's
+ * card offers the same (`agent-threads.tsx`).
+ */
+export function startedThreads(
+  start: AgentsControl["startInboxThread"],
+  onStarted: (item: InboxItem, itemId: string) => void,
+): InboxNewThread {
+  return {
+    onStart: (item, begun) =>
+      start({
+        agentId: item.agentId,
+        text: begun.text,
+        ...(begun.attachments.length === 0 ? undefined : { attachments: begun.attachments }),
+        clientKey: begun.clientKey,
+      })
+        .catch(
+          (): AgentInboxMessagedView => ({
+            failure: AGENT_CALL_FAILURE.UNANSWERED,
+          }),
+        )
+        .then((answer) => {
+          if ("failure" in answer) return messageFailureWords(answer.failure);
+          onStarted(item, answer.item.id);
+          return undefined;
+        }),
+  };
+}
+
 /** A file the item names as its code names it: its path, and its lines where it names them. */
 function fileRef(path: string, lines: MentionLines | undefined): CodeRef {
   return lines === undefined
@@ -821,12 +836,13 @@ function InboxSidePanel({
   pages: TasksControl["inboxView"]["pages"];
   agents: AgentsControl;
   views: TabViews;
-  /** What the item's box offers an `@`, which the composer of an agent's transcript beside it offers too. */
+  /** What the item's box offers an `@`, which every tab beside it offers too: an agent's composer, and a page's comments. */
   mentions: TaskMentionsValue | undefined;
   /** Where the panel heads itself on a phone, its way back shutting it to the item (`SidePanel`'s `phone`). */
   phone: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
   const { panel } = drawing;
+  const cloudTerminalTab = useCloudTerminalTab();
   const terminals =
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
     true;
@@ -885,60 +901,61 @@ function InboxSidePanel({
   const transcript = (agentId: string) => {
     const agent = agents.agents?.find((each) => each.id === agentId);
     return (
-      <TaskMentions value={mentions}>
-        <AgentPane
-          label={agent === undefined ? undefined : agentName(agent, agents.models)}
-          tabbed={false}
-          tab={{ agent: agentId }}
-          agents={agents}
-          shown={tasks.shown}
-          views={views}
-          // Note that a worker is drawn beside its agent's column alone, so its row goes to the task.
-          onOpenDelegation={(agent, callId, _task, status) => {
-            views.onWorkerStatus(callId, status);
-            if (taskId !== undefined) tasks.onShowAgent(taskId, agent);
-          }}
-          onOpenPullRequest={(agent) =>
-            showPullRequest(panel, agents, agent, PULL_REQUEST_VIEW.CONVERSATION)
-          }
-          onOpenTarget={openTarget}
-          cards={cards}
-        />
-      </TaskMentions>
+      <AgentPane
+        label={agent === undefined ? undefined : agentName(agent, agents.models)}
+        tabbed={false}
+        tab={{ agent: agentId }}
+        agents={agents}
+        shown={tasks.shown}
+        views={views}
+        // Note that a worker is drawn beside its agent's column alone, so its row goes to the task.
+        onOpenDelegation={(agent, callId, _task, status) => {
+          views.onWorkerStatus(callId, status);
+          if (taskId !== undefined) tasks.onShowAgent(taskId, agent);
+        }}
+        onOpenPullRequest={(agent) =>
+          showPullRequest(panel, agents, agent, PULL_REQUEST_VIEW.CONVERSATION)
+        }
+        onOpenTarget={openTarget}
+        cards={cards}
+      />
     );
   };
+  // Note that every tab beside the item reads the mentions its box offers, so a page's comment is written in the box's editor, its quotes as blocks, as on the task.
   return (
-    <SidePanel
-      {...drawing}
-      unread={NO_UNREAD}
-      holder={SIDE_PANEL_HOLDER.INBOX}
-      taskId={panelFor ?? ""}
-      onAgent={taskId === undefined && panelFor !== undefined}
-      repository={repository}
-      repositoryPlace={repositoryPlace}
-      pages={pages}
-      agents={agents}
-      openAgents={NO_OPEN_AGENTS}
-      shownAgent={undefined}
-      views={views}
-      shown={tasks.shown}
-      focused={focused}
-      onOpenTarget={openTarget}
-      transcript={taskId === undefined ? undefined : transcript}
-      transcriptDoors={
-        taskId === undefined
-          ? undefined
-          : {
-              // Note that an agent's terminal never stands beside the Inbox, so it opens on the agent's task.
-              onOpenInTask: (agentId) => tasks.onShowAgent(taskId, agentId),
-              onOpenTerminal: terminals
-                ? (agentId) => tasks.onShowPanelTab(taskId, { terminal: agentId })
-                : undefined,
-            }
-      }
-      phone={phone}
-      taskOfTab={tasks}
-    />
+    <TaskMentions value={mentions}>
+      <SidePanel
+        {...drawing}
+        unread={NO_UNREAD}
+        holder={SIDE_PANEL_HOLDER.INBOX}
+        taskId={panelFor ?? ""}
+        onAgent={taskId === undefined && panelFor !== undefined}
+        repository={repository}
+        repositoryPlace={repositoryPlace}
+        pages={pages}
+        agents={agents}
+        openAgents={NO_OPEN_AGENTS}
+        shownAgent={undefined}
+        views={views}
+        shown={tasks.shown}
+        focused={focused}
+        onOpenTarget={openTarget}
+        transcript={taskId === undefined ? undefined : transcript}
+        transcriptDoors={
+          taskId === undefined
+            ? undefined
+            : {
+                // Note that an agent's terminal never stands beside the Inbox, so it opens on the agent's task.
+                onOpenInTask: (agentId) => tasks.onShowAgent(taskId, agentId),
+                onOpenTerminal: terminals
+                  ? (agentId) => tasks.onShowPanelTab(taskId, cloudTerminalTab(agentId))
+                  : undefined,
+              }
+        }
+        phone={phone}
+        taskOfTab={tasks}
+      />
+    </TaskMentions>
   );
 }
 
@@ -973,9 +990,10 @@ function repositoryReads(place: TasklessPlace | undefined): FileReads | undefine
  * the panel stands for the task; an automation's open its page where the
  * Automations experiment is on, its agents' own pages, and its agent's
  * files, read through its workspace and repository (`answerPlace`), in the
- * panel beside the Inbox, which stands for that agent.
+ * panel beside the Inbox, which stands for that agent. An agent's card
+ * hands its threads the same doors (`agent-threads.tsx`).
  */
-function paneDoors(
+export function paneDoors(
   tasks: TasksControl,
   holder: InboxHolder,
   seams: {

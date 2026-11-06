@@ -10,7 +10,7 @@ import {
 } from "@repo/features/terminal-acts";
 import { SANDBOX_STATE } from "@repo/features/terminal-wire";
 import type { WireBoundaryInput } from "@repo/wire";
-import { Deferred, Effect, Fiber } from "effect";
+import { Effect } from "effect";
 import { ACT_KIND } from "../acts.js";
 import type { HostOperator } from "../host-operator.js";
 import type { ActSender } from "./base.js";
@@ -66,14 +66,11 @@ interface ScriptedPort {
   readonly posted: TerminalPortOutbound[];
   closed: boolean;
   send(message: WireBoundaryInput): void;
+  /** The panel closing its end. */
+  hangUp(): void;
 }
 
-function fixture(
-  options: {
-    connectTaken?: boolean;
-    connect?: (connectionId: string) => Effect.Effect<boolean>;
-  } = {},
-) {
+function fixture(options: { connectTaken?: boolean } = {}) {
   const asked: string[] = [];
   const opened: ScriptedPort[] = [];
   const gone = new Map<Window, () => void>();
@@ -96,11 +93,7 @@ function fixture(
         asked.push(
           `connect:${params.connectionId}:${params.agentId}:${params.terminalId}:${params.cols}x${params.rows}`,
         );
-      }).pipe(
-        Effect.andThen(
-          options.connect?.(params.connectionId) ?? Effect.succeed(options.connectTaken ?? true),
-        ),
-      ),
+      }).pipe(Effect.as(options.connectTaken ?? true)),
     terminalInput: ({ connectionId, data }) =>
       Effect.sync(() => void asked.push(`input:${connectionId}:${data}`)),
     terminalResize: ({ connectionId, cols, rows }) =>
@@ -124,18 +117,23 @@ function fixture(
       ports: {
         open: (sender, ticket): HostTerminalPort => {
           let heard: ((message: WireBoundaryInput) => void) | undefined;
+          let hungUp: (() => void) | undefined;
           const port: ScriptedPort = {
             sender,
             ticket,
             posted: [],
             closed: false,
             send: (message) => heard?.(message),
+            hangUp: () => hungUp?.(),
           };
           opened.push(port);
           return {
             post: (message) => void port.posted.push(message),
             onMessage: (listener) => {
               heard = listener;
+            },
+            onClose: (then) => {
+              hungUp = then;
             },
             close: () => {
               port.closed = true;
@@ -166,8 +164,6 @@ function fixture(
     drain: Effect.suspend(() => Effect.all(pending.splice(0), { discard: true })),
   };
 }
-
-const DETACH = { agentId: AGENT_ID, terminalId: SHELL_ID };
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
@@ -293,7 +289,7 @@ it.effect(
 );
 
 it.effect(
-  "a second attach of the same shell, a detach, and the page's end each close the port and let the connection go",
+  "the panel closing its port and the page's end each let the connection go, and its port hears nothing after",
   () =>
     Effect.gen(function* () {
       const { actPort, asked, opened, hostSays, pageGone, drain } = fixture();
@@ -301,22 +297,18 @@ it.effect(
       const leaving = panelOf();
 
       yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
-      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
-      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_DETACH, payload: DETACH }, panel);
       yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, leaving);
+      opened[0]?.hangUp();
       pageGone(leaving.sender);
       yield* drain;
-      hostSays.output("connection-2", "late");
+      hostSays.output("connection-1", "late");
 
       assert.deepEqual(
-        opened.map((port) => port.closed),
-        [true, true, true],
-      );
-      assert.deepEqual(
         asked.filter((line) => line.startsWith("disconnect")),
-        ["disconnect:connection-1", "disconnect:connection-2", "disconnect:connection-3"],
+        ["disconnect:connection-1", "disconnect:connection-2"],
       );
-      assert.deepEqual(opened[1]?.posted, [], "a detached port hears nothing after");
+      assert.equal(opened[1]?.closed, true);
+      assert.deepEqual(opened[0]?.posted, [], "a detached port hears nothing after");
     }),
 );
 
@@ -332,58 +324,6 @@ it.effect("an attach the host did not take is refused, and its port closed", () 
     assert.deepEqual(attached, refusedAs(ACT_KIND.TERMINAL_ATTACH));
     assert.equal(opened[0]?.closed, true);
   }),
-);
-
-it.effect(
-  "an attach the host refused after a newer attach of the shell leaves the newer one standing",
-  () =>
-    Effect.gen(function* () {
-      const firstAnswer = yield* Deferred.make<boolean>();
-      const { actPort, asked, opened } = fixture({
-        connect: (connectionId) =>
-          connectionId === "connection-1" ? Deferred.await(firstAnswer) : Effect.succeed(true),
-      });
-      const panel = panelOf();
-
-      const first = yield* Effect.forkChild(
-        actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel),
-      );
-      yield* Effect.yieldNow;
-      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
-      yield* Deferred.succeed(firstAnswer, false);
-      yield* Fiber.join(first);
-      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_DETACH, payload: DETACH }, panel);
-
-      assert.equal(opened[1]?.closed, true, "the newer port is still the panel's to detach");
-      assert.ok(asked.includes("disconnect:connection-2"));
-    }),
-);
-
-it.effect(
-  "one shell id under two agents is two shells: a detach of one leaves the other's port",
-  () =>
-    Effect.gen(function* () {
-      const { actPort, opened, hostSays } = fixture();
-      const panel = panelOf();
-      const otherAgent = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
-
-      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
-      yield* actPort.perform(
-        { kind: ACT_KIND.TERMINAL_ATTACH, payload: { ...ATTACH, agentId: otherAgent } },
-        panel,
-      );
-      yield* actPort.perform(
-        { kind: ACT_KIND.TERMINAL_DETACH, payload: { agentId: otherAgent, terminalId: SHELL_ID } },
-        panel,
-      );
-      hostSays.output("connection-1", "still here");
-
-      assert.deepEqual(
-        opened.map((port) => port.closed),
-        [false, true],
-      );
-      assert.equal(opened[0]?.posted.length, 1, "the first agent's shell still hears its output");
-    }),
 );
 
 it.effect(

@@ -62,15 +62,14 @@ import { plainWords } from "./tool-call-model.js";
  * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
  *
  * The list holds every item of every plan it is handed, the latest changed
- * first, under its plan, under the person it waits on, or in one
- * run with no groups, the items its tab takes: what needs the reader, what
+ * first, in one run with no groups, the items its tab takes: what needs the reader, what
  * they are not done with, everything, or what they set a reminder on, each tab
  * counting its own.
  * An item is the reader's where it waits on them: they are its task's
  * assignee, or, on a task nobody is assigned or an agent's with no task,
  * they started the agent that asks it; or where the service does not say, as main counts what waits on
  * the account (`agent-notices.ts`), and only the reader's open items need
- * them: Needs you lists only those, though the steps through any tab keep the
+ * them: Questions lists only those, though the steps through any tab keep the
  * item chosen, while a teammate's open item stands in the list as waiting
  * on them. An item is its title and its thread, each answer a member's
  * message under the ask it answers, and a settled one says how it ended.
@@ -1174,6 +1173,11 @@ export function threadsWaitingWords(waiting: number): string {
     : `${waiting} threads ${NEEDS_YOU.COUNT.many}`;
 }
 
+/** What a line of threads none of which waits on the developer says: "1 thread", "4 threads". */
+export function threadsWords(count: number): string {
+  return count === 1 ? "1 thread" : `${count} threads`;
+}
+
 /** The items given that wait on the developer, by the agent that posted each, in their order. */
 export function waitingByAgent(
   waiting: readonly InboxItem[],
@@ -1388,7 +1392,7 @@ export function agentGroups(
 }
 
 /**
- * Which items an Inbox lists, as its view's menu chooses: Needs you, the
+ * Which items an Inbox lists, as its view's menu chooses: Questions, the
  * questions whose ask waits on the reader's answer (`threadNeedsReader`),
  * which Addressed to never narrows; Open, every
  * thread the reader is not done with, a question not yet answered, a notice
@@ -1602,7 +1606,7 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
   }
 }
 
-/** Whether Addressed to narrows a scope: every scope but Needs you, which names the reader already. */
+/** Whether Addressed to narrows a scope: every scope but Questions, which names the reader already. */
 export function narrowedByWhose(show: InboxShow): boolean {
   return show !== INBOX_SHOW.NEEDS_ME;
 }
@@ -1733,7 +1737,7 @@ export function isDone(item: InboxItem): boolean {
 }
 
 /**
- * Whether a scope lists the item: Needs you every question whose ask waits
+ * Whether a scope lists the item: Questions every question whose ask waits
  * on the reader (`threadNeedsReader`), what main's to-do count and the
  * Dock's badge count but for those with a reminder, a notice never; Open every
  * thread the reader is not done with (`isDone`), one still open, one

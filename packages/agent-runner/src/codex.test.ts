@@ -21,6 +21,7 @@ import {
 } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { TestClock } from "effect/testing";
+import { vi } from "vitest";
 import { CODEX_BUNDLED_MODELS_JSON } from "./codex-protocol/bundled-models.js";
 import { codexToken } from "./codex-token.js";
 import type { RunnerSelf } from "./launch.js";
@@ -503,6 +504,48 @@ it.effect("interrupts the running turn on a stop and ends the launch as stopped"
       reason: RUNNER_END.STOPPED,
     });
   }),
+);
+
+it.effect(
+  "a thread resumed in a sandbox that no longer holds its rollout has it written back from the service's store first",
+  () =>
+    Effect.gen(function* () {
+      const home = mkdtempSync(join(tmpdir(), "codex-home-"));
+      const subpath = `sessions/2026/11/06/rollout-2026-11-06T18-00-00-${THREAD}.jsonl`;
+      const kept = [
+        { type: "session_meta", payload: { id: THREAD } },
+        { type: "response_item", payload: { type: "message", role: "user" } },
+      ];
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        const call = JSON.parse(String(init?.body));
+        const answer =
+          call.call === "listSubkeys"
+            ? { subkeys: [subpath] }
+            : call.call === "load"
+              ? { entries: kept }
+              : {};
+        return new Response(JSON.stringify(answer));
+      });
+      const service = fakeService("What exact line");
+      const { write, run } = yield* launch([{ exchanges: [...RESUME, RESUMED_TURN] }], service, {
+        ...ENV,
+        CODEX_HOME: home,
+      });
+      yield* write({
+        ...CONFIG,
+        threadId: THREAD,
+        transcriptsUrl: "https://app.test/api/agents/runner-transcripts",
+      });
+      yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      assert.equal(
+        readFileSync(join(home, subpath), "utf8"),
+        kept.map((entry) => `${JSON.stringify(entry)}\n`).join(""),
+      );
+      vi.restoreAllMocks();
+      rmSync(home, { recursive: true, force: true });
+    }),
 );
 
 it.effect(

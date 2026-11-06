@@ -329,7 +329,7 @@ test("the arrows move the highlight, and Space on an empty search flips the high
   assert.deepEqual(switched, [[VERCEL]]);
 });
 
-test("a server page's back is hinted \"Back to Integrations\", names no key since the popover's own keys step back, and returns to the servers", async () => {
+test("a server page's back is hinted \"Back to MCP servers\", names no key since the popover's own keys step back, and returns to the servers", async () => {
   const { container } = await opened();
   openVercel(container);
   const back =
@@ -340,7 +340,7 @@ test("a server page's back is hinted \"Back to Integrations\", names no key sinc
   restOn(back);
   const hint = document.querySelector('[role="tooltip"]:not([inert])');
 
-  assert.equal(hint?.textContent, "Back to Integrations");
+  assert.equal(hint?.textContent, "Back to MCP servers");
   assert.equal(back.getAttribute("aria-keyshortcuts"), null);
   act(() => back.click());
   assert.equal(container.querySelector(".agent-servers-page-title"), null);

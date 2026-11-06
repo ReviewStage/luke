@@ -1011,7 +1011,7 @@ function serversChip(root: ParentNode = document): HTMLButtonElement | undefined
   return [...root.querySelectorAll<HTMLButtonElement>("button[aria-labelledby]")].find((each) => {
     const [fieldName] = (each.getAttribute("aria-labelledby") ?? "").split(" ");
     return (
-      fieldName !== undefined && document.getElementById(fieldName)?.textContent === "Integrations"
+      fieldName !== undefined && document.getElementById(fieldName)?.textContent === "MCP servers"
     );
   });
 }
@@ -1546,12 +1546,12 @@ test("a personal automation another member made is not called Only you, in its r
   assert.equal(picked(editor, "Owner"), "Personal");
 });
 
-test("a new agent's Integrations are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
+test("a new agent's MCP servers are a field chip of the owner's connected ones until switched off, the row naming those off, and a switch saves with the task", async () => {
   standing = [{ ...SWEEP, mine: true }];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const chip = serversChip() ?? assert.fail("the servers chip stands");
-  assert.match(page.textContent ?? "", /Every connected integration is on\./u);
+  assert.match(page.textContent ?? "", /Every connected MCP server is on\./u);
   assert.equal(chip.querySelectorAll(".ui-provider-mark").length, 2, "Linear's and Sentry's marks");
 
   act(() => chip.click());
@@ -1563,15 +1563,15 @@ test("a new agent's Integrations are a field chip of the owner's connected ones 
   act(() => sentry.click());
   assert.match(page.textContent ?? "", /Sentry off\./u);
   assert.equal(chip.querySelectorAll(".ui-provider-mark").length, 1, "Linear's mark alone");
-  assert.equal(nameOf(chip), "Integrations", "marks draw no words, so the field's name stands");
+  assert.equal(nameOf(chip), "MCP servers", "marks draw no words, so the field's name stands");
   const linear = document.querySelector<HTMLButtonElement>(
     "[role=switch][aria-label='Linear for this agent']",
   );
   assert.ok(linear, "Linear's switch stands");
   act(() => linear.click());
-  assert.equal(nameOf(chip), "Integrations None", "the name carries the word the chip draws");
+  assert.equal(nameOf(chip), "MCP servers None", "the name carries the word the chip draws");
   act(() => linear.click());
-  assert.equal(nameOf(chip), "Integrations");
+  assert.equal(nameOf(chip), "MCP servers");
   act(() => button("Save").click());
   await settle();
 
@@ -1581,19 +1581,19 @@ test("a new agent's Integrations are a field chip of the owner's connected ones 
   });
 });
 
-test("a new agent's Integrations row claims nothing while the owner's connections are read", async () => {
+test("a new agent's MCP servers row claims nothing while the owner's connections are read", async () => {
   standing = [{ ...SWEEP, mine: true }];
   integrationsHeld = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
   const reading = [...page.querySelectorAll("[role=status]")].map((each) => each.textContent);
-  assert.ok(reading.includes("Reading your connected integrations…"), "the row says it is reading");
-  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected integration/u);
+  assert.ok(reading.includes("Reading your connected MCP servers…"), "the row says it is reading");
+  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected MCP server/u);
   assert.equal(serversChip(page) === undefined, true, "no chip claims None while the read is out");
 });
 
-test("a new agent's Integrations row says a refused read of the owner's connections, and Retry reads them", async () => {
+test("a new agent's MCP servers row says a refused read of the owner's connections, and Retry reads them", async () => {
   standing = [{ ...SWEEP, mine: true }];
   integrationsRefusals = 1;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -1602,7 +1602,7 @@ test("a new agent's Integrations row says a refused read of the owner's connecti
   await vi.waitFor(() =>
     assert.match(
       page.querySelector("[role=alert]")?.textContent ?? "",
-      /Your connected integrations could not be read\./u,
+      /Your connected MCP servers could not be read\./u,
     ),
   );
   assert.doesNotMatch(page.textContent ?? "", /None connected yet\./u);
@@ -1610,7 +1610,7 @@ test("a new agent's Integrations row says a refused read of the owner's connecti
   act(() => button("Retry").click());
   await settle();
   await vi.waitFor(() =>
-    assert.match(page.textContent ?? "", /Every connected integration is on\./u),
+    assert.match(page.textContent ?? "", /Every connected MCP server is on\./u),
   );
   assert.equal(
     (serversChip() ?? assert.fail("the servers chip stands")).querySelectorAll(".ui-provider-mark")
@@ -1632,7 +1632,7 @@ test("another member's automation says which servers its creator switched off, o
 
   assert.match(
     page.textContent ?? "",
-    /Its creator's connected integrations, but Sentry and Notion \(account 2\) switched off\./u,
+    /Its creator's connected MCP servers, but Sentry and Notion \(account 2\) switched off\./u,
   );
   assert.equal(serversChip(page) === undefined, true);
 });

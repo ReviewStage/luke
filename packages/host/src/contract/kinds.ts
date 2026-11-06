@@ -582,8 +582,9 @@ export const PORT_FORWARD_ACT_KIND = {
 /**
  * A coding agent's Terminal tab (`messages/terminal.ts`): its shells listed,
  * started, named, and ended, its sandbox resumed on the developer's click,
- * and a shell attached and detached. What a shell prints travels on the port
- * an attach posts to the asking panel, never on an act.
+ * and a shell attached, detached as the panel closes the port. What a shell
+ * prints travels on the port an attach posts to the asking panel, never on
+ * an act.
  */
 export const TERMINAL_ACT_KIND = {
   TERMINAL_LIST: "terminal.list",
@@ -592,7 +593,6 @@ export const TERMINAL_ACT_KIND = {
   TERMINAL_KILL: "terminal.kill",
   TERMINAL_RESUME: "terminal.resume",
   TERMINAL_ATTACH: "terminal.attach",
-  TERMINAL_DETACH: "terminal.detach",
 } as const;
 
 /**
@@ -992,7 +992,6 @@ export const PORT_ACT_USE = {
   TERMINAL_KILL: ACT_USE.WRITE,
   TERMINAL_RESUME: ACT_USE.WRITE,
   TERMINAL_ATTACH: ACT_USE.WRITE,
-  TERMINAL_DETACH: ACT_USE.WRITE,
 
   UPDATE_CHECK: ACT_USE.WRITE,
   UPDATE_INSTALL: ACT_USE.WRITE,

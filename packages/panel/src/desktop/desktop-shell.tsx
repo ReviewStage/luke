@@ -485,6 +485,7 @@ function useFocusHandedBack(held: RefObject<Holder | undefined>): void {
  */
 function usePlaceCommands(
   pastGate: boolean,
+  tab: PanelTab,
   onTabChange: (tab: PanelTab) => void,
   tasks: TasksControl,
   settings: SettingsPanelProps,
@@ -499,7 +500,8 @@ function usePlaceCommands(
     APP_COMMAND.NEW_TASK,
     pastGate && tasks.signedIn
       ? () => {
-          onTabChange(PANEL_TAB.TASKS);
+          // Note that the card stands over whatever place stands, so only Settings, which takes the window, is left for it.
+          if (tab === PANEL_TAB.SETTINGS) onTabChange(PANEL_TAB.TASKS);
           tasks.onNewTask();
         }
       : undefined,
@@ -781,6 +783,7 @@ export function DesktopShell({
   const founding = !gated && tasks.newWorkspace.open;
   usePlaceCommands(
     !gated && setup === SETUP_GATE.NONE && !founding,
+    tab,
     onTabChange,
     tasks,
     settings,

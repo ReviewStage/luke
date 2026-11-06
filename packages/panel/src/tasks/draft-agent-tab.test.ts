@@ -370,12 +370,12 @@ function openServers(): void {
   act(() => plus.click());
   const row =
     [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (item) => item.textContent === "Integrations",
-    ) ?? assert.fail("the + menu offers Integrations");
+      (item) => item.textContent === "MCP servers",
+    ) ?? assert.fail("the + menu offers MCP servers");
   act(() => row.click());
 }
 
-test("the Integrations popover draws a row for each server the deployment offers the account, and none for one it does not", async () => {
+test("the MCP servers popover draws a row for each server the deployment offers the account, and none for one it does not", async () => {
   const tab = mount([]);
   await settle();
   openServers();

@@ -11,21 +11,24 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   FILL_ELEMENT,
   Fill,
+  IconButton,
   INLINE_EDIT_LOOK,
   InlineEdit,
+  PlusIcon,
   RetryButton,
   STATUS_TONE,
   TABS_GROUND,
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
   Toolbar,
+  Tooltip,
   useMenu,
   VisuallyHidden,
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@repo/ui/tab-strip-model";
 import type { InlineRename } from "@repo/ui/use-inline-rename";
-import { memo, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -54,10 +57,10 @@ import {
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
+import { AgentHistory } from "./agent-history.js";
 import type { TaskCards } from "./side-panel.js";
 import {
   type AddEntry,
-  AddTabButton,
   type DocumentMenu,
   DoorsTab,
   type HeldTranscripts,
@@ -113,13 +116,12 @@ import { TabStrip } from "./tab-strip.js";
  * agent's or the draft's, while its box holds words and another tab is
  * chosen, the Draft pencil at its end (`draft-mark.tsx`).
  *
- * The "+" after the last tab drops the shared searchable menu: New agent,
- * which opens a draft agent's tab, or chooses the
- * task's draft where it has one, unavailable with Start's own reason while
- * Start could not run; and each of the
- * task's agents in the order started, picking one choosing its tab or
- * opening it again. An archived task starts nothing, so its menu offers
- * only the agents to read, and its agents are not renamed.
+ * The "+" after the last tab opens a New agent at once, as ⌘T does: a draft
+ * agent's tab, or the task's draft where it has one, unavailable with Start's
+ * own reason while Start could not run. An archived task starts nothing, so
+ * it draws no "+", and its agents are not renamed. The task's agents whose
+ * tabs are closed, and those archived, stand behind History at the bar's
+ * end (`agent-history.tsx`), which opens them again.
  */
 
 /**
@@ -130,17 +132,14 @@ import { TabStrip } from "./tab-strip.js";
 export const ROW_COUNT =
   "inbox-row-count flex-none text-caption-inline text-muted-foreground tabular-nums data-[tone]:text-tone-ink";
 
-/** The "+" menu's section for the task's agents, which the task's summary lists under the same heading. */
+/** The section the task's agents stand under where they are listed among other things, as ⌘K lists them, and the details' way back names. */
 export const AGENTS_SECTION = "Agents";
-
-/** The "+" menu's row that opens a draft agent, which no agent's id spells. */
-const NEW_AGENT_ROW = "new-agent";
 
 /** What the row that opens a draft says while a Start is out. */
 const NEW_AGENT_STARTING = "Starting…";
 
 /** The row that opens the task's Inbox, which no agent's id spells. */
-export const INBOX_ROW = "inbox";
+const INBOX_ROW = "inbox";
 
 /** What the press that reads the plan's agents again, after a first read did not land, says. */
 const RETRY_AGENTS = "Retry agents";
@@ -376,8 +375,8 @@ function agentTabs(input: {
 }
 
 /**
- * Each of the task's agents in the order started, as the "+" menu offers it,
- * the task's summary lists it (`task-summary.tsx`), and ⌘K finds it, in its
+ * Each of the task's agents in the order started, as History lists a closed
+ * one (`agent-history.tsx`), the Overview's agents list it, and ⌘K finds it, in its
  * tab's look: its harness's mark wearing where it stands, and, where the
  * row draws one, a failure at its end, as its tab does. Picking an agent
  * whose tab is open chooses that tab rather than opening another, as a
@@ -414,25 +413,13 @@ export function agentEntries(
   });
 }
 
-/**
- * The task's Inbox as a row: its tray and its name, then at its end the
- * Draft pencil where one of its items' boxes holds a draft, as the sidebar's
- * row for the task wears it, and what waits on the developer counted in the
- * attention tone the rows it counts wear, and nothing at none. It names no section, so the summary lists it under Tabs, beside the
- * panel's other kinds; picking it opens the window's Inbox narrowed to the task.
- */
-export function inboxEntry(onPick: () => void, waiting: number, drafted = false): AddEntry {
-  const row = { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) };
-  const count = waitingMark(waiting);
-  const endMark = drafted ? (
-    <>
-      <DraftMark />
-      {count}
-    </>
-  ) : (
-    count
-  );
-  return { row, endMark, onPick };
+/** The task's Inbox as a row, its tray and its name, which picking opens through `onPick`. */
+function inboxEntry(waiting: number, onPick: () => void): AddEntry {
+  return {
+    row: { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) },
+    endMark: waitingMark(waiting),
+    onPick,
+  };
 }
 
 /** What waits on the developer counted at a row's or a tab's end in the attention tone the Inbox's rows wear; nothing at none. */
@@ -448,22 +435,23 @@ function waitingMark(waiting: number): React.JSX.Element | undefined {
 /**
  * The task's Inbox as ⌘K offers it, by itself rather than among the task's
  * agents, though only they post to it; none on a task with no agent and
- * nothing main says waits on it (`waiting`), which holds the Inbox while its
- * agents are unread. Picking it opens the window's Inbox narrowed to the
- * task, through `onPick`.
+ * nothing main says waits on it (`waiting`, how many), which holds the Inbox
+ * while its agents are unread and is counted at its end as the task's Inbox
+ * row counts it. Picking it opens the window's Inbox narrowed to the task,
+ * through `onPick`.
  */
 export function inboxEntries(
   agents: AgentsControl,
-  waiting: boolean,
+  waiting: number,
   onPick: () => void,
 ): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the task holds any agent.
-  if ((agents.heldIds?.length ?? 0) === 0 && !waiting) return [];
-  return [inboxEntry(onPick, 0)];
+  if ((agents.heldIds?.length ?? 0) === 0 && waiting === 0) return [];
+  return [inboxEntry(waiting, onPick)];
 }
 
 /**
- * New agent, the one start the "+" menu and the plan's agents offer alike:
+ * New agent, the one start the "+" and the plan's agents offer alike:
  * a draft opened in the column, unavailable while a Start is out, and left
  * out on an archived task and on a pilot task, whose agents are its pilot's
  * to start (`startsOwnAgents`).
@@ -482,21 +470,41 @@ export function newAgentStarts(main: MainTabsControl, agents: AgentsControl): Me
 }
 
 /**
- * The "+" menu's rows: New agent (`newAgentStarts`), by itself under no
- * heading; then each of its agents under Agents (`agentEntries`).
+ * The "+" after the column's last tab: New agent (`newAgentStarts`) on a
+ * press, unavailable with Start's reason while a Start is out, and nothing
+ * on a task that starts no agent of its own. ⌘T's ask starts it as a press
+ * does, once the column is on screen to take it (`answers`), and is let go
+ * once answered, since the "+" stands again each time its column is shown.
  */
-function addEntries(
-  main: MainTabsControl,
-  agents: AgentsControl,
-  held: HeldTranscripts,
-): AddEntry[] {
-  const starts = newAgentStarts(main, agents).map(
-    (start): AddEntry => ({
-      row: { id: NEW_AGENT_ROW, ...tabLook({ kind: TAB_KIND.DRAFT }), disabled: start.detail },
-      onPick: start.onSelect,
-    }),
+function NewAgentButton({
+  start,
+  asked,
+  answers,
+  onAnswered,
+}: {
+  start: MenuAction | undefined;
+  asked: boolean;
+  answers: boolean;
+  onAnswered: () => void;
+}): React.JSX.Element | null {
+  const onStart = start === undefined || start.disabled === true ? undefined : start.onSelect;
+  useEffect(() => {
+    if (!asked || !answers) return;
+    onAnswered();
+    onStart?.();
+  }, [asked, answers, onAnswered, onStart]);
+  if (start === undefined) return null;
+  return (
+    <Tooltip label={start.detail ?? start.label} command={APP_COMMAND.NEW_TAB}>
+      <IconButton
+        icon={<PlusIcon />}
+        label={start.label}
+        disabled={start.disabled}
+        focusableWhenDisabled
+        onClick={start.onSelect}
+      />
+    </Tooltip>
   );
-  return [...starts, ...agentEntries(main, agents, held)];
 }
 
 /**
@@ -623,6 +631,7 @@ export function MainTabBars({
   onOpenLocal,
   onOpenBrowser,
   onShown,
+  onOpenAgent,
   waiting,
 }: {
   /** The task the column is, whose strip's looks the switcher keeps. */
@@ -649,6 +658,8 @@ export function MainTabBars({
   onOpenBrowser?: ((agentId: string) => void) | undefined;
   /** Hears the tab the column shows, for a phone's header, whose ⋯ offers what the tab's right-click would (`task-pane-switcher.tsx`); none wider than a phone. */
   onShown?: ((shown: ShownTab | undefined) => void) | undefined;
+  /** Opens an agent from History: a closed one's tab in the column, an archived one's own page. */
+  onOpenAgent: (agentId: string) => void;
   /** The threads waiting on the developer, by the agent that posted them (`waitingByAgent`), which each agent's tab counts. */
   waiting?: ReadonlyMap<string, readonly unknown[]> | undefined;
 }): React.JSX.Element {
@@ -748,17 +759,22 @@ export function MainTabBars({
               <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
             </ReplayUnmask>
           ) : null}
-          <AddTabButton
-            label="Open a tab"
-            placeholder="Search tabs"
-            noMatch="No tabs match"
-            entries={addEntries(main, agents, views.held)}
-            onOpen={agents.onRetryList}
+          <NewAgentButton
+            start={newAgentStarts(main, agents)[0]}
             asked={main.newTabAsked}
             answers={keys}
             onAnswered={main.onNewTabAnswered}
           />
         </MainTabsRow>
+      }
+      actions={
+        <AgentHistory
+          main={main}
+          agents={agents}
+          held={views.held}
+          shown={shown}
+          onOpenAgent={onOpenAgent}
+        />
       }
     />
   );
@@ -883,6 +899,7 @@ export function MainTabContent({
 export const AgentPane = memo(function AgentPane({
   label,
   tabbed,
+  hidden = false,
   ...content
 }: Omit<Parameters<typeof MainTabContent>[0], "tab"> & {
   /** The agent's or the draft's tab whose pane it is; Overview's is the task's page's own. */
@@ -891,6 +908,8 @@ export const AgentPane = memo(function AgentPane({
   label: string | undefined;
   /** Whether the pane is the panel of a tab in a strip, as the task column's is. */
   tabbed: boolean;
+  /** Whether the agent's threads stand in its place (`agent-threads.tsx`), which keeps it drawn beneath, hidden, so going back finds the transcript where it was. */
+  hidden?: boolean | undefined;
 }): React.JSX.Element {
   return (
     <Fill
@@ -898,6 +917,7 @@ export const AgentPane = memo(function AgentPane({
       className="desktop-agent"
       role={tabbed ? "tabpanel" : undefined}
       aria-label={label}
+      hidden={hidden}
       data-popover-room=""
     >
       <MainTabContent {...content} />

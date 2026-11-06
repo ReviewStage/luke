@@ -1,7 +1,6 @@
 import {
   Card,
   CardPress,
-  Checkbox,
   GAP,
   LIST_ROW_LEAD,
   LIST_ROW_META,
@@ -9,6 +8,7 @@ import {
   ListRow,
   SELECT_BOX_PLACE,
   SelectionBar,
+  SelectionPicker,
   SelectionRegion,
   SelectionToolbar,
   Stack,
@@ -144,11 +144,28 @@ function ChoosingMail(): React.JSX.Element {
       <Toolbar
         lead={
           count === 0 ? null : (
-            <Checkbox
-              label="Select all"
-              checked={count === MAIL.length}
-              mixed={count < MAIL.length}
-              onChange={(all) => setSelected(new Set(all ? MAIL.map((item) => item.id) : []))}
+            <SelectionPicker
+              count={count}
+              total={MAIL.length}
+              onAll={() => setSelected(new Set(MAIL.map((item) => item.id)))}
+              onNone={clear}
+              controls="selection-mail-list"
+              by={[
+                {
+                  label: "Read",
+                  count: MAIL.filter((item) => !item.unread).length,
+                  onSelect: () =>
+                    setSelected(
+                      new Set(MAIL.filter((item) => !item.unread).map((item) => item.id)),
+                    ),
+                },
+                {
+                  label: "Unread",
+                  count: MAIL.filter((item) => item.unread).length,
+                  onSelect: () =>
+                    setSelected(new Set(MAIL.filter((item) => item.unread).map((item) => item.id))),
+                },
+              ]}
             />
           )
         }

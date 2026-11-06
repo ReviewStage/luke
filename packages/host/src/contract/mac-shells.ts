@@ -20,13 +20,15 @@ import { MAC_SHELL_ACT_KIND } from "./kinds.js";
 /** The longest folder a shell opens in, as macOS's `PATH_MAX` bounds a path. */
 const FOLDER_MAX_CHARS = 1024;
 
-/** A shell opened for an agent, in a folder named by its absolute path. */
+/** A shell opened for an agent, in a folder named by its absolute path, at the size its screen was first fitted to. */
 const macShellOpenParamsSchema = EffectSchema.Struct({
   agentId: terminalShellParamsSchema.fields.agentId,
   folder: EffectSchema.String.check(
     EffectSchema.isPattern(/^\//u),
     EffectSchema.isMaxLength(FOLDER_MAX_CHARS),
   ),
+  cols: terminalAttachParamsSchema.fields.cols,
+  rows: terminalAttachParamsSchema.fields.rows,
 });
 
 /** The agent's mirror, by the absolute path of its folder. */

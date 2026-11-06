@@ -2602,7 +2602,7 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
   const listed = rows();
   assert.ok(listed.includes(`Invite funnel · ${DOCUMENT_TASK.name}`), "the page is listed");
   assert.ok(
-    listed.includes(`Invoice export · Terminal · ${DOCUMENT_TASK.name}`),
+    listed.includes(`Invoice export · Cloud Terminal · ${DOCUMENT_TASK.name}`),
     "the agent's terminal is listed",
   );
 
@@ -2611,8 +2611,11 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens again");
   });
   chooseFilter("This task");
-  press(`Invoice export · Terminal · ${DOCUMENT_TASK.name}`);
-  assert.deepEqual(chosen, [{ page: "page-1" }, { terminal: agent.id }]);
+  press(`Invoice export · Cloud Terminal · ${DOCUMENT_TASK.name}`);
+  const [page, terminal] = chosen;
+  assert.deepEqual(page, { page: "page-1" });
+  assert.ok(terminal instanceof Object && "terminal" in terminal && "title" in terminal);
+  assert.deepEqual([terminal.terminal, terminal.title], [agent.id, "Cloud 1"]);
 });
 
 test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages the Inbox\'s panel read, as that panel\'s "+" offers them', async () => {
@@ -2828,7 +2831,21 @@ test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archiv
   assert.deepEqual(asked, [`${agent.id}:true`, `${agent.id}:false`]);
 });
 
-test("⌘K's \"This task\" still offers the task's Inbox while an item waits on it and its agents are unread", async () => {
+/** The words at the end of the row listed as exactly `listed`, as a reader hears them; empty where it draws none. */
+function endWordsOf(listed: string): string {
+  const row = document.querySelectorAll('[role="option"]')[rows().indexOf(listed)];
+  assert.ok(row, `${listed} is listed`);
+  const end = row.querySelector(".ui-combobox-option-hint");
+  return end === null ? "" : heard(end).trim();
+}
+
+test("⌘K's \"This task\" offers the task's Inbox while an item waits on it and its agents are unread, counting the threads that wait", async () => {
+  const waiting = (id: string) => ({
+    id,
+    agentId: "agent-1",
+    title: id,
+    postedAt: 1,
+  });
   const tasks = tasksControl({
     activeTaskId: DOCUMENT_TASK.id,
     tasks: [
@@ -2842,11 +2859,13 @@ test("⌘K's \"This task\" still offers the task's Inbox while an item waits on 
       },
     ],
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-    inbox: [{ taskId: DOCUMENT_TASK.id, items: [] }],
+    inbox: [{ taskId: DOCUMENT_TASK.id, items: [waiting("first"), waiting("second")] }],
   });
   await paletteUnderState(tasks);
   chooseFilter("This task");
-  assert.ok(rows().includes(`Inbox · ${DOCUMENT_TASK.name}`), "a waiting item holds the Inbox");
+  const listed = `Inbox · ${DOCUMENT_TASK.name}`;
+  assert.ok(rows().includes(listed), "a waiting item holds the Inbox");
+  assert.equal(endWordsOf(listed), "2 need you");
 });
 
 test("⌘K draws no Issues filter, with every experiment on, since Vespin keeps no issues of its own", async () => {
