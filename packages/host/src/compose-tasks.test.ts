@@ -14,7 +14,12 @@ import {
 } from "@repo/features";
 import { BROWSER_TABS_PLACE, browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
-import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@repo/features/agent-wire";
+import {
+  AGENT_MACHINE,
+  AGENT_STATUS,
+  PULL_REQUEST_STATE,
+  type TasklessAgent,
+} from "@repo/features/agent-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -54,6 +59,7 @@ import {
   TASK_STATUS,
   type Task,
   type TaskAgentsSummary,
+  type TaskCreateRequest,
   type TaskFileAnswer,
   type TaskSkillsAnswer,
   type TaskTreeAnswer,
@@ -173,6 +179,8 @@ interface FakeService extends TasksClient {
   createAnswer: TaskCallResult<TaskStarted, RepositoryCallFailure>;
   /** The idempotency key each start asked was sent under, in order. */
   createKeys: (string | undefined)[];
+  /** Each start's request as the service was sent it, in order. */
+  createRequests: TaskCreateRequest[];
   /** The repositories the account reaches, as the service answers them; a failure is the service refusing the read. */
   repositoriesAnswer: TaskCallResult<GitHubRepositoriesAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
   /** Whether a repository is refused as one the App does not reach. */
@@ -588,6 +596,7 @@ function fakeService(tasks: Task[]): FakeService {
     relationAnswered: Effect.void,
     createAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     createKeys: [],
+    createRequests: [],
     repositoriesAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     repositoryUnreachable: false,
     reads: [],
@@ -1112,9 +1121,10 @@ function fakeService(tasks: Task[]): FakeService {
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
           : { ok: true, answer: found };
       }),
-    create: (_request, key) =>
+    create: (request, key) =>
       Effect.sync(() => {
         service.createKeys.push(key);
+        service.createRequests.push(request);
         return service.createAnswer;
       }),
     repositories: (workspaceId) =>
@@ -1933,6 +1943,32 @@ it.effect(
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
       assert.deepEqual(last()?.repositoryPins, [{ repository: "acme/relay", pinnedAt: 3 }]);
       assert.deepEqual(last()?.github, { connected: true, login: "ada" });
+    }),
+);
+
+it.effect(
+  "a start reaches the service whole: its workspace, brief, planning, standing, and the device its agents run on, under the id the host minted",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call } = yield* subject(service);
+      yield* call("TASKS_REFRESH", undefined);
+      service.createAnswer = { ok: true, answer: { task: task(INVITES, "Rate limit", "", 10) } };
+      const asked = {
+        name: "Rate limit",
+        brief: "Rate limit search.",
+        repository: "acme/ledger",
+        workspaceId: "workspace-acme",
+        planning: false,
+        status: TASK_STATUS.BACKLOG,
+        priority: TASK_PRIORITY.HIGH,
+        assigneeId: "user-ada",
+        runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId: "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11" },
+      } as const;
+
+      yield* call("TASKS_START", { ...asked, quiet: true });
+
+      assert.deepEqual(service.createRequests, [{ ...asked, id: INVITES }]);
     }),
 );
 
