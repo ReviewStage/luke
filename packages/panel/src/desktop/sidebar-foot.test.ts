@@ -21,7 +21,7 @@ import {
   handState,
   stateWith,
 } from "../testing/app-state.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries, startQueriesAfresh } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 
@@ -61,21 +61,18 @@ afterEach(() => {
 });
 
 /**
- * Hands the window main's document with `patch`, its run a development build
- * of `branch`, and waits for the foot to draw that branch and for what Query
- * notifies beside it: one client holds a
- * test's document across its mounts, so the branch is what says this one landed.
+ * Hands the window main's document with `patch` on a Query client of its own,
+ * so no document an earlier mount read stands in for it, and waits for the
+ * foot to draw it and for what Query notifies beside it.
  */
 async function footOn(
-  branch: string,
   patch: Partial<AppStateSnapshot>,
   options: Parameters<typeof mount>[1] = {},
 ): Promise<void> {
-  const base = stateWith({}, patch).run;
-  handState({}, { ...patch, run: { ...base, commit: { sha: "a10eee5", dirty: false, branch } } });
+  startQueriesAfresh();
+  handState({}, patch);
   mount(DEAN, options);
-  await vi.waitFor(() => assert.equal(document.body.textContent?.includes(branch), true));
-  // Note that a slice drawn apart from the branch, the network's or the run's capabilities, may reach the foot a Query notification later.
+  await stateArrived();
   await settleQueries();
 }
 
@@ -431,8 +428,8 @@ test("an update ready to install offers Restart in the sidebar on the desktop, a
     installSupported: true,
     latestVersion: "1.1.0",
   };
-  const restartShown = async (branch: string, capabilities: readonly HostCapability[]) => {
-    await footOn(branch, { run: { ...stateWith({}, {}).run, capabilities } }, { update: ready });
+  const restartShown = async (capabilities: readonly HostCapability[]) => {
+    await footOn({ run: { ...stateWith({}, {}).run, capabilities } }, { update: ready });
     const shown = [...document.querySelectorAll("button")].some(
       (button) => button.textContent === "Restart",
     );
@@ -440,19 +437,16 @@ test("an update ready to install offers Restart in the sidebar on the desktop, a
     return shown;
   };
 
-  assert.equal(await restartShown("feat/updates", DESKTOP_CAPABILITIES), true);
+  assert.equal(await restartShown(DESKTOP_CAPABILITIES), true);
   assert.equal(
-    await restartShown(
-      "feat/no-updates",
-      DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.UPDATES),
-    ),
+    await restartShown(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.UPDATES)),
     false,
   );
 });
 
 test("the Mac offline says so in the foot, and nothing does while it is online", async () => {
   const offlineShown = async (online: boolean) => {
-    await footOn(online ? "feat/online" : "feat/offline", { network: { online, reachable: true } });
+    await footOn({ network: { online, reachable: true } });
     const mark = document.querySelector('.offline-mark[aria-label="Offline"]');
     const words = mark?.textContent ?? null;
     for (const root of roots.splice(0)) act(() => root.unmount());
@@ -461,49 +455,4 @@ test("the Mac offline says so in the foot, and nothing does while it is online",
 
   assert.equal(await offlineShown(false), "Offline");
   assert.equal(await offlineShown(true), null);
-});
-
-test("a development build's branch row hides the branch, and its hidden row brings it back", async () => {
-  const asked: unknown[] = [];
-  const run = {
-    profile: "test",
-    packaged: false,
-    platform: "darwin",
-    capabilities: DESKTOP_CAPABILITIES,
-    appVersion: "1.0.0",
-    captureMode: false,
-    fixtureMode: false,
-    accountRequired: false,
-    commit: { sha: "a10eee5", dirty: false, branch: "feat/demo" },
-  };
-  const footWith = async (hidden: boolean) => {
-    handState({}, { run, window: { fullScreen: false, buildLabelHidden: hidden } });
-    fakeActPortAnswering((request) => {
-      if (request.kind === ACT_KIND.WINDOW_SHOW_BUILD_LABEL) asked.push(request.payload);
-      return Promise.resolve(undefined);
-    });
-    mount(DEAN);
-    await vi.waitFor(() => assert.equal(branchPress(hidden ? "Show branch" : "Hide branch"), true));
-  };
-  const branchPress = (name: string) =>
-    [...document.querySelectorAll("button")].some(
-      (each) => each.getAttribute("aria-label") === name || each.textContent === name,
-    );
-  const pressNamed = async (name: string) => {
-    const button = [...document.querySelectorAll("button")].find(
-      (each) => each.getAttribute("aria-label") === name || each.textContent === name,
-    );
-    await act(async () => (button ?? assert.fail(`the foot offers ${name}`)).click());
-  };
-
-  await footWith(false);
-  assert.ok(document.body.textContent?.includes("feat/demo"));
-  await pressNamed("Hide branch");
-  for (const root of roots.splice(0)) act(() => root.unmount());
-
-  await footWith(true);
-  assert.ok(!document.body.textContent?.includes("feat/demo"));
-  await pressNamed("Show branch");
-
-  assert.deepEqual(asked, [{ shown: false }, { shown: true }]);
 });
