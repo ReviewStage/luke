@@ -341,3 +341,17 @@ test("an agent's link pressed in an Inbox item, its task not open, lands on the 
   assert.deepEqual(after.slice(0, before.length), before, "the Inbox item stays the step behind");
   assert.equal(after.length, before.length + 1, `one step, not through Home: ${after.join(" → ")}`);
 });
+
+test("a tab landing on an agent's address, its link opened as it lands, stands the page in the one step it landed on", async () => {
+  const router = await drawWindow("/acme");
+  const steps = router.addresses().length;
+
+  act(() => {
+    router.history.push("/acme/agent/agent-9");
+    showLink?.({ workspace: "acme", place: { kind: LINK_PLACE.AGENT, agentId: "agent-9" } });
+  });
+  await settle();
+
+  assert.equal(router.history.location.pathname, "/acme/agent/agent-9");
+  assert.equal(router.addresses().length, steps + 1, router.addresses().join(" → "));
+});

@@ -10,8 +10,13 @@
  * beside its address (`navigation-history.ts`), as it does an Inbox item's.
  */
 
-import { useNavigate } from "@tanstack/react-router";
-import { ROUTED_PLACE, useWindowPlace } from "./places/routed-places.js";
+import { useNavigate, useRouter } from "@tanstack/react-router";
+import {
+  placeParamsOf,
+  ROUTED_PLACE,
+  routedPlaceOf,
+  useWindowPlace,
+} from "./places/routed-places.js";
 
 /** An agent's page as the router stands it. */
 export interface AgentRoute {
@@ -24,16 +29,27 @@ export interface AgentRoute {
   readonly onClose: () => void;
 }
 
-/** An agent's page as the router stands it, left by `onClose`, and kept standing by `onStay` where a leave was asked of it before a door asked for the page standing. */
+/**
+ * An agent's page as the router stands it, left by `onClose`, and kept
+ * standing by `onStay` where a leave was asked of it before a door asked for
+ * the page standing. Note that the page standing is read from where the
+ * router's history stands at the call rather than as the window was last
+ * drawn, because a tab landing on the page's address opens its link in the
+ * same turn, before the window draws it standing (`load-link.ts`).
+ */
 export function useAgentRoute(input: { onClose: () => void; onStay: () => void }): AgentRoute {
+  const router = useRouter();
   const navigate = useNavigate();
   const here = useWindowPlace();
   const open = here.place === ROUTED_PLACE.AGENT;
   const agentId = open ? here.params.agentId : undefined;
   const workspace = open ? here.params.workspace : undefined;
   const onOpen = (to: string, toWorkspace: string) => {
+    const matches = router.matchRoutes(router.history.location.pathname);
+    const params = placeParamsOf(matches);
+    const standing = routedPlaceOf(matches) === ROUTED_PLACE.AGENT;
     // Opening the page standing moves nothing, and keeps it standing where the door that asked for it left the routed place first, as a link's and ⌘K's do.
-    if (to === agentId && toWorkspace === workspace) {
+    if (standing && params.agentId === to && params.workspace === toWorkspace) {
       input.onStay();
       return;
     }
