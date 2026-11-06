@@ -87,13 +87,23 @@ const HEADING_ELEMENT = {
   [RELOAD_ROOM.REGION]: TEXT_ELEMENT.H2,
 } as const satisfies Record<ReloadRoom, (typeof TEXT_ELEMENT)[keyof typeof TEXT_ELEMENT]>;
 
-/** What was thrown, as one line a person can send: an error's name and message, or the thrown value said as words; nothing where nothing was handed. */
+/**
+ * What was thrown, as one line a person can send: an error's name and
+ * message, or the thrown value said as words; nothing where nothing was
+ * handed. Note that a value that cannot be said as words (one with no
+ * prototype, or a getter that throws) answers nothing too, because a throw
+ * here would take down the very screen that says the place failed.
+ */
 function thrownWords(thrown: unknown): string | undefined {
   if (thrown === undefined) return undefined;
-  if (thrown instanceof Error) {
-    return thrown.message === "" ? thrown.name : `${thrown.name}: ${thrown.message}`;
+  try {
+    if (thrown instanceof Error) {
+      return thrown.message === "" ? String(thrown.name) : `${thrown.name}: ${thrown.message}`;
+    }
+    return String(thrown);
+  } catch {
+    return undefined;
   }
-  return String(thrown);
 }
 
 /**

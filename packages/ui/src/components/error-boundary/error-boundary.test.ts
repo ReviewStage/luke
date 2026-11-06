@@ -78,6 +78,14 @@ test("a child that throws while drawing draws the failure and Reload rather than
   ]);
 });
 
+test("a child that throws a value with no words of its own still draws the failure and Reload", () => {
+  function Place(): React.JSX.Element {
+    throw Object.create(null);
+  }
+  const page = mount(createElement(ErrorBoundary, { failure: FAILURE }, createElement(Place)));
+  expect(page.textContent).toBe(alertSaying(FAILURE));
+});
+
 test("a place that names no failure says the boundary's own sentence", () => {
   const Place = placeThatThrows({ now: true });
   const page = mount(createElement(ErrorBoundary, null, createElement(Place)));
