@@ -839,7 +839,7 @@ function treeAt(path: string): readonly TaskTreeEntry[] {
 /** The file the File profile opens, read from the agent's branch. */
 const OPENED_FILE = "src/members/invite.ts";
 
-/** How a profile stages the agent's Terminal: its sandbox stopped or starting, a list it refuses, an attach no port answers, or a port that says how the connection stands. */
+/** How a profile stages the agent's cloud terminal: its sandbox stopped or starting, a shell it refuses, an attach no port answers, or a port that says how the connection stands. */
 const TERMINAL_STAGE = {
   SANDBOX: "sandbox",
   REFUSED: "refused",
@@ -916,6 +916,9 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   // The description's threads are the tasks fixture's to hold (`tasks-fixture.ts`); one of them is this agent's.
   [RUN_PROFILE.TASKS_COMMENTS, { description: true }],
 ]);
+
+/** The id the window minted the agent's one terminal tab under. */
+const FIXTURE_TERMINAL_TAB = "6c4f8dae-2a5b-4e9c-9d4f-6b8c0d2e4a53";
 
 /** The shell the agent's sandbox holds. */
 const SHELL = {
@@ -1029,14 +1032,20 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       truncated: false,
     },
   }),
-  [ACT_KIND.TERMINAL_LIST]: (_payload, stage) => {
+  [ACT_KIND.TERMINAL_CREATE]: (_payload, stage) => {
     const terminal = terminalStage(stage);
     if (terminal?.kind === TERMINAL_STAGE.REFUSED) {
       return { refused: TERMINAL_REFUSAL.SANDBOX_UNANSWERED };
     }
-    if (terminal?.kind === TERMINAL_STAGE.SANDBOX)
-      return { sandbox: terminal.sandbox, terminals: [] };
-    return { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] };
+    if (terminal?.kind === TERMINAL_STAGE.SANDBOX) {
+      return {
+        refused:
+          terminal.sandbox === SANDBOX_STATE.STOPPED
+            ? TERMINAL_REFUSAL.SANDBOX_STOPPED
+            : TERMINAL_REFUSAL.AGENT_NOT_READY,
+      };
+    }
+    return { terminal: SHELL };
   },
   [ACT_KIND.TERMINAL_ATTACH]: (_payload, stage) => {
     const terminal = terminalStage(stage);
@@ -1262,7 +1271,7 @@ export function agentSidePanel(
   }
   // The description stands in the column's Overview, so the panel beside it is shut (`agentColumnTab`).
   if ("description" in stage) return { ...panel, open: false, tab: undefined };
-  const terminal = { terminal: FIXTURE_AGENT_ID };
+  const terminal = { terminal: FIXTURE_AGENT_ID, shell: FIXTURE_TERMINAL_TAB, title: "Cloud 1" };
   return { ...panel, tab: terminal, terminals: [terminal] };
 }
 

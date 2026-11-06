@@ -203,7 +203,6 @@ import {
 } from "./use-description-history.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
-import { useEndLocal } from "./use-local-session.js";
 import {
   isOverviewTab,
   MAIN_TAB,
@@ -216,7 +215,6 @@ import {
   DRAWN_KINDS,
   drawsChanges,
   drawsSubagent,
-  drawsTerminal,
   isPinnable,
   SIDE_PANEL_TAB,
   type SidebarPin,
@@ -225,7 +223,7 @@ import {
   type TaskHolds,
   useSidePanel,
 } from "./use-side-panel.js";
-import { useEndTerminal } from "./use-terminal-session.js";
+import { useEndTerminalTab } from "./use-terminal-session.js";
 import { sayRestored } from "./version-view.js";
 
 /**
@@ -3839,18 +3837,16 @@ export function useTasksTab(input: {
     [keepColumnClosed, closeMainTab, dozeMainTab],
   );
   const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
-  const endLocal = useEndLocal();
-  const endTerminal = useEndTerminal();
-  // Note that a Local tab's terminal ends as its tab closes, whichever way it closes, since the tab
+  const endTerminal = useEndTerminalTab();
+  // Note that a terminal tab's shell ends as its tab closes, whichever way it closes, since the tab
   // is the only place it stands, so the tab goes on no stack of closed tabs: nothing opens it again.
-  // A Terminal tab's screens end with it too, its shells running on in the sandbox for it to open again.
   const closeSidePanelTab = useCallback(
     (tab: SidePanelTab) => {
-      if (isLocalTab(tab)) endLocal(tab);
-      if (isTerminalTab(tab)) endTerminal(tab.terminal);
+      const terminal = isTerminalTab(tab) || isLocalTab(tab);
+      if (terminal) endTerminal(tab);
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0 && !isLocalTab(tab)) {
+      if (task !== undefined && at >= 0 && !terminal) {
         const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
         const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, task, tab, at, file };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
@@ -3864,14 +3860,13 @@ export function useTasksTab(input: {
       viewed.activeTaskId,
       setClosedTabs,
       latestClosedTabs,
-      endLocal,
       endTerminal,
     ],
   );
   // Whether the open task's strips draw a closed tab of it again: an agent's
   // while the agent is not archived, never the Inbox, which the panel
   // draws no more, a Changes tab while its agent is the task's, archived or not,
-  // and a subagent's, a Terminal tab, or a page's on the strip's own
+  // and a subagent's or a page's on the strip's own
   // terms. Note that what the task has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
   // A fixed kind of the side panel draws on every task or on none, so whether it draws again is
@@ -3892,7 +3887,6 @@ export function useTasksTab(input: {
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
     // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
     if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
-    if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);
@@ -3900,8 +3894,8 @@ export function useTasksTab(input: {
   // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
   // pinned, its agent works, waits on the developer, or ended unseen, or nothing could open it again:
   // a draft's, which lets the draft go, a Browser tab's, which takes its
-  // page with it, a cloud Browser tab's, which only the "+" opens again, and a Local tab's,
-  // whose terminal ends as it closes. The side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
+  // page with it, a cloud Browser tab's, which only the "+" opens again, and a terminal tab's,
+  // whose shell ends as it closes. The side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
   const workingAgents = useMemo(
     () =>
       (agents.agents ?? []).flatMap((agent) => (agentStillWriting(agent.status) ? [agent.id] : [])),
@@ -3956,6 +3950,7 @@ export function useTasksTab(input: {
             keeps: (tab) =>
               typeof tab === "string" ||
               isCloudBrowserTab(tab) ||
+              isTerminalTab(tab) ||
               isLocalTab(tab) ||
               pinnedHere(tab),
           },

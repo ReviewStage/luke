@@ -73,6 +73,13 @@ const AGENT: AgentSummary = {
   turnId: null,
 };
 
+/** The agent's cloud terminal tab. */
+const CLOUD = {
+  terminal: AGENT.id,
+  shell: "2f6e0c1a-5b3d-4c8e-9a1f-7d2b4e6a8c10",
+  title: "Cloud 1",
+};
+
 const PAGE_ID = "5d2b7c1e-9a3f-4e6d-8c2b-1f0e9d8c7b6a";
 
 const roots: Root[] = [];
@@ -137,7 +144,7 @@ async function mountEveryTab(
       subagents: [SUBAGENT],
       files: [{ path: "src/invite.ts", range: undefined, opened: 1, browsedOn: TASK.id }],
       changes: [{ changes: AGENT.id }],
-      terminals: [{ terminal: AGENT.id }],
+      terminals: [CLOUD],
       pages: [{ page: PAGE_ID }],
       tab: chosen.side,
     },
@@ -316,7 +323,7 @@ test("the task's name's right-click is the task's own document menu, which pins 
 test("a tab with nothing to offer on what it shows still answers a right-click with its own keeping, and no tab wears a ⋯ of its own", async () => {
   const without: { main: MainTab; side: SidePanelTab }[] = [
     { main: { draft: "draft-1" }, side: { file: "src/invite.ts" } },
-    { main: { draft: "draft-1" }, side: { terminal: AGENT.id } },
+    { main: { draft: "draft-1" }, side: CLOUD },
   ];
   for (const chosen of without) {
     const container = await mountEveryTab(chosen);

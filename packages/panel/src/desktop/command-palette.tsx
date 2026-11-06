@@ -202,15 +202,16 @@ import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-
 import { markReadItem, type OpenTaskRename, useTaskRenameOffer } from "../tasks/task-menu-items.js";
 import { TaskKey } from "../tasks/task-standing.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
+import { TERMINAL_KIND } from "../tasks/terminal-session.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
 import { type AgentsControl, type HeldPeople, readAgentById } from "../tasks/use-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
-import { useOpenLocal } from "../tasks/use-local-session.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { useOpenTerminalTab } from "../tasks/use-terminal-session.js";
 import { appStateQuery, selectCapability, selectExperimentChoices } from "../use-app-state.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
@@ -1017,9 +1018,9 @@ function agentRows(
     : [];
   const entries: readonly AddEntry[] = [...inbox, ...agents, ...places];
   const standing = entries.map(({ row, endMark, card, onPick, agent }) => {
-    // Note that a terminal's row is named by its agent, as under the "+"'s Terminal heading, which ⌘K draws none of, so the row says it.
+    // Note that a terminal's row is named by its agent, as under the "+"'s Cloud and Local headings, which ⌘K draws none of, so the row says it.
     const heading =
-      row.section === ADD_SECTION.TERMINAL || row.section === ADD_SECTION.LOCAL
+      row.section === ADD_SECTION.CLOUD || row.section === ADD_SECTION.LOCAL
         ? row.section
         : undefined;
     const detail = typeof row.detail === "string" ? row.detail : undefined;
@@ -2157,7 +2158,7 @@ export function CommandPalette({
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   // The task's terminals and Browser tabs are offered as the panel's "+" offers them, through its own doors.
   const openTerminal = useOpenTerminal(tasks.sidePanel, noFocusMove);
-  const openLocal = useOpenLocal(tasks.sidePanel, noFocusMove);
+  const openLocal = useOpenTerminalTab(TERMINAL_KIND.LOCAL, tasks.sidePanel, noFocusMove);
   // Note that the task's Changes rows hang their pull request's people, as their Changes tabs read them.
   const offeredChanges = tasks.sidePanel.changes;
   const changesPeople = useChangesPeopleOf(

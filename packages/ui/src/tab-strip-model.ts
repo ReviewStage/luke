@@ -6,8 +6,8 @@
  * `tasks/use-side-panel.ts`). A tab is either a word
  * its column names it by, such as the plan's own or the side panel's Board,
  * or an object naming what it shows: one coding agent, a draft agent not yet
- * started, one subagent, one file, one agent's changes, one agent's
- * terminal, one page, or one Browser tab in an agent's cloud browser. Two
+ * started, one subagent, one file, one agent's changes, one terminal of
+ * an agent's, one page, or one Browser tab in an agent's cloud browser. Two
  * tabs are the same where they name the same thing, so a tab rebuilt on
  * every render is still the tab it was.
  *
@@ -38,15 +38,8 @@ export const TAB_WORDS = {
   NEW_AGENT: "New agent",
   AGENT: "Agent",
   PULL_REQUEST: "Pull request",
-  TERMINAL: "Terminal",
-  LOCAL: "Local",
   BROWSER: "Browser",
 } as const;
-
-/** A Local tab's name: the kind's word, then its terminal's. */
-export function localLabelOf(tab: Pick<LocalStripTab, "title">): string {
-  return `${TAB_WORDS.LOCAL} · ${tab.title}`;
-}
 
 /** A Pull request tab's name once its pull request is read: the pull request's number, then its title, as GitHub names it. */
 export function pullRequestLabelOf(pullRequest: {
@@ -98,16 +91,21 @@ export interface ChangesStripTab {
   readonly number?: number;
 }
 
-/** One agent's Terminal tab, named by the agent in whose sandbox its shells run. */
+/**
+ * One terminal in a coding agent's cloud sandbox, a tab of its own: named by
+ * the agent and the id the window minted the terminal under before its shell
+ * was opened, and carrying the terminal's name ("Cloud 1"), which titles the
+ * tab and never changes.
+ */
 export interface TerminalStripTab {
   readonly terminal: string;
+  readonly shell: string;
+  readonly title: string;
 }
 
 /**
  * One terminal on this Mac in a cloud agent's mirrored files, a tab of its
- * own: named by the agent and the id the window minted the terminal under
- * before main opened it, and carrying the terminal's name, which titles the
- * tab and never changes.
+ * own, on the same terms as a cloud one, named "Local 1".
  */
 export interface LocalStripTab {
   readonly local: string;
@@ -243,29 +241,14 @@ export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boole
   if (isDraftTab(a)) return isDraftTab(b) && a.draft === b.draft;
   if (isFileTab(a)) return isFileTab(b) && a.file === b.file;
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes && a.number === b.number;
-  if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
+  if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal && a.shell === b.shell;
   if (isLocalTab(a)) return isLocalTab(b) && a.local === b.local && a.shell === b.shell;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
   if (isCloudBrowserTab(a)) return isCloudBrowserTab(b) && a.cloudBrowser === b.cloudBrowser;
   return a === b;
 }
 
-/**
- * The key each agent's Terminal tab is drawn under, by agent, made the first
- * time it is asked for. Note that it is not the agent's id, because the
- * agent's Changes tab stands in the same strip under that.
- */
-const terminalKeys = new Map<string, string>();
-
-function terminalKey(agentId: string): string {
-  const held = terminalKeys.get(agentId);
-  if (held !== undefined) return held;
-  const made = crypto.randomUUID();
-  terminalKeys.set(agentId, made);
-  return made;
-}
-
-/** The key each agent's transcript tab in the side panel is drawn under, by agent, made the first time it is asked for, apart from its Changes tab's and its Terminal tab's. */
+/** The key each agent's transcript tab in the side panel is drawn under, by agent, made the first time it is asked for, apart from its Changes tab's. */
 const transcriptKeys = new Map<string, string>();
 
 function transcriptKey(agentId: string): string {
@@ -299,15 +282,14 @@ function numberedKey(agentId: string, number: number): string {
  * the agent's, call's, or draft's own id, which no word spells, or the
  * file's path. A Changes tab is keyed by its agent's id, which no other tab
  * of the side panel, the one strip it stands in, is keyed by, one naming a
- * pull request by its number by a key made for the two (`numberedKey`), a Terminal tab
- * by a key made for its agent (`terminalKey`), a Local tab by the id its terminal was minted under, a page's by the page's
+ * pull request by its number by a key made for the two (`numberedKey`), a Terminal or
+ * Local tab by the id its terminal was minted under, a page's by the page's
  * own id, and a cloud Browser tab's by the id the service keeps it under.
  */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
   if (isTranscriptTab(tab)) return transcriptKey(tab.transcript);
-  if (isTerminalTab(tab)) return terminalKey(tab.terminal);
-  if (isLocalTab(tab)) return tab.shell;
+  if (isTerminalTab(tab) || isLocalTab(tab)) return tab.shell;
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) {
