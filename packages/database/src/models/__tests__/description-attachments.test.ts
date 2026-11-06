@@ -23,9 +23,9 @@ import {
 import { createTask, saveDescriptionText } from "../task-store.js";
 
 /**
- * A plan's pictures over a real dialect: kept by a member, read by every
- * member of the plan's workspace and by nobody else, held to the plan's
- * bound, a video among them to a video's bound and the plan's count of
+ * A description's pictures over a real dialect: kept by a member, read by every
+ * member of the plan's workspace and by nobody else, held to the description's
+ * bound, a video among them to a video's bound and the description's count of
  * videos, refused on a plan the account does not reach, and swept a day
  * after upload only where no save ever named them.
  *
@@ -66,7 +66,7 @@ function keptId(kept: { readonly status: string; readonly id?: string }): string
   return kept.id;
 }
 
-it.layer(getTestDB())("a plan's pictures", (it) => {
+it.layer(getTestDB())("a description's pictures", (it) => {
   it.effect(
     "a picture a teammate pasted reads for every member of the plan's workspace, and as nothing for anyone else",
     () =>
@@ -87,7 +87,7 @@ it.layer(getTestDB())("a plan's pictures", (it) => {
       }),
   );
 
-  it.effect("a picture is read only under the plan it was kept on", () =>
+  it.effect("a picture is read only under the description it was kept on", () =>
     Effect.gen(function* () {
       const first = yield* openSharedTask;
       const second = yield* openSharedTask;
@@ -98,7 +98,7 @@ it.layer(getTestDB())("a plan's pictures", (it) => {
   );
 
   it.effect(
-    "a plan keeps no more pictures than its bound, and one the account does not reach keeps none",
+    "a description keeps no more pictures than its bound, and one the account does not reach keeps none",
     () =>
       Effect.gen(function* () {
         const { owner, taskId } = yield* openSharedTask;
@@ -180,7 +180,7 @@ it.layer(getTestDB())("a plan's pictures", (it) => {
   );
 
   it.effect(
-    "a plan keeps no more videos than its bound of them, and pictures still beside them",
+    "a description keeps no more videos than its bound of them, and pictures still beside them",
     () =>
       Effect.gen(function* () {
         const { owner, taskId } = yield* openSharedTask;

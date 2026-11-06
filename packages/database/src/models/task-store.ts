@@ -170,7 +170,7 @@ export interface TaskStandingAgent {
   readonly id: string;
   readonly conversationId: string;
   readonly createdAt: Date;
-  /** Whether it was started blank, handed neither the plan nor a prompt. */
+  /** Whether it was started blank, handed neither the description nor a prompt. */
   readonly blank: boolean;
 }
 
@@ -218,7 +218,7 @@ export interface StoredTask {
   readonly ownerId: string;
   /** How the task's repository was reached as it was named: the workspace's GitHub App, or its owner's own token. */
   readonly githubAccess: GitHubAccess;
-  /** The plan's whole text. */
+  /** The description's whole text. */
   readonly text: string;
   readonly agentEdits: readonly LabeledAgentEdit[];
   /** Whether the text was ever saved since the task started: false while nobody has written it. */
@@ -256,7 +256,7 @@ export interface NewTask {
   readonly mode?: TaskMode;
   /** Whether `start_agent` made it for the agent it started, its caller on no task; not where none is named. */
   readonly madeByStart?: boolean;
-  /** The plan's text as it starts; empty where none is named. */
+  /** The description's text as it starts; empty where none is named. */
   readonly text?: string;
 }
 
@@ -603,7 +603,7 @@ const findAgentLabels = SqlSchema.findAll({
  * name them now, so a renamed agent reads renamed everywhere: the label is
  * the name its tab shows (`agentName`). The row's own
  * account is the one they are read under. Note that an agent is found by
- * its id alone, wherever it works now, because an agent edits any plan of
+ * its id alone, wherever it works now, because an agent edits any description of
  * its workspace by naming the task (`edit_description`), and the task may move to
  * another workspace after while the agent stays with its own. The ids are
  * the service's own, written by the save, never a caller's.
@@ -647,7 +647,7 @@ function sectionEditOf(
 }
 
 /**
- * A coding agent's save from the journal as a plan's last edit, for a plan
+ * A coding agent's save from the journal as a description's last edit, for a description
  * whose history has not begun: an agent's save made before it is the newest
  * thing the service can name a writer for.
  */
@@ -995,7 +995,7 @@ const findTaskWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-/** The columns of a task `readTaskHeaders` answers: every one but its plan's. */
+/** The columns of a task `readTaskHeaders` answers: every one but its description's. */
 const findTaskHeaders = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
@@ -1244,7 +1244,7 @@ const nameUntitled = SqlSchema.findOneOption({
  * the list. A plan handed no name, or a blank one, starts as
  * `UNTITLED_DESCRIPTION_NAME`.
  */
-/** A started task's row as it is inserted: its name, or Untitled, its plan's text, empty where none is named, and its brief, or none for a blank one. */
+/** A started task's row as it is inserted: its name, or Untitled, its description's text, empty where none is named, and its brief, or none for a blank one. */
 const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -1411,7 +1411,7 @@ export function createTaskCommittedOnce(
 
 /**
  * Starts a task under the id its maker chose, as an agent's call makes one
- * under an id drawn from its own key, its plan's text the one given, where
+ * under an id drawn from its own key, its description's text the one given, where
  * no task stands under that id yet; nothing where one does, so the call run
  * again, even at once, makes one task between them.
  */
@@ -1471,7 +1471,7 @@ export function readTask(
 
 /**
  * The task as `readTask` answers it to the window, without the rest the
- * service holds beside it: what opening a plan and answering one after a
+ * service holds beside it: what opening a description and answering one after a
  * write need. Nothing for a task of a
  * workspace the account is not in.
  */
@@ -1499,7 +1499,7 @@ export function readTaskWorkspace(
   );
 }
 
-/** A task as `readTaskHeader` reads it: where it stands and whose it is, without its plan. */
+/** A task as `readTaskHeader` reads it: where it stands and whose it is, without its description. */
 export interface TaskHeader {
   readonly workspaceId: string;
   readonly ownerId: string;
@@ -1519,7 +1519,7 @@ export interface TaskHeader {
 
 /**
  * A task the account reaches, as `readTask` would answer it, in one
- * statement and without its plan or its history: what a read
+ * statement and without its description or its history: what a read
  * that only refuses a task, finds its workspace or its repository, or names
  * it needs. Nothing where the account reaches none.
  */
@@ -1574,7 +1574,7 @@ export function readTaskForUpdate(
   );
 }
 
-/** What a save of a document plan's text writes beside it, where it is handed. */
+/** What a save of a description's text writes beside it, where it is handed. */
 export interface DescriptionTextSaveExtras {
   /** The coding agents' journal. */
   readonly agentEdits?: readonly DescriptionAgentEdit[];
@@ -1582,7 +1582,7 @@ export interface DescriptionTextSaveExtras {
 
 /**
  * Replaces the text of a task that is one document, with the agents' journal
- * where it is handed, stamps the plan's pictures the text names as saved, and answers
+ * where it is handed, stamps the description's pictures the text names as saved, and answers
  * the task as saved, or nothing where the account reaches no such task; nothing
  * is ever created here.
  */
@@ -1595,7 +1595,7 @@ export function saveDescriptionText(
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const row = yield* replaceText({ userId, taskId, text, ...extras, now });
-    // The pictures the text names are saved now, so the sweep leaves them for as long as the plan stands.
+    // The pictures the text names are saved now, so the sweep leaves them for as long as the description stands.
     if (Option.isSome(row))
       yield* stampSavedAttachments(taskId, descriptionAttachmentIdsIn(text, taskId));
     return yield* Effect.transposeOption(Option.map(row, (saved) => taskOf(userId, saved)));

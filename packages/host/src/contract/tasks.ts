@@ -256,7 +256,7 @@ export const tasksActsContract = {
   )
     .input(exactInput(taskPagesFollowSchema))
     .output(eventIterator(type<never>())),
-  // Note that the hold's stream carries nothing: the held plan reaches the panel on app state, and the stream is the window's hold on it.
+  // Note that the hold's stream carries nothing: the held description reaches the panel on app state, and the stream is the window's hold on it.
   [TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW]: actProcedure(
     "Could not follow that task's description on this system.",
   )

@@ -414,8 +414,8 @@ it.layer(getTestDB())("an untitled plan's name", (it) => {
   );
 });
 
-it.layer(getTestDB())("a plan's starting text", (it) => {
-  it.effect("a plan starts empty", () =>
+it.layer(getTestDB())("a description's starting text", (it) => {
+  it.effect("a description starts empty", () =>
     Effect.gen(function* () {
       const owner = yield* openAccount;
       const organizationId = yield* openWorkspace(owner);

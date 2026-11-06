@@ -66,9 +66,9 @@ import { Clock, type Context, DateTime, Effect, Layer, Option, Queue, Result } f
 import { SqlClient } from "effect/sql";
 
 /**
- * A plan's comment threads through the paths a desktop calls, answered by
+ * A description's comment threads through the paths a desktop calls, answered by
  * the hosted oRPC router as the deployed route answers them, over a real
- * dialect: a member starts a thread on a teammate's plan and every member
+ * dialect: a member starts a thread on a teammate's description and every member
  * reads it, named by its writer; a reader whose cursor is behind reads it at
  * once, and one whose cursor is current is held until something moves or
  * the hold ends, on the test's clock; an account outside the workspace
@@ -95,11 +95,11 @@ interface Answered {
   readonly body: string;
 }
 
-/** The account's Plans turned on or off, which its agents are handed a plan's comment threads by. */
+/** The account's Descriptions turned on or off, which its agents are handed a description's comment threads by. */
 const descriptionsFor = (userId: string, on: boolean) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
-/** An account with Plans on, whose agents are handed a plan's comment threads only then. */
+/** An account with Descriptions on, whose agents are handed a description's comment threads only then. */
 const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -306,7 +306,7 @@ function startBody(comment: string) {
   };
 }
 
-it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
+it.layer(getTestDB())("a description's comment threads through the routes", (it) => {
   it.effect(
     "a thread a member started reads for every member past a stale cursor, and as nothing for an outsider",
     () =>
@@ -436,7 +436,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
   );
 });
 
-it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
+it.layer(getTestDB())("a description's comment thread sent to an agent", (it) => {
   it.effect(
     "a thread started with an agent mentioned hands it the thread as the member's message, kept as the comment thread's line with what a window draws it by, and the thread says who asked it",
     () =>
@@ -495,7 +495,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   );
 
   it.effect(
-    "a reply in a plan's thread reaches the agent an earlier comment mentioned, with no mention of its own, none while its starter has Plans off, said back as not sent, and none once it is archived",
+    "a reply in a description's thread reaches the agent an earlier comment mentioned, with no mention of its own, none while its starter has Descriptions off, said back as not sent, and none once it is archived",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
@@ -528,7 +528,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
         assert.ok(message, "the agent in the thread was handed the reply");
         assert.ok(JSON.stringify(message.message).includes("And withdrawing by email?"));
 
-        // An agent whose starter has Plans off is told nothing of the plan's comments.
+        // An agent whose starter has Descriptions off is told nothing of the description's comments.
         yield* descriptionsFor(owner, false);
         const planless = readEither(descriptionCommentThreadAnswerSchema)(
           unparsedWire(JSON.parse((yield* reply("And by link?")).body)),
@@ -537,7 +537,11 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
         assert.deepEqual(planless.success.unsent, [
           { actor: DESCRIPTION_COMMENT_ACTOR.AGENT, agentId },
         ]);
-        assert.equal(opened.length, before + 1, "the agent with Plans off was handed nothing");
+        assert.equal(
+          opened.length,
+          before + 1,
+          "the agent with Descriptions off was handed nothing",
+        );
         yield* descriptionsFor(owner, true);
 
         yield* archiveAgent(owner, agentId, true);
@@ -547,12 +551,12 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   );
 
   it.effect(
-    "a comment on a page is answered first, then hands the thread to the agent that showed it, mentioned or not, naming the page and its version, Plans on or off, and one whose agent was archived is said back as not sent",
+    "a comment on a page is answered first, then hands the thread to the agent that showed it, mentioned or not, naming the page and its version, Descriptions on or off, and one whose agent was archived is said back as not sent",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
         const agentId = yield* startAgent(owner, taskId);
-        // Note that a page's threads are no plan's, so its starter's Plans off keeps none of them from the agent.
+        // Note that a page's threads are no description's, so its starter's Descriptions off keeps none of them from the agent.
         yield* descriptionsFor(owner, false);
         const page = Option.getOrThrow(
           yield* writePage(
@@ -882,7 +886,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   );
 });
 
-it.layer(getTestDB())("a plan's comments read held on the test's clock", (it) => {
+it.layer(getTestDB())("a description's comments read held on the test's clock", (it) => {
   /** A read past the cursor, forked on a clock that announces each wait it makes. */
   const heldRead = (userId: string, taskId: string, after: string) =>
     Effect.gen(function* () {

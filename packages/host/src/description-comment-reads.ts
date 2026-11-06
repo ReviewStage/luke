@@ -13,16 +13,16 @@ import { confirmWrite, type SealedRead, type TxWait } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
 
 /**
- * description-comment-reads.ts -- a task's comments, its plan's own threads or one page's, each thread one row of the sync engine's pool, followed for main over the service's held poll while a window shows them, and told whole on the app state as they change, every write standing drawn over them.
+ * description-comment-reads.ts -- a task's comments, its description's own threads or one page's, each thread one row of the sync engine's pool, followed for main over the service's held poll while a window shows them, and told whole on the app state as they change, every write standing drawn over them.
  *
  * A thread is a kind of the pool (`@repo/sync`), its comments and the lines
  * of what happened to it carried on its row, since the read answers a
  * thread whole and every change of one, a comment's among them, moves the
  * thread's revision. The host follows a subject's live read (`live-push.ts`)
  * the first time a window holds it, and keeps the few let go latest
- * followed (`heldSlice`), so a window stepping back to a plan or a page
+ * followed (`heldSlice`), so a window stepping back to a description or a page
  * draws its threads from where they stand; every held subject is told on
- * the one slice the windows draw (`LIVE_READ.DESCRIPTION_COMMENTS`), a plan's by
+ * the one slice the windows draw (`LIVE_READ.DESCRIPTION_COMMENTS`), a description's by
  * its task and a page's by the page, never its version. A page's subject
  * names its task too, which the service reads it by.
  *
@@ -42,7 +42,7 @@ export type CommentThreadRow = DescriptionCommentThread & { readonly taskId: str
 /** A thread of a task's comments as the pool holds it, by its id, every write to it a change of its fields, its deletion, or a thread made. */
 export const COMMENT_THREAD = fieldKind((row: CommentThreadRow) => row.id);
 
-/** One subject of a task's comments, as the host keys its follow: the plan's own threads where it names no page. */
+/** One subject of a task's comments, as the host keys its follow: the description's own threads where it names no page. */
 export class CommentSubjectKey extends Data.Class<{
   readonly taskId: string;
   readonly pageId: string | undefined;
@@ -116,7 +116,7 @@ export function descriptionCommentReads(dependencies: DescriptionCommentReadsDep
         const threads: HeldRows<CommentThreadRow> = yield* dependencies.pool.stand(COMMENT_THREAD, {
           redraw: () => Effect.sync(() => drawn()),
           confirmation: () => (wait === undefined ? undefined : (txid) => confirmWrite(wait, txid)),
-          // Note that a thread started shows in the subject it was started in alone: its task's plan, or the page it names.
+          // Note that a thread started shows in the subject it was started in alone: its task's description, or the page it names.
           adopts: (row) => row.taskId === subject.taskId && row.page?.id === subject.pageId,
         });
         const drawn = () => {

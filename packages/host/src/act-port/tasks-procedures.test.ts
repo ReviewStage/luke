@@ -804,7 +804,7 @@ it("a page's source is read through the host for a panel, line by line and plain
   assert.deepEqual(asked, ["page:page-funnel:2", "page:page-funnel:2", "page:page-funnel:2"]);
 });
 
-it("a plan's picture is read through the host from a panel, its absence answered rather than refused, and one is kept", async () => {
+it("a description's picture is read through the host from a panel, its absence answered rather than refused, and one is kept", async () => {
   const { client, asked } = windowPort(PANEL);
   const read = (attachmentId: string) =>
     settled(client, TASKS_ACT_KIND.TASKS_PICTURE_READ, { ...PLAN, attachmentId });
@@ -829,7 +829,7 @@ it("a plan's picture is read through the host from a panel, its absence answered
   ]);
 });
 
-it("a plan's comments are read again and acted on through the host from a panel", async () => {
+it("a description's comments are read again and acted on through the host from a panel", async () => {
   const { client, asked } = windowPort(PANEL);
 
   assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_COMMENTS_RETRY, TASK), {

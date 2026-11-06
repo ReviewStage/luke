@@ -65,7 +65,7 @@ const openTask = Effect.gen(function* () {
   return { userId, taskId: task.id };
 });
 
-/** What a Start hands the agent where the test names nothing: the plan's text. */
+/** What a Start hands the agent where the test names nothing: the description's text. */
 const TASK_BRIEF: AgentBriefText = {
   descriptionSnapshot: "# Teammate invitations\n\nAny member may invite by email.\n",
   prompt: null,
@@ -133,7 +133,7 @@ const PULL_REQUEST: AgentPullRequest = {
   changedFiles: 3,
 };
 
-/** Text the size of a long plan, which an agent may be handed and no list line carries. */
+/** Text the size of a long description, which an agent may be handed and no list line carries. */
 const LARGE_TEXT = "Any member may invite a teammate by email, and the invite expires.\n".repeat(
   4_000,
 );
@@ -439,7 +439,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
 
 it.layer(getTestDB())("the plan list's agent lines", (it) => {
   it.effect(
-    "agents handed a large plan or prompt are listed beside their task and with none, naming their brief, automation, and source, and carrying none of the text they were handed",
+    "agents handed a large description or prompt are listed beside their task and with none, naming their brief, automation, and source, and carrying none of the text they were handed",
     () =>
       Effect.gen(function* () {
         const { userId, taskId } = yield* openTask;

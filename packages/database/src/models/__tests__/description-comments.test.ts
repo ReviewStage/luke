@@ -35,7 +35,7 @@ import { writePage } from "../task-pages.js";
 import { createTask, saveDescriptionText } from "../task-store.js";
 
 /**
- * A plan's comment threads over a real dialect: started and read by every
+ * A description's comment threads over a real dialect: started and read by every
  * member of the plan's workspace and by nobody else, anchored to the words
  * they were started on, carried with those words through every save, left
  * with their quote where the words are deleted and anchored again where the
@@ -43,7 +43,7 @@ import { createTask, saveDescriptionText } from "../task-store.js";
  * member, and a comment edited or deleted only by its writer. A comment's
  * files are kept with it, read by every member and nobody else, and go
  * with it. A thread on one of the task's pages is read with that page's
- * alone, never the plan's.
+ * alone, never the description's.
  *
  * Synthetic accounts and plans throughout.
  */
@@ -123,7 +123,7 @@ const readOne = (userId: string, taskId: string) =>
     (threads) => Option.getOrThrow(threads)[0],
   );
 
-it.layer(getTestDB())("a plan's comment threads", (it) => {
+it.layer(getTestDB())("a description's comment threads", (it) => {
   it.effect(
     "a thread a teammate started reads for every member, naming its writer, and as no plan for anyone else",
     () =>
@@ -592,7 +592,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         yield* startDescriptionCommentThread(
           member(owner),
           taskId,
-          startOn(DESCRIPTION_TEXT, "seven days", "On the plan."),
+          startOn(DESCRIPTION_TEXT, "seven days", "On the description."),
         );
         const onElement = {
           clientKey: randomUUID(),
@@ -706,7 +706,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         assert.equal(kept.contentType, AGENT_ATTACHMENT_TYPE.TEXT);
         assert.deepEqual([...kept.bytes], [...notes]);
         assert.ok(Option.isNone(yield* readDescriptionCommentFile(outsider, taskId, fileId)));
-        // A comment's file is no picture of the plan's.
+        // A comment's file is no picture of the description's.
         assert.ok(Option.isNone(yield* readDescriptionAttachment(owner, taskId, fileId)));
 
         assert.deepEqual(

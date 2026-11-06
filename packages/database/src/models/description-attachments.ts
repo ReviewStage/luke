@@ -16,7 +16,7 @@ import type { TaskStoreEffect } from "./task-store.js";
 import { reachableTask, taskReachableBy } from "./workspace-store.js";
 
 /**
- * description-attachments.ts -- a plan's pictures: keep one, read one, stamp the ones a save names, and sweep the uploads no save named.
+ * description-attachments.ts -- a description's pictures: keep one, read one, stamp the ones a save names, and sweep the uploads no save named.
  *
  * A picture, or a video an agent recorded, is kept under the plan row's own
  * lock, so the counts it is held to, every picture's and every video's,
@@ -28,7 +28,7 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * picture no save ever stamped, a sweep's worth at a time.
  */
 
-/** What keeping a picture came to: kept under its new id, refused for the plan's count of pictures or of videos, or no plan to keep it on. */
+/** What keeping a picture came to: kept under its new id, refused for the description's count of pictures or of videos, or no plan to keep it on. */
 export const DESCRIPTION_ATTACHMENT_KEEP = {
   KEPT: "kept",
   TOO_MANY: "too-many",
@@ -45,7 +45,7 @@ export type DescriptionAttachmentKeep =
 /** The most unsaved pictures one sweep deletes, so a sweep stays bounded however many piled up. */
 const PURGE_BATCH = 200;
 
-/** A plan's pictures among every attachment: the ones its task owns alone. */
+/** A description's pictures among every attachment: the ones its task owns alone. */
 const descriptionPicture = ownedByTaskAlone(attachment);
 
 /** The plan's id and workspace under its row's lock, where the account reaches it; nothing otherwise. */
@@ -62,7 +62,7 @@ const lockOpenTask = SqlSchema.findOneOption({
     ),
 });
 
-/** How many pictures the plan holds, and how many of them are videos. */
+/** How many pictures the description holds, and how many of them are videos. */
 const countPictures = SqlSchema.findOne({
   Request: Schema.Struct({ taskId: Schema.String }),
   Result: Schema.Struct({ count: Schema.Number, videos: Schema.Number }),
@@ -171,8 +171,8 @@ const deletePictures = SqlSchema.void({
 });
 
 /**
- * Keeps one picture or video on the plan, uploaded by the account, under a
- * new id; refused where the plan already holds its bound of pictures, or a
+ * Keeps one picture or video on the description, uploaded by the account, under a
+ * new id; refused where the description already holds its bound of pictures, or a
  * video where it holds its bound of videos, and nothing where the account
  * reaches no such plan.
  */
@@ -216,7 +216,7 @@ export function keepDescriptionAttachment(
   );
 }
 
-/** One picture or video of the plan, its type and bytes; nothing where the account reaches no such plan or the plan no such picture. */
+/** One picture or video of the description, its type and bytes; nothing where the account reaches no such plan or the description no such picture. */
 export function readDescriptionAttachment(
   userId: string,
   taskId: string,
@@ -225,7 +225,7 @@ export function readDescriptionAttachment(
   return findPicture({ userId, taskId, attachmentId });
 }
 
-/** Stamps the plan's pictures the saved text names as saved, the ones no save stamped before; nothing where it names none. */
+/** Stamps the description's pictures the saved text names as saved, the ones no save stamped before; nothing where it names none. */
 export function stampSavedAttachments(
   taskId: string,
   ids: readonly string[],
