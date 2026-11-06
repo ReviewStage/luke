@@ -82,7 +82,11 @@ test("Connect approves the code the link named, once the box it names is shown, 
   const told = await opened();
 
   const text = document.body.textContent ?? "";
-  assert.ok(text.includes("Connect fra-03 (Linux server · 203.0.113.7) to your account?"), text);
+  assert.ok(text.includes("Connect fra-03?"), text);
+  assert.ok(
+    text.includes("Linux server · x64 · 203.0.113.7"),
+    "the box is shown as it named itself",
+  );
   assert.ok(text.includes("BCDF-GHJK"), "the code is shown as the box shows it");
   assert.deepEqual(approved, [], "nothing is approved before Connect is pressed");
 
