@@ -13,7 +13,7 @@ import { afterPaint } from "../after-paint.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { acknowledgedOnOpen, type InboxListed, isUnread } from "./inbox-model.js";
-import { type InboxReminder, remindWords } from "./inbox-remind.js";
+import { type InboxReminder, type RemindSaying, remindWords } from "./inbox-remind.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /**
@@ -150,7 +150,7 @@ export function useInboxReadMarks({
   );
   // Note that a reminder reaches the reader alone and is undone by canceling it, so it asks nothing and offers Undo, as the panel's other such acts do.
   const onRemind = useCallback(
-    (item: InboxItem, until: number | null): void => {
+    (item: InboxItem, until: number | null, saying?: RemindSaying): void => {
       void sendRemind({ itemId: item.id, until })
         .catch(unreached)
         .then((answer) => {
@@ -161,7 +161,7 @@ export function useInboxReadMarks({
             });
             return;
           }
-          if (until !== null) {
+          if (until !== null && saying?.quiet !== true) {
             toast({
               ...undoToast(`Reminder set for ${remindWords(until, Date.now())}`, () =>
                 onRemind(item, null),
