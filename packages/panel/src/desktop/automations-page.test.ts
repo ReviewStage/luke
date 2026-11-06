@@ -63,7 +63,7 @@ import {
   stateWith,
 } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries, testQueryClientNow } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
@@ -72,7 +72,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
-import { appStateNow } from "../use-app-state.js";
+import { appStateIn } from "../use-app-state.js";
 import { AutomationsPage } from "./automations-page.js";
 
 /**
@@ -2857,7 +2857,10 @@ test("a webhook made in the window shows its secret once, with Copy, left out of
   assert.equal(field?.textContent, MADE_SECRET);
   assert.ok(field?.closest(".ph-no-capture"), "the secret is left out of the screen recording");
   assert.match(page.textContent ?? "", /You won't be able to see this again/u);
-  assert.ok(!JSON.stringify(appStateNow() ?? {}).includes(MADE_SECRET), "no app state holds it");
+  assert.ok(
+    !JSON.stringify(appStateIn(testQueryClientNow()) ?? {}).includes(MADE_SECRET),
+    "no app state holds it",
+  );
   act(() => button("Copy secret").click());
   await settle();
   assert.deepEqual(copied, [MADE_SECRET]);

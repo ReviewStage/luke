@@ -96,7 +96,7 @@ import {
   type PullRequestPartAnswers,
 } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { peopleRead, withPeopleRead } from "../testing/people-read.js";
@@ -2575,7 +2575,12 @@ test("where nothing of the pull request is held and its reads fail, each part sa
       getPropagationContext: () => ({ traceId: "0af7651916cd43dd8448eb211c80319c" }),
     }),
   };
-  onTestFinished(installShownFailureReporter((report) => sendShownFailure(recording, report)));
+  onTestFinished(
+    installShownFailureReporter(
+      (report) => sendShownFailure(recording, report),
+      testQueryClientNow(),
+    ),
+  );
   const control = {
     ...controlAnswering({
       pullRequest: inTurn<AgentOverviewPullRequestAnswerView>(failure, {
