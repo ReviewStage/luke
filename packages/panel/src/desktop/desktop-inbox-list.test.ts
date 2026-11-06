@@ -1728,7 +1728,7 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
   assert.equal(document.activeElement, input, "the caret stays in the field");
 });
 
-test("an item whose reminder came due since the window's minute last read the clock lists at once, at the top, as an Undo of Remind me brings it back the moment it is canceled", async () => {
+test("an item whose reminder is canceled after the window's minute last read the clock lists again at once, at the top, as an Undo of Remind me brings it back the moment it is canceled", async () => {
   const minuteRead = Date.UTC(2026, 10, 6, 18, 38);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(minuteRead);
@@ -1739,8 +1739,10 @@ test("an item whose reminder came due since the window's minute last read the cl
   const ticks = createRoot(document.createElement("div"));
   act(() => ticks.render(createElement(TimeTicks)));
   onTestFinished(() => act(() => ticks.unmount()));
+  world.inboxes.set(BILLING.id, [{ ...THRESHOLD, remindAt: minuteRead + 3_600_000 }, RETRY]);
   const { page } = mount();
   await settle();
+  assert.deepEqual(listed(page), ["How is a failed email retried?", "*Expire after 7 days?"]);
   const canceled = minuteRead + 20_000;
   vi.setSystemTime(canceled);
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, remindAt: canceled }, RETRY]);
