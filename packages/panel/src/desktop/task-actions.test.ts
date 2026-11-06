@@ -618,7 +618,7 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
     agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
   const container = mount(withQueryClient(sidebarTask(tasks, working, asked)));
-  const card = mount(taskCardOf(tasks, working, working.updatedAt));
+  const card = mount(withQueryClient(taskCardOf(tasks, working, working.updatedAt)));
 
   assert.ok(
     container.querySelector('.sidebar-task-time [role="img"][aria-label="Working"]') !== null,
@@ -638,7 +638,7 @@ test("no sidebar plan's card says its repository belongs elsewhere where its own
   ];
   const named = cases.map(([task, workspaces]) => {
     const tasks = tasksControl({ me: DEAN.userId, workspaces: [...workspaces] });
-    const card = mount(taskCardOf(tasks, task, task.updatedAt));
+    const card = mount(withQueryClient(taskCardOf(tasks, task, task.updatedAt)));
     const found = /Repository belongs to/u.test(heard(card));
     unmountAll();
     return found;

@@ -39,7 +39,7 @@ import {
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName, personActor } from "@repo/ui/actor-model";
 import { CheckIcon, GLYPH, PenLineIcon, SquareCheckIcon } from "@repo/ui/icons";
-import * as Atom from "effect/reactivity/Atom";
+import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
@@ -47,7 +47,7 @@ import { useInboxItemDrafted } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectWorkspaces } from "../use-app-state.js";
 import { agentStillWriting, providerOf } from "./agent-model.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { AutomationChipCard, TaskChipCard } from "./chip-cards.js";
@@ -285,9 +285,6 @@ export function InboxItemCard({
   );
 }
 
-/** The account's workspaces, which tell their readers only as the list moves, not as the tasks beside it do. */
-const WORKSPACES = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.workspaces);
-
 /**
  * What holds an item, as its card says it under the head, a quieter row
  * on the name's column: a task by its key, as the task's own card says it
@@ -304,7 +301,7 @@ function HolderDetail({
   holder: InboxHolder;
   workspaceId: string | undefined;
 }): React.JSX.Element {
-  const workspaces = useAppSlice(WORKSPACES);
+  const workspaces = useQuery({ ...appStateQuery, select: selectWorkspaces }).data;
   const workspaceName =
     holder.kind === INBOX_HOLDER.TASK
       ? workspaces?.find((each) => each.id === holder.task.workspaceId)?.name

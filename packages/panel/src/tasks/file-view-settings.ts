@@ -19,14 +19,14 @@
  * they last asked for.
  */
 
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { APP_SETTING_DEFAULTS, type AppSettingField, type AppSettingValue } from "@repo/settings";
 import type { AppSettingsView } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { settingMutation } from "../act-mutations.js";
-import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 
 /** The settings code and diffs are drawn by, by their fields in the settings schema. */
 type FileViewField = Extract<
@@ -85,21 +85,13 @@ function settingsOf(view: AppSettingsView | undefined): FileViewSettings {
   };
 }
 
-/** Whether two readings draw code and diffs alike, each field a value. */
-function sameFileView(held: FileViewSettings, next: FileViewSettings): boolean {
-  const nextValues = new Map(Object.entries(next));
-  return Object.entries(held).every(([field, value]) => nextValues.get(field) === value);
-}
-
 /**
- * The settings as the document holds them, read once per change to the
- * settings for every File tab and diff, which tells them only when one of
+ * The settings as the document holds them for a File tab or diff, which
+ * Query's structural sharing hands back as the same object until one of
  * their own fields moves, so a write to another setting draws none of them.
  */
-const storedFileViewAtom: Atom.Atom<FileViewSettings> = Atom.withEquality(
-  Atom.map(APP_SETTINGS_VIEW, settingsOf),
-  sameFileView,
-);
+const selectStoredFileView = (state: AppStateSnapshot): FileViewSettings =>
+  settingsOf(selectAppSettingsView(state));
 
 /** The settings code and diffs are drawn by, and the door that writes one for every window, answering the write's own answer. */
 export interface FileViewSettingsControl {
@@ -150,7 +142,8 @@ function without(
 }
 
 export function useFileViewSettings(): FileViewSettingsControl {
-  const stored = useAppSlice(storedFileViewAtom);
+  const stored =
+    useQuery({ ...appStateQuery, select: selectStoredFileView }).data ?? DEFAULT_SETTINGS;
   const { mutateAsync: updateSetting } = useMutation(settingMutation());
   const out = useSyncExternalStore(subscribePending, pendingNow);
   const settings = useMemo(() => ({ ...stored, ...out }), [stored, out]);

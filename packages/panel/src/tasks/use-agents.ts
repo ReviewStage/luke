@@ -1,4 +1,4 @@
-import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@repo/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   type AgentAttachment,
   type AgentChangesPeople,
@@ -28,8 +28,13 @@ import type { PortActPayload } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useIsMutating, useMutation, useQuery } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
+import {
+  type QueryClient,
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOfferedModels } from "../account-choices.js";
 import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
@@ -47,7 +52,12 @@ import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
-import { APP_SLICE, appStateQuery, selectExperiment, useAppSlice } from "../use-app-state.js";
+import {
+  appStateQuery,
+  memoizedSelect,
+  selectExperiment,
+  selectPullRequestPublished,
+} from "../use-app-state.js";
 import { HOST_READ_STATUS } from "../use-host-read.js";
 import {
   ARCHIVE_NOT_READY,
@@ -64,6 +74,11 @@ import {
   STOP_FAILED,
   startFailureNote,
 } from "./agent-model.js";
+import {
+  agentMessagesQueryOptions,
+  agentPageQueryOptions,
+  repositorySkillsQueryOptions,
+} from "./agent-reads.js";
 import { type AgentFork, continueFork, forkStart } from "./fork-model.js";
 import { type ByPullRequestTab, pullRequestAsked } from "./pull-request-number.js";
 import { keptSkills } from "./repository-skills.js";
@@ -108,8 +123,8 @@ const NO_NUMBERED_PULL_REQUESTS: ByPullRequestTab<AgentPullRequest> = new Map();
  * failed, or named no pull request, holds none, and the agents' own stand
  * apart (`pullRequests`).
  */
-const numberedPullRequestsAtom = Atom.map(
-  APP_SLICE.PULL_REQUEST_PUBLISHED,
+const selectNumberedPullRequests = memoizedSelect(
+  (state) => [selectPullRequestPublished(state)],
   (held): ByPullRequestTab<AgentPullRequest> => {
     const numbered = new Map<string, Map<number | undefined, AgentPullRequest>>();
     for (const [agentId, ofAgent] of Object.entries(held ?? {})) {
@@ -398,8 +413,6 @@ export interface AgentsControl {
   pullRequests: ReadonlyMap<string, AgentPullRequest>;
   /** Each pull request a Pull request tab names by its number, by agent and then by number (`pull-request-number.ts`), as the host holds what was published of it while a surface holds it. */
   numberedPullRequests: ByPullRequestTab<AgentPullRequest>;
-  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
-  readChanges: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>;
   /**
    * One pull request's chapters generated for its head now, or the
    * generation already under way; answers once the generation lands, which
@@ -408,8 +421,6 @@ export interface AgentsControl {
    * there are none, a port that refused included.
    */
   generateChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
-  /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
-  changesPeople: ReadonlyMap<string, HeldPeople>;
   /** The words a dictation into an agent's box is likely to say, read off the open task. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a workspace, or while the Skills experiment is off. */
@@ -601,11 +612,11 @@ function sameFiles(a: readonly AgentAttachment[], b: readonly AgentAttachment[])
  * task, reads it so before it archives it unasked.
  */
 export function readAgentById(
-  act: ActHandle["act"],
+  queryClient: QueryClient,
   agentId: string,
 ): Promise<AgentSummary | undefined> {
   // Note that a page names no automation by null where a summary leaves the key out.
-  return act(ACT_KIND.AGENTS_PAGE, { agentId }).then(
+  return queryClient.fetchQuery(agentPageQueryOptions(agentId)).then(
     (answer) => {
       if ("failure" in answer) return undefined;
       const {
@@ -631,8 +642,8 @@ const AGENT_LOOKUP = {
 type AgentLookup = (typeof AGENT_LOOKUP)[keyof typeof AGENT_LOOKUP];
 
 /** Whether the service still holds the agent for the reader, read once by its id, as a link to one the task list does not carry yet is opened. */
-function lookUpAgent(act: ActHandle["act"], agentId: string): Promise<AgentLookup> {
-  return act(ACT_KIND.AGENTS_PAGE, { agentId }).then(
+function lookUpAgent(queryClient: QueryClient, agentId: string): Promise<AgentLookup> {
+  return queryClient.fetchQuery(agentPageQueryOptions(agentId)).then(
     (answer) => {
       if (!("failure" in answer)) return AGENT_LOOKUP.FOUND;
       return answer.failure === AGENT_CALL_FAILURE.NOT_FOUND
@@ -724,6 +735,7 @@ export function useAgents(input: {
   const { taskId, agentId, repository } = input;
   // Note that the reads below stay on `act` until they move to queries; every write is a mutation.
   const { act } = input.acts;
+  const queryClient = useQueryClient();
   const { mutateAsync: sendStart, isPending: starting } = useMutation(
     actMutation(ACT_KIND.AGENTS_START),
   );
@@ -853,7 +865,7 @@ export function useAgents(input: {
   useEffect(() => {
     if (lookUp === undefined) return;
     let live = true;
-    lookUpAgent(latest.current.acts.act, lookUp).then((outcome) => {
+    lookUpAgent(queryClient, lookUp).then((outcome) => {
       if (live) setLookedUp({ agentId: lookUp, outcome });
     });
     return () => {
@@ -1453,11 +1465,14 @@ export function useAgents(input: {
     });
   };
 
-  const readAgent = useCallback((named: string) => readAgentById(act, named), [act]);
+  const readAgent = useCallback(
+    (named: string) => readAgentById(queryClient, named),
+    [queryClient],
+  );
 
   const readTranscript = useCallback<TranscriptReader>(
-    (params) => act(ACT_KIND.AGENTS_MESSAGES, params),
-    [act],
+    (params) => queryClient.fetchQuery(agentMessagesQueryOptions(params)),
+    [queryClient],
   );
 
   // Note that every agent's pull request, an archived one's among them, is the task list's, so
@@ -1469,43 +1484,9 @@ export function useAgents(input: {
 
   // A pull request a tab names by its number is kept by agent and number,
   // apart from the agents' own, so it never stands for what an agent published.
-  const numberedPullRequests = useAppSlice(numberedPullRequestsAtom);
-
-  // Note that who a pull request names is kept beside the agent, with the
-  // pull request it was read for, so its Changes card says them wherever it
-  // hangs once its tab has read them, and never for another pull request.
-  // Each agent's reads are numbered, so only its newest read's answer is kept,
-  // as the tab draws only its newest.
-  const [changesPeople, setChangesPeople] = useState<ReadonlyMap<string, HeldPeople>>(
-    () => new Map(),
-  );
-  const changesAsked = useRef(new Map<string, number>());
-  const readChanges = useCallback<AgentsControl["readChanges"]>(
-    (agentId, number) => {
-      // Note that another pull request's people are not this agent's, so they are never kept beside it.
-      if (number !== undefined) {
-        return act(ACT_KIND.AGENTS_CHANGES, pullRequestAsked(agentId, number));
-      }
-      const ask = (changesAsked.current.get(agentId) ?? 0) + 1;
-      changesAsked.current.set(agentId, ask);
-      return act(ACT_KIND.AGENTS_CHANGES, { agentId }).then((answer) => {
-        if (changesAsked.current.get(agentId) !== ask || !("pullRequest" in answer)) return answer;
-        const read = answer.pullRequest;
-        setChangesPeople((was) => {
-          const next = new Map(was);
-          if (read === null) {
-            next.delete(agentId);
-          } else {
-            const { url, files: _files, truncated: _truncated, ...people } = read;
-            next.set(agentId, { url, people });
-          }
-          return next;
-        });
-        return answer;
-      });
-    },
-    [act],
-  );
+  const numberedPullRequests =
+    useQuery({ ...appStateQuery, select: selectNumberedPullRequests }).data ??
+    NO_NUMBERED_PULL_REQUESTS;
 
   const generateChapters = useCallback<AgentsControl["generateChapters"]>(
     (agentId, number) =>
@@ -1546,18 +1527,17 @@ export function useAgents(input: {
   const readSkills = useMemo(() => {
     if (!skillsOn) return undefined;
     if (taskId !== undefined) {
-      return keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { planId: taskId }));
+      return keptSkills(() =>
+        queryClient.fetchQuery(repositorySkillsQueryOptions({ planId: taskId })),
+      );
     }
     if (workspaceId === undefined) return undefined;
-    return keptSkills(() =>
-      act(
-        ACT_KIND.TASKS_SKILLS,
-        agentRepository === undefined
-          ? { workspaceId }
-          : { workspaceId, repository: agentRepository },
-      ),
-    );
-  }, [act, skillsOn, taskId, workspaceId, agentRepository, repository]);
+    const asked =
+      agentRepository === undefined
+        ? { workspaceId }
+        : { workspaceId, repository: agentRepository };
+    return keptSkills(() => queryClient.fetchQuery(repositorySkillsQueryOptions(asked)));
+  }, [queryClient, skillsOn, taskId, workspaceId, agentRepository, repository]);
 
   // A start reads the agents as they stand when it is pressed, so the doors to it stand across draws.
   const steadyStartPrompt = useSteadyDoor(startPrompt);
@@ -1626,8 +1606,6 @@ export function useAgents(input: {
     readTranscript,
     pullRequests,
     numberedPullRequests,
-    readChanges,
-    changesPeople,
     generateChapters,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,

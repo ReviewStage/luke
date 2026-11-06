@@ -161,7 +161,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act.js";
 import { AssigneeFaceMark, AutomationCard } from "../actor-ref.js";
 import {
   appCommandOffered,
@@ -192,18 +191,19 @@ import {
 } from "../settings-search.js";
 import { agentName } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
+import { useChangesPeopleOf } from "../tasks/changes-people.js";
 import { FileCard, fileLook } from "../tasks/file-ref.js";
 import { fileName } from "../tasks/file-ref-model.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
 import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts.js";
 import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";
-import { taskTreeQueryOptions } from "../tasks/repository-reads.js";
+import { refusedAnswer, taskTreeQueryOptions } from "../tasks/repository-reads.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem, type OpenTaskRename, useTaskRenameOffer } from "../tasks/task-menu-items.js";
 import { TaskKey } from "../tasks/task-standing.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
-import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
+import { type AgentsControl, type HeldPeople, readAgentById } from "../tasks/use-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-panel.js";
@@ -620,7 +620,7 @@ function paletteFilesQueryOptions(taskId: string | undefined) {
 /** The files as the palette holds them: none before they are asked for, and reading while a read is out, a Retry's among them. */
 function filesHeld(files: UseQueryResult<TasksTreeAnswer>): FilesRead | undefined {
   if (files.isFetching) return { read: FILES_READ.READING };
-  if (files.isError) return { read: FILES_READ.FAILED };
+  if (files.isError) return filesOf(refusedAnswer(files.error));
   return files.data === undefined ? undefined : filesOf(files.data);
 }
 
@@ -971,6 +971,7 @@ function agentRows(
   tasks: TasksControl,
   doors: PanelOfferDoors,
   show: (pick: () => void) => void,
+  people: ReadonlyMap<string, HeldPeople>,
 ): readonly PaletteRow[] {
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
@@ -1004,6 +1005,7 @@ function agentRows(
           pagePlace: { taskId },
           shownAgent: undefined,
           onOpenAgent: (agentId) => show(() => tasks.onShowAgent(taskId, agentId)),
+          people,
         },
       })
         .filter((entry) => entry.row.section !== undefined)
@@ -1641,9 +1643,12 @@ function OpenAgentArchive({
   /** How many times ⌘K asked for this agent, each new one run once. */
   asked: number;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const queryClient = useQueryClient();
   // Note that the agent is read again by its own id before a teammate's is archived, as its sidebar row reads it.
-  const control = { ...agents, readAgent: (agentId: string) => readAgentById(act, agentId) };
+  const control = {
+    ...agents,
+    readAgent: (agentId: string) => readAgentById(queryClient, agentId),
+  };
   const archive = useAgentArchive(agent, control, shown);
   const unarchive = useAgentUnarchive(agent.id, control);
   const action = agent.archivedAt === undefined ? archive.action : unarchive;
@@ -2145,6 +2150,11 @@ export function CommandPalette({
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   // The task's terminals and Browser tabs are offered as the panel's "+" offers them, through its own doors.
   const openTerminal = useOpenTerminal(tasks.sidePanel, noFocusMove);
+  // Note that the task's Changes rows hang their pull request's people, as their Changes tabs read them.
+  const offeredChanges = tasks.sidePanel.changes;
+  const changesPeople = useChangesPeopleOf(
+    useMemo(() => offeredChanges.map((tab) => tab.changes), [offeredChanges]),
+  );
   const offerDoors: PanelOfferDoors = {
     onNewTerminal:
       useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
@@ -2223,7 +2233,7 @@ export function CommandPalette({
   // Every other kind's rows in tiers, built only for the filter shown and only
   // while open: every row a tier matches ranks above the next tier's.
   const tiersOf = {
-    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
+    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks, changesPeople)],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],

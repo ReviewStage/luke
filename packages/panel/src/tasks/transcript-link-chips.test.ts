@@ -17,6 +17,7 @@ import {
   openingLinks,
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
@@ -96,7 +97,9 @@ function drawnElement(page: TaskMentionsValue | undefined, words: ReactElement):
   roots.push(root);
   act(() =>
     root.render(
-      page === undefined ? words : createElement(TaskMentions, { value: page, children: words }),
+      withQueryClient(
+        page === undefined ? words : createElement(TaskMentions, { value: page, children: words }),
+      ),
     ),
   );
   return container;

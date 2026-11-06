@@ -11,7 +11,7 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { createElement, type ReactElement, type ReactNode } from "react";
+import { createContext, createElement, type ReactElement, type ReactNode, useContext } from "react";
 import { afterEach, beforeEach } from "vitest";
 import { AppStateSubscription, appStateQuery } from "../use-app-state.js";
 
@@ -48,6 +48,21 @@ afterEach(() => {
   testQueryClient.clear();
 });
 
+/** Whether a tree already stands on the test's client, so a second `withQueryClient` inside it is caught. */
+const OnTestClient = createContext(false);
+
+/**
+ * The document's one subscription for the tree, refused under another: two
+ * would each write their own registry's document, and the later write would
+ * stand over the one the test meant.
+ */
+function TestAppStateSubscription(): ReactElement {
+  if (useContext(OnTestClient)) {
+    throw new Error("withQueryClient is nested in another: draw the tree through one.");
+  }
+  return createElement(AppStateSubscription);
+}
+
 /**
  * `element` on the test's Query client, with the document's one subscription
  * (`AppStateSubscription`) writing each reading of the registry it stands
@@ -58,8 +73,8 @@ export function withQueryClient(element: ReactNode): ReactElement {
   return createElement(
     QueryClientProvider,
     { client: testQueryClient },
-    createElement(AppStateSubscription),
-    element,
+    createElement(TestAppStateSubscription),
+    createElement(OnTestClient.Provider, { value: true }, element),
   );
 }
 
@@ -69,6 +84,11 @@ export function onRegistry(
   element: ReactElement,
 ): ReactElement {
   return createElement(RegistryContext.Provider, { value: registry }, withQueryClient(element));
+}
+
+/** The test's own Query client, for a case that looks at or changes what it keeps from outside a component, as code outside one takes the client it is handed. */
+export function testQueryClientNow(): QueryClient {
+  return testQueryClient;
 }
 
 /**

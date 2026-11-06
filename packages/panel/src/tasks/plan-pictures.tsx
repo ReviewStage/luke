@@ -6,7 +6,8 @@ import {
 } from "@repo/features/plan-attachment-link";
 import { planSections } from "@repo/features/plan-document";
 import { ACT_KIND } from "@repo/host/acts";
-import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@repo/ui/picture-cache";
+import { PICTURE_STATE, usePicture } from "@repo/ui/picture-read";
+import { useQueryClient } from "@tanstack/react-query";
 import { ImageIcon } from "lucide-react";
 import {
   createContext,
@@ -21,6 +22,7 @@ import { useAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import type { PictureDrawer } from "../markdown-message.js";
 import { OUTSIDE_GLYPH_CLASS, PictureBlock } from "../picture-block.js";
+import { type PictureReader, pictureNow, pictureQuery } from "../picture-query.js";
 import { TextLink } from "../text-link.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useOpenLink } from "./use-open-link.js";
@@ -54,7 +56,7 @@ const DATA_URL_TYPE = /^data:([^;,]+)[;,]/u;
 /** What the pictures under a plan's words share: the plan, how a picture is read, and how one is opened. */
 export interface PlanPicturesDoor {
   readonly taskId: string;
-  readonly read: (owner: string, id: string) => Promise<PictureAnswer>;
+  readonly read: PictureReader;
   readonly open: (id: string) => void;
   /** Remembers the alt text a picture is drawn with, which the viewer names it by. */
   readonly name: (id: string, alt: string) => void;
@@ -108,6 +110,7 @@ export function PlanPictures({
   children: ReactNode;
 }): React.JSX.Element {
   const { act } = useAct();
+  const queryClient = useQueryClient();
   const [viewing, setViewing] = useState<Viewing | undefined>(undefined);
   const names = useRef(new Map<string, string>());
   // Note that the words are read as a picture is opened, so the door stands
@@ -128,7 +131,7 @@ export function PlanPictures({
       // Note that the viewer walks the pictures read by the press, since one still being read has nothing to show.
       open: (id) => {
         const shown = planAttachmentIdsIn(shownText.current, taskId).flatMap((each) => {
-          const state = pictureNow(taskId, each);
+          const state = pictureNow(queryClient, taskId, each);
           if (state.kind !== PICTURE_STATE.READY) return [];
           return [
             { id: each, chip: chipOf(state.url, names.current.get(each) || UNNAMED_PICTURE) },
@@ -144,7 +147,7 @@ export function PlanPictures({
         }
       },
     }),
-    [taskId, read],
+    [taskId, read, queryClient],
   );
   const shownId = viewing?.ids[viewing.at];
   const heading = shownId === undefined ? undefined : sectionOfPicture(text, taskId, shownId);
@@ -178,7 +181,7 @@ function PlanPicture({
   alt: string;
   caption: string | undefined;
 }): React.JSX.Element {
-  const state = usePicture(owner, id, door.read, pictureUnread);
+  const state = usePicture(pictureQuery(owner, id, door.read), pictureUnread);
   door.name(id, alt);
   const own = owner === door.taskId;
   return (

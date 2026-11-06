@@ -44,10 +44,11 @@ import { useCoarsePointer } from "../coarse-pointer.js";
 import { rowDrafted, useInboxRowDrafts } from "../composer-drafts.js";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
+import { useChangesPeopleOf } from "../tasks/changes-people.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { openPlanStanding, TAB_KIND } from "../tasks/tab-look.js";
-import type { AgentsControl } from "../tasks/use-agents.js";
+import type { AgentsControl, HeldPeople } from "../tasks/use-agents.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptFlag, keptKey, useKept } from "../use-kept.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
@@ -329,11 +330,13 @@ function withCards(
     inbox: InboxBoardView;
     held: HeldTranscripts;
     changes: readonly ChangesOffer[];
+    /** Who each agent's pull request names, as its Changes tab last read them. */
+    people: ReadonlyMap<string, HeldPeople>;
     /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
     onOpenAgent: (agentId: string) => void;
   },
 ): SummaryEntry[] {
-  const { tasks, inbox, held, changes, onOpenAgent } = input;
+  const { tasks, inbox, held, changes, people, onOpenAgent } = input;
   const { agents, mainTabs } = tasks;
   const models = agents.models ?? [];
   const card = (entry: AddEntry, subject: CardSubject) => ({
@@ -358,7 +361,7 @@ function withCards(
         subject: agentSubject(agents, offer.agent.id, held, chosen),
         models,
         pullRequest: offer.pullRequest,
-        people: peopleOf(agents.changesPeople.get(offer.agent.id), offer.pullRequest),
+        people: peopleOf(people.get(offer.agent.id), offer.pullRequest),
         onOpenAgent: () => onOpenAgent(offer.agent.id),
       });
     }
@@ -424,9 +427,10 @@ function summarySections(
   held: HeldTranscripts,
   onOpenAgent: (agentId: string) => void,
   inboxDrafted: boolean,
+  people: ReadonlyMap<string, HeldPeople>,
 ): SummarySection[] {
   const { rows, changes } = summaryRows(tasks, inbox, inboxDrafted);
-  const entries = withCards(rows, { tasks, inbox, held, changes, onOpenAgent });
+  const entries = withCards(rows, { tasks, inbox, held, changes, people, onOpenAgent });
   return sectionsOf(entries, tasks.agents);
 }
 
@@ -859,7 +863,10 @@ export function TaskSummary({
   const inboxDrafted = [...inbox.open, ...inbox.settled].some((item) =>
     rowDrafted(rowDrafts.get(item.id), item),
   );
-  const sections = summarySections(tasks, inbox, held, onOpenAgent, inboxDrafted);
+  // Note that the pull requests offered are the agents', whose people their Changes tabs read.
+  const pullRequests = tasks.agents.pullRequests;
+  const people = useChangesPeopleOf(useMemo(() => [...pullRequests.keys()], [pullRequests]));
+  const sections = summarySections(tasks, inbox, held, onOpenAgent, inboxDrafted, people);
   // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
   const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
     (entry) => entry.row.id !== INBOX_ROW,

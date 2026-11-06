@@ -7,7 +7,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
-import { PICTURE_STATE, type PictureState } from "@repo/ui/picture-cache";
+import { PICTURE_STATE, type PictureState } from "@repo/ui/picture-read";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";

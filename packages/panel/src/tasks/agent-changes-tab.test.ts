@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ORPCError } from "@orpc/client";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import {
   AGENT_CALL_FAILURE,
+  type AgentChangesAnswerView,
   type AgentPullRequestViewedAnswerView,
   PULL_REQUEST_PART,
 } from "@repo/features/agent-view";
@@ -53,6 +55,7 @@ import { findRanges, reveal } from "../find-matches.js";
 import { rendererRegistry } from "../renderer-runtime.js";
 import {
   type AnyAct,
+  answeringChanges,
   FAKE_ANSWER,
   type FakeActAnswer,
   fakeActPort,
@@ -151,21 +154,26 @@ let viewedReads = 0;
 /** What the next read of the marks waits on, where a test holds it; none answers at once. */
 let viewedHeld: Promise<void> | undefined;
 
+/** The agent's changes as the service answers them: the pull request's files as the test set them. */
+const readChanges = (): Promise<AgentChangesAnswerView> =>
+  Promise.resolve({
+    pullRequest: {
+      url: "https://github.com/acme/relay/pull/7",
+      ...commits,
+      truncated,
+      files,
+      reviewers: [],
+      comments: [],
+    },
+  });
+
+/** How the act port answers the changes this test, the service's answer unless a test stands another in. */
+let answerChanges: typeof readChanges = readChanges;
+
 const control = agentsControl({
   agents: [AGENT],
   agentIds: [AGENT.id],
   models: [],
-  readChanges: () =>
-    Promise.resolve({
-      pullRequest: {
-        url: "https://github.com/acme/relay/pull/7",
-        ...commits,
-        truncated,
-        files,
-        reviewers: [],
-        comments: [],
-      },
-    }),
 });
 
 /** What the stand-in bundle was handed, mount first, each draw after it. */
@@ -270,6 +278,8 @@ beforeEach(() => {
   fakeAppBridge({});
   handSettings();
   holdViewedReads();
+  answerChanges = readChanges;
+  fakeActPort({ ...fakeActPortCalls(), ...answeringChanges(() => answerChanges()) });
 });
 
 afterEach(() => {
@@ -316,15 +326,29 @@ let heldReads: ChangesReads | undefined;
 
 /** Reads the changes again as the Pull request tab's Refresh does, the one Refresh its screen offers, with the review threads. */
 async function refreshAsTheTab(threads?: ChangesThreads): Promise<void> {
+  const landed = heldReads?.count ?? 0;
   act(() => {
     heldReads?.ask();
     threads?.refresh?.();
   });
+  // Note that the changes land through a query, so the refresh is done once its answer has, or it failed.
+  await vi.waitFor(() =>
+    assert.equal(
+      heldReads?.out === false && ((heldReads.count ?? 0) > landed || heldReads.refreshFailed),
+      true,
+    ),
+  );
   await flush();
 }
 
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
 async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
+  await render(options);
+  return lastDrawn();
+}
+
+/** Draws the view in the root standing, without asking what it drew. */
+async function render(options: DrawOptions = {}): Promise<void> {
   const { ChangesTabReading } = await import("../testing/changes-tab.js");
   const tab = createElement(ChangesTabReading, {
     agentId: AGENT.id,
@@ -356,7 +380,6 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
     ),
   );
   await flush();
-  return lastDrawn();
 }
 
 /** Draws the agent's Files changed view afresh, its read landed, and answers what the list was last drawn with. */
@@ -366,7 +389,13 @@ async function drawTab(options: DrawOptions = {}): Promise<DiffListProps> {
   registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  return redraw(options);
+  // Note that the reads waited on are this tab's own, never the last test's.
+  heldReads = undefined;
+  await render(options);
+  // Note that the changes land through a query, so the view is read once its read has settled.
+  await vi.waitFor(() => assert.equal(heldReads?.answer !== undefined && !heldReads.out, true));
+  await flush();
+  return lastDrawn();
 }
 
 function lastDrawn(): DiffListProps {
@@ -1146,7 +1175,14 @@ test("a write answered while a later one to the same setting is out leaves the l
 });
 
 test("a refused write flips the switch back and is said in a toast, and the switch can be pressed again", async () => {
-  await drawTab({ beside: onRegistry(rendererRegistry, createElement(ToastHost)) });
+  // Note that the toasts read the window's own registry, beside the tab's, on the one Query client the tab stands on.
+  await drawTab({
+    beside: createElement(
+      RegistryContext.Provider,
+      { value: rendererRegistry },
+      createElement(ToastHost),
+    ),
+  });
   const held = holdSettingWrites();
   const popover = openSettings();
 
@@ -1215,11 +1251,7 @@ test("a review thread is drawn under its line in its file, and one a push outdat
 
 test("a refresh that fails after the changes were read keeps the files drawn, says Could not refresh with Retry, and Retry reads again", async () => {
   let failing = false;
-  const flaky = {
-    ...control,
-    readChanges: (...args: Parameters<typeof control.readChanges>) =>
-      failing ? Promise.reject(new Error("offline")) : control.readChanges(...args),
-  };
+  answerChanges = () => (failing ? Promise.reject(new Error("offline")) : readChanges());
   /** The alert that says the refresh did not land, none while it did. */
   const refreshNote = () =>
     [...document.querySelectorAll('[role="alert"]')].find((each) =>
@@ -1227,7 +1259,6 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
     );
   let threadReads = 0;
   await drawTab({
-    control: flaky,
     threads: {
       list: [],
       draw: () => null,
@@ -1236,10 +1267,11 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
       },
     },
   });
-  assert.equal(refreshNote(), undefined);
+  assert.equal(refreshNote() === undefined, true);
 
   failing = true;
   await refreshAsTheTab();
+  await vi.waitFor(() => assert.equal(refreshNote() !== undefined, true));
 
   const note = refreshNote();
   assert.ok(note, "the refresh says it did not land");
@@ -1255,10 +1287,9 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
   );
   const readsBefore = threadReads;
   act(() => retry?.click());
-  await flush();
+  await vi.waitFor(() => assert.equal(refreshNote() === undefined, true));
 
   assert.equal(threadReads, readsBefore + 1, "Retry reads the review threads with the files");
-  assert.equal(refreshNote(), undefined);
   assert.deepEqual(
     lastDrawn().files.map((file) => file.path),
     ["src/seats.ts"],
@@ -1318,6 +1349,10 @@ async function standNearView(path: string): Promise<HTMLElement> {
   document.body.append(slot);
   comeIntoView();
   await flush();
+  // Note that a picture's read reaches React a tick after it lands, as the window's queries hand it on.
+  await vi.waitFor(() =>
+    assert.equal((slot.textContent ?? "").includes("Reading the picture"), false),
+  );
   return slot;
 }
 
@@ -1466,10 +1501,9 @@ test("an image side whose read did not land offers Retry, which reads it again a
 
   refusing.clear();
   act(() => retry?.click());
-  await flush();
 
+  await vi.waitFor(() => assert.equal(slot.querySelector("img")?.alt, "Added"));
   assert.deepEqual(asked, [after, after]);
-  assert.equal(slot.querySelector("img")?.alt, "Added");
 });
 
 test("an SVG moved with its contents unchanged offers no source, having no lines to show", async () => {
@@ -2148,6 +2182,12 @@ function answerFileReads(answer: (path: string, ref?: string) => TasksFileAnswer
   const asked: AnyAct[] = [];
   fakeActs({
     act: (request: AnyAct) => {
+      // Note that the changes are still the service's, as the test set them.
+      if (request.kind === ACT_KIND.AGENTS_CHANGES) {
+        return answerChanges().then(
+          (value): FakeActAnswer => ({ status: FAKE_ANSWER.DONE, value }),
+        );
+      }
       if (request.kind === ACT_KIND.TASKS_FILE) asked.push(request);
       const outcome: FakeActAnswer = {
         status: FAKE_ANSWER.DONE,
@@ -2222,7 +2262,6 @@ test("no file is read whole for an agent on no task, a head not named, or a task
     agents: [{ ...AGENT, planId: null }],
     agentIds: [AGENT.id],
     models: [],
-    readChanges: control.readChanges,
   });
   assert.equal((await drawTab({ control: taskless })).readTexts, undefined, "no task");
   commits = {};
@@ -2406,6 +2445,12 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
   const held: Array<() => void> = [];
   fakeActs({
     act: (request: AnyAct) => {
+      // Note that the changes are still the service's, as the test set them.
+      if (request.kind === ACT_KIND.AGENTS_CHANGES) {
+        return answerChanges().then(
+          (value): FakeActAnswer => ({ status: FAKE_ANSWER.DONE, value }),
+        );
+      }
       const value =
         request.kind === ACT_KIND.TASKS_FILE
           ? {

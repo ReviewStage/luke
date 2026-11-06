@@ -19,6 +19,7 @@ import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
+import { useChangesPeople } from "../tasks/changes-people.js";
 import { awaitsNod, NEEDS_YOU, threadsWaitingWords } from "../tasks/inbox-model.js";
 import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
@@ -131,10 +132,8 @@ function PlanAgentRow({
   const { row, endMark, card } = entry;
   const agentId = row.id;
   const chosen = tab !== undefined && sameTab({ agent: agentId }, tab);
-  const people =
-    pullRequest === undefined
-      ? undefined
-      : peopleOf(agents.changesPeople.get(agentId), pullRequest);
+  const changesPeople = useChangesPeople(pullRequest === undefined ? undefined : agentId);
+  const people = pullRequest === undefined ? undefined : peopleOf(changesPeople, pullRequest);
   return (
     <RowHintOptions card={card}>
       <ListRow

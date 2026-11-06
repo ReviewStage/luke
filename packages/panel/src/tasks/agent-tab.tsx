@@ -36,6 +36,7 @@ import {
   sameShape,
 } from "@repo/features/turn-rows";
 import { replyFromWords } from "@repo/features/words";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { AGENT_ENTER } from "@repo/settings";
 import {
   ANNOUNCE,
@@ -77,6 +78,7 @@ import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
   createContext,
@@ -117,7 +119,7 @@ import { failureShown, unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import { AgentForward } from "./agent-forward.js";
@@ -375,6 +377,10 @@ export const AGENT_LEAD: TranscriptLead = {
 
 /** The plan's own tab, which a task's name over its plan's card opens. */
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
+
+/** Whether Enter queues a message while the agent works, as Settings say; until the first document arrives it sends. */
+const selectEnterQueues = (state: AppStateSnapshot): boolean =>
+  selectAppSettingsView(state)?.agentEnter === AGENT_ENTER.QUEUE;
 
 /** The height a transcript's row is taken to have before it is drawn and measured, in pixels: a short turn's, with the log's step before it (`--ui-space-12`), which a row holds itself (tasks.css's `.agent-log-row-next`). */
 const ROW_ESTIMATE_PX = 172;
@@ -2744,7 +2750,7 @@ function AgentTabView({
   const queue = useAgentQueue(agent.id, transcript.queue);
   const pictures = useAgentPictureDoor(agent.id);
   const queueEditing = useQueueEditing(composer, queue, pictures);
-  const enterQueues = useAppSlice(APP_SETTINGS_VIEW)?.agentEnter === AGENT_ENTER.QUEUE;
+  const enterQueues = useQuery({ ...appStateQuery, select: selectEnterQueues }).data === true;
   // Only the agent's starter may change its queue, as the service holds (`controlsAgent`); a teammate reads it.
   const controlsQueue = starter === undefined;
   // A rewind writes in the box, so it is offered only while the box takes words.

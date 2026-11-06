@@ -8,6 +8,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { MarkdownMessage } from "../markdown-message.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import {
   documentManager,
   documentMarkdown,
@@ -216,8 +217,9 @@ test("a picture whose alt text, address, and title need escaping reads back as t
 /** How many checkboxes the read view draws for a plan's text. */
 function drawnCheckboxes(words: string): number {
   return (
-    renderToStaticMarkup(createElement(MarkdownMessage, { words })).split('type="checkbox"')
-      .length - 1
+    renderToStaticMarkup(withQueryClient(createElement(MarkdownMessage, { words }))).split(
+      'type="checkbox"',
+    ).length - 1
   );
 }
 

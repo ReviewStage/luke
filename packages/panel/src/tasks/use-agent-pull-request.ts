@@ -2,9 +2,10 @@ import type { AgentPullRequestAnswerView } from "@repo/features/agent-view";
 import type { AgentPullRequest, AgentPullRequestAnswer } from "@repo/features/agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import type { ListedPullRequest } from "@repo/features/task-wire";
-import * as Atom from "effect/reactivity/Atom";
-import { useMemo } from "react";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
+import { appStateQuery } from "../use-app-state.js";
 import { useHostRead } from "../use-host-read.js";
 
 /**
@@ -91,14 +92,6 @@ export function useListedPullRequests(
   }, [listed, taskId, agentId]);
 }
 
-/** The pull request the task list holds of one agent, as its row keeps it. */
-const listedPullRequestAtom = Atom.family((agentId: string) =>
-  Atom.map(
-    APP_SLICE.TASKS,
-    (tasks) => tasks?.agentPullRequests?.find((each) => each.agentId === agentId)?.pullRequest,
-  ),
-);
-
 /**
  * The pull request one agent opened, as the service last synced it onto the
  * agent's row and the task list carries it, a hover card's whole source of
@@ -108,5 +101,10 @@ const listedPullRequestAtom = Atom.family((agentId: string) =>
  * does.
  */
 export function useListedPullRequest(agentId: string): AgentPullRequest | undefined {
-  return useAppSlice(listedPullRequestAtom(agentId));
+  const select = useCallback(
+    (state: AppStateSnapshot) =>
+      state.tasks.agentPullRequests?.find((each) => each.agentId === agentId)?.pullRequest,
+    [agentId],
+  );
+  return useQuery({ ...appStateQuery, select }).data;
 }

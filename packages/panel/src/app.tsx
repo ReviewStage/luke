@@ -32,7 +32,6 @@ import { cssCustomProperties, RetryOffered } from "@repo/ui";
 import { isComposingKey } from "@repo/ui/composing-key";
 import { useLinkOpener } from "@repo/ui/held-link";
 import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
-import { forgetPictures } from "@repo/ui/picture-cache";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
@@ -79,6 +78,7 @@ import { OpenSettingsProvider } from "./open-settings.js";
 import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
+import { forgetPictures } from "./picture-query.js";
 import { ROUTED_PLACE } from "./route-gates.js";
 import { useOpenHostConnect } from "./settings/host-connect-dialog.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
@@ -258,10 +258,11 @@ function AppWindow(): React.JSX.Element {
   // A picture is read as the account signed in, so the window lets go of every one it read once that account changes, and of every write it would undo, which is its presser's own.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
+  const queryClient = useQueryClient();
   useEffect(() => {
-    forgetPictures();
+    void forgetPictures(queryClient);
     forgetUndo();
-  }, [accountKey]);
+  }, [queryClient, accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   // A fixture run's profile may open the window on a page of Settings, or on Admin, at launch (`tasks-fixture.ts`).
@@ -337,7 +338,6 @@ function AppWindow(): React.JSX.Element {
   // A pairing's link opens Settings › Hosts with its code, for the page to ask over itself; while
   // Bring your own host is off, which stands nowhere then, it lands on that experiment's row alone.
   const openHostConnect = useOpenHostConnect();
-  const queryClient = useQueryClient();
   const openAccountLink = useSteadyDoor(({ place }: AccountLink) => {
     const state = queryClient.getQueryData(appStateQuery.queryKey);
     if (state === undefined || !selectExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST)(state)) {

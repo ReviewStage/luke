@@ -23,7 +23,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers, signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { listedAgent } from "../testing/tasks-control.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -162,6 +162,8 @@ async function drawn(
     act: (): Promise<FakeActAnswer> =>
       Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined }),
   });
+  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  writeAppState(state);
   handMembers(() => ({ rows: { members: MEMBERS } }));
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

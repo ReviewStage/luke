@@ -9,6 +9,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { HISTORY_READ, type PlanHistoryControl } from "../tasks/use-plan-history.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -51,31 +52,37 @@ function drawn(list: PlanHistoryControl["list"], room: ShellRoom = SHELL_ROOM.WI
   roots.push(root);
   act(() =>
     root.render(
-      createElement(DesktopVersionHistory, {
-        sidebar: {
-          collapsed: false,
-          compact: false,
-          overlay: SIDEBAR_OVERLAY.CLOSED,
-          width: 264,
-          onToggle: ignore,
-          onOverlay: ignore,
-          onResize: ignore,
-          staged: false,
-        },
-        room,
-        history: {
-          canGoBack: false,
-          canGoForward: false,
-          onBack: ignore,
-          onForward: ignore,
-          steps: { back: [], forward: [] },
-          onGoTo: ignore,
-        },
-        subject: taskVersionSubject(tasks),
-        account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
-        onExit: ignore,
-        onRestored: ignore,
-      }),
+      withQueryClient(
+        createElement(DesktopVersionHistory, {
+          sidebar: {
+            collapsed: false,
+            compact: false,
+            overlay: SIDEBAR_OVERLAY.CLOSED,
+            width: 264,
+            onToggle: ignore,
+            onOverlay: ignore,
+            onResize: ignore,
+            staged: false,
+          },
+          room,
+          history: {
+            canGoBack: false,
+            canGoForward: false,
+            onBack: ignore,
+            onForward: ignore,
+            steps: { back: [], forward: [] },
+            onGoTo: ignore,
+          },
+          subject: taskVersionSubject(tasks),
+          account: {
+            status: ACCOUNT_STATUS.SIGNED_IN,
+            email: "dev@example.com",
+            provider: "github",
+          },
+          onExit: ignore,
+          onRestored: ignore,
+        }),
+      ),
     ),
   );
   return container;
