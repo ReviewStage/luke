@@ -371,8 +371,8 @@ function agentTabs(input: {
 }
 
 /**
- * Each of the task's agents in the order started, as History lists a closed
- * one (`agent-history.tsx`), the Overview's agents list it, and ⌘K finds it, in its
+ * Each of the task's agents in the order started, or of those given (`listed`), as History lists a closed
+ * or an archived one (`agent-history.tsx`), the Overview's agents list it, and ⌘K finds it, in its
  * tab's look: its harness's mark wearing where it stands, and, where the
  * row draws one, a failure at its end, as its tab does. Picking an agent
  * whose tab is open chooses that tab rather than opening another, as a
@@ -382,8 +382,9 @@ export function agentEntries(
   main: Pick<MainTabsControl, "tab" | "onChoose">,
   agents: AgentsControl,
   held?: HeldTranscripts,
+  listed: readonly AgentSummary[] = agents.agents ?? [],
 ): AddEntry[] {
-  return (agents.agents ?? []).map((agent) => {
+  return listed.map((agent) => {
     const label = agentName(agent, agents.models);
     const chosen = main.tab !== undefined && sameTab(agentTab(agent.id), main.tab);
     return {

@@ -22,7 +22,9 @@ import { useRef, useState } from "react";
 import { agentName } from "../tasks/agent-model.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import type { MainTabsControl } from "../tasks/use-main-tabs.js";
-import { ArchivedAgentRow, SUMMARY_GLYPH } from "./agent-archive.js";
+import { rowMenu } from "./action-menu.js";
+import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
+import { SUMMARY_GLYPH } from "./agent-archive.js";
 import { agentEntries } from "./main-tabs.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 
@@ -32,12 +34,12 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * The button hangs a panel under it (`PopoverIconButton`), a search field at
  * its head over two groups, Closed and Archived, each the newest started
  * first, a group drawn only while it holds a row. A closed agent is one of
- * the task's agents not archived whose tab the column does not hold open;
- * its row wears its tab's look and hangs its tab's card (`agentEntries`),
- * and a press opens its tab again and chooses it, as its tab's own press
- * does. An archived agent's row is the one the summary's Archived fold once
- * drew (`ArchivedAgentRow`): muted, its Unarchive on hover and its ⋯
- * offering the agent's menu, and a press opens the agent's tab, read only,
+ * the task's agents not archived whose tab the column does not hold open.
+ * Every row, a closed agent's and an archived one's alike, wears its tab's
+ * look and hangs its tab's card (`agentEntries`), a right-click, a long
+ * press, or the menu key opening the agent's menu as its tab's does, which
+ * offers an archived agent's Unarchive; a press opens its tab again and
+ * chooses it, as its tab's own press does, an archived agent's read only,
  * since looking at an agent never unarchives it. Each press puts the
  * panel away. An agent whose tab stands open is in the bar already, so it
  * is not listed; ⌘K still finds every agent. While nothing is closed or
@@ -60,26 +62,52 @@ const NO_MATCH = "No agents match";
 /** The groups' headings, each also its list's name for a reader moving between lists. */
 const HISTORY_GROUP = { CLOSED: "Closed", ARCHIVED: "Archived" } as const;
 
+/** What a row's menu names its agent, an archived one's or another's. */
+const ROW_THING = { AGENT: "Agent", ARCHIVED: "Archived agent" } as const;
+
 /** Whether an agent's name holds the search, whatever its case; every agent for no search. */
 function matches(agent: AgentSummary, models: AgentsControl["models"], query: string): boolean {
   const asked = query.trim().toLowerCase();
   return asked === "" || agentName(agent, models).toLowerCase().includes(asked);
 }
 
-/** A closed agent's row: its tab's glyph, name, and failure mark, hanging its tab's card, opening its tab on a press. */
-function ClosedAgentRow({ entry, onPick }: { entry: AddEntry; onPick: () => void }) {
+/** An agent's row, closed or archived: its tab's glyph, name, and failure mark, hanging its tab's card, opening its tab on a press, and the agent's menu on a right-click. */
+function HistoryAgentRow({
+  entry,
+  agent,
+  agents,
+  shown,
+  onPick,
+}: {
+  entry: AddEntry;
+  agent: AgentSummary;
+  agents: AgentsControl;
+  shown: boolean;
+  onPick: () => void;
+}) {
   const { row, endMark, card } = entry;
+  // The agent's menu over the doors a row has, as the sidebar's agent rows offer it.
+  const actions = useAgentActions(agent, agents, {
+    label: row.label,
+    shown,
+    terminals: { onOpenTerminal: undefined },
+  });
+  const thing = agent.archivedAt === undefined ? ROW_THING.AGENT : ROW_THING.ARCHIVED;
   return (
-    <RowHintOptions card={card}>
-      <ListRow
-        leading={<span className={SUMMARY_GLYPH}>{row.icon}</span>}
-        title={row.label}
-        titleReplayMasked
-        meta={endMark}
-        hint={card === undefined ? undefined : { Hint: RowHint, label: row.label }}
-        onPress={onPick}
-      />
-    </RowHintOptions>
+    <>
+      <RowHintOptions card={card}>
+        <ListRow
+          leading={<span className={SUMMARY_GLYPH}>{row.icon}</span>}
+          title={row.label}
+          titleReplayMasked
+          meta={endMark}
+          hint={card === undefined ? undefined : { Hint: RowHint, label: row.label }}
+          onPress={onPick}
+          menu={rowMenu(thing, agentMenuGroups(rowDoors(actions.doors)), shown, true)}
+        />
+      </RowHintOptions>
+      {actions.dialog}
+    </>
   );
 }
 
@@ -116,15 +144,24 @@ function HistoryPanel({
 }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const { closed, archived } = historyAgents(main, agents, query);
-  const closedIds = closed.map((agent) => agent.id);
-  // Note that the closed rows take their looks and cards from the "+" rows' one builder, so a row and its tab say the same.
-  const entries = agentEntries(main, agents, held)
-    .filter((entry) => closedIds.includes(entry.row.id))
-    .toSorted((a, b) => closedIds.indexOf(a.row.id) - closedIds.indexOf(b.row.id));
+  // Note that every row takes its look and card from the "+" rows' one builder, so a row and its tab say the same.
+  const entries = agentEntries(main, agents, held, closed);
+  const archivedEntries = agentEntries(main, agents, held, archived);
   const open = (agentId: string) => {
     onPicked();
     onOpenAgent(agentId);
   };
+  const rowOf = ({ agent, ...entry }: AddEntry) =>
+    agent === undefined ? null : (
+      <HistoryAgentRow
+        key={entry.row.id}
+        entry={entry}
+        agent={agent}
+        agents={agents}
+        shown={shown}
+        onPick={() => open(agent.id)}
+      />
+    );
   return (
     <div className="agent-history flex min-h-0 w-popover-narrow flex-col">
       <ReplayUnmask>
@@ -153,18 +190,12 @@ function HistoryPanel({
                 label={HISTORY_GROUP.CLOSED}
               >
                 <List label={HISTORY_GROUP.CLOSED} density={LIST_DENSITY.DENSE}>
-                  {entries.map((entry) => (
-                    <ClosedAgentRow
-                      key={entry.row.id}
-                      entry={entry}
-                      onPick={() => open(entry.row.id)}
-                    />
-                  ))}
+                  {entries.map((entry) => rowOf(entry))}
                 </List>
               </GroupHeader>
             </ReplayUnmask>
           )}
-          {archived.length === 0 ? null : (
+          {archivedEntries.length === 0 ? null : (
             <ReplayUnmask>
               <GroupHeader
                 heading={GROUP_HEADING.NONE}
@@ -172,15 +203,7 @@ function HistoryPanel({
                 label={HISTORY_GROUP.ARCHIVED}
               >
                 <List label={HISTORY_GROUP.ARCHIVED} density={LIST_DENSITY.DENSE}>
-                  {archived.map((agent) => (
-                    <ArchivedAgentRow
-                      key={agent.id}
-                      agent={agent}
-                      agents={agents}
-                      shown={shown}
-                      onOpen={open}
-                    />
-                  ))}
+                  {archivedEntries.map((entry) => rowOf(entry))}
                 </List>
               </GroupHeader>
             </ReplayUnmask>
