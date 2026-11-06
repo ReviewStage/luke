@@ -2139,7 +2139,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(services(api)),
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
         const first = api.commands[0];
         assert.ok(first !== undefined);
         first.exitCode = 0;
@@ -2161,7 +2161,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* Fiber.interrupt(waiting);
 
         assert.ok(answered !== undefined && Exit.isSuccess(answered));
-        assert.equal(answered.value.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.deepEqual(answered.value, { outcome: SESSION_SEND_OUTCOME.FAILED, status: 503 });
         assert.equal(api.commands.length, 1);
       }),
   );
