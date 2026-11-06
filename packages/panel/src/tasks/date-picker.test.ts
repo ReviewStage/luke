@@ -3,14 +3,17 @@
 import assert from "node:assert/strict";
 import type { PlanEditRequest } from "@repo/features/plan-edit";
 import type { Task } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { registryWith } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -47,7 +50,7 @@ const registries: AtomRegistry.AtomRegistry[] = [];
 
 /** A registry of the test's own, as the window's root provides one, so words a plan left unsaved in one test are not the next one's. */
 function ownRegistry(): AtomRegistry.AtomRegistry {
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   registries.push(registry);
   return registry;
 }

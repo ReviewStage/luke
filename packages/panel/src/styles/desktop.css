@@ -519,20 +519,48 @@ body,
   --ui-toolbar-end-at: 0px;
 }
 
-/* On the frame the plan's first tab starts on one line with its sheet's
-   edge below it, as the side panel's does (`.side-panel-bar`); with the
-   sidebar folded it starts past the title bar's buttons, measured from the
-   sheet's edge, a gap in from the window's. A bar further in the column, a
-   task's Inbox tab's, sets its own start. */
+/* A task's page stands its topbar across the work, clear of the title bar's
+   buttons at either end (`main-tabs.tsx`'s `TaskTopbar`), and its column's
+   tabs and its side panel's on one row under it, on the frame: each starts
+   and ends on one line with its sheet's edge below it, however the sidebar
+   stands and whether or not the panel is open. */
 :where(:root):not([data-ui-room="narrow"]) .desktop-shell > .desktop-main .desktop-task-main {
   --ui-toolbar-start-at: 0px;
+  --ui-toolbar-end-at: 0px;
 }
 
 :where(:root):not([data-ui-room="narrow"])
-  .desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-shell
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel
+  > .side-panel-bar {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+/* The task's details stand across the page with no bar of their own, so
+   their sheet starts right under the topbar. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
   > .desktop-main
-  .desktop-task-main {
-  --ui-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
+  .desktop-task[data-barless="true"]
+  > .desktop-task-main::before {
+  top: 0;
+}
+
+/* The way back to the agents stays at the details' card's top left, on the
+   card's ground, as the details scroll beneath it. */
+.desktop-task[data-barless="true"] .desktop-document {
+  position: relative;
+}
+
+.task-details-back {
+  position: absolute;
+  z-index: 1;
+  top: var(--ui-space-8);
+  left: var(--ui-space-8);
+  border-radius: var(--ui-control-radius);
+  background: var(--ui-color-ground);
 }
 
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its

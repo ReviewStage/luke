@@ -204,7 +204,7 @@ describe("the menu bar's dimmed items", () => {
       ["Close Other Tabs", false],
       ["Close Window", true],
       ["Copy Link", true],
-      ["Copy Plan or Transcript", false],
+      ["Copy Transcript", false],
       ["Copy Full Transcript", false],
       ["Version History", false],
       ["Mark Done", false],

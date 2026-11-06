@@ -15,6 +15,7 @@ import {
   type Task,
 } from "@repo/features/task-wire";
 import { agoText, momentText, sinceText } from "@repo/features/time-format";
+import { EXPERIMENT } from "@repo/settings";
 import {
   Button,
   EDITABLE_BLOCK_CLASS,
@@ -52,6 +53,7 @@ import { useCreator } from "../member-directory.js";
 import { PLACEMENT_END, PLAN_PLACEHOLDER, type PlanEditorHandle } from "../plan-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { useExperiment } from "../use-app-state.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
   type EditAgents,
@@ -62,7 +64,12 @@ import {
   useEditReader,
 } from "./edit-ref.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
-import { PlanCommentLayer, useCommentFocus, useEditorComment } from "./plan-comments.js";
+import {
+  CommentsToggle,
+  PlanCommentLayer,
+  useCommentFocus,
+  useEditorComment,
+} from "./plan-comments.js";
 import {
   DocumentBlock,
   EditableTitle,
@@ -298,13 +305,17 @@ function PlanByline({
   place,
   saves,
   onShowHistory,
+  comments,
 }: {
   task: Task;
+  /** The plan's last edit, said after who created the task; none while nothing changed, or while Plans is off and there is no plan to have edited. */
   edit: PlanLastEdit | undefined;
   place: EditPlace;
-  /** How many of the reader's saves of this plan landed, which its Saved tick confirms. */
-  saves: number;
+  /** How many of the reader's saves of this plan landed, which its Saved tick confirms; none while Plans is off, which saves nothing. */
+  saves: number | undefined;
   onShowHistory: ShowHistory | undefined;
+  /** Whether the plan's comments are drawn here, whose toggle ends the line. */
+  comments: boolean;
 }): React.JSX.Element {
   // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
   const creator = useCreator(task, place.reader.readerId);
@@ -329,7 +340,8 @@ function PlanByline({
           </>
         )
       }
-      saved={<SavedTick saves={saves} />}
+      saved={saves === undefined ? undefined : <SavedTick saves={saves} />}
+      end={comments ? <CommentsToggle /> : undefined}
     />
   );
 }
@@ -1030,7 +1042,9 @@ export const PlanBody = memo(function PlanBody({
   titleActions?: boolean;
 }): React.JSX.Element {
   const { views, sections: textSections } = useDrawnUnits(task);
-  const editable = onEdit !== undefined;
+  // While Plans is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
+  const documented = useExperiment(EXPERIMENT.PLANS);
+  const editable = onEdit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
   // Note that what each section is drawn from is held steady across draws,
@@ -1305,7 +1319,7 @@ export const PlanBody = memo(function PlanBody({
       />
     ),
   );
-  const titled = editable && onRename !== undefined;
+  const titled = onEdit !== undefined && onRename !== undefined;
   const titleMenu =
     !titleActions || linked === undefined ? null : (
       <TitleLink
@@ -1314,83 +1328,93 @@ export const PlanBody = memo(function PlanBody({
         tabbable={editable ? entry === EDITOR_PLACE.TITLE : true}
       />
     );
-  return (
+  const column = (
+    <DocumentScroll ref={scroller}>
+      <PlanBodyColumn ref={bodyHost}>
+        <WordsDatePickerRoom>
+          {taskStanding === undefined ? null : <TaskPath task={task} door={taskStanding} />}
+          {titled ? (
+            // Keyed by the plan, so words typed for one are saved to it as another opens.
+            <EditableTitle
+              key={task.id}
+              // A refused name stays in the title, beside the refusal, until the next rename.
+              name={rename?.asked ?? task.name}
+              entry={entry === EDITOR_PLACE.TITLE}
+              editing={editing}
+              alone={!documented}
+              renaming={rename?.asks ?? 0}
+              actions={titleMenu}
+              onRename={onRename}
+              onDraft={onDraftName}
+            />
+          ) : (
+            <TaskTitle name={task.name} actions={titleMenu} />
+          )}
+          {taskStanding === undefined ? null : (
+            <TaskStandingChips
+              task={task}
+              onSet={taskStanding.onSet}
+              relations={taskStanding.relations}
+              inSight={taskStanding.inSight}
+            />
+          )}
+          <PlanByline
+            task={task}
+            edit={documented ? edited : undefined}
+            place={place}
+            saves={documented ? editing.saves : undefined}
+            onShowHistory={onShowHistory}
+            comments={documented && commentsHere}
+          />
+          {documented ? <ChangedLine looks={looks} marks={marks} /> : null}
+          <Fragment key={HEAD_KEY}>{head}</Fragment>
+          {!documented ? null : editing.editor === undefined ? (
+            editable && views.length === 0 ? (
+              <EmptyPlanLine onOpen={() => editing.open(PLACEMENT_END)} />
+            ) : (
+              sections
+            )
+          ) : (
+            <PlanDocumentEditor
+              task={task}
+              editor={editing.editor}
+              editing={editing}
+              drawn={sections}
+              hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
+              mentions={mentionDoors}
+              scroller={scroller}
+              handle={editorHandle}
+              closedOn={closedOn}
+              onComment={drawnSections === undefined ? undefined : commentOnWords}
+            />
+          )}
+          {!documented ||
+          comments === undefined ||
+          !commentsHere ||
+          drawnSections === undefined ? null : (
+            <PlanCommentLayer
+              body={body}
+              scroller={scroller}
+              unitClass={UNIT_CLASS}
+              sections={drawnSections}
+              text={task.document.body}
+              doors={{ control: comments, agents, me: reader.readerId }}
+              editor={editing.editor === undefined ? undefined : editorHandle}
+            />
+          )}
+        </WordsDatePickerRoom>
+      </PlanBodyColumn>
+    </DocumentScroll>
+  );
+  return documented ? (
     <PlanPictures
       taskId={task.id}
       text={task.document.body}
       sectionNote={(heading) => pictureNoteOf(marks, heading)}
     >
-      <DocumentScroll ref={scroller}>
-        <PlanBodyColumn ref={bodyHost}>
-          <WordsDatePickerRoom>
-            {taskStanding === undefined ? null : <TaskPath task={task} door={taskStanding} />}
-            {titled ? (
-              // Keyed by the plan, so words typed for one are saved to it as another opens.
-              <EditableTitle
-                key={task.id}
-                // A refused name stays in the title, beside the refusal, until the next rename.
-                name={rename?.asked ?? task.name}
-                entry={entry === EDITOR_PLACE.TITLE}
-                editing={editing}
-                renaming={rename?.asks ?? 0}
-                actions={titleMenu}
-                onRename={onRename}
-                onDraft={onDraftName}
-              />
-            ) : (
-              <TaskTitle name={task.name} actions={titleMenu} />
-            )}
-            {taskStanding === undefined ? null : (
-              <TaskStandingChips
-                task={task}
-                onSet={taskStanding.onSet}
-                relations={taskStanding.relations}
-                inSight={taskStanding.inSight}
-              />
-            )}
-            <PlanByline
-              task={task}
-              edit={edited}
-              place={place}
-              saves={editing.saves}
-              onShowHistory={onShowHistory}
-            />
-            <ChangedLine looks={looks} marks={marks} />
-            <Fragment key={HEAD_KEY}>{head}</Fragment>
-            {editing.editor === undefined ? (
-              editable && views.length === 0 ? (
-                <EmptyPlanLine onOpen={() => editing.open(PLACEMENT_END)} />
-              ) : (
-                sections
-              )
-            ) : (
-              <PlanDocumentEditor
-                task={task}
-                editor={editing.editor}
-                editing={editing}
-                drawn={sections}
-                hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
-                mentions={mentionDoors}
-                scroller={scroller}
-                handle={editorHandle}
-                closedOn={closedOn}
-                onComment={drawnSections === undefined ? undefined : commentOnWords}
-              />
-            )}
-            {comments === undefined || !commentsHere || drawnSections === undefined ? null : (
-              <PlanCommentLayer
-                body={body}
-                scroller={scroller}
-                unitClass={UNIT_CLASS}
-                sections={drawnSections}
-                text={task.document.body}
-                doors={{ control: comments, agents, me: reader.readerId }}
-                editor={editing.editor === undefined ? undefined : editorHandle}
-              />
-            )}
-          </WordsDatePickerRoom>
-        </PlanBodyColumn>
-      </DocumentScroll>
+      {column}
     </PlanPictures>
+  ) : (
+    column
   );
 });

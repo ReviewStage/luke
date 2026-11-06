@@ -32,6 +32,8 @@ import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -56,6 +58,7 @@ import {
   holdIntegrations,
   holdIntegrationTools,
   holdMembers,
+  registryWith,
   stateWith,
 } from "../testing/app-state.js";
 import {
@@ -313,7 +316,8 @@ beforeEach(() => {
   fakeAppPlatform(DESKTOP_LINKS);
   fakeActs({
     act: answer,
-    requestAppState: () => Promise.resolve(stateWith({}, { tasks: tasksView() })),
+    requestAppState: () =>
+      Promise.resolve(stateWith(experimentsOn(EXPERIMENT.PLANS), { tasks: tasksView() })),
   });
   // Every connected server lists the same tools, three of them under names a mention cannot carry.
   const reads = handHostReads({});
@@ -394,7 +398,7 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
 function drawing(
   node: ReactNode,
   page: TaskMentionsValue | undefined,
-  registry = AtomRegistry.make(),
+  registry = registryWith(experimentsOn(EXPERIMENT.PLANS)),
 ) {
   const container = document.createElement("div");
   document.body.append(container);

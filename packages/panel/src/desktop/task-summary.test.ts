@@ -404,8 +404,13 @@ function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   );
 }
 
+/** A plan whose summary lists something: one page its agents wrote. */
+function listedControl(): TasksControl {
+  return tasksControl({ pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }] });
+}
+
 /** The column of `plans` drawn `width` pixels wide, and ways to lay it out again at another width or over other plans. */
-function columnAt(width: number, tasks: TasksControl = tasksControl()) {
+function columnAt(width: number, tasks: TasksControl = listedControl()) {
   const measured = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
   measured.mockReturnValue(DOMRect.fromRect({ width }));
   const page = document.body.appendChild(document.createElement("div"));
@@ -493,8 +498,8 @@ test("a column with room for the rail draws it, and one widened to that room dra
 });
 
 test("a plan with nothing yet to list draws no summary and no toolbar button, and both stand once it holds a row", () => {
-  const listed = tasksControl();
-  const bare = tasksControl({ sidePanel: { ...listed.sidePanel, tabs: [], used: [] } });
+  const listed = listedControl();
+  const bare = tasksControl();
   for (const width of [1200, 600, 280]) {
     const column = columnAt(width, bare);
     assert.equal(column.rail(), null, `no summary at ${width}px`);

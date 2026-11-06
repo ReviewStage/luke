@@ -14,10 +14,12 @@ import type { PlanEditRequest } from "@repo/features/plan-edit";
 import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { DIAGRAM_DRAWING, type DiagramModule } from "@repo/ui/diagram-contract";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@repo/ui/plan-comments";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -31,6 +33,7 @@ import {
   type PlanEditorProps,
 } from "../plan-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { registryWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
@@ -226,7 +229,7 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   registries.push(registry);
   const saved: TasksEditAnswer = { saved: true };
   const onEdit = (request: PlanEditRequest) => {

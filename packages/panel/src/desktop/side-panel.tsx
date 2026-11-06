@@ -134,7 +134,6 @@ import {
 import { FileView, type TreeShown } from "../tasks/file-view.js";
 import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
-import { PlanCommentsTab } from "../tasks/plan-comments.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
 import {
@@ -1948,7 +1947,7 @@ function TabContent({
   shown: boolean;
   /** Whether the panel holds the window's keys, so a page's tab finds in its source. */
   findActive: boolean;
-  /** Opens what a row of a tab is about in the tab that draws it, as the Comments tab's opens the plan or an agent's tab. */
+  /** Opens what a row of a tab is about in the tab that draws it, as a page comment's opens an agent's tab. */
   onOpenTarget: (target: ToolTarget) => void;
   /** What a worker's rows hang, its agent's cards (`taskCards`). */
   cards: TaskCards;
@@ -2141,19 +2140,8 @@ function TabContent({
     // A tab no delegation started stands only until the panel moves back to the board, a render away.
     return <SpinnerRegion delay label={readingWords("the worker")} />;
   }
-  // Note that the plan's and the Inbox's kinds of old stand nowhere (`DRAWN_KINDS`), so Comments is the one fixed kind drawn.
-  return tab === SIDE_PANEL_TAB.COMMENTS ? (
-    <PlanCommentsTab
-      doors={{
-        agents: {
-          control: agents,
-          onOpen: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
-        },
-        me: agents.me,
-      }}
-      onShowDocument={() => onOpenTarget({ kind: TOOL_TARGET.PLAN })}
-    />
-  ) : null;
+  // Note that no fixed kind is drawn now (`DRAWN_KINDS`): the plan's, the Inbox's, and Comments stand elsewhere.
+  return null;
 }
 
 /**

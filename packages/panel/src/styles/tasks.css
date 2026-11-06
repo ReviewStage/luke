@@ -2629,6 +2629,21 @@ svg.lucide {
   flex-direction: column;
 }
 
+/* The plan's comments listed in the margin's place (`PlanCommentList`): the
+   choice of open or resolved over the threads, each a step from the next. */
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-tight-gap);
+}
+
+/* Over the words, where the margin folds, the list stands no taller than
+   the scroller it opens in, its threads scrolling under the choice. */
+.comment-list-float {
+  min-height: 0;
+  max-height: var(--comment-card-room);
+}
+
 /* The threads on a folded line, the open one among those at rest, which
    scroll together where the float has no room for them all. */
 .comment-float-cards {

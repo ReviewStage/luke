@@ -360,11 +360,11 @@ test("on a phone, which has no ⌘F to press, Overview's ⋯ Find opens the find
   assert.equal(document.activeElement, field);
 });
 
-test("a wide window keeps the panel's strip and the column's toolbar, the task's ⋯ Overview's, and draws no row of a phone's", () => {
-  const page = mount(SHELL_ROOM.WIDE, true);
+test("a wide window keeps the panel's strip and the column's toolbar beside an agent, the task's ⋯ the topbar's, and draws no row of a phone's", () => {
+  const page = mount(SHELL_ROOM.WIDE, true, SIDE_PANEL_TAB.COMMENTS, false, true);
   assert.equal(page.container.querySelector(".task-head"), null);
   assert.ok(page.container.querySelector(".side-panel-tabs"), "the panel keeps its strip");
-  assert.ok(page.labeled(`${TASK.name} actions`), "the task's first tab keeps the task's ⋯");
+  assert.ok(page.labeled(`${TASK.name} actions`), "the topbar keeps the task's ⋯");
   assert.equal(page.labeled("Task actions"), false, "the column's toolbar draws none");
 });
 
@@ -421,9 +421,9 @@ test("on a phone a tab draws no bar of its own, and the task's header's ⋯ offe
 /** Chooses Rename from Overview's ⋯ in a wide window's column. */
 function chooseOverviewRename(container: HTMLElement): void {
   const more = container.querySelector<HTMLButtonElement>(
-    ".desktop-task-main .toolbar-tab-actions button",
+    '.task-topbar button[aria-label$=" actions"]',
   );
-  assert.ok(more, "Overview holds the task's ⋯");
+  assert.ok(more, "the topbar holds the task's ⋯");
   act(() => more.click());
   const rename = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].find(
     (each) => itemWords(each) === "Rename",
@@ -437,7 +437,7 @@ function planTitle(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="textbox"][aria-label="Task name"]');
 }
 
-test("on a wide window Overview's ⋯ › Rename puts the caret in the plan's own title, and draws no phone's field", () => {
+test("on a wide window the topbar's ⋯ › Rename puts the caret in the plan's own title, and draws no phone's field", () => {
   const page = mount(SHELL_ROOM.WIDE);
   chooseOverviewRename(page.container);
 

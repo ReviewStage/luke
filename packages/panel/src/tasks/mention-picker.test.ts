@@ -14,14 +14,15 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { decodeMention, MENTION_KIND } from "@repo/features/mention-link";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { holdExits } from "@repo/ui/testing/held-exits";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { handHostReads, handState, holdAutomations } from "../testing/app-state.js";
+import { handHostReads, handState, holdAutomations, registryWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { MentionNodeChip } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./mention-picker.js";
@@ -61,7 +62,9 @@ function mounted() {
   const page = document.createElement("div");
   document.body.append(page);
   root = createRoot(page);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Picker))));
+  act(() =>
+    root?.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Picker))),
+  );
   return {
     picker: (): MentionPicker => {
       assert.ok(latest, "the picker is drawn");
@@ -147,7 +150,9 @@ async function mountedOnPlan(chosen: MentionNode[]) {
   const page = document.createElement("div");
   document.body.append(page);
   root = createRoot(page);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Picker))));
+  act(() =>
+    root?.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Picker))),
+  );
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
@@ -190,24 +195,21 @@ const task = (id: string, workspaceId: string, number: number, name: string) => 
 });
 
 test("on a plan, a task's key typed whole leads the @ list with that task, its key beside it, a pick written as its mention; the plan's own key leads with the plan, and another workspace's tasks are not offered", async () => {
-  handState(
-    {},
-    {
-      tasks: {
-        ...IDLE_TASKS_VIEW,
-        workspaces: [
-          workspace("workspace-stage", "Stage", "stage"),
-          workspace("workspace-acme", "Acme", "acme"),
-        ],
-        tasks: [
-          task("plan-1", "workspace-stage", 1, "Ship the palette"),
-          task("plan-421", "workspace-stage", 421, "Cut the release"),
-          task("plan-42", "workspace-stage", 42, "Billing usage alerts from the meter"),
-          task("plan-acme", "workspace-acme", 42, "Acme's own task"),
-        ],
-      },
+  handState(experimentsOn(EXPERIMENT.PLANS), {
+    tasks: {
+      ...IDLE_TASKS_VIEW,
+      workspaces: [
+        workspace("workspace-stage", "Stage", "stage"),
+        workspace("workspace-acme", "Acme", "acme"),
+      ],
+      tasks: [
+        task("plan-1", "workspace-stage", 1, "Ship the palette"),
+        task("plan-421", "workspace-stage", 421, "Cut the release"),
+        task("plan-42", "workspace-stage", 42, "Billing usage alerts from the meter"),
+        task("plan-acme", "workspace-acme", 42, "Acme's own task"),
+      ],
     },
-  );
+  });
   const chosen: MentionNode[] = [];
   const { picker, page } = await mountedOnPlan(chosen);
 
@@ -309,7 +311,7 @@ test("on a plan, the workspace's Inbox threads are found by their title, the pla
   act(() =>
     boxRoot.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(MentionNodeChip, {
           mention: picked,
           doors: {
