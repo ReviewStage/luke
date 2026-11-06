@@ -505,10 +505,10 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           yield* sentLineStands(owner, agent.conversationId, sentLineId(run.id)),
           "the task stands as the creator's line under the run's key",
         );
-        // The agent's tab names the automation over it, by the name it had when the run sent it.
+        // The agent's tab names the automation over it, by the name it had when the run sent it, and by its id, which its card and page are read by.
         assert.deepEqual(
           yield* lineSenderUnder({ userId: owner, conversationId: agent.conversationId }, run.id),
-          { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
+          { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name, automationId: automation.id },
         );
 
         yield* archiveAgent(owner, first, true);
