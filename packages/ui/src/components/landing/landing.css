@@ -997,12 +997,15 @@
   /* Under 640px of room the page keeps to one column: the ball under the
      words, each stage under its heading, and the phone nearer the window. A
      window scaled to the column draws its words too small to read, so a
-     stage that holds one alone draws it larger than its room instead: the
-     whole desktop app as it is, laid out at 1280 by 800, scaled so the one
-     column its story plays in spans the stage, and cut by the stage's edges
-     and foot. A window names that column in its own pixels, where it starts
-     (`--ui-landing-crop-from`) and how much of the window spans the stage
-     (`--ui-landing-crop-span`). */
+     stage that holds one alone shows the one moment that sells it instead:
+     the desktop app as it is, laid out at 1280 by 800, cut to that moment's
+     box and scaled so the box spans the stage, about three quarters of the
+     app's size on a phone. The stage is as tall as the box, so no ground
+     stands empty, and the window fades out at its right and foot, where it
+     runs on. A window names its box in its own pixels: where it starts
+     (`--ui-landing-crop-x`, `--ui-landing-crop-y`) and how wide and tall it
+     is (`--ui-landing-crop-w`, `--ui-landing-crop-h`); a margin's percentage
+     is of the stage's width, so each offset is a share of the box's. */
   /* off-scale: 640px, a phone's landing */
   @container (width < 640px) {
     .ui-landing-lost {
@@ -1068,27 +1071,43 @@
     }
 
     .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) {
-      padding-inline: 0;
+      padding: 0;
+      aspect-ratio: var(--ui-landing-crop-w) / var(--ui-landing-crop-h);
+    }
+
+    .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-field {
+      display: none;
+    }
+
+    .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-scene {
+      mask-image:
+        linear-gradient(to left, transparent, #000 var(--ui-space-32)),
+        linear-gradient(to top, transparent, #000 var(--ui-space-32));
+      mask-composite: intersect;
     }
 
     .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
-      width: calc(100% * 1280 / var(--ui-landing-crop-span));
-      margin-bottom: -24px;
-      margin-left: calc(-100% * var(--ui-landing-crop-from) / var(--ui-landing-crop-span));
+      width: calc(100% * 1280 / var(--ui-landing-crop-w));
+      margin: calc(-100% * var(--ui-landing-crop-y) / var(--ui-landing-crop-w)) 0 0
+        calc(-100% * var(--ui-landing-crop-x) / var(--ui-landing-crop-w));
     }
 
-    /* The Inbox opens on its thread, the list's last pixels at its left and
-       the window's own edge in from the stage's right. */
+    /* The Inbox's moment is the ask: the question over its options, the
+       pick, the note, and the send. */
     .ui-landing-stage[data-scene="inbox"] {
-      --ui-landing-crop-from: 580;
-      --ui-landing-crop-span: 737;
+      --ui-landing-crop-x: 592;
+      --ui-landing-crop-y: 56;
+      --ui-landing-crop-w: 445;
+      --ui-landing-crop-h: 440;
     }
 
-    /* The task opens on its agent's log, the sidebar's frame at its left and
-       the plan beside it running off the stage's right. */
+    /* The task's moment is the hand-off: the agent started and messaged,
+       and its answer, the next one rising from the foot. */
     .ui-landing-stage[data-scene="agents"] {
-      --ui-landing-crop-from: 256;
-      --ui-landing-crop-span: 660;
+      --ui-landing-crop-x: 268;
+      --ui-landing-crop-y: 0;
+      --ui-landing-crop-w: 445;
+      --ui-landing-crop-h: 345;
     }
 
     .ui-landing-beside {
