@@ -116,7 +116,11 @@ export function useTeamForm({
     if (newPhoto) {
       await setWorkspacePhoto({ workspaceId, photo }).then(
         () => setSetPhoto(photo),
-        (why: Error) => refused.push(why.message),
+        // Note that a refused photo is said under the fields, as a refused address is beside its chip.
+        (why: Error) => {
+          refused.push(why.message);
+          setRefusal(why.message);
+        },
       );
     }
     refused.push(...(await invitees.send(workspaceId, emails)));
