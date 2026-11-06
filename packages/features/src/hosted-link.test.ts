@@ -208,13 +208,14 @@ it.effect("a body that arrives past what is left of the deadline is let go at th
   Effect.gen(function* () {
     let answer: (response: Response) => void = () => undefined;
     let bodyAsked = false;
-    // Note that the body is pulled only once the link reads it, so the test knows its deadline is armed.
+    // Note that the body is pulled only once the link reads it, so the test knows its deadline is armed, and its cancel never settles, so the deadline must not wait on it.
     const body = new ReadableStream<Uint8Array>(
       {
         pull: () => {
           bodyAsked = true;
           return new Promise<void>(() => undefined);
         },
+        cancel: () => new Promise<void>(() => undefined),
       },
       { highWaterMark: 0 },
     );

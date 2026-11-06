@@ -342,8 +342,8 @@ function textOf(reader: ReadableStreamDefaultReader<Uint8Array>): Effect.Effect<
 
 /**
  * A response's body read whole within the deadline, so the link reads it
- * from memory; nothing, its stream canceled so its connection is let go,
- * where it has not ended by then or could not be read.
+ * from memory; nothing, its stream's cancel started so its connection is let
+ * go, where it has not ended by then or could not be read.
  */
 export function textWithin(
   response: Response,
@@ -355,7 +355,12 @@ export function textWithin(
     Effect.catch(() => Effect.succeed(undefined)),
     Effect.timeoutOrElse({
       duration: deadline,
-      orElse: () => Effect.as(Effect.ignore(Effect.tryPromise(() => reader.cancel())), undefined),
+      // Note that the cancel is started rather than awaited, because a stream whose cancel never settles would otherwise hold the call past its deadline.
+      orElse: () =>
+        Effect.as(
+          Effect.forkDetach(Effect.ignore(Effect.tryPromise(() => reader.cancel()))),
+          undefined,
+        ),
     }),
   );
 }
