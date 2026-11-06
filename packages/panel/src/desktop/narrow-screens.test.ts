@@ -37,7 +37,6 @@ import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
-import { HOST_READ_STATUS } from "../use-host-read.js";
 // Note that Settings is loaded as the shell loads it, on first use, so the
 // module is read here first and its load settles within the test's own ticks.
 import "./desktop-settings.js";
@@ -122,8 +121,8 @@ function line(seq: number) {
 /** The plan's history as main holds it for the version history: two revisions, each the plan as it stands. */
 const HELD_HISTORY = {
   rows: { revisions: [line(3), line(2)] },
-  status: HOST_READ_STATUS.READY,
-  retry: () => Promise.resolve(),
+  failed: false,
+  onRetry: () => undefined,
 };
 
 /** The history's older pages and its restore, as the service answers them. */

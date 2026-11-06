@@ -26,7 +26,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
@@ -183,6 +183,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 function press(element: Element | null | undefined): void {

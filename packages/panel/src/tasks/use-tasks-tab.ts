@@ -13,7 +13,6 @@ import {
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
@@ -130,7 +129,13 @@ import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js"
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
-import { pagesQuery, planDocumentQuery, planDocumentRetryMutation } from "../live-reads.js";
+import {
+  historyQuery,
+  historyRetryMutation,
+  pagesQuery,
+  planDocumentQuery,
+  planDocumentRetryMutation,
+} from "../live-reads.js";
 import {
   beginPanelSpan,
   PANEL_SPAN,
@@ -144,7 +149,6 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
 import { appStateQuery, selectAppSettingsView, selectExperimentChoices } from "../use-app-state.js";
-import { useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -2741,9 +2745,17 @@ export function useTasksTab(input: {
   );
   const historyTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   // The open task's history is held while its version history is shown, and main keeps it a while after, so one opened again lists its versions in its first frame.
-  const heldHistory = useHostRead(
-    LIVE_READ.HISTORY,
-    shown && historyOpen ? historyTaskId : undefined,
+  const historyRead = useQuery({
+    ...historyQuery(historyTaskId),
+    enabled: shown && historyOpen && historyTaskId !== undefined,
+  });
+  const { mutate: retryHistory } = useMutation(historyRetryMutation());
+  const onRetryHistory = useCallback(() => {
+    if (historyTaskId !== undefined) retryHistory({ taskId: historyTaskId });
+  }, [retryHistory, historyTaskId]);
+  const heldHistory = useMemo(
+    () => ({ rows: historyRead.data, failed: historyRead.isError, onRetry: onRetryHistory }),
+    [historyRead.data, historyRead.isError, onRetryHistory],
   );
   const history = usePlanHistory({
     source: historySource,
