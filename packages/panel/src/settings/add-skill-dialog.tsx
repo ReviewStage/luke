@@ -44,9 +44,10 @@ import {
   TextField,
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
-import { queryOptions, type UseQueryResult, useQuery } from "@tanstack/react-query";
+import { queryOptions, type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { askAct, useAct } from "../act.js";
+import { askAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { failureShown, refusedShown } from "../failure-report.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { rendererPause } from "../renderer-runtime.js";
@@ -218,7 +219,9 @@ export function AddSkillDialog({
   /** The wait before a preview, the renderer's own where none is handed in. */
   pause?: (ms: number) => Promise<void>;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendInstalledSkillsInstall } = useMutation(
+    actMutation(ACT_KIND.INSTALLED_SKILLS_INSTALL),
+  );
   const [text, setText] = useState("");
   // Note that the text is previewed once typing pauses, so a preview asks for the words as they settled.
   const [settled, setSettled] = useState<string | undefined>(undefined);
@@ -283,7 +286,7 @@ export function AddSkillDialog({
     if (request === undefined || installing) return;
     setInstalling(true);
     setRefusal(undefined);
-    void act(ACT_KIND.INSTALLED_SKILLS_INSTALL, request)
+    void sendInstalledSkillsInstall(request)
       .catch(() => undefined)
       .then((answer) => {
         setInstalling(false);

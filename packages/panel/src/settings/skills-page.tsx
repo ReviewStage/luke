@@ -47,9 +47,10 @@ import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import type { SkillOption } from "@repo/ui/skill-mention";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { queryOptions, type UseQueryResult, useQuery } from "@tanstack/react-query";
+import { queryOptions, type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { type ActResult, askAct, useAct } from "../act.js";
+import { type ActResult, askAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { QUERY_ROOT } from "../query-keys.js";
@@ -266,7 +267,9 @@ function SkillRowView({
   workspace: Workspace;
   landed: boolean;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendInstalledSkillsRemove } = useMutation(
+    actMutation(ACT_KIND.INSTALLED_SKILLS_REMOVE),
+  );
   const { skill } = row;
   // Note that an installed skill names no file of a repository's, so its card says where it comes from and what it is for alone.
   const cardSkill: SkillOption = {
@@ -281,7 +284,7 @@ function SkillRowView({
   const removal = useConfirmDialog(
     { subject: true, surfaceOpen: true },
     () =>
-      act(ACT_KIND.INSTALLED_SKILLS_REMOVE, { skillId: skill.id })
+      sendInstalledSkillsRemove({ skillId: skill.id })
         .catch(() => undefined)
         .then((answer): ActionResult => {
           if (answer === undefined) return rejected(UNANSWERED_LINE);
