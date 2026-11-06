@@ -315,33 +315,33 @@ export function useLiveReadSubscription(): void {
   const client = useQueryClient();
   useEffect(() => {
     const cache = client.getQueryCache();
-    const follows = new Map<string, () => void>();
-    const letGo = (hash: string): void => {
-      follows.get(hash)?.();
-      follows.delete(hash);
+    const follows = new Map<Query, () => void>();
+    const letGo = (query: Query): void => {
+      follows.get(query)?.();
+      follows.delete(query);
     };
     const hold = (query: Query): void => {
       const live = liveReadOf(query);
       const follow = live === undefined ? undefined : LIVE_FOLLOWS[live.read];
       if (live === undefined || follow === undefined) return;
-      const followed = follows.has(query.queryHash);
+      const followed = follows.has(query);
       if (query.isActive() && !followed) {
         follows.set(
-          query.queryHash,
+          query,
           streamFrom(
             () => follow(live.ids),
             () => undefined,
           ),
         );
       }
-      if (!query.isActive() && followed) letGo(query.queryHash);
+      if (!query.isActive() && followed) letGo(query);
     };
     const unsubscribe = cache.subscribe((event) => {
       if (isAppState(event.query)) {
         if (event.type === "updated") writeLiveReads(client);
         return;
       }
-      if (event.type === "removed") letGo(event.query.queryHash);
+      if (event.type === "removed") letGo(event.query);
       if (
         event.type === "observerAdded" ||
         event.type === "observerRemoved" ||
