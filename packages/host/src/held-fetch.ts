@@ -114,18 +114,20 @@ export function heldFetch<Slice extends SliceKeyed, Key>(options: {
               return landed(loop.waiting);
             }),
           );
-          const ask = Effect.gen(function* () {
+          // Note that each Try again this ask took is answered however it ends, an interruption as the key is let go among them, so none waits for good.
+          const ask = Effect.suspend(() => {
             const landing = loop.waiting;
             loop.waiting = [];
             loop.asking = true;
             loop.overtaken = false;
-            const rows = yield* options.fetch(key, answers.rows());
-            loop.asking = false;
-            // Note that an answer asked before a write that answered the read whole is older than what that write laid.
-            if (loop.overtaken) loop.overtaken = false;
-            else if (Option.isSome(rows)) answers.answered(rows.value);
-            else answers.unanswered();
-            yield* landed(landing);
+            return Effect.gen(function* () {
+              const rows = yield* options.fetch(key, answers.rows());
+              loop.asking = false;
+              // Note that an answer asked before a write that answered the read whole is older than what that write laid.
+              if (loop.overtaken) loop.overtaken = false;
+              else if (Option.isSome(rows)) answers.answered(rows.value);
+              else answers.unanswered();
+            }).pipe(Effect.ensuring(landed(landing)));
           });
           const ticks: Stream.Stream<unknown> =
             options.every === undefined

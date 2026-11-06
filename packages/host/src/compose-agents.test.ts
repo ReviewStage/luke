@@ -1598,11 +1598,14 @@ it.effect(
   "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held once the repository lists moved, and a save the schema refuses is refused in words that hold no token",
   () =>
     Effect.gen(function* () {
-      // The token the windows held as each write asked the repository lists again.
+      // The token the windows held as each write's read of the repository lists landed, a turn after it was asked.
       const movedUnder: unknown[] = [];
       let held: () => unknown[] = () => [];
       const { call, asked, githubToken } = yield* subject({
-        repositoriesMoved: Effect.sync(() => void movedUnder.push(held().at(-1))),
+        repositoriesMoved: Effect.andThen(
+          Effect.yieldNow,
+          Effect.sync(() => void movedUnder.push(held().at(-1))),
+        ),
       });
       held = githubToken;
 
