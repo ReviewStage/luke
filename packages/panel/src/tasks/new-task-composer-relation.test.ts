@@ -216,7 +216,7 @@ test("a task picked again changes its kind, and a second Sub-task of replaces th
   ]);
 });
 
-test("as Sub-task of, a task in another repository says why and takes no pick, and a pick holds the repository to the other task's", async () => {
+test("as Sub-task of, a task in another repository says why and takes no pick, and a pick holds the repository to the other task's, its row checked and taking no press", async () => {
   const { container, starts } = await mount();
 
   await openRelationSearch(container);
@@ -229,7 +229,18 @@ test("as Sub-task of, a task in another repository says why and takes no pick, a
     [...container.querySelectorAll<HTMLElement>(".ui-chip")].find((each) =>
       each.textContent?.includes("acme/web"),
     ) ?? assert.fail("the repository chip stands");
-  assert.equal(repository.getAttribute("aria-disabled"), "true");
+  act(() => repository.click());
+  await settle();
+  const held =
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
+      each.textContent?.includes("web"),
+    ) ?? assert.fail("the chip's menu lists the held repository");
+  assert.deepEqual(
+    [held.getAttribute("aria-current"), held.getAttribute("aria-disabled")],
+    ["true", "true"],
+  );
+  act(() => repository.click());
+  await settle();
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 

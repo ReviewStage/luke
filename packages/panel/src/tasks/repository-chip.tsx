@@ -79,7 +79,9 @@ import { useOpenSettings } from "../open-settings.js";
  * the menu stands open: the first pick is the primary, marked Primary once
  * another is picked beside it, where
  * the agent starts and its pull requests open by default, and unchecking it
- * makes the next pick the primary; the chip names the picks, the first two
+ * makes the next pick the primary, unless the opener holds it, as a
+ * sub-task's card holds its parent's, its row then checked and disabled
+ * saying why; the chip names the picks, the first two
  * and then the rest counted, under the first's owner picture; and once a
  * primary is picked, each row the service would refuse beside it
  * (`start.ts`'s `extraRepositoriesOf`) is dimmed, saying why, so it is
@@ -291,6 +293,8 @@ export interface SeveralPicks {
   readonly also: readonly string[];
   /** Hears a press on a row, which checks it where it stands unchecked and unchecks it where it stands checked. */
   readonly onToggle: (repository: string) => void;
+  /** Why the primary is held, its row drawn checked and disabled with these words, so it is neither unchecked nor replaced; none where it may be. */
+  readonly held?: string | undefined;
 }
 
 /** What the repository's menu is handed, whatever opens it: the chip, or the plan's repository crumb. */
@@ -423,9 +427,13 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     .map((row) => {
       // Once a primary is picked, a row the service would refuse beside it says why before the pick.
       const why =
-        primary === undefined || isPicked(row.id)
+        primary === undefined
           ? undefined
-          : extraRefusal(listing(row.id), listing(primary), picked.length - 1);
+          : sameName(row.id, primary)
+            ? several?.held
+            : isPicked(row.id)
+              ? undefined
+              : extraRefusal(listing(row.id), listing(primary), picked.length - 1);
       return why === undefined ? row : { ...row, disabled: why };
     });
   // Note that no repository is a choice of its own where the opener lets one go, so it is not said as a pick still owed.

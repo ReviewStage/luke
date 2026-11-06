@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { TASK_CREATE_RELATION_KIND } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { EVERY_WORKSPACE } from "@repo/host/app-state";
 import { Effect } from "effect";
@@ -23,6 +24,7 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
+import type { NewTaskRelation } from "./new-task-relation.js";
 
 /**
  * New task's repository chip in a workspace whose GitHub App is on another
@@ -93,6 +95,7 @@ async function mount(
   preset?: string,
   scope: { id: string | undefined } = { id: ACME.id },
   recent: readonly string[] = [],
+  relation?: NewTaskRelation,
 ) {
   const { again } = holdRepositoryLists(handHostReads({}).deliverRepositoryLists, read);
   const control = tasksControl();
@@ -111,7 +114,14 @@ async function mount(
             ...control.newTask,
             workspaces: [ACME],
             workspaceId: scope.id,
-            ...(preset === undefined ? undefined : { preset: { repository: preset } }),
+            ...(preset === undefined && relation === undefined
+              ? undefined
+              : {
+                  preset: {
+                    ...(preset === undefined ? undefined : { repository: preset }),
+                    ...(relation === undefined ? undefined : { relation }),
+                  },
+                }),
             repositoriesIn: () => ({ ...control.repositories, recent, scope: scope.id }),
             start: (_name: string, repository: string | null, _workspace, from) => {
               starts.push(repository);
@@ -362,4 +372,39 @@ test("unchecking the primary makes the next pick the task's", async () => {
 
   assert.deepEqual(starts, ["acme/api"]);
   assert.deepEqual(also, [undefined]);
+});
+
+test("a sub-task's card holds its parent's repository first and checks another beside it, which travels with the agent the card starts", async () => {
+  const parent = {
+    id: "1a2b3c4d-0000-4000-8000-000000000001",
+    workspaceId: ACME.id,
+    name: "Ship login",
+    number: 7,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/api",
+  };
+  const { container, starts, also } = await mount(SEVERAL_LISTING, undefined, { id: ACME.id }, [], {
+    kind: TASK_CREATE_RELATION_KIND.SUB_TASK_OF,
+    task: parent,
+  });
+  act(() => container.querySelector<HTMLButtonElement>(".ui-chip")?.click());
+  await settle();
+  act(() => row("api").click());
+  await settle();
+  act(() => row("web").click());
+  await settle();
+
+  assert.equal(row("api").getAttribute("aria-disabled"), "true");
+  assert.deepEqual(
+    ["api", "web"].map((name) => row(name).getAttribute("aria-current")),
+    ["true", "true"],
+  );
+  typeInComposer(container, "Bump the client in both");
+  pressInComposer(container, "Enter");
+  await settle();
+
+  // Note that a tree's start names no repository, since the service gives it the parent's.
+  assert.deepEqual(starts, [null]);
+  assert.deepEqual(also, [["acme/web"]]);
 });

@@ -106,8 +106,10 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * Primary, where the agent starts, and the rest beside it, cloned beside its
  * checkout; unchecking the primary makes the next pick the task's. The
  * repository the card chose, the default or a preset, stands in until the
- * first pick, which replaces it; only picks after it add. A tree's
- * card, held to the other task's repository, and one on a device pick one.
+ * first pick, which replaces it; only picks after it add. A tree's card
+ * holds the other task's repository as the first, its row checked and
+ * disabled saying why, and picks others beside it; a card on a device
+ * picks one.
  *
  * While the Pilot experiment is on, a task's card offers Pilot or Agent at
  * the head row's end, set to Pilot: how the task is worked, kept on the task
@@ -550,10 +552,10 @@ export function NewTaskComposer({
   // A tree's two tasks work in one repository, the other task's, which the chip is held to.
   const repository = treeRelation === undefined ? picked : treeRelation.task.repository;
   // A task's card picks several repositories in its one chip, the first the task's own, for an agent
-  // in the cloud; a tree's card, held to the other task's, and one on a device pick one, as the
-  // service refuses others beside it there. A pick the chip's read does not list, or the task's own,
-  // is let go as the task's is.
-  const offersAlso = !forAutomation && !tree && device === undefined;
+  // in the cloud; one on a device picks one, as the service refuses others beside it there. A tree's
+  // card holds the other task's repository as the first, picking others beside it where it names one.
+  // A pick the chip's read does not list, or the task's own, is let go as the task's is.
+  const offersAlso = !forAutomation && device === undefined && !(tree && repository === null);
   const also =
     !offersAlso || repository === null
       ? NONE_ALSO
@@ -562,6 +564,16 @@ export function NewTaskComposer({
   // Note that the first press replaces a repository the card chose rather than the member, the
   // default or a preset, because the commonest pick is another single repository, not a second.
   const togglePick = (name: string) => {
+    // A tree's repository is held as the first, so a press checks or unchecks only those beside it.
+    if (tree) {
+      if (repository !== null && sameRepository(repository, name)) return;
+      setAlsoChosen(
+        also.some((each) => sameRepository(each, name))
+          ? also.filter((each) => !sameRepository(each, name))
+          : [...also, name],
+      );
+      return;
+    }
     const picks = repository === null || !pickedByHand ? [] : [repository, ...also];
     const next = picks.some((each) => sameRepository(each, name))
       ? picks.filter((each) => !sameRepository(each, name))
@@ -725,8 +737,12 @@ export function NewTaskComposer({
       }
       onListed={setListed}
       pending={!tree && chosen !== null && repository === null}
-      held={tree ? REPOSITORY_HELD : undefined}
-      several={offersAlso ? { also, onToggle: togglePick } : undefined}
+      held={tree && !offersAlso ? REPOSITORY_HELD : undefined}
+      several={
+        offersAlso
+          ? { also, onToggle: togglePick, held: tree ? REPOSITORY_HELD : undefined }
+          : undefined
+      }
     />
   );
   const composer: AgentComposerControl = {
