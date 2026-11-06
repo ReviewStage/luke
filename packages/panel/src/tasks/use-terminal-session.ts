@@ -32,10 +32,12 @@ import {
   type SameValue,
 } from "@repo/ui/pending-values";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { usePendingNow } from "../pending-clock.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -300,6 +302,12 @@ export function useTerminalSession(
   onGone: () => void,
 ): TerminalSession {
   const { act } = useAct();
+  const { mutateAsync: sendAttach } = useMutation(actMutation(ACT_KIND.TERMINAL_ATTACH));
+  const { mutateAsync: sendCreate } = useMutation(actMutation(ACT_KIND.TERMINAL_CREATE));
+  const { mutateAsync: sendRename } = useMutation(actMutation(ACT_KIND.TERMINAL_RENAME));
+  const { mutateAsync: sendKill } = useMutation(actMutation(ACT_KIND.TERMINAL_KILL));
+  const { mutateAsync: sendResume } = useMutation(actMutation(ACT_KIND.TERMINAL_RESUME));
+  const { mutate: sendDetach } = useMutation(actMutation(ACT_KIND.TERMINAL_DETACH));
   const openLink = useOpenLink();
   // Note that the module itself is held, not the result around it, which is a new value each render.
   const { terminal } = useSideBundles();
@@ -386,13 +394,13 @@ export function useTerminalSession(
       setShell(shell);
       enter({ kind: TERMINAL_STATE.CONNECTING });
       // An attach main refused posts no port, so it is out of the line.
-      void act(ACT_KIND.TERMINAL_ATTACH, { agentId, terminalId: shell, ...size }).catch(() => {
+      void sendAttach({ agentId, terminalId: shell, ...size }).catch(() => {
         held.asked = held.asked.filter((each) => each !== asked);
         if (held.asked.length === 0) held.release?.();
         if (held.attaching && held.asked.length === 0) enter(SERVICE_UNREACHED);
       });
     },
-    [act, agentId, enter],
+    [sendAttach, agentId, enter],
   );
 
   const connect = useCallback(async () => {
@@ -425,7 +433,7 @@ export function useTerminalSession(
       const held = listed.terminals.find((each) => each.id === live.current.shell);
       const oldest = held ?? listed.terminals[0];
       if (oldest !== undefined && !fresh) return attach(oldest.id);
-      const made = await act(ACT_KIND.TERMINAL_CREATE, { agentId });
+      const made = await sendCreate({ agentId });
       if (!current()) return;
       if ("refused" in made) return wait(refusedState(made.refused));
       setListed({ ...listed, terminals: [...listed.terminals, made.terminal] });
@@ -433,7 +441,7 @@ export function useTerminalSession(
     } catch {
       if (current()) enter(SERVICE_UNREACHED);
     }
-  }, [act, agentId, attach, enter, letGo, relistLater, setAsked, setListed]);
+  }, [act, sendCreate, agentId, attach, enter, letGo, relistLater, setAsked, setListed]);
 
   // The list as an answer says it, every read since let go.
   const writeList = useCallback(
@@ -474,7 +482,7 @@ export function useTerminalSession(
 
   const onCreate = useCallback(async () => {
     try {
-      const made = await act(ACT_KIND.TERMINAL_CREATE, { agentId });
+      const made = await sendCreate({ agentId });
       if ("refused" in made) {
         const next = refusedState(made.refused);
         return next === undefined ? gone.current() : enter(next);
@@ -484,7 +492,7 @@ export function useTerminalSession(
     } catch (cause) {
       failedToast(SHELL_FAILED.CREATE, cause);
     }
-  }, [act, agentId, enter, failedToast, onChoose, reread]);
+  }, [sendCreate, agentId, enter, failedToast, onChoose, reread]);
 
   // A name given here stands over the list until a read carries it, or a third name, or its time
   // runs out (`@repo/ui/pending-values`), and goes at once where the rename is refused.
@@ -502,7 +510,7 @@ export function useTerminalSession(
     live.current.listMoves += 1;
     const asked = pendingValue(titles.get(target), title, shellTitle(listed, target), sameTitle);
     setTitles((was) => new Map(was).set(target, asked));
-    const answer = await act(ACT_KIND.TERMINAL_RENAME, {
+    const answer = await sendRename({
       agentId,
       terminalId: target,
       title,
@@ -537,7 +545,7 @@ export function useTerminalSession(
         await connect();
       };
       try {
-        const answer = await act(ACT_KIND.TERMINAL_KILL, { agentId, terminalId: target });
+        const answer = await sendKill({ agentId, terminalId: target });
         if ("refused" in answer) {
           await moveOn(false);
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: SHELL_FAILED.KILL };
@@ -550,14 +558,14 @@ export function useTerminalSession(
         return { status: ACTION_RESULT_STATUS.REJECTED, reason: SHELL_FAILED.KILL };
       }
     },
-    [act, agentId, connect, letGo, writeList],
+    [sendKill, agentId, connect, letGo, writeList],
   );
 
   const resume = useCallback(async () => {
     const generation = live.current.generation;
     enter({ kind: TERMINAL_STATE.RESUMING, since: Date.now() });
     try {
-      const resumed = await act(ACT_KIND.TERMINAL_RESUME, { agentId });
+      const resumed = await sendResume({ agentId });
       if (generation !== live.current.generation) return;
       if ("refused" in resumed) {
         const next = refusedState(resumed.refused);
@@ -567,7 +575,7 @@ export function useTerminalSession(
     } catch {
       if (generation === live.current.generation) enter(SERVICE_UNREACHED);
     }
-  }, [act, agentId, connect, enter]);
+  }, [sendResume, agentId, connect, enter]);
 
   // Note that the screen takes the keyboard back as the bar's action
   // starts, because the button pressed goes with the bar.
@@ -716,7 +724,7 @@ export function useTerminalSession(
     return () => {
       if (held.asked.length === 0) return;
       for (const shell of new Set(held.asked.map((asked) => asked.shell))) {
-        void act(ACT_KIND.TERMINAL_DETACH, { agentId, terminalId: shell }).catch(() => undefined);
+        sendDetach({ agentId, terminalId: shell });
       }
       // Note that a port is matched to any attach still out for its shell,
       // not only the oldest, since nothing waits on their order any more.
@@ -729,7 +737,7 @@ export function useTerminalSession(
       });
       held.release = stop;
     };
-  }, [act, agentId]);
+  }, [sendDetach, agentId]);
 
   // Connected only while shown, and only once there is a screen to draw on.
   useEffect(() => {

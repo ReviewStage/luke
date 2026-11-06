@@ -42,6 +42,7 @@ import {
   useAnnounce,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { useMutation } from "@tanstack/react-query";
 import { Clock, Duration, Effect, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -61,7 +62,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
@@ -784,28 +785,25 @@ export function CloudBrowserDraftPane({
   onOpened: (tab: AgentBrowserTab) => void;
   onDiscard: () => void;
 }): React.JSX.Element {
-  const { act } = useAct();
-  const [opening, setOpening] = useState(false);
-  const [refused, setRefused] = useState<string | undefined>(undefined);
+  // Note that the draft stays opening once a tab answers, because `onOpened` replaces it with that tab.
+  const opened = useMutation({
+    ...actMutation(ACT_KIND.TASKS_BROWSER_TAB_OPEN),
+    onSuccess: (answer) => {
+      if (!("tab" in answer)) return;
+      noteOpenedCloudTab(place, answer.tab);
+      onOpened(answer.tab);
+    },
+  });
+  const answer = opened.data;
+  const opening = opened.isPending || (answer !== undefined && "tab" in answer);
+  const refused = opened.isError
+    ? openFailureWords(BROWSER_TAB_OPEN_FAILURE.UNANSWERED, owner.name)
+    : answer !== undefined && "failure" in answer
+      ? openFailureWords(answer.failure, owner.name)
+      : undefined;
   const open = (address: string) => {
     if (opening) return;
-    setOpening(true);
-    setRefused(undefined);
-    act(ACT_KIND.TASKS_BROWSER_TAB_OPEN, { agentId: draft.agentId, address }).then(
-      (answer) => {
-        if ("tab" in answer) {
-          noteOpenedCloudTab(place, answer.tab);
-          onOpened(answer.tab);
-          return;
-        }
-        setOpening(false);
-        setRefused(openFailureWords(answer.failure, owner.name));
-      },
-      () => {
-        setOpening(false);
-        setRefused(openFailureWords(BROWSER_TAB_OPEN_FAILURE.UNANSWERED, owner.name));
-      },
-    );
+    opened.mutate({ agentId: draft.agentId, address });
   };
   return (
     <Fill

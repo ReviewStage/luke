@@ -16,8 +16,9 @@ import { PLAN_COMMENT_CALL_FAILURE, type TasksCommentAnswer } from "@repo/featur
 import { ACT_KIND } from "@repo/host/acts";
 import { STATUS_TONE } from "@repo/ui";
 import type { PlanCommentsControl } from "@repo/ui/plan-comments";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { DRAFT_PLACE, useDraftWriter } from "../composer-drafts.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { type CommentSubject, HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
@@ -108,7 +109,8 @@ export function usePlanComments(
   subject: CommentSubject | undefined,
 ): PlanCommentsControl | undefined {
   const read = useHostRead(LIVE_READ.PLAN_COMMENTS, subject);
-  const { act: ask } = useAct();
+  const { mutateAsync: sendStart } = useMutation(actMutation(ACT_KIND.TASKS_COMMENT_START));
+  const { mutateAsync: sendCommentAct } = useMutation(actMutation(ACT_KIND.TASKS_COMMENT_ACT));
   const toast = useToast();
   const drafts = useDraftWriter();
   const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
@@ -143,7 +145,7 @@ export function usePlanComments(
   const start = useCallback(
     async (begun: PlanCommentStart) => {
       if (planId === undefined) return { note: COMMENT_NOTE.NOT_POSTED };
-      const answer = await ask(ACT_KIND.TASKS_COMMENT_START, { planId, start: begun }).catch(
+      const answer = await sendStart({ planId, start: begun }).catch(
         (): TasksCommentAnswer => UNANSWERED,
       );
       if (!("thread" in answer)) {
@@ -154,14 +156,14 @@ export function usePlanComments(
       note(answer.thread.id, unsentWords(answer));
       return { thread: answer.thread };
     },
-    [planId, ask, note, takenBack],
+    [planId, sendStart, note, takenBack],
   );
 
   const act = useCallback(
     async (threadId: string, action: PlanCommentActionRequest): Promise<boolean> => {
       if (planId === undefined) return false;
       note(threadId, undefined);
-      const answer = await ask(ACT_KIND.TASKS_COMMENT_ACT, { planId, threadId, action }).catch(
+      const answer = await sendCommentAct({ planId, threadId, action }).catch(
         (): TasksCommentAnswer => UNANSWERED,
       );
       if ("thread" in answer || "deleted" in answer) {
@@ -187,7 +189,7 @@ export function usePlanComments(
       }
       return false;
     },
-    [planId, ask, note, takenBack, drafts],
+    [planId, sendCommentAct, note, takenBack, drafts],
   );
 
   const { rows, status, retry } = read;
