@@ -1,5 +1,6 @@
 import {
   AUTOMATION_CALL_FAILURE,
+  AUTOMATION_FOLLOW,
   type AutomationCallFailure,
   type AutomationChangeParams,
   type AutomationCreateParams,
@@ -7,19 +8,18 @@ import {
   type AutomationView,
 } from "@repo/features/automation-view";
 import type { AutomationSummary } from "@repo/features/automation-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { mutationOptions, useMutation } from "@tanstack/react-query";
+import { mutationOptions, useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { sendAct, unreachedAs } from "../act.js";
 import { actMutation } from "../act-mutations.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { automationsQuery, automationsRetryMutation } from "../live-reads.js";
 
 /**
  * use-automations.ts -- the Automations pages' list: one workspace's automations, held while a page stands, and the writes that make, change, and delete one.
  *
  * The list is a read the host holds while a page holds it and a while
- * after (`useHostRead`), so a schedule's next run, a run's agent, and what
+ * after (`automationsQuery`), so a schedule's next run, a run's agent, and what
  * changed elsewhere reach it without a press or a clock here, and a page
  * drawn again draws it at once. A write is drawn on the list the host
  * holds (`@repo/host`'s `automation-collections.ts`), a new automation, a
@@ -58,14 +58,27 @@ export const WEBHOOK_SECRET_MUTATION = mutationOptions({
 export function useAutomations(workspaceId: string | undefined) {
   const { mutateAsync: sendCreate } = useMutation(actMutation(ACT_KIND.AUTOMATIONS_CREATE));
   const { mutateAsync: sendChange } = useMutation(actMutation(ACT_KIND.AUTOMATIONS_CHANGE));
-  const held = useHostRead(LIVE_READ.AUTOMATIONS, workspaceId);
+  const held = useQuery(automationsQuery(workspaceId));
+  const { mutateAsync: retry } = useMutation(automationsRetryMutation());
   // Note that the read keeps one identity while its rows do, so a page memoized on it draws again only as they move.
-  const rows = held.rows;
+  const rows = held.data;
+  const failed = held.isError;
   const read = useMemo<AutomationsRead>(() => {
     if (workspaceId === undefined) return undefined;
     if (rows !== undefined) return { automations: rows };
-    return held.status === HOST_READ_STATUS.FAILED ? UNANSWERED : undefined;
-  }, [workspaceId, rows, held.status]);
+    return failed ? UNANSWERED : undefined;
+  }, [workspaceId, rows, failed]);
+  // Note that a Try again the port refuses settles as one that landed, since the read's own failure is what the pages draw.
+  const reload = useCallback(
+    (): Promise<void> =>
+      workspaceId === undefined
+        ? Promise.resolve()
+        : retry({ kind: AUTOMATION_FOLLOW.WORKSPACE, id: workspaceId }).then(
+            () => undefined,
+            () => undefined,
+          ),
+    [retry, workspaceId],
+  );
   const create = useCallback(
     (params: AutomationCreateParams): Promise<AutomationView> =>
       sendCreate(params).catch(unreached),
@@ -81,5 +94,5 @@ export function useAutomations(workspaceId: string | undefined) {
     (automationId: string, enabled: boolean) => change({ automationId, change: { enabled } }),
     [change],
   );
-  return { read, reload: held.retry, create, change, toggle };
+  return { read, reload, create, change, toggle };
 }

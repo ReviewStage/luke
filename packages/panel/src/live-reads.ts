@@ -68,6 +68,7 @@ import {
   type PullRequestPart,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
+import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import { integrationConnectionOf } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -167,6 +168,11 @@ export function repositoryScope(workspace: string): { readonly workspaceId?: str
   return workspace === EVERY_WORKSPACE ? {} : { workspaceId: workspace };
 }
 
+/** The follow of one automations list or history, by what it holds and its id. */
+function automationsFollow(kind: AutomationFollow["kind"]): LiveFollow {
+  return ([id = ""]) => askAct(ACT_KIND.AUTOMATIONS_FOLLOW, { kind, id: String(id) });
+}
+
 /** The follow of an integration server's tools, by its connection's name; none for a name this build cannot read, which the host holds no read under. */
 function integrationToolsFollow(name: string): ReturnType<LiveFollow> {
   const server = integrationServerOf(name);
@@ -248,6 +254,9 @@ const LIVE_FOLLOWS: { readonly [Read in LiveReadName]?: LiveFollow } = {
     askAct(ACT_KIND.WORKSPACE_MEMBERS_FOLLOW, { workspaceId: String(workspaceId) }),
   [LIVE_READ.WORKSPACE_INVITATIONS]: ([workspaceId = ""]) =>
     askAct(ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW, { workspaceId: String(workspaceId) }),
+  [LIVE_READ.AUTOMATIONS]: automationsFollow(AUTOMATION_FOLLOW.WORKSPACE),
+  [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: automationsFollow(AUTOMATION_FOLLOW.WORKSPACE_RUNS),
+  [LIVE_READ.AUTOMATION_RUNS]: automationsFollow(AUTOMATION_FOLLOW.RUNS),
 };
 
 /** A pull request part's ids from its path: the agent, then the number, or `OWN_PULL_REQUEST` for the agent's own. */
@@ -319,6 +328,9 @@ const LIVE_QUERY_READS = [
   LIVE_READ.WORKSPACE_MEMBERS,
   LIVE_READ.WORKSPACE_INVITATIONS,
   LIVE_READ.WORKSPACE_PHOTOS,
+  LIVE_READ.AUTOMATIONS,
+  LIVE_READ.AUTOMATION_WORKSPACE_RUNS,
+  LIVE_READ.AUTOMATION_RUNS,
 ] as const satisfies readonly LiveReadName[];
 
 /** A live read moved here, by its name. */
@@ -657,6 +669,18 @@ export const workspaceInvitationsQuery = (workspaceId: string | undefined) =>
 export const workspacePhotoQuery = (workspaceId: string | undefined) =>
   liveReadQuery(LIVE_READ.WORKSPACE_PHOTOS, oneId(workspaceId));
 
+/** A workspace's automations, by the workspace. */
+export const automationsQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.AUTOMATIONS, oneId(workspaceId));
+
+/** Every run of a workspace's automations the account reads, by the workspace. */
+export const automationWorkspaceRunsQuery = (workspaceId: string | undefined) =>
+  liveReadQuery(LIVE_READ.AUTOMATION_WORKSPACE_RUNS, oneId(workspaceId));
+
+/** One automation's runs, by the automation. */
+export const automationRunsQuery = (automationId: string | undefined) =>
+  liveReadQuery(LIVE_READ.AUTOMATION_RUNS, oneId(automationId));
+
 /** Try again on the account's preferences row. */
 export const accountPreferencesRetryMutation = () => actMutation(ACT_KIND.AGENTS_PREFERENCES_RETRY);
 
@@ -731,6 +755,9 @@ export const workspaceMembersRetryMutation = () => actMutation(ACT_KIND.WORKSPAC
 /** Try again on a workspace's invitations. */
 export const workspaceInvitationsRetryMutation = () =>
   actMutation(ACT_KIND.WORKSPACE_INVITATIONS_RETRY);
+
+/** Try again on one automations list or history, by what it holds and its id (`AutomationFollow`). */
+export const automationsRetryMutation = () => actMutation(ACT_KIND.AUTOMATIONS_RETRY);
 
 /**
  * Writes what each push lays of a live read into its query: the rows of
