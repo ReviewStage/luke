@@ -28,9 +28,10 @@ import { NewTaskComposer } from "./new-task-composer.js";
  * New task's repository chip in a workspace whose GitHub App is on another
  * owner: a repository the picker lists on a member's own GitHub token stays
  * picked once chosen, and a preset the workspace's GitHub does not reach is
- * not started on before the picker's read lands. A repository checked
- * beside the task's travels with the agent the card starts, and unchecking
- * the task's own makes the next pick the task's. Synthetic throughout.
+ * not started on before the picker's read lands. The first pick replaces
+ * the repository the card chose, one checked after it travels beside the
+ * task's with the agent the card starts, and unchecking the task's own makes
+ * the next pick the task's. Synthetic throughout.
  */
 
 const ACME: Workspace = {
@@ -150,15 +151,12 @@ test("with no recent task, the chip stands on the first repository the read list
   });
 });
 
-test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked once checked again", async () => {
+test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked", async () => {
   const { container } = await mount(TOKEN_LISTING);
   const chip =
     container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
   act(() => chip.click());
-  await settle();
-  // The default stands checked, so the first press unchecks it and the second picks it.
-  act(() => row("tools").click());
   await settle();
   act(() => row("tools").click());
   await settle();
@@ -319,7 +317,7 @@ function row(name: string): HTMLElement {
   );
 }
 
-test("a repository checked in the chip's menu travels beside the task's with the agent the card starts, the menu standing open and a row the service would refuse beside it dimmed", async () => {
+test("the first pick replaces the repository the card chose, and a later one is checked beside it and travels with the agent the card starts, the menu standing open and a row the service would refuse beside it dimmed", async () => {
   const { container, starts, also } = await mount(SEVERAL_LISTING, "acme/api");
   const chip =
     container.querySelector<HTMLButtonElement>(".ui-chip") ??
@@ -328,21 +326,23 @@ test("a repository checked in the chip's menu travels beside the task's with the
   await settle();
   act(() => row("web").click());
   await settle();
+  act(() => row("api").click());
+  await settle();
 
   assert.deepEqual(
-    ["api", "web"].map((name) => row(name).getAttribute("aria-current")),
+    ["web", "api"].map((name) => row(name).getAttribute("aria-current")),
     ["true", "true"],
   );
-  assert.equal(row("api").textContent?.includes("Primary"), true);
+  assert.equal(row("web").textContent?.includes("Primary"), true);
   assert.equal(row("tools").getAttribute("aria-disabled"), "true");
   assert.equal(row("tools").textContent?.includes("Token only"), true);
-  assert.equal(chip.textContent, "api, web");
+  assert.equal(chip.textContent, "web, api");
   typeInComposer(container, "Bump the client in both");
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(starts, ["acme/api"]);
-  assert.deepEqual(also, [["acme/web"]]);
+  assert.deepEqual(starts, ["acme/web"]);
+  assert.deepEqual(also, [["acme/api"]]);
 });
 
 test("unchecking the primary makes the next pick the task's", async () => {
@@ -353,11 +353,13 @@ test("unchecking the primary makes the next pick the task's", async () => {
   await settle();
   act(() => row("api").click());
   await settle();
+  act(() => row("web").click());
+  await settle();
 
   typeInComposer(container, "Bump the client");
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(starts, ["acme/web"]);
+  assert.deepEqual(starts, ["acme/api"]);
   assert.deepEqual(also, [undefined]);
 });

@@ -104,7 +104,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * A task's card for an agent in the cloud picks several repositories in that
  * one chip, each checked in its menu: the first the task's own, marked
  * Primary, where the agent starts, and the rest beside it, cloned beside its
- * checkout; unchecking the primary makes the next pick the task's. A tree's
+ * checkout; unchecking the primary makes the next pick the task's. The
+ * repository the card chose, the default or a preset, stands in until the
+ * first pick, which replaces it; only picks after it add. A tree's
  * card, held to the other task's repository, and one on a device pick one.
  *
  * While the Pilot experiment is on, a task's card offers Pilot or Agent at
@@ -399,6 +401,9 @@ export function NewTaskComposer({
   const [alsoChosen, setAlsoChosen] = useState<readonly string[]>(
     refused?.card.press.ask.agent.alsoRepositories ?? NONE_ALSO,
   );
+  // Whether the chip's repositories are the member's own picks, as a refused card's were pressed,
+  // rather than the default or a preset standing in until the first pick.
+  const [pickedByHand, setPickedByHand] = useState(refused !== undefined);
   // The servers the + menu switched off, a refused card's as it was pressed.
   const [disabledServers, setDisabledServers] = useState<readonly string[]>(
     refused?.card.press.ask.agent.disabledServers ?? NONE_OFF,
@@ -506,6 +511,7 @@ export function NewTaskComposer({
     if (scope !== undefined) {
       setChosen(undefined);
       setAlsoChosen(NONE_ALSO);
+      setPickedByHand(false);
       setDropped(NONE_DROPPED);
     }
     setScope(repositories.scope);
@@ -553,14 +559,17 @@ export function NewTaskComposer({
       ? NONE_ALSO
       : alsoChosen.filter((each) => !sameRepository(each, repository) && isListed(each));
   // A press checks a row after the others or unchecks it, the first pick left standing the task's.
+  // Note that the first press replaces a repository the card chose rather than the member, the
+  // default or a preset, because the commonest pick is another single repository, not a second.
   const togglePick = (name: string) => {
-    const picks = repository === null ? [] : [repository, ...also];
+    const picks = repository === null || !pickedByHand ? [] : [repository, ...also];
     const next = picks.some((each) => sameRepository(each, name))
       ? picks.filter((each) => !sameRepository(each, name))
       : [...picks, name];
     const [first = null, ...rest] = next;
     setChosen(first);
     setAlsoChosen(rest);
+    setPickedByHand(true);
   };
   const said = words.trim();
   // Note that an automation's agent starts on words alone, since the brief fences them as the request.
@@ -700,7 +709,10 @@ export function NewTaskComposer({
       align={POPOVER_ALIGN.START}
       value={repository}
       chooser={repositories}
-      onChoose={setChosen}
+      onChoose={(name) => {
+        setChosen(name);
+        setPickedByHand(true);
+      }}
       onUnreached={judged && repository !== null ? () => drop(repository) : undefined}
       onClear={
         tree
@@ -708,6 +720,7 @@ export function NewTaskComposer({
           : () => {
               setChosen(null);
               setAlsoChosen(NONE_ALSO);
+              setPickedByHand(true);
             }
       }
       onListed={setListed}
