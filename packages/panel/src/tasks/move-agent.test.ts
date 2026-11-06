@@ -19,8 +19,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import type { MenuEntry } from "../desktop/action-menu.js";
 import { agentMenuGroups, useAgentActions } from "../desktop/agent-actions.js";
-import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { handState, stateWith } from "../testing/app-state.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import type { AgentsControl } from "./use-agents.js";
 
@@ -89,7 +89,10 @@ async function menuOf(
   control: AgentsControl,
   experimentOn = true,
 ): Promise<MenuEntry[]> {
-  handState(experimentOn ? experimentsOn(EXPERIMENT.BRING_YOUR_OWN_HOST) : {});
+  const experiments = experimentOn ? experimentsOn(EXPERIMENT.BRING_YOUR_OWN_HOST) : {};
+  handState(experiments);
+  // Note that the menu is read once, so the document is in the client from its first frame.
+  writeAppState(stateWith(experiments, {}));
   let groups: MenuEntry[][] = [];
   function Probe(): null {
     const actions = useAgentActions(agent, control, {

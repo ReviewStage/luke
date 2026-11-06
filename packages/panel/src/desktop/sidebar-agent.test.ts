@@ -34,7 +34,7 @@ import {
   fakeAppBridgeCalls,
 } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { AGENT } from "../testing/desktop-inbox.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -596,19 +596,21 @@ test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop
 test("a local agent offers Terminal only where it runs on This Mac", async () => {
   const thisMac = "5c3d2e1f-0a9b-4c8d-9e7f-6a5b4c3d2e1f";
   const signedIn = signedInAs({ id: ME, email: "dev@example.com", name: "Dev" });
+  const signedInOnThisMac = {
+    ...signedIn,
+    [LIVE_READ.THIS_MAC_HOST]: { [ME]: { rows: { deviceId: thisMac } } },
+  };
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     onAppState: () => () => undefined,
-    requestAppState: () =>
-      Promise.resolve({
-        ...signedIn,
-        [LIVE_READ.THIS_MAC_HOST]: { [ME]: { rows: { deviceId: thisMac } } },
-      }),
+    requestAppState: () => Promise.resolve(signedInOnThisMac),
   });
   /** Whether the local agent on the device given offers Terminal, once the window holds This Mac. */
   const offersTerminal = async (deviceId: string) => {
     let offered: AgentActions | undefined;
     const agent = { ...RUN, machine: AGENT_MACHINE.DEVICE, mac: { name: "Studio", deviceId } };
+    // Note that the actions are read once, so the document is in the client from their first frame.
+    writeAppState(signedInOnThisMac);
     const held = createRoot(document.createElement("div"));
     act(() =>
       held.render(

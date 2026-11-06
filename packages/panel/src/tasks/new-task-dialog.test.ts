@@ -324,10 +324,12 @@ test("the card, named New task, holds the composer with its words focused, the r
     null,
     "the card offers no workspace picker",
   );
-  assert.equal(
-    document.querySelector(".agent-model-chip")?.textContent?.includes("Opus"),
-    true,
-    "the model chip names the account's default",
+  await vi.waitFor(() =>
+    assert.equal(
+      document.querySelector(".agent-model-chip")?.textContent?.includes("Opus"),
+      true,
+      "the model chip names the account's default",
+    ),
   );
 });
 
