@@ -20,9 +20,10 @@ import { GitHubSetup } from "./setup-github.js";
 
 /**
  * Setup's GitHub step over a workspace the App reaches: its card stands
- * checked, naming the owners reached. And the token's picker, which checks
+ * checked, naming the owners reached. And the token's picker, which adds
  * several repositories in one open menu and keeps the token's card through
- * Back. Synthetic throughout.
+ * Back; the shared menu's checks and words are New task's tests' to hold.
+ * Synthetic throughout.
  */
 
 const WORKSPACE = "workspace-acme";
@@ -89,7 +90,7 @@ function reached(fullName: string, updatedAt: number, access: GitHubAccess): Git
   return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt, access };
 }
 
-test("the token's picker checks several repositories in one open menu and keeps standing once the workspace reaches them, its chip naming them after Back, and taking them all back keeps the token's card", async () => {
+test("the token's picker adds several repositories in one open menu and keeps standing once the workspace reaches them, and taking them all back after Back keeps the token's card", async () => {
   const reach = [
     reached("octo/tools", 2, GITHUB_ACCESS.TOKEN),
     reached("octo/notes", 1, GITHUB_ACCESS.TOKEN),
@@ -163,18 +164,12 @@ test("the token's picker checks several repositories in one open menu and keeps 
   await settle();
   await act(() => lists.again());
   await settle();
-
-  assert.deepEqual(
-    ["tools", "notes"].map((name) => option(name).getAttribute("aria-current")),
-    ["true", "true"],
-  );
   // Back draws the step again, which forgets the card last pressed.
   act(() => first.unmount());
   draw();
   // The host hands a window opened again the token repositories as they stand now.
   act(() => reads.deliverTokenRepositories({ [WORKSPACE]: { rows: added } }));
   await settle();
-  const namedAfterBack = chip().textContent;
   act(() => chip().click());
   await settle();
   act(() => option("tools").click());
@@ -184,7 +179,6 @@ test("the token's picker checks several repositories in one open menu and keeps 
   await act(() => lists.again());
   await settle();
 
-  assert.equal(namedAfterBack, "tools, notes");
   assert.equal(radio("Personal access token").getAttribute("aria-checked"), "true");
   assert.equal(chip().textContent, "Add repositories");
 });

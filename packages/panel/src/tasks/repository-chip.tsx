@@ -280,7 +280,7 @@ function extraRefusal(
  * several by their names, the first two and then the rest counted
  * ("vespin, meerkat +1").
  */
-export function pickedRepositoriesWords(picked: readonly string[]): string {
+function pickedRepositoriesWords(picked: readonly string[]): string {
   if (picked.length === 1) return picked[0] ?? "";
   const named = picked.slice(0, NAMED_PICKS).map((each) => repositoryParts(each).name);
   const more = picked.length - named.length;
@@ -297,6 +297,98 @@ export interface SeveralPicks {
   readonly held?: string | undefined;
   /** Whether `value` is the opener's own choice, standing in until the first pick replaces it, so no row is yet refused beside it. */
   readonly standIn?: boolean | undefined;
+}
+
+/**
+ * Where a repository's menu stands, whatever it lists: whether it is open,
+ * drawn through its fade, its id, the room it hangs in, the press that opens
+ * and shuts it from its opener, and closing, which hands focus back to that
+ * opener, as a native menu returns it to its trigger, because closing takes
+ * the focused field away with it.
+ */
+function useMenuPlace() {
+  const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
+  const menuId = useId();
+  const room = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  return {
+    open,
+    drawn,
+    menuId,
+    room,
+    /** Opens the menu as asked from elsewhere, from whatever holds focus. */
+    ask: () => {
+      opener.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setOpen(true);
+    },
+    press: (from: HTMLElement) => {
+      opener.current = from;
+      setOpen(!open);
+    },
+    close: () => {
+      setOpen(false);
+      opener.current?.focus();
+    },
+    leave: (left: EventTarget | null) => {
+      if (!(left instanceof Node && room.current?.contains(left))) setOpen(false);
+    },
+  };
+}
+
+type MenuPlace = ReturnType<typeof useMenuPlace>;
+
+/**
+ * The searched menu over the rows a repository's opener lists, while it is
+ * drawn: one chosen, or each picked checked where picks turn rows on and
+ * off. Note that every row names a repository and its owner, so each stays
+ * masked, and the note, which can name the workspace, is left unmarked.
+ */
+function repositoryMenu(
+  place: MenuPlace,
+  menu: {
+    rows: readonly MenuRow[];
+    value: string | undefined;
+    checked: ReadonlySet<string> | undefined;
+    note: React.ReactNode;
+    align: PopoverAlign;
+    onPick: (repository: string) => void;
+    foot?: React.ComponentProps<typeof SearchableMenu>["foot"];
+  },
+): React.ReactNode {
+  return place.drawn.mounted ? (
+    <SearchableMenu
+      leaving={place.drawn.leaving}
+      ref={place.drawn.ref}
+      id={place.menuId}
+      label={menu.checked === undefined ? "Repository" : "Repositories"}
+      placeholder="Search repositories"
+      replayUnmasked
+      rows={menu.rows.map((row) => ({ ...row, replayMasked: true }))}
+      value={menu.value}
+      checked={menu.checked}
+      note={menu.note}
+      noMatch={NO_MATCH}
+      align={menu.align}
+      onPick={menu.onPick}
+      foot={menu.foot}
+      onClose={place.close}
+      onLeave={place.leave}
+    />
+  ) : null;
+}
+
+/** The rows of `rows` whose repository is among `picked`, by the id each row spells it with, which a pick may spell in another case. */
+function checkedAmong(rows: readonly MenuRow[], picked: readonly string[]): ReadonlySet<string> {
+  return new Set(
+    rows.filter((row) => picked.some((each) => sameName(each, row.id))).map((row) => row.id),
+  );
+}
+
+/** The owner's picture of the first of the repositories picked, at a chip's glyph size. */
+function firstPicture(repository: string, pictures: boolean): React.JSX.Element {
+  return <RepositoryPicture repository={repository} pictures={pictures} size={AVATAR_SIZE.GLYPH} />;
 }
 
 /** What the repository's menu is handed, whatever opens it: the chip, or the plan's repository crumb. */
@@ -354,35 +446,21 @@ export interface RepositoryMenu {
 export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   const { chooser, openRequest, onAsked, onUnreached, onListed, onClear, value } = props;
   const openSettings = useOpenSettings();
-  const [open, setOpen] = useState(false);
-  const drawn = useDisclosure(open);
+  const place = useMenuPlace();
   // Note that the host asks the list again as a window comes forward, which is how a developer returns from installing the App in the browser.
   const scope = chooser.scope ?? EVERY_WORKSPACE;
   const list = useQuery(repositoryListsQuery(scope));
   const retry = useMutation(repositoryListsRetryMutation());
-  const menuId = useId();
-  const room = useRef<HTMLDivElement>(null);
-  /** What held focus as the menu opened, which closing hands it back to. */
-  const opener = useRef<HTMLElement | null>(null);
   // Each ask from elsewhere, ⌘K's Change repository, opens the menu once, and is answered.
   const answered = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (openRequest === undefined || openRequest === 0 || openRequest === answered.current) return;
     answered.current = openRequest;
-    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setOpen(true);
+    place.ask();
     onAsked?.(openRequest);
-  }, [openRequest, onAsked]);
-
-  // Note that we hand focus back to where it came from, the opener or the task
-  // menu's button, as a native menu returns it to its trigger, because
-  // closing takes the focused field away with it.
-  const close = () => {
-    setOpen(false);
-    opener.current?.focus();
-  };
+  }, [openRequest, onAsked, place.ask]);
   const choose = (pick: () => void) => {
-    close();
+    place.close();
     pick();
   };
 
@@ -401,10 +479,6 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     page: SETTINGS_VIEW.WORKSPACE,
     section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
     ...(chooser.scope === undefined ? undefined : { workspaceId: chooser.scope }),
-  };
-  const press = (from: HTMLElement) => {
-    opener.current = from;
-    setOpen(!open);
   };
   const omitted = new Set((props.omit ?? []).map((each) => each.toLowerCase()));
   const reached =
@@ -480,8 +554,8 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     ) : undefined;
 
   return {
-    open,
-    menuId,
+    open: place.open,
+    menuId: place.menuId,
     label,
     hint: value === null ? undefined : picked.join(", "),
     glyph:
@@ -492,61 +566,36 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
           <GLYPH.REPOSITORY />
         )
       ) : (
-        <RepositoryPicture
-          repository={value}
-          pictures={chooser.pictures}
-          size={AVATAR_SIZE.GLYPH}
-        />
+        firstPicture(value, chooser.pictures)
       ),
     card:
-      value === null || picked.length > 1 || open ? undefined : (
+      value === null || picked.length > 1 || place.open ? undefined : (
         <RepositoryCard repository={value} pictures={chooser.pictures} />
       ),
-    press,
-    room,
-    menu: drawn.mounted ? (
-      <SearchableMenu
-        leaving={drawn.leaving}
-        ref={drawn.ref}
-        id={menuId}
-        label="Repository"
-        placeholder="Search repositories"
-        // Note that every row names a repository and its owner, so each stays masked, and the note, which can name the workspace, is left unmarked.
-        replayUnmasked
-        rows={rows.map((row) => ({ ...row, replayMasked: true }))}
-        value={several === undefined ? (value ?? undefined) : undefined}
-        // Note that a pick is checked on its row as the row spells it, which a preset may spell in another case.
-        checked={
-          several === undefined
-            ? undefined
-            : new Set(rows.filter((row) => isPicked(row.id)).map((row) => row.id))
-        }
-        note={note}
-        noMatch={NO_MATCH}
-        align={props.align ?? POPOVER_ALIGN.END}
-        onPick={(repository) =>
-          several === undefined
-            ? choose(() => props.onChoose(repository))
-            : several.onToggle(repository)
-        }
-        foot={
-          onClear === undefined
-            ? undefined
-            : [
-                {
-                  id: NONE_ROW,
-                  label: NO_REPOSITORY,
-                  icon: <NoRepositoryGlyph />,
-                  onPress: () => choose(onClear),
-                },
-              ]
-        }
-        onClose={close}
-        onLeave={(left) => {
-          if (!(left instanceof Node && room.current?.contains(left))) setOpen(false);
-        }}
-      />
-    ) : null,
+    press: place.press,
+    room: place.room,
+    menu: repositoryMenu(place, {
+      rows,
+      value: several === undefined ? (value ?? undefined) : undefined,
+      checked: several === undefined ? undefined : checkedAmong(rows, picked),
+      note,
+      align: props.align ?? POPOVER_ALIGN.END,
+      onPick: (repository) =>
+        several === undefined
+          ? choose(() => props.onChoose(repository))
+          : several.onToggle(repository),
+      foot:
+        onClear === undefined
+          ? undefined
+          : [
+              {
+                id: NONE_ROW,
+                label: NO_REPOSITORY,
+                icon: <NoRepositoryGlyph />,
+                onPress: () => choose(onClear),
+              },
+            ],
+    }),
   };
 }
 
@@ -587,6 +636,58 @@ export function RepositoryChip(
 }
 
 /**
+ * A form row's repository chip over the rows its caller lists, as setup's
+ * token card lists the repositories its token reaches: each picked row
+ * checked, a press checking or unchecking it while the menu stands open,
+ * and the chip naming the picks as New task's several-pick chip does, or
+ * `empty` while none is.
+ */
+export function CheckedRepositoryChip(props: {
+  rows: readonly MenuRow[];
+  /** The repositories picked, in the order the chip names them. */
+  picked: readonly string[];
+  pictures: boolean;
+  /** The chip's words while nothing is picked. */
+  empty: string;
+  note: React.ReactNode;
+  onToggle: (repository: string) => void;
+  /** Hears the menu opening, as a read that failed is asked again. */
+  onOpen?: (() => void) | undefined;
+}): React.JSX.Element {
+  const place = useMenuPlace();
+  const first = props.picked[0];
+  return (
+    <div
+      className="repository-chip relative min-w-0"
+      data-place={CHIP_PLACE.FIELD}
+      ref={place.room}
+    >
+      <RepositoryMenuChip
+        place={CHIP_PLACE.FIELD}
+        open={place.open}
+        menuId={place.menuId}
+        hint={first === undefined ? undefined : props.picked.join(", ")}
+        glyph={first === undefined ? <GLYPH.ADD /> : firstPicture(first, props.pictures)}
+        label={first === undefined ? props.empty : pickedRepositoriesWords(props.picked)}
+        named={first !== undefined}
+        onPress={(from) => {
+          if (!place.open) props.onOpen?.();
+          place.press(from);
+        }}
+      />
+      {repositoryMenu(place, {
+        rows: props.rows,
+        value: undefined,
+        checked: checkedAmong(props.rows, props.picked),
+        note: props.note,
+        align: POPOVER_ALIGN.START,
+        onPick: props.onToggle,
+      })}
+    </div>
+  );
+}
+
+/**
  * The chip a repository's menu drops from, in its place's look: the first
  * pick's owner picture, or the glyph standing for none, and its words,
  * masked in a screen recording where they name a repository; a press opens
@@ -594,7 +695,7 @@ export function RepositoryChip(
  * is shut. Note that a held chip is `aria-disabled` rather than disabled,
  * because a disabled button hears no pointer, and its hint says why.
  */
-export function RepositoryMenuChip(props: {
+function RepositoryMenuChip(props: {
   place: ChipPlace;
   /** A form row's chip: how wide it stands, its words' own width where none is named. */
   width?: ChipWidth | undefined;
