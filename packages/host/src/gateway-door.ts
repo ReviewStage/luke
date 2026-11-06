@@ -12,30 +12,10 @@ import { ACT, type Act, type DoorTable } from "@repo/sync";
 
 /** What each Gateway method does, said once; a method added to the protocol fails here until it is classified. */
 const GATEWAY_ACT = {
-  [GATEWAY_METHOD.WORKSPACES_RENAME]: ACT.ROW_WRITE,
-  [GATEWAY_METHOD.WORKSPACES_SLUG_SET]: ACT.ROW_WRITE,
   // Note that a disconnect deletes the rows a workspace's held integrations read, so it is drawn gone before the service answers.
-  [GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT]: ACT.ROW_WRITE,
-  [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT]: ACT.ROW_WRITE,
-  [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS]: ACT.ROW_WRITE,
-  [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_REPOSITORY]: ACT.ROW_WRITE,
-  [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL]: ACT.ROW_WRITE,
-  [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET]: ACT.ROW_WRITE,
-  [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: ACT.ROW_WRITE,
-  [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: ACT.ROW_WRITE,
-  [GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL]: ACT.ROW_WRITE,
 
   // Note that a workspace made mints its slug and membership and changes what the account reaches.
-  [GATEWAY_METHOD.WORKSPACES_CREATE]: ACT.REMOTE_WORK,
-  [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: ACT.REMOTE_WORK,
-  [GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT]: ACT.REMOTE_WORK,
-  [GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT]: ACT.REMOTE_WORK,
-  [GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL]: ACT.REMOTE_WORK,
   // Note that a connect asks Slack which team the bot answers for, so the row it writes is known only once it answers.
-  [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT]: ACT.REMOTE_WORK,
-  [GATEWAY_METHOD.WORKSPACES_TRANSFER]: ACT.REMOTE_WORK,
-  [GATEWAY_METHOD.WORKSPACES_LEAVE]: ACT.REMOTE_WORK,
-  [GATEWAY_METHOD.WORKSPACES_INVITE]: ACT.REMOTE_WORK,
   // Note that no held read carries the account's experiments, which ride the settings snapshot, so its switch draws at once in the panel as every settings switch does; it becomes a field change on the account preferences kind once the settings snapshot is fed from that read.
   // Note that a terminal is the sandbox's state, never a row the service holds.
   [GATEWAY_METHOD.TERMINALS_CREATE]: ACT.REMOTE_WORK,

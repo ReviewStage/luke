@@ -1325,9 +1325,12 @@ function ThreadCard({
   const look = { ...useDiffLook(false), inlineDiff: INLINE_DIFF.NONE };
   const preview = threadPreview(thread);
   const pending = usePendingThread(thread);
-  const start = usePendingActs(usePendingComment(thread.comments[0]?.url));
   const head = useThreadHead(thread, now, pending);
   const landed = useLandedThread(thread, !thread.resolved && !thread.outdated);
+  // Note that a folded card opens for its ⋯'s Edit or Delete, so the field or the question it opens is in view.
+  const start = usePendingActs(usePendingComment(thread.comments[0]?.url), () =>
+    landed.onOpenChange(true),
+  );
   const toFiles = useThreadJump(thread, PULL_REQUEST_THREAD_VIEW.FILES);
   return (
     <li className="pull-request-thread-slot">
@@ -1539,9 +1542,12 @@ function InlineThread({
 }): React.JSX.Element {
   // A thread the member's pending comment starts is theirs alone until they submit it, with no page to link or jump to.
   const pending = usePendingThread(thread);
-  const start = usePendingActs(usePendingComment(thread.comments[0]?.url));
   const head = useThreadHead(thread, now, pending);
   const landed = useLandedThread(thread, !thread.resolved && !thread.outdated);
+  // Note that a folded card opens for its ⋯'s Edit or Delete, so the field or the question it opens is in view.
+  const start = usePendingActs(usePendingComment(thread.comments[0]?.url), () =>
+    landed.onOpenChange(true),
+  );
   const lines = place === THREAD_PLACE.ABOVE ? lineSpan(thread) : undefined;
   return (
     <AnnotationCard

@@ -1,19 +1,18 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { ORPCError } from "@orpc/client";
-import { WORKSPACE_CALL_FAILURE } from "@repo/features";
-import type { TasksWorkspaceGitHubConnectAnswer } from "@repo/features/tasks-view";
-import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { HOSTED_API_ERROR } from "@repo/features";
+import { WORKSPACE_ROLE, WORKSPACE_SLUG_PROBLEM } from "@repo/features/workspace-wire";
+import { HTTP_METHOD, type WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
-import { ALREADY_INVITED_REFUSAL, WORKSPACE_NOT_PERMITTED_REFUSAL } from "../acts.js";
 import {
-  ACT_ERROR,
-  type ActPortClient,
-  type PortActKind,
-  type PortActPayload,
-  type PortActResult,
-  WORKSPACE_ACT_KIND,
-} from "../contract/index.js";
+  ALREADY_INVITED_REFUSAL,
+  WORKSPACE_NOT_PERMITTED_REFUSAL,
+  WORKSPACE_SLUG_REFUSAL,
+} from "../acts.js";
+import { WORKSPACE_ACT_KIND, WORKSPACE_ACTS } from "../contract/index.js";
+import { ActRefused } from "../host-acts.js";
+import { hostActPort } from "../testing/host-act-port.js";
 import type { ActSender } from "./base.js";
 import { type TestActPort, testActPort } from "./testing.js";
 import {
@@ -22,126 +21,134 @@ import {
 } from "./workspace-procedures.js";
 
 /**
- * The workspace acts, through the act port as a window calls them: only a
- * panel of this build's own renderer asks; any other window, and
- * a frame this build does not trust, are refused in each kind's own words
- * before the host is asked; a panel's ask reaches the host with its payload
- * as the kind's schema read it, and answers what the host answered; a write
- * the account's role does not allow and an address already invited are
- * refused in words that say so; and an
- * address the service named opens only where it is the one kind its
- * connection may open.
+ * The workspace acts, through the act port as a window calls them, over the
+ * host that answers them: only a panel of this build's own renderer asks,
+ * and any other window, and a frame this build does not trust, are refused
+ * in each act's own words before the service is asked; a refusal the service
+ * names is refused in words that say why, and anything else in the act's
+ * own; and an address the service named for a connection opens only where
+ * it stands on that connection's own origin.
  */
 
-// The platform's handle on the window that asked, which no procedure here reads.
-const SENDER = Symbol("window");
+const PANEL: ActSender = { sender: Symbol("panel"), panel: true };
+const OTHER_WINDOW: ActSender = { sender: Symbol("takeover"), panel: false };
 
-const PANEL: ActSender = { sender: SENDER, panel: true };
-const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
-
-const INVITATION = {
-  id: "inv-1",
-  email: "alan@app.test",
-  role: WORKSPACE_ROLE.MEMBER,
-  expiresAt: "2026-10-16T12:00:00.000Z",
-  acceptUrl: "https://app.test/accept-invitation.html?id=inv-1",
-};
-const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
-/** A workspace's photo as the window sends it: a WebP's `data:` URL. */
-const PHOTO_URL = "data:image/webp;base64,UklGRgAAAABXRUJQ";
-const ACME = {
-  id: "workspace-acme",
-  name: "acme",
-  slug: "acme",
-  role: WORKSPACE_ROLE.MEMBER,
-  github: { login: "acme", active: true },
-};
-const GRACE = {
-  userId: "user-grace",
-  name: "Grace Hopper",
-  email: "grace@app.test",
-  role: WORKSPACE_ROLE.MEMBER,
-};
-const SENTRY_INSTALL_URL = "https://sentry.io/sentry-apps/luke/external-install/?state=fixture";
-const SENTRY_INSTALLATION = { installationId: "installation-1", account: "acme" };
-
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
-const REFUSAL = {
-  [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: "Could not make that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_RENAME]: "Could not rename that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_INVITE]: "Could not invite that address on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATION_CANCEL]:
-    "Could not cancel that invitation on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT]:
-    "Could not connect GitHub to that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]:
-    "Could not disconnect GitHub from that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL]:
-    "Could not install Sentry for that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT]:
-    "Could not connect the Slack bot to that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT]:
-    "Could not disconnect Sentry from that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY]:
-    "Could not read that workspace's members again on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_RETRY]:
-    "Could not read that workspace's invitations again on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE]: "Could not remove that member on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_ROLE]: "Could not change that member's role on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_TRANSFER]: "Could not transfer that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_LEAVE]: "Could not leave that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET]:
-    "Could not change that workspace's photo on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET]: "Could not change that workspace's link on this system.",
+/** The account the host stands signed in to, so an act reaches the service. */
+const SIGNED_IN = {
+  status: ACCOUNT_STATUS.SIGNED_IN,
+  id: "user-dana",
+  email: "dana@example.com",
+  provider: ACCOUNT_PROVIDER.GITHUB,
 } as const;
 
-type WorkspaceKind = keyof typeof REFUSAL;
+const WORKSPACE = { workspaceId: "workspace-acme" };
+const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
+const SENTRY_INSTALL_URL = "https://sentry.io/sentry-apps/luke/external-install/?state=fixture";
 
-/** What any port kind takes, the union a test hands one kind or refuses on purpose. */
-type AnyPayload = PortActPayload<PortActKind>;
+/** What a declared act's refusal row holds: a payload its schema takes, and the sentence it is refused in. */
+interface RefusalRow {
+  readonly payload: WireBoundaryInput;
+  /** Its refusal, as the window drew it before the act was declared. */
+  readonly refusal: string;
+  /** Whether its procedure is written by hand, which the host's relayed port does not serve. */
+  readonly byHand?: true;
+}
 
-const WORKSPACE = { workspaceId: ACME.id };
+/** Every declared act's row, keyed by its name, so an act declared with no row here does not compile. */
+const REFUSAL_ROWS: { readonly [Name in keyof typeof WORKSPACE_ACTS]: RefusalRow } = {
+  WORKSPACE_CREATE: {
+    refusal: "Could not make that workspace on this system.",
+    payload: { name: "Relay Labs" },
+  },
+  WORKSPACE_RENAME: {
+    refusal: "Could not rename that workspace on this system.",
+    payload: { ...WORKSPACE, name: "Acme Labs" },
+  },
+  WORKSPACE_SLUG_SET: {
+    refusal: "Could not change that workspace's link on this system.",
+    payload: { ...WORKSPACE, slug: "acme-labs" },
+  },
+  WORKSPACE_PHOTO_SET: {
+    refusal: "Could not change that workspace's photo on this system.",
+    payload: { ...WORKSPACE, photo: null },
+  },
+  WORKSPACE_INVITE: {
+    refusal: "Could not invite that address on this system.",
+    payload: { ...WORKSPACE, email: "alan@app.test", role: WORKSPACE_ROLE.MEMBER },
+  },
+  WORKSPACE_INVITATION_CANCEL: {
+    refusal: "Could not cancel that invitation on this system.",
+    payload: { ...WORKSPACE, invitationId: "inv-1" },
+  },
+  WORKSPACE_GITHUB_DISCONNECT: {
+    refusal: "Could not disconnect GitHub from that workspace on this system.",
+    payload: WORKSPACE,
+  },
+  WORKSPACE_SENTRY_DISCONNECT: {
+    refusal: "Could not disconnect Sentry from that workspace on this system.",
+    payload: { ...WORKSPACE, installationId: "installation-1" },
+  },
+  WORKSPACE_SLACK_BOT_CONNECT: {
+    refusal: "Could not connect the Slack bot to that workspace on this system.",
+    payload: WORKSPACE,
+  },
+  WORKSPACE_SLACK_BOT_DISCONNECT: {
+    refusal: "Could not disconnect the Slack bot from that workspace on this system.",
+    payload: WORKSPACE,
+  },
+  WORKSPACE_SLACK_BOT_NOTIFICATIONS: {
+    refusal: "Could not change your Slack notifications on this system.",
+    payload: { ...WORKSPACE, notifications: false },
+  },
+  WORKSPACE_SLACK_BOT_REPOSITORY: {
+    refusal: "Could not change the Slack bot's default repository on this system.",
+    payload: { ...WORKSPACE, repository: null },
+  },
+  WORKSPACE_SLACK_BOT_CHANNEL: {
+    refusal: "Could not change that Slack channel on this system.",
+    payload: { ...WORKSPACE, channelId: "C1", member: false },
+  },
+  WORKSPACE_MEMBER_REMOVE: {
+    refusal: "Could not remove that member on this system.",
+    payload: { ...WORKSPACE, userId: "user-grace" },
+  },
+  WORKSPACE_MEMBER_ROLE: {
+    refusal: "Could not change that member's role on this system.",
+    payload: { ...WORKSPACE, userId: "user-grace", role: WORKSPACE_ROLE.ADMIN },
+  },
+  WORKSPACE_TRANSFER: {
+    refusal: "Could not transfer that workspace on this system.",
+    payload: { ...WORKSPACE, userId: "user-grace" },
+  },
+  WORKSPACE_LEAVE: {
+    refusal: "Could not leave that workspace on this system.",
+    payload: WORKSPACE,
+  },
+  WORKSPACE_TOKEN_REPOSITORY_SET: {
+    refusal: "Could not change that workspace's repositories on this system.",
+    payload: { ...WORKSPACE, repository: "acme/relay", added: true },
+  },
+  WORKSPACE_GITHUB_CONNECT: {
+    refusal: "Could not connect GitHub to that workspace on this system.",
+    payload: WORKSPACE,
+    byHand: true,
+  },
+  WORKSPACE_SENTRY_INSTALL: {
+    refusal: "Could not install Sentry for that workspace on this system.",
+    payload: WORKSPACE,
+    byHand: true,
+  },
+};
 
-/** One ask of every workspace kind, with a payload its schema admits. */
-const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_CREATE, payload: { name: "Relay Labs" } },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_RENAME, payload: { ...WORKSPACE, name: "Acme Labs" } },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_INVITE,
-    payload: { ...WORKSPACE, email: INVITATION.email, role: WORKSPACE_ROLE.MEMBER },
-  },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_INVITATION_CANCEL,
-    payload: { ...WORKSPACE, invitationId: INVITATION.id },
-  },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: WORKSPACE },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, payload: WORKSPACE },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY, payload: WORKSPACE },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_RETRY, payload: WORKSPACE },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE,
-    payload: { ...WORKSPACE, userId: GRACE.userId },
-  },
-  {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_ROLE,
-    payload: { ...WORKSPACE, userId: GRACE.userId, role: WORKSPACE_ROLE.ADMIN },
-  },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_TRANSFER, payload: { ...WORKSPACE, userId: GRACE.userId } },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_LEAVE, payload: WORKSPACE },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...WORKSPACE, photo: null } },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET, payload: { ...WORKSPACE, slug: "acme-labs" } },
-];
+/** Each declared act, with its kind and its row. */
+const ACTS = Object.values(WORKSPACE_ACTS).map((act) => ({
+  kind: act.kind,
+  ...REFUSAL_ROWS[act.name],
+}));
 
-/** What the fake host answers, set by each test before it asks. */
-interface Script {
-  /** Whether every write is refused as the account's role not allowing it. */
-  notPermitted: boolean;
-  /** Whether an invitation is refused as the address already invited. */
-  alreadyInvited: boolean;
-  /** The address a GitHub connection answers to open. */
-  connectUrl: string;
-  /** The address a Sentry install answers to open. */
-  sentryInstallUrl: string;
+/** What the host sent the service on an act's behalf: every request but the reads it opens on its own, which only read. */
+function asksSent<Request extends { readonly method: string }>(requests: readonly Request[]) {
+  return requests.filter((request) => request.method !== HTTP_METHOD.GET);
 }
 
 const ports: TestActPort<unknown>[] = [];
@@ -151,390 +158,137 @@ afterEach(() => {
 });
 
 /**
- * A window's act port, opened as the bridge opens one, over a fake host
- * holding the Acme workspace with Grace in it: the window standing as
- * `actor`, trusted or not.
+ * A panel's port over the connections' procedures alone, each handler
+ * answering the address `answers` names for it or the refusal it fails
+ * with, every address opened kept in `opened`.
  */
-function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
-  const asked: string[] = [];
-  const browsed: string[] = [];
-  const script: Script = {
-    notPermitted: false,
-    alreadyInvited: false,
-    connectUrl: INSTALL_URL,
-    sentryInstallUrl: SENTRY_INSTALL_URL,
-  };
-  const refusal = () =>
-    script.notPermitted
-      ? ({ failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED } as const)
-      : ({ failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const);
-  const ask = <A>(line: string, answer: () => A) =>
-    Effect.sync(() => {
-      asked.push(line);
-      return answer();
-    });
-  const host: WorkspaceProceduresDependencies["host"] = {
-    workspaceTokenRepositoriesFollow: (params) =>
-      ask(`tokenRepositoriesFollow:${params.workspaceId}`, () => undefined),
-    workspaceTokenRepositoriesUnfollow: (params) =>
-      ask(`tokenRepositoriesUnfollow:${params.workspaceId}`, () => undefined),
-    workspaceTokenRepositoriesRetry: (params) =>
-      ask(`tokenRepositoriesRetry:${params.workspaceId}`, () => undefined),
-    workspaceTokenRepositorySet: (params) =>
-      ask(`tokenRepositorySet:${params.workspaceId}:${params.repository}:${params.added}`, () =>
-        script.notPermitted ? refusal() : { repositories: [] },
-      ),
-    workspaceCreate: (params) =>
-      ask(`create:${params.name}`, () =>
-        script.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } },
-      ),
-    workspaceRename: (params) =>
-      ask(`rename:${params.workspaceId}:${params.name}`, () =>
-        script.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } },
-      ),
-    workspaceSlugSet: (params) =>
-      ask(`slugSet:${params.workspaceId}:${params.slug}`, () =>
-        script.notPermitted ? refusal() : { workspace: { ...ACME, slug: params.slug } },
-      ),
-    workspacePhotoSet: (params) =>
-      ask(`photoSet:${params.workspaceId}:${params.photo ?? "none"}`, () => {
-        if (script.notPermitted) return refusal();
-        return { workspace: params.photo === null ? ACME : { ...ACME, photoVersion: "v2" } };
-      }),
-    workspaceGitHubConnect: (params) =>
-      ask(
-        `connect:${params.workspaceId}`,
-        (): TasksWorkspaceGitHubConnectAnswer =>
-          script.notPermitted ? refusal() : { url: script.connectUrl },
-      ),
-    workspaceGitHubDisconnect: (params) =>
-      ask(`disconnect:${params.workspaceId}`, () =>
-        script.notPermitted ? refusal() : { workspace: ACME },
-      ),
-    workspaceSentryInstall: (params) =>
-      ask(
-        `sentry-install:${params.workspaceId}`,
-        (): TasksWorkspaceGitHubConnectAnswer =>
-          script.notPermitted ? refusal() : { url: script.sentryInstallUrl },
-      ),
-    workspaceSentryDisconnect: (params) =>
-      ask(`sentry-disconnect:${params.workspaceId}:${params.installationId}`, () =>
-        script.notPermitted ? refusal() : { sentry: { configured: true, installations: [] } },
-      ),
-    workspaceSlackBotConnect: (params) =>
-      ask(`slack-bot-connect:${params.workspaceId}`, () =>
-        script.notPermitted || params.workspaceId !== ACME.id
-          ? refusal()
-          : { slackBot: { configured: true } },
-      ),
-    workspaceSlackBotDisconnect: (params) =>
-      ask(`slack-bot-disconnect:${params.workspaceId}`, () =>
-        script.notPermitted ? refusal() : { slackBot: { configured: true } },
-      ),
-    workspaceSlackBotNotifications: (params) =>
-      ask(`slack-bot-notifications:${params.workspaceId}`, () => ({
-        slackBot: { configured: true },
-      })),
-    workspaceSlackBotRepository: (params) =>
-      ask(`slack-bot-repository:${params.workspaceId}`, () => ({
-        slackBot: { configured: true },
-      })),
-    workspaceSlackBotChannel: (params) =>
-      ask(`slack-bot-channel:${params.workspaceId}`, () => ({
-        slackBot: { configured: true },
-      })),
-    workspaceMembersFollow: (scope) => ask(`membersFollow:${scope.workspaceId}`, () => undefined),
-    workspaceMembersUnfollow: (scope) =>
-      ask(`membersUnfollow:${scope.workspaceId}`, () => undefined),
-    workspaceMembersRetry: (scope) => ask(`membersRetry:${scope.workspaceId}`, () => undefined),
-    workspaceIntegrationsFollow: (params) =>
-      ask(`integrationsFollow:${params.workspaceId}`, () => undefined),
-    workspaceIntegrationsUnfollow: (params) =>
-      ask(`integrationsUnfollow:${params.workspaceId}`, () => undefined),
-    workspaceIntegrationsRetry: (params) =>
-      ask(`integrationsRetry:${params.workspaceId}`, () => undefined),
-    workspaceSlackChannelsFollow: (params) =>
-      ask(`slackChannelsFollow:${params.workspaceId}`, () => undefined),
-    workspaceSlackChannelsUnfollow: (params) =>
-      ask(`slackChannelsUnfollow:${params.workspaceId}`, () => undefined),
-    workspaceSlackChannelsRetry: (params) =>
-      ask(`slackChannelsRetry:${params.workspaceId}`, () => undefined),
-    workspaceMemberRemove: (params) =>
-      ask(`remove:${params.workspaceId}:${params.userId}`, () =>
-        script.notPermitted ? refusal() : { members: [] },
-      ),
-    workspaceMemberRole: (params) =>
-      ask(`role:${params.workspaceId}:${params.userId}:${params.role}`, () =>
-        script.notPermitted ? refusal() : { members: [{ ...GRACE, role: params.role }] },
-      ),
-    workspaceTransfer: (params) =>
-      ask(`transfer:${params.workspaceId}:${params.userId}`, () =>
-        script.notPermitted ? refusal() : { members: [{ ...GRACE, role: WORKSPACE_ROLE.OWNER }] },
-      ),
-    workspaceLeave: (params) =>
-      ask(`leave:${params.workspaceId}`, () =>
-        script.notPermitted ? refusal() : ({ left: true } as const),
-      ),
-    workspaceInvite: (params) =>
-      ask(`invite:${params.workspaceId}:${params.email}`, () =>
-        script.alreadyInvited
-          ? ({ failure: WORKSPACE_CALL_FAILURE.ALREADY_INVITED } as const)
-          : { invitation: INVITATION },
-      ),
-    workspaceInvitationCancel: (params) =>
-      ask(`cancel:${params.workspaceId}:${params.invitationId}`, () => ({ invitations: [] })),
-    workspaceInvitationsFollow: (scope) =>
-      ask(`invitationsFollow:${scope.workspaceId}`, () => undefined),
-    workspaceInvitationsUnfollow: (scope) =>
-      ask(`invitationsUnfollow:${scope.workspaceId}`, () => undefined),
-    workspaceInvitationsRetry: (scope) =>
-      ask(`invitationsRetry:${scope.workspaceId}`, () => undefined),
+function connectPort(answers: {
+  readonly github: Effect.Effect<string, ActRefused>;
+  readonly sentry: Effect.Effect<string, ActRefused>;
+}) {
+  const opened: string[] = [];
+  const dependencies: WorkspaceProceduresDependencies = {
+    // SAFETY: a connection's procedure reads no follow of the host's, so none is handed.
+    host: {} as WorkspaceProceduresDependencies["host"],
+    openExternal: async (url) => {
+      opened.push(url);
+    },
   };
   const port = testActPort(
-    workspaceProcedures({
-      host,
-      openExternal: (url) => {
-        browsed.push(url);
-        return Promise.resolve();
-      },
+    workspaceProcedures(dependencies, {
+      WORKSPACE_GITHUB_CONNECT: () => answers.github,
+      WORKSPACE_SENTRY_INSTALL: () => answers.sentry,
     }),
   );
   ports.push(port);
-  const client = port.as(actor, { trusted: options.trusted ?? true });
-  return { client, asked, browsed, script };
+  return { port, opened };
 }
 
-/** Any port kind's procedure, erased to the union of what every one takes and answers. */
-type PortCall = (payload: PortActPayload<PortActKind>) => Promise<PortActResult<PortActKind>>;
+it.effect.each(ACTS)(
+  "$kind is refused a window that is not a panel, and a frame this build does not trust, in its own words, and nothing is asked or opened",
+  (act) =>
+    Effect.gen(function* () {
+      // Note that a connection is served by its own procedure, over handlers that would open an address on its own origin.
+      const { port, done } = yield* act.byHand
+        ? Effect.sync(() => {
+            const connect = connectPort({
+              github: Effect.succeed(INSTALL_URL),
+              sentry: Effect.succeed(SENTRY_INSTALL_URL),
+            });
+            return { port: connect.port, done: () => connect.opened };
+          })
+        : Effect.map(hostActPort({ account: SIGNED_IN }), ({ port, requests }) => ({
+            port,
+            done: (): readonly unknown[] => asksSent(requests),
+          }));
 
-/** One act called on the port, settled to its answer or the sentence of its refusal. */
-async function settled(client: ActPortClient, kind: WorkspaceKind, payload: AnyPayload) {
-  // SAFETY: each test pairs a kind with the payload its own procedure takes, or one it refuses on purpose.
-  const call = client[kind] as PortCall;
-  try {
-    return { answer: await call(payload) };
-  } catch (error) {
-    assert.ok(error instanceof ORPCError);
-    assert.equal(error.code, ACT_ERROR.REFUSED);
-    return { refused: error.message };
-  }
-}
+      const refused = [
+        yield* port.perform(act, OTHER_WINDOW),
+        yield* port.perform(act, PANEL, { trusted: false }),
+      ];
 
-it("a window that is not a panel is refused every workspace act in the kind's own words, and the host is not asked", async () => {
-  const { client, asked, browsed } = windowPort(OTHER_WINDOW);
-  for (const act of ACTS) {
-    assert.deepEqual(await settled(client, act.kind, act.payload), {
-      refused: REFUSAL[act.kind],
-    });
-  }
-  assert.deepEqual(asked, []);
-  assert.deepEqual(browsed, []);
-});
-
-it("a frame this build does not trust is refused every workspace act, even as a panel, and the host is not asked", async () => {
-  const { client, asked } = windowPort(PANEL, { trusted: false });
-  for (const act of ACTS) {
-    assert.deepEqual(await settled(client, act.kind, act.payload), {
-      refused: REFUSAL[act.kind],
-    });
-  }
-  assert.deepEqual(asked, []);
-});
-
-it("the workspace acts reach the host from a panel and answer what it answered", async () => {
-  const { client, asked, browsed } = windowPort(PANEL);
-  const ask = (kind: WorkspaceKind, payload: AnyPayload) => settled(client, kind, payload);
-
-  assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_CREATE, { name: "Relay Labs" }), {
-    answer: { ...ACME, name: "Relay Labs" },
-  });
-  assert.deepEqual(
-    await ask(WORKSPACE_ACT_KIND.WORKSPACE_RENAME, { ...WORKSPACE, name: "  Acme Labs " }),
-    { answer: { ...ACME, name: "Acme Labs" } },
-  );
-  assert.deepEqual(
-    await ask(WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET, { ...WORKSPACE, photo: PHOTO_URL }),
-    { answer: { ...ACME, photoVersion: "v2" } },
-  );
-  assert.deepEqual(
-    await ask(WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET, { ...WORKSPACE, photo: null }),
-    { answer: ACME },
-  );
-  assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT, WORKSPACE), {
-    answer: undefined,
-  });
-  assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, WORKSPACE), {
-    answer: undefined,
-  });
-  assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY, WORKSPACE), {
-    answer: undefined,
-  });
-  assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_RETRY, WORKSPACE), {
-    answer: undefined,
-  });
-  assert.deepEqual(
-    await ask(WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE, { ...WORKSPACE, userId: GRACE.userId }),
-    { answer: [] },
-  );
-  assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_LEAVE, WORKSPACE), {
-    answer: undefined,
-  });
-
-  assert.deepEqual(asked, [
-    "create:Relay Labs",
-    `rename:${ACME.id}:Acme Labs`,
-    `photoSet:${ACME.id}:${PHOTO_URL}`,
-    `photoSet:${ACME.id}:none`,
-    `connect:${ACME.id}`,
-    `disconnect:${ACME.id}`,
-    `membersRetry:${ACME.id}`,
-    `invitationsRetry:${ACME.id}`,
-    `remove:${ACME.id}:${GRACE.userId}`,
-    `leave:${ACME.id}`,
-  ]);
-  assert.deepEqual(browsed, [INSTALL_URL]);
-});
-
-it("a member's role is changed and a workspace handed over from a panel, each answered with the members, and one the account's role does not allow is refused in words that say so", async () => {
-  const { client, asked, script } = windowPort(PANEL);
-  const role = {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_ROLE,
-    payload: { ...WORKSPACE, userId: GRACE.userId, role: WORKSPACE_ROLE.ADMIN },
-  } as const;
-  const transfer = {
-    kind: WORKSPACE_ACT_KIND.WORKSPACE_TRANSFER,
-    payload: { ...WORKSPACE, userId: GRACE.userId },
-  } as const;
-
-  const changed = await settled(client, role.kind, role.payload);
-  const handedOver = await settled(client, transfer.kind, transfer.payload);
-  script.notPermitted = true;
-  const refused = [
-    await settled(client, role.kind, role.payload),
-    await settled(client, transfer.kind, transfer.payload),
-  ];
-
-  assert.deepEqual(changed, { answer: [{ ...GRACE, role: WORKSPACE_ROLE.ADMIN }] });
-  assert.deepEqual(handedOver, { answer: [{ ...GRACE, role: WORKSPACE_ROLE.OWNER }] });
-  const notPermitted = { refused: WORKSPACE_NOT_PERMITTED_REFUSAL };
-  assert.deepEqual(refused, [notPermitted, notPermitted]);
-  assert.deepEqual(asked, [
-    `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
-    `transfer:${ACME.id}:${GRACE.userId}`,
-    `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
-    `transfer:${ACME.id}:${GRACE.userId}`,
-  ]);
-});
-
-it("an invitation is made and canceled from a panel, and an address already invited is refused in words that say so", async () => {
-  const { client, asked, browsed, script } = windowPort(PANEL);
-  const invite = { ...WORKSPACE, email: INVITATION.email, role: WORKSPACE_ROLE.MEMBER };
-
-  const made = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITE, invite);
-  const canceled = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITATION_CANCEL, {
-    ...WORKSPACE,
-    invitationId: INVITATION.id,
-  });
-  script.alreadyInvited = true;
-  const again = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITE, invite);
-
-  assert.deepEqual(made, { answer: INVITATION });
-  assert.deepEqual(canceled, { answer: [] });
-  assert.deepEqual(again, { refused: ALREADY_INVITED_REFUSAL });
-  assert.deepEqual(asked, [
-    `invite:${ACME.id}:${INVITATION.email}`,
-    `cancel:${ACME.id}:${INVITATION.id}`,
-    `invite:${ACME.id}:${INVITATION.email}`,
-  ]);
-  assert.deepEqual(browsed, []);
-});
-
-it("a connection's install address opens only where it is GitHub's", async () => {
-  const { client, browsed, script } = windowPort(PANEL);
-  script.connectUrl = "https://evil.test/apps/luke/installations/new";
-
-  assert.deepEqual(await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT, WORKSPACE), {
-    refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT],
-  });
-  assert.deepEqual(browsed, []);
-});
-
-it("a workspace's Sentry install opens only Sentry's own address, and a disconnect answers what remains or is refused in words that say why", async () => {
-  const { client, browsed, script } = windowPort(PANEL);
-  const disconnect = { ...WORKSPACE, installationId: SENTRY_INSTALLATION.installationId };
-
-  const installed = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL, WORKSPACE);
-  script.sentryInstallUrl = "https://sentry.example/sentry-apps/luke/external-install/";
-  const elsewhere = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL, WORKSPACE);
-  const disconnected = await settled(
-    client,
-    WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT,
-    disconnect,
-  );
-  script.notPermitted = true;
-  const refused = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT, disconnect);
-
-  assert.deepEqual(installed, { answer: undefined });
-  assert.deepEqual(elsewhere, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL] });
-  assert.deepEqual(browsed, [SENTRY_INSTALL_URL]);
-  assert.deepEqual(disconnected, { answer: { configured: true, installations: [] } });
-  assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
-});
-
-it("a workspace write the account's role does not allow is refused in words that say so, and one unanswered in its kind's own", async () => {
-  const { client, browsed, script } = windowPort(PANEL);
-  script.notPermitted = true;
-
-  const refusedNow = [
-    await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT, WORKSPACE),
-    await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, WORKSPACE),
-    await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE, {
-      ...WORKSPACE,
-      userId: GRACE.userId,
+      assert.deepEqual(refused, [{ refused: act.refusal }, { refused: act.refusal }]);
+      assert.deepEqual(done(), []);
     }),
-    await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_LEAVE, WORKSPACE),
-    await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_RENAME, { ...WORKSPACE, name: "Acme Labs" }),
-    await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET, { ...WORKSPACE, photo: null }),
-  ];
-  script.notPermitted = false;
-  const unread = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT, {
-    workspaceId: "workspace-gone",
-  });
+);
 
-  const notPermitted = { refused: WORKSPACE_NOT_PERMITTED_REFUSAL };
-  assert.deepEqual(refusedNow, Array(6).fill(notPermitted));
-  assert.deepEqual(unread, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT] });
-  assert.deepEqual(browsed, []);
-});
+it.effect(
+  "a workspace act the service refuses for a reason it names is refused in words that say so, and one it does not answer in the act's own",
+  () =>
+    Effect.gen(function* () {
+      let refusal: string | undefined;
+      const { port } = yield* hostActPort({
+        account: SIGNED_IN,
+        respond: (request) =>
+          request.method !== HTTP_METHOD.GET && refusal !== undefined
+            ? Response.json({ error: refusal }, { status: 403 })
+            : new Response(null, { status: 503 }),
+      });
+      const remove = ACTS.find((act) => act.kind === WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE);
+      const invite = ACTS.find((act) => act.kind === WORKSPACE_ACT_KIND.WORKSPACE_INVITE);
+      const slug = ACTS.find((act) => act.kind === WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET);
+      assert.ok(remove && invite && slug);
 
-/** A role no workspace has. */
-const EMPEROR: string = "emperor";
+      refusal = HOSTED_API_ERROR.NOT_PERMITTED;
+      const notPermitted = yield* port.perform(remove, PANEL);
+      refusal = HOSTED_API_ERROR.ALREADY_INVITED;
+      const alreadyInvited = yield* port.perform(invite, PANEL);
+      refusal = HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN;
+      const slugTaken = yield* port.perform(slug, PANEL);
+      refusal = undefined;
+      const unanswered = yield* port.perform(invite, PANEL);
 
-it("a payload its kind's schema refuses is refused in the kind's own words, and the host is not asked", async () => {
-  const { client, asked } = windowPort(PANEL);
+      assert.deepEqual(notPermitted, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
+      assert.deepEqual(alreadyInvited, { refused: ALREADY_INVITED_REFUSAL });
+      assert.deepEqual(slugTaken, {
+        refused: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.TAKEN],
+      });
+      assert.deepEqual(unanswered, { refused: invite.refusal });
+    }),
+);
 
-  assert.deepEqual(
-    // SAFETY: a role the schema does not name, refused on purpose.
-    await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITE, {
-      ...WORKSPACE,
-      email: INVITATION.email,
-      role: EMPEROR,
-    } as AnyPayload),
-    { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_INVITE] },
-  );
-  assert.deepEqual(asked, []);
-});
+it.effect(
+  "a connection opens the address its handler answered only where it stands on the connection's own origin, and a refused one opens nothing",
+  () =>
+    Effect.gen(function* () {
+      const github = { kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: WORKSPACE };
+      const sentry = { kind: WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL, payload: WORKSPACE };
+      const own = connectPort({
+        github: Effect.succeed(INSTALL_URL),
+        sentry: Effect.succeed(SENTRY_INSTALL_URL),
+      });
+      const elsewhere = connectPort({
+        github: Effect.succeed("https://evil.test/apps/luke/installations/new"),
+        sentry: Effect.succeed("https://sentry.example/sentry-apps/luke/external-install/"),
+      });
+      const refused = connectPort({
+        github: Effect.fail(new ActRefused({ sentence: WORKSPACE_NOT_PERMITTED_REFUSAL })),
+        sentry: Effect.fail(new ActRefused({})),
+      });
 
-it("a payload carrying a key its kind's schema does not name is refused, and the host is not asked", async () => {
-  const { client, asked } = windowPort(PANEL);
+      const opening = [
+        yield* own.port.perform(github, PANEL),
+        yield* own.port.perform(sentry, PANEL),
+      ];
+      const offOrigin = [
+        yield* elsewhere.port.perform(github, PANEL),
+        yield* elsewhere.port.perform(sentry, PANEL),
+      ];
+      const refusing = [
+        yield* refused.port.perform(github, PANEL),
+        yield* refused.port.perform(sentry, PANEL),
+      ];
 
-  assert.deepEqual(
-    // SAFETY: a key the schema does not name, refused on purpose.
-    await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_LEAVE, {
-      ...WORKSPACE,
-      extra: true,
-    } as AnyPayload),
-    { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_LEAVE] },
-  );
-  assert.deepEqual(asked, []);
-});
+      assert.deepEqual(opening, [{ answer: undefined }, { answer: undefined }]);
+      assert.deepEqual(own.opened, [INSTALL_URL, SENTRY_INSTALL_URL]);
+      assert.deepEqual(offOrigin, [
+        { refused: WORKSPACE_ACTS.WORKSPACE_GITHUB_CONNECT.refusal },
+        { refused: WORKSPACE_ACTS.WORKSPACE_SENTRY_INSTALL.refusal },
+      ]);
+      assert.deepEqual(refusing, [
+        { refused: WORKSPACE_NOT_PERMITTED_REFUSAL },
+        { refused: WORKSPACE_ACTS.WORKSPACE_SENTRY_INSTALL.refusal },
+      ]);
+      assert.deepEqual([...elsewhere.opened, ...refused.opened], []);
+    }),
+);
