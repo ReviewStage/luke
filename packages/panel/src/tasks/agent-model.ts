@@ -834,8 +834,6 @@ export function addRepositoryFailureWords(refused: RefusedCall): string {
   }
   if (refused.failure !== AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED) return NOT_ADDED;
   switch (refused.extraRepositoryRefusal) {
-    case EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF:
-      return "Turn on Several repositories in Settings › Experimental to add a repository to an agent.";
     case EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY:
       return "This agent works in no repository of its own. Start an agent in that repository instead.";
     case EXTRA_REPOSITORY_REFUSAL.DEVICE:
@@ -865,8 +863,6 @@ function extraRepositoryRefusalWords(
 ): string {
   const named = repository ?? "One of the other repositories";
   switch (refusal) {
-    case EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF:
-      return "Turn on Several repositories in Settings › Experimental to start an agent in more than one repository.";
     case EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY:
       return "Choose the agent's repository before adding others.";
     case EXTRA_REPOSITORY_REFUSAL.DEVICE:

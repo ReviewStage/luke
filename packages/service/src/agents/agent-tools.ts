@@ -478,10 +478,8 @@ const LOCAL_AGENT_REFUSAL_WORDS = {
   string
 >;
 
-/** Why a repository beside an agent's own is refused, in the words a start and an added repository share: the experiment off for the member named, the agent on a device, and the repository named reached on the member's token or another installation. */
+/** Why a repository beside an agent's own is refused, in the words a start and an added repository share: the agent on a device, and the repository named reached on the member's token or another installation. */
 const EXTRA_REPOSITORY_WHY = {
-  experimentOff: (whose: string) =>
-    `an agent in several repositories needs the Several repositories experiment, which is off for ${whose}.`,
   device: "an agent in several repositories runs only in the cloud.",
   token: (named: string) =>
     `${named} is reached only on the member's own GitHub token, and an agent's repositories are all reached through the GitHub App.`,
@@ -496,8 +494,6 @@ function extraRepositoryWords(
 ): string {
   const named = repository ?? "One of the repositories";
   switch (refusal) {
-    case EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF:
-      return `Not started: ${EXTRA_REPOSITORY_WHY.experimentOff("the member you start for")} Ask them to turn it on in Settings › Experimental, or leave alsoRepositories out.`;
     case EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY:
       return START_AGENT_REFUSAL.ALSO_NO_REPOSITORY;
     case EXTRA_REPOSITORY_REFUSAL.DEVICE:
@@ -520,8 +516,6 @@ function addedRepositoryWords(
 ): string {
   const named = repository ?? "That repository";
   switch (refusal) {
-    case EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF:
-      return `${ADD_REPOSITORY_LEAD}: ${EXTRA_REPOSITORY_WHY.experimentOff("the member who started it")} Ask them to turn it on in Settings › Experimental.`;
     case EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY:
       return `${ADD_REPOSITORY_LEAD}: that agent works in no repository of its own for another to stand beside. Start a new agent in the repository instead.`;
     case EXTRA_REPOSITORY_REFUSAL.DEVICE:
@@ -772,8 +766,8 @@ const START_AGENT_INPUT = Schema.Struct({
       ).check(Schema.isMinLength(1), Schema.isMaxLength(AGENT_BOUNDS.MAX_ALSO_REPOSITORIES)),
       "Other repositories the agent works in beside its own, each checked out in a folder of " +
         "its own beside its checkout, which its instructions name: each reached through the " +
-        "GitHub App installation its own repository is on, the agent in the cloud, and the " +
-        "member with the Several repositories experiment on. Leave it out for one repository.",
+        "GitHub App installation its own repository is on, and the agent in the cloud. Leave it " +
+        "out for one repository.",
     ),
   ),
   model: Schema.optionalKey(
@@ -1234,8 +1228,8 @@ const UPDATE_AGENT_INPUT = Schema.Struct({
         "checked out in a folder of its own, which its token then reaches and it is told of; " +
         "named alone, with no other change. Only for an agent the developer you work for started, " +
         "in the cloud, in a repository of its own, its repositories all reached through one " +
-        "GitHub App installation, and the developer with the Several repositories experiment " +
-        "on. Never once your conversation holds words from another account. Nothing removes one.",
+        "GitHub App installation. Never once your conversation holds words from another " +
+        "account. Nothing removes one.",
     ),
   ),
 }).check(Schema.makeFilter(updateNamesAChange));

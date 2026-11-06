@@ -10,9 +10,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import {
   ANNOUNCE,
   AVATAR_SIZE,
-  CHIP_LOOK,
-  Chip,
-  ChipName,
   CONFIRM_LOSS,
   ConfirmDialog,
   ErrorState,
@@ -26,8 +23,6 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { ReplayMask } from "@repo/ui/session-replay-marks";
-import { repositoryParts } from "@repo/ui/task-list-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
@@ -43,6 +38,11 @@ import {
   tokenRepositoriesRetryMutation,
 } from "../live-reads.js";
 import { useRepositoryPictures } from "../repository-pictures.js";
+import {
+  CHIP_PLACE,
+  pickedRepositoriesWords,
+  RepositoryMenuChip,
+} from "../tasks/repository-chip.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AddMenuButton } from "./add-menu-button.js";
@@ -248,9 +248,6 @@ function AddRepositoryMenu({
   );
 }
 
-/** How many repositories the picker's chip names before it counts the rest. */
-const CHIP_NAMED = 2;
-
 /** One repository the picker lists, by its whole name, with when it was last updated, which orders the list. */
 interface PickerRepository {
   readonly fullName: string;
@@ -275,16 +272,10 @@ function pickerRepositories(
   return [...byName.values()].sort((one, other) => other.updatedAt - one.updatedAt);
 }
 
-/** The chip's words for the repositories picked, in the list's order: the first few by name, the rest counted. */
-function pickedWords(picked: readonly string[]): string {
-  const named = picked.slice(0, CHIP_NAMED).map((one) => repositoryParts(one).name);
-  const more = picked.length - CHIP_NAMED;
-  return more > 0 ? `${named.join(", ")} +${more}` : named.join(", ");
-}
-
 /**
- * The token repositories as setup picks them: a field chip, as the new task
- * dialog's repository chip is, naming what is picked, or Add repositories
+ * The token repositories as setup picks them: the new task dialog's
+ * repository chip (`RepositoryMenuChip`), naming what is picked in its words
+ * (`pickedRepositoriesWords`), or Add repositories
  * while nothing is, and under it the app's searched menu listing every
  * repository the reader's token reaches, each added one checked. A press
  * adds or removes its row and leaves the menu standing, so several are
@@ -310,7 +301,8 @@ export function TokenRepositoryPicker({
   const drawn = useDisclosure(open);
   const menuId = useId();
   const room = useRef<HTMLDivElement>(null);
-  const chip = useRef<HTMLButtonElement>(null);
+  /** The chip pressed to open the menu, which closing hands focus back to. */
+  const opener = useRef<HTMLElement | null>(null);
   // Note that a press's check is held here, keyed as no case spells the name, until the service answers it.
   const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(new Map());
   const listed = new Map(repositories.listed.map((one) => [one.fullName.toLowerCase(), one]));
@@ -352,32 +344,31 @@ export function TokenRepositoryPicker({
   };
   const close = () => {
     setOpen(false);
-    chip.current?.focus();
+    opener.current?.focus();
   };
   const first = picked[0];
   return (
     <div className="relative min-w-0" ref={room}>
-      <Chip
-        ref={chip}
-        look={CHIP_LOOK.FIELD}
-        chevron
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={() => {
+      <RepositoryMenuChip
+        place={CHIP_PLACE.FIELD}
+        open={open}
+        menuId={menuId}
+        hint={first === undefined ? undefined : picked.join(", ")}
+        glyph={
+          first === undefined ? (
+            <GLYPH.ADD />
+          ) : (
+            <RepositoryPicture repository={first} pictures={pictures} size={AVATAR_SIZE.GLYPH} />
+          )
+        }
+        label={first === undefined ? WORDS.ADD_SEVERAL : pickedRepositoriesWords(picked)}
+        named={first !== undefined}
+        onPress={(from) => {
+          opener.current = from;
           if (!open && list.isError) retry(repositoryScope(workspaceId));
           setOpen(!open);
         }}
-      >
-        {first === undefined ? (
-          <GLYPH.ADD />
-        ) : (
-          <RepositoryPicture repository={first} pictures={pictures} size={AVATAR_SIZE.GLYPH} />
-        )}
-        <ChipName>
-          {first === undefined ? WORDS.ADD_SEVERAL : <ReplayMask>{pickedWords(picked)}</ReplayMask>}
-        </ChipName>
-      </Chip>
+      />
       {drawn.mounted ? (
         <SearchableMenu
           leaving={drawn.leaving}

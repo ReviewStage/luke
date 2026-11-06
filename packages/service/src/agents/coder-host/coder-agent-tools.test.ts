@@ -4535,7 +4535,7 @@ let severalConnected = 0;
 /**
  * A workspace whose installation reaches the agents' repository and its
  * neighbor, with another installation on another account reaching a third,
- * its owner's Several repositories on, and the harness and GitHub its tools
+ * and the harness and GitHub its tools
  * reach, the harness answering an added repository's checkout as given.
  */
 async function openSeveralRepositories(checkout: RunnerCheckout) {
@@ -4557,11 +4557,6 @@ async function openSeveralRepositories(checkout: RunnerCheckout) {
       LINK_OUTCOME.LINKED,
     );
   }
-  await database.run(
-    writeAccountPreferences(opened.agents.caller.userId, {
-      experiments: { [EXPERIMENT.SEVERAL_REPOSITORIES]: true },
-    }),
-  );
   const sent: SentCall[] = [];
   const services = Layer.merge(
     harnessRecording(sent, () => false, EVE_CANCEL_OUTCOME.ACCEPTED, checkout),
@@ -4627,7 +4622,7 @@ test("update_agent adds a repository to an agent whose place does not run for it
   assert.deepEqual(sent, []);
 });
 
-test("update_agent refuses a repository added with Several repositories off, to another member's agent, to an agent in no repository or on a device, one already among its own, one on another installation, and one an agent adds after hearing another account, writing nothing", async () => {
+test("update_agent refuses a repository added to another member's agent, to an agent in no repository or on a device, one already among its own, one on another installation, and one an agent adds after hearing another account, writing nothing", async () => {
   const { workspaceId, agents, plans, sent, services } = await openSeveralRepositories(
     RUNNER_CHECKOUT.CHECKED_OUT,
   );
@@ -4671,12 +4666,6 @@ test("update_agent refuses a repository added with Several repositories off, to 
   ];
   await directMessage(hostOf(), teammates, caller, services);
   const afterOutsideWords = await add(caller.id, "acme/web");
-  await database.run(
-    writeAccountPreferences(caller.userId, {
-      experiments: { [EXPERIMENT.SEVERAL_REPOSITORIES]: false },
-    }),
-  );
-  const experimentOff = await add(helper.id, "acme/web");
 
   const says = [
     "only",
@@ -4685,9 +4674,8 @@ test("update_agent refuses a repository added with Several repositories off, to 
     "is already among that agent's repositories",
     "another GitHub account's installation",
     "words from another account",
-    "Several repositories experiment, which is off",
   ];
-  const reasons = [...refused, afterOutsideWords, experimentOff];
+  const reasons = [...refused, afterOutsideWords];
   assert.equal(reasons.length, says.length);
   reasons.forEach((reason, index) => {
     assert.ok(reason.startsWith("Not added: ") && reason.includes(says[index] ?? ""), reason);

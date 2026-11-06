@@ -4,20 +4,13 @@ import assert from "node:assert/strict";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { EVERY_WORKSPACE } from "@repo/host/app-state";
-import { EXPERIMENT } from "@repo/settings";
-import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import {
-  handHostReads,
-  handState,
-  holdRepositoryLists,
-  type RepositoriesRead,
-} from "../testing/app-state.js";
+import { handHostReads, holdRepositoryLists, type RepositoriesRead } from "../testing/app-state.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -35,9 +28,9 @@ import { NewTaskComposer } from "./new-task-composer.js";
  * New task's repository chip in a workspace whose GitHub App is on another
  * owner: a repository the picker lists on a member's own GitHub token stays
  * picked once chosen, and a preset the workspace's GitHub does not reach is
- * not started on before the picker's read lands. With Several repositories
- * on, a repository added beside the task's travels with the agent the card
- * starts; with it off, none is offered. Synthetic throughout.
+ * not started on before the picker's read lands. A repository checked
+ * beside the task's travels with the agent the card starts, and unchecking
+ * the task's own makes the next pick the task's. Synthetic throughout.
  */
 
 const ACME: Workspace = {
@@ -157,18 +150,17 @@ test("with no recent task, the chip stands on the first repository the read list
   });
 });
 
-test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked", async () => {
+test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked once checked again", async () => {
   const { container } = await mount(TOKEN_LISTING);
   const chip =
     container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
   act(() => chip.click());
   await settle();
-  const row =
-    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
-      option.textContent?.includes("tools"),
-    ) ?? assert.fail("the picker lists the token repository");
-  act(() => row.click());
+  // The default stands checked, so the first press unchecks it and the second picks it.
+  act(() => row("tools").click());
+  await settle();
+  act(() => row("tools").click());
   await settle();
 
   assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
@@ -289,45 +281,61 @@ test("a recent default a read does not list is let go, so a later read listing i
   assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
 });
 
-/** A read listing two repositories the workspace's App reaches. */
-const APP_LISTING = (): Promise<RepositoriesRead> =>
+/** A read listing two repositories the workspace's App reaches, and one reached only on a member's token. */
+const SEVERAL_LISTING = (): Promise<RepositoriesRead> =>
   Promise.resolve({
     repositories: {
       installed: true,
-      repositories: ["api", "web"].map((name) => ({
-        owner: "acme",
-        name,
-        fullName: `acme/${name}`,
-        defaultBranch: "main",
-        private: true,
-        updatedAt: 1,
-        access: GITHUB_ACCESS.APP,
-      })),
+      repositories: [
+        ...["api", "web"].map((name) => ({
+          owner: "acme",
+          name,
+          fullName: `acme/${name}`,
+          defaultBranch: "main",
+          private: true,
+          updatedAt: 1,
+          access: GITHUB_ACCESS.APP,
+        })),
+        {
+          owner: "octo",
+          name: "tools",
+          fullName: "octo/tools",
+          defaultBranch: "main",
+          private: true,
+          updatedAt: 1,
+          access: GITHUB_ACCESS.TOKEN,
+        },
+      ],
       installationUrl: "https://github.com/apps/luke/installations/new",
     },
   });
 
-/** The card's Add repository chip, where it draws one. */
-function addRepositoryChip(container: ParentNode): HTMLButtonElement | undefined {
-  return [...container.querySelectorAll<HTMLButtonElement>(".ui-chip")].find((chip) =>
-    chip.textContent?.includes("Add repository"),
+/** The chip's menu's row naming `name`, where it lists one. */
+function row(name: string): HTMLElement {
+  return (
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
+      option.textContent?.includes(name),
+    ) ?? assert.fail(`the menu lists ${name}`)
   );
 }
 
-test("with Several repositories on, a repository added beside the task's travels with the agent the card starts", async () => {
-  handState(experimentsOn(EXPERIMENT.SEVERAL_REPOSITORIES));
-  const { container, starts, also } = await mount(APP_LISTING, "acme/api");
-  const add = addRepositoryChip(container) ?? assert.fail("the card offers to add one");
-  act(() => add.click());
+test("a repository checked in the chip's menu travels beside the task's with the agent the card starts, the menu standing open and a row the service would refuse beside it dimmed", async () => {
+  const { container, starts, also } = await mount(SEVERAL_LISTING, "acme/api");
+  const chip =
+    container.querySelector<HTMLButtonElement>(".ui-chip") ??
+    assert.fail("the card draws the repository chip");
+  act(() => chip.click());
   await settle();
-  const offered = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  act(() => row("web").click());
+  await settle();
+
   assert.deepEqual(
-    offered.map((option) => option.textContent?.includes("acme/api")),
-    [false],
-    "the task's own repository is not offered again",
+    ["api", "web"].map((name) => row(name).getAttribute("aria-current")),
+    ["true", "true"],
   );
-  act(() => offered[0]?.click());
-  await settle();
+  assert.equal(row("tools").getAttribute("aria-disabled"), "true");
+  assert.equal(row("tools").textContent?.includes("Token only"), true);
+  assert.equal(chip.textContent, "api, web");
   typeInComposer(container, "Bump the client in both");
   pressInComposer(container, "Enter");
   await settle();
@@ -336,9 +344,20 @@ test("with Several repositories on, a repository added beside the task's travels
   assert.deepEqual(also, [["acme/web"]]);
 });
 
-test("with Several repositories off, the card offers no repository beside the task's", async () => {
-  handState(experimentsOn());
-  const { container } = await mount(APP_LISTING, "acme/api");
+test("unchecking the primary makes the next pick the task's", async () => {
+  const { container, starts, also } = await mount(SEVERAL_LISTING, "acme/api");
+  act(() => container.querySelector<HTMLButtonElement>(".ui-chip")?.click());
+  await settle();
+  act(() => row("web").click());
+  await settle();
+  act(() => row("api").click());
+  await settle();
 
-  assert.equal(addRepositoryChip(container), undefined);
+  assert.equal(row("web").textContent?.includes("Primary"), true);
+  typeInComposer(container, "Bump the client");
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(starts, ["acme/web"]);
+  assert.deepEqual(also, [undefined]);
 });

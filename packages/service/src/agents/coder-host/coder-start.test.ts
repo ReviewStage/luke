@@ -525,16 +525,11 @@ const severalServices = Layer.mergeAll(
   catalog,
 );
 
-/** A workspace connected to an installation reaching the repository and its neighbor, its owner, who saved their own token, with Several repositories on unless asked off. */
-const openSeveralWorkspace = (experimentOn = true) =>
+/** A workspace connected to an installation reaching the repository and its neighbor, and its owner, who saved their own token. */
+const openSeveralWorkspace = () =>
   Effect.gen(function* () {
     const owner = yield* openTokenMember();
     yield* connectAgentApiKeys(owner);
-    if (experimentOn) {
-      yield* writeAccountPreferences(owner, {
-        experiments: { [EXPERIMENT.SEVERAL_REPOSITORIES]: true },
-      });
-    }
     const workspaceId = yield* openWorkspace(owner);
     const installation = SEVERAL[severalConnected++];
     assert.ok(installation);
@@ -576,7 +571,7 @@ it.layer(getTestDB())("an agent started in several repositories", (it) => {
   );
 
   it.effect(
-    "a continue works in the repositories its source worked in beside its own, at the branches they started on and with none of its pull requests, its starter's experiment since turned off asking nothing",
+    "a continue works in the repositories its source worked in beside its own, at the branches they started on and with none of its pull requests",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openSeveralWorkspace();
@@ -587,9 +582,6 @@ it.layer(getTestDB())("an agent started in several repositories", (it) => {
           alsoRepositories: [{ repository: web }],
         }).pipe(Effect.provide(severalServices));
         yield* recordAgentRepositoryHead(owner, source.agent.id, web, "agent/invite");
-        yield* writeAccountPreferences(owner, {
-          experiments: { [EXPERIMENT.SEVERAL_REPOSITORIES]: false },
-        });
 
         const continued = yield* startAgent(eve, owner, {
           ...workspaceAsk(workspaceId),
@@ -602,19 +594,6 @@ it.layer(getTestDB())("an agent started in several repositories", (it) => {
           { repository: web, baseBranch: null, headBranch: null, pullRequest: null },
         ]);
       }),
-  );
-
-  it.effect("refuses them to a member with Several repositories off", () =>
-    Effect.gen(function* () {
-      const { owner, workspaceId } = yield* openSeveralWorkspace(false);
-
-      const refused = yield* refusedStart(owner, {
-        ...workspaceAsk(workspaceId),
-        alsoRepositories: [{ repository: `${WEB.owner}/${WEB.name}` }],
-      });
-
-      assert.deepEqual(refused, extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF));
-    }),
   );
 
   it.effect("refuses them to an agent that would run on a device", () =>
