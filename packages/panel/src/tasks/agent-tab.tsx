@@ -73,7 +73,7 @@ import {
   useAnnounce,
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
-import { AlarmClockCheckIcon, ICON_SIZE } from "@repo/ui/icons";
+import { AlarmClockCheckIcon, ICON_SIZE, RotateCcwIcon } from "@repo/ui/icons";
 import { skillWord } from "@repo/ui/skill-mention";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
@@ -147,6 +147,7 @@ import {
   delegates,
   type EndLineParts,
   endLineOffersContinue,
+  endLineOffersTryAgain,
   endLineParts,
   endLineReason,
   finishedReplyLead,
@@ -169,6 +170,7 @@ import {
   type SentLine,
   type StartingLaunch,
   slackLineOf,
+  TRY_AGAIN_LABEL,
   type TurnStretch,
   teammateStarter,
   threadLineOf,
@@ -3203,6 +3205,33 @@ export function StartingAgentTab({
 }
 
 /**
+ * Try again on a failed end line (`endLineOffersTryAgain`), pressed once:
+ * the line it sends takes the end line's place, and a line that did not go
+ * draws the end line, and so a fresh press, again.
+ */
+function TryAgainPress({ onPress }: { onPress: () => void }): React.JSX.Element {
+  // Note that the press is kept in a ref as well as drawn, so a second press before the draw sends nothing.
+  const pressed = useRef(false);
+  const [sent, setSent] = useState(false);
+  const press = () => {
+    if (pressed.current) return;
+    pressed.current = true;
+    setSent(true);
+    onPress();
+  };
+  return (
+    <Button
+      variant={BUTTON_VARIANT.OUTLINE}
+      icon={<RotateCcwIcon aria-hidden="true" />}
+      disabled={sent}
+      onClick={press}
+    >
+      {TRY_AGAIN_LABEL}
+    </Button>
+  );
+}
+
+/**
  * An agent's tab, by the agent's id alone: its transcript is followed from
  * the moment the tab stands, while the agent itself may still be on its way with the task's list of agents. What needs
  * the agent, its composer, its model, its pull request, and how its log is
@@ -3353,13 +3382,17 @@ function AgentTabBody({
   // On a pilot task only its pilot continues, so a coding agent there offers no Continue anywhere.
   const continues = offersContinue(control.mode, agent);
   // The failed end line holds the press, Continue again once another agent continued this one.
-  const pressed = endLineOffersContinue({
+  const ending = {
     status: agent.status,
     endReason: endLineReason(transcript.failure, starter),
     failure: transcript.failure,
     continued: continued.length > 0,
     boxClosed: composer.closed !== undefined,
-  });
+  };
+  const pressed = endLineOffersContinue(ending);
+  // Where a message carries the agent on, the row offers it as a line of the developer's own, unless the box is a pilot's or an archived task's note.
+  const triesAgain =
+    endLineOffersTryAgain(ending) && reportsTo === undefined && control.onUnarchive === undefined;
   // How the messages are named moves only when the agent's place or the messages read do, not with each page.
   const readIds = useKept(
     messages.map((message) => message.id),
@@ -3426,6 +3459,8 @@ function AgentTabBody({
               offers={continues}
               label={continued.length > 0 ? CONTINUE_AGAIN_LABEL : CONTINUE_LABEL}
             />
+          ) : triesAgain ? (
+            <TryAgainPress onPress={() => composer.sendWords(RETRY_LINE)} />
           ) : undefined
         }
         continuable={continued.length > 0 || (continues && control.continueAgent !== undefined)}

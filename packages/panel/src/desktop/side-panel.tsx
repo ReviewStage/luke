@@ -259,6 +259,8 @@ interface StripActivity {
  * Shutting the panel, or bringing it back from full screen, changes the
  * window's layout at once, and the panel keeps drawing what it held until its
  * exit has played (`useSidePanelDrawing`); its arrivals are pane-motion.tsx's.
+ * The window going to another stop plays neither, since navigation does not
+ * travel (docs/DESIGN.md): the panel the new stop stands, or none, lands at once.
  */
 
 /**
@@ -2312,6 +2314,7 @@ interface HeldPanel {
 function sameDrawing(a: SidePanelControl, b: SidePanelControl): boolean {
   return (
     a.open === b.open &&
+    a.stop === b.stop &&
     a.fullScreen === b.fullScreen &&
     a.width === b.width &&
     a.tabs === b.tabs &&
@@ -2329,6 +2332,10 @@ function drawnPanel(panel: SidePanelControl, held: HeldPanel | undefined): SideP
 /**
  * The exit `panel`'s change asks for, given what was drawn before it, or
  * `undefined` where the change ends the exit under way, or the one standing.
+ * Note that a change of stop asks for none and ends the one under way,
+ * because the panel shut there belongs to the stop the window left, and
+ * drawing it out over the one arrived at is the flash navigation must not
+ * make.
  */
 function exitFor(
   drawn: SidePanelControl,
@@ -2336,6 +2343,7 @@ function exitFor(
   panel: SidePanelControl,
   held: HeldPanel | undefined,
 ): HeldPanel | undefined {
+  if (last.stop !== panel.stop) return undefined;
   if (last.open && !panel.open) return { leaving: PANEL_LEAVING.CLOSE, panel: drawn };
   if (panel.open && last.fullScreen && !panel.fullScreen) {
     return { leaving: PANEL_LEAVING.FULL_SCREEN, panel: drawn };

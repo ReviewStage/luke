@@ -3,9 +3,10 @@ import { AGENT_BRIEF } from "@repo/features/agent-wire";
 import { LINK_PLACE, readLink } from "@repo/features/link-grammar";
 import { decodeMention, isMentionLabel, MENTION_KIND } from "@repo/features/mention-link";
 import { test } from "vitest";
+import { standingFor } from "../testing/agent-standing.js";
+import { EDIT_DESCRIPTION_TOOL } from "./coder-host/description-edit.js";
 import { INBOX_TOOLS } from "./coder-host/inbox.js";
 import { coderInstructions } from "./coder-host/instructions.js";
-import { EDIT_DESCRIPTION_TOOL } from "./coder-host/description-edit.js";
 
 /**
  * link-examples.test.ts -- the link every author is shown how to write a
@@ -65,7 +66,13 @@ test("a coding agent is shown to name each kind as a mention Vespin draws as its
   const own = [LINK_PLACE.TASK, LINK_PLACE.SECTION, LINK_PLACE.PAGE];
   for (const brief of Object.values(AGENT_BRIEF)) {
     for (const onTask of [true, false]) {
-      const words = coderInstructions(REPOSITORY, brief, true, onTask ? TASK_ADDRESS : null);
+      const words = coderInstructions(
+        REPOSITORY,
+        brief,
+        true,
+        onTask ? TASK_ADDRESS : null,
+        standingFor(REPOSITORY),
+      );
       const told = words.slice(words.indexOf("## What your messages are"));
       assert.deepEqual(
         drawnAs(told),
@@ -114,6 +121,7 @@ test("a coding agent is shown to name an MCP server as a mention Vespin draws as
       AGENT_BRIEF.PROMPT,
       true,
       onTask ? TASK_ADDRESS : null,
+      standingFor(REPOSITORY),
     );
     assert.deepEqual(appMentionsIn(words), [
       { kind: MENTION_KIND.SERVER, mention: true },
@@ -130,6 +138,12 @@ function datesIn(words: string): (string | undefined)[] {
 }
 
 test("a coding agent is shown a day, a time, and a range, each a date Vespin draws as its chip", () => {
-  const words = coderInstructions(REPOSITORY, AGENT_BRIEF.DESCRIPTION, true, TASK_ADDRESS);
+  const words = coderInstructions(
+    REPOSITORY,
+    AGENT_BRIEF.DESCRIPTION,
+    true,
+    TASK_ADDRESS,
+    standingFor(REPOSITORY),
+  );
   assert.deepEqual(datesIn(words), [MENTION_KIND.DATE, MENTION_KIND.DATE, MENTION_KIND.DATE]);
 });

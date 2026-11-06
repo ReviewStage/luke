@@ -870,6 +870,7 @@ function onTabs(input: {
     sidePanel: {
       ...base.sidePanel,
       open: input.side !== undefined,
+      stop: TASK_ID,
       tab: input.side ?? SIDE_PANEL_TAB.INBOX,
       opened: input.opened ?? 0,
       onShow: (_taskId, tab) => input.shown?.push(`side:${isFileTab(tab) ? tab.file : tab}`),
@@ -1056,6 +1057,7 @@ test("an Inbox item's step holds the panel beside it, so Back from the next item
       sidePanel: {
         ...base.sidePanel,
         open: side !== undefined,
+        stop: itemId,
         tab: side,
         opened,
         onShow: (holder, tab) => done.push(`side:${holder}:${isPageTab(tab) ? tab.page : tab}`),
@@ -1081,6 +1083,34 @@ test("an Inbox item's step holds the panel beside it, so Back from the next item
   act(() => window.history().onBack());
   assert.equal(window.at(), "/acme/inbox/item-a");
   assert.deepEqual(done.slice(1), ["side:shut"]);
+});
+
+test("Back to another task whose panel stood shut leaves the panel to shut as that task arrives, rather than shutting it over the task the window is leaving", () => {
+  const OTHER_TASK = "7e8f9a0b-0000-4000-8000-0000000000c4";
+  const done: string[] = [];
+  const notes = fileTab("docs/notes.md");
+  const onTask = (taskId: string, side: SidePanelTab | undefined) => {
+    const base = tasksControl();
+    return tasksControl({
+      page: TASKS_PAGE.DOCUMENT,
+      activeTaskId: taskId,
+      boundFor: taskId,
+      onRestoreTask: (id) => done.push(`task:${id}`),
+      sidePanel: {
+        ...base.sidePanel,
+        open: side !== undefined,
+        stop: taskId,
+        tab: side,
+        onSetOpen: (open) => done.push(open ? "side:open" : "side:shut"),
+      },
+    });
+  };
+  const window = mount(onTask(OTHER_TASK, undefined));
+  press();
+  window.stand(onTask(TASK_ID, notes));
+
+  act(() => window.history().onBack());
+  assert.deepEqual(done, [`task:${OTHER_TASK}`]);
 });
 
 test("a tab the window chooses by itself, with no press leading to it, takes the step standing in place", () => {
