@@ -69,6 +69,7 @@ import {
   type AgentSandboxImageService,
   ImagePreparing,
 } from "../agent-sandbox-image.js";
+import { fillBaseDrive } from "../base-drive.js";
 import { CODER, sandboxVcpus } from "../coder-host/bounds.js";
 import {
   type AgentExtraRead,
@@ -690,6 +691,28 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     });
 
   /**
+   * The workspace's repository's base drive filled past the request's
+   * answer where it has none (`base-drive.ts`), on the same terms as the
+   * repository snapshot's build.
+   */
+  const fillBaseDriveInBackground = (
+    agent: Agent,
+    of: RepositorySnapshotOf,
+    read: AgentRepositoryRead,
+  ) =>
+    Effect.gen(function* () {
+      if (Option.isNone(yield* Effect.serviceOption(AfterResponse))) return;
+      yield* afterResponse(
+        "A base drive's fill",
+        Effect.flatMap(Effect.context<DatabaseServices>(), (context) =>
+          fillBaseDrive(api, of, of.imageSnapshotId, read, (running) =>
+            checkoutOver(context, running, agent.userId),
+          ),
+        ),
+      );
+    });
+
+  /**
    * The agent's sandbox opened from its repository snapshot and its
    * checkout brought up to the default branch; none where the snapshot was
    * gone or its checkout would not refresh, the snapshot then forgotten so
@@ -771,6 +794,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     Effect.gen(function* () {
       const of = repositorySnapshotOf(agent, read, imageSnapshotId);
       if (Option.isSome(of)) {
+        yield* fillBaseDriveInBackground(agent, of.value, read);
         const found = yield* readRepositorySnapshot(api, of.value).pipe(Effect.option);
         if (Option.isSome(found) && found.value.state === REPOSITORY_SNAPSHOT_STATE.READY) {
           const fromSnapshot = yield* openedFromRepositorySnapshot(
