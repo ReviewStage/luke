@@ -2842,11 +2842,22 @@ function AgentTabView({
       unsent,
       notes: failedNotes,
       sending,
-      retry: (id: string) => retryLine?.(id),
-      takeBack: (id: string) => takeBackLine?.(id),
+      // Note that an archived agent takes no message, so a line refused before it was archived is only deleted.
+      retry: onUnarchive === undefined ? (id: string) => retryLine?.(id) : undefined,
+      takeBack: onUnarchive === undefined ? (id: string) => takeBackLine?.(id) : undefined,
       drop: (id: string) => dropLine?.(id),
     }),
-    [undelivered, composer.closed, unsent, failedNotes, sending, retryLine, takeBackLine, dropLine],
+    [
+      undelivered,
+      composer.closed,
+      unsent,
+      failedNotes,
+      sending,
+      retryLine,
+      takeBackLine,
+      dropLine,
+      onUnarchive,
+    ],
   );
   const starterActor = usePerson(agent.startedBy);
   const wholeParts = useWholePartDoor(agent.id);
