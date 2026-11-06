@@ -32,6 +32,7 @@
     "./sentry-tracing": "./src/sentry-tracing.js",
     "./sentry-tunnel": "./src/sentry-tunnel.js",
     "./shown-failure": "./src/shown-failure.js",
+    "./live-read": "./src/live-read.js",
     "./live-wire": "./src/live-wire.js",
     "./transcript-window": "./src/transcript-window.js",
     "./turn-record": "./src/turn-record.js",

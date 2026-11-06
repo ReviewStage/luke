@@ -5,9 +5,10 @@ import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { accountBearer, CALL_FAULT } from "./account-call.js";
 import { FAILURE_FACT } from "./failure-facts.js";
-import { hostedCall } from "./hosted-call.js";
+import { HOSTS_READ } from "./host-live.js";
+import { askLiveRead, hostedCall } from "./hosted-call.js";
 import { type HostedClient, hostedClient } from "./hosted-link.js";
-import { LIVE_SIGNED_OUT } from "./live-wire.js";
+import { LIVE_POLL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -135,4 +136,36 @@ it.effect.each<Row>([
 
     assert.deepEqual(untraced(answer), expected);
   }),
+);
+
+it.effect(
+  "a declared live read polled past where its rows stood asks for them inline past it, as its params name it",
+  () =>
+    Effect.gen(function* () {
+      const sealed = { capability: "cap-1", queryFingerprint: "fp-1", expiresAt: 1, digest: "d2" };
+      const recording = recordingHttpClient(() =>
+        jsonResponse({
+          url: `${BASE_URL}/poll`,
+          queries: { hosts: { ...sealed, rows: "[]" } },
+          installScriptUrl: `${BASE_URL}/install.sh`,
+        }),
+      );
+      const hosted = hostedClient({ baseUrl: BASE_URL, credential: account("token-1") });
+
+      const answer = yield* Effect.provide(
+        askLiveRead(hosted.live, HOSTS_READ, { [LIVE_USER_QUERY]: "user-1" }, { after: "d1" }),
+        recording.layer,
+      );
+
+      assert.deepEqual(answer, {
+        url: `${BASE_URL}/poll`,
+        queries: { hosts: { ...sealed, rows: [] } },
+        installScriptUrl: `${BASE_URL}/install.sh`,
+      });
+      assert.deepEqual([...(recording.requests[0]?.searchParams.entries() ?? [])].toSorted(), [
+        [LIVE_POLL.AFTER, "d1"],
+        [LIVE_POLL.QUERY, LIVE_POLL.ON],
+        [LIVE_USER_QUERY, "user-1"],
+      ]);
+    }),
 );

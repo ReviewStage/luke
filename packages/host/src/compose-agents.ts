@@ -76,6 +76,7 @@ import {
 } from "@repo/features/agent-wire";
 import { FAILURE_FACT, type FailureFacts, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_SOURCE, githubImageOf } from "@repo/features/github-image";
+import { HOSTS_READ } from "@repo/features/host-live";
 import {
   type HostPairingApproveView,
   type HostPairingDenyView,
@@ -275,7 +276,7 @@ export type AgentClient = Pick<
   | "models"
   | "accountPreferencesLive"
   | "writeDefault"
-  | "hostsLive"
+  | "liveRead"
   | "devicePresence"
   | "removeHost"
   | "readHostPairing"
@@ -601,7 +602,8 @@ export function composeAgents(
         dependencies.kernel.emit(GATEWAY_EVENT.MEMORIES_CHANGED, carried(held)),
     });
     const hosts = yield* heldHosts({
-      seal: (userId, poll, after) => asked(client.hostsLive(userId, poll, after)),
+      seal: (userId, poll, after) =>
+        asked(client.liveRead(HOSTS_READ, { userId }, poll ? { after } : undefined)),
       accountId: dependencies.accountId,
       gate,
       pool: dependencies.pool,

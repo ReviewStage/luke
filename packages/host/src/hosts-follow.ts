@@ -1,8 +1,8 @@
 import type { HostDoneAnswerView } from "@repo/features/agent-view";
 import {
+  HOSTS_READ,
   type HostLiveRow,
   type HostsLiveAnswer,
-  hostsLiveRowsSchema,
   hostsOfLiveRows,
 } from "@repo/features/host-live";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
@@ -121,7 +121,7 @@ function followHosts(
           },
         },
         first,
-        hostsLiveRowsSchema,
+        HOSTS_READ.rows,
         (rows) =>
           Effect.andThen(
             hosts.answer(rows.hosts),
