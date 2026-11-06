@@ -62,7 +62,7 @@ import type { RunMode } from "./run-mode.js";
  * function's bound — is opened again on its own, after a wait that doubles
  * to ten seconds and starts over once the shell attaches; one whose agent
  * has not opened its sandbox is asked after every five seconds; and one the
- * relay ended as idle, stopped, gone, or exited, or one the deployment
+ * relay ended as stopped, gone, or exited, or one the deployment
  * serves no relay for, stays ended until the tab attaches again. A wake
  * after the Mac slept cuts every wait short. Output is paced to what the
  * tab has drawn: past `PAUSE_ABOVE_BYTES` unacked the socket is no longer
@@ -151,7 +151,6 @@ const RECONNECT_BACKOFF = Schedule.exponential(TERMINAL_RECONNECT.FIRST).pipe(
 
 /** The states a relay's close ends a connection in, by its code; any other close is a drop. */
 const ENDED_BY_CLOSE: ReadonlyMap<number, TerminalConnection> = new Map([
-  [TERMINAL_RELAY_CLOSE.IDLE, TERMINAL_CONNECTION.IDLE],
   [TERMINAL_RELAY_CLOSE.STOPPED, TERMINAL_CONNECTION.STOPPED],
   [TERMINAL_RELAY_CLOSE.GONE, TERMINAL_CONNECTION.GONE],
   [TERMINAL_RELAY_CLOSE.EXITED, TERMINAL_CONNECTION.EXITED],

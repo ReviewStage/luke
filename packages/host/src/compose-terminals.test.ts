@@ -270,7 +270,7 @@ it.effect(
         cols: 100,
         rows: 30,
       });
-      yield* relay.close(TERMINAL_RELAY_CLOSE.IDLE);
+      yield* relay.close(TERMINAL_RELAY_CLOSE.STOPPED);
       yield* settle;
       yield* TestClock.adjust(Duration.minutes(1));
 
@@ -293,9 +293,9 @@ it.effect(
       assert.deepEqual(states(), [
         state(TERMINAL_CONNECTION.CONNECTING),
         state(TERMINAL_CONNECTION.ATTACHED),
-        state(TERMINAL_CONNECTION.IDLE),
+        state(TERMINAL_CONNECTION.STOPPED),
       ]);
-      assert.equal(opened.length, 1, "an idle connection is not opened again on its own");
+      assert.equal(opened.length, 1, "a stopped connection is not opened again on its own");
     }),
 );
 
@@ -581,7 +581,7 @@ it.effect(
       const beforeAttach = [...relay.sent];
       yield* relay.attached;
       yield* settle;
-      yield* relay.close(TERMINAL_RELAY_CLOSE.IDLE);
+      yield* relay.close(TERMINAL_RELAY_CLOSE.STOPPED);
       yield* settle;
       yield* type("lost");
 
