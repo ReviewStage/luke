@@ -21,7 +21,8 @@
  *   first frame, and the query is never stale (`staleTime: Infinity`) and
  *   never read again. A read the host could not answer before it ever had
  *   is the query's error (`LiveReadFailed`); one that holds rows keeps them
- *   whatever it says after.
+ *   whatever it says after, and one whose rows the document drops, as a
+ *   sign-out drops them, is reset to pending (`resetQueries`).
  * - **Its follow**, the `*_FOLLOW` act a read the panel holds is followed by,
  *   stays open on the act port exactly while the query is active (the
  *   query's own `isActive()`: it has an observer that is not disabled), one
@@ -211,13 +212,19 @@ function firstAnswer<Read extends LiveReadName>(
  * current from it, by the read's name and ids; disabled under its name alone
  * where `ids` is none. Note that the `queryFn` takes the signal, so a read
  * every observer let go before it answered is canceled rather than left
- * waiting.
+ * waiting, and that it answers the rows the document holds as it settles,
+ * since a push may have landed between the first answer and the fiber's
+ * resuming, and no newer rows may be overwritten by older.
  */
 function liveReadQuery<Read extends LiveReadName>(read: Read, ids: readonly string[] | undefined) {
   const queryKey: LiveReadKey<Read> = ids === undefined ? [read] : [read, ...ids];
   return queryOptions({
     queryKey,
-    queryFn: ({ client, signal }) => rendererPromise(firstAnswer(client, read, ids ?? []), signal),
+    queryFn: ({ client, signal }) =>
+      rendererPromise(firstAnswer(client, read, ids ?? []), signal).then(
+        (answered) =>
+          heldAt(client.getQueryData(appStateQuery.queryKey), read, ids ?? [])?.rows ?? answered,
+      ),
     enabled: ids !== undefined,
     staleTime: Infinity,
     retry: false,
@@ -279,7 +286,9 @@ export const hostsRetryMutation = () => actMutation(ACT_KIND.HOSTS_RETRY);
  * Writes what each push lays of a live read into its query: the rows of
  * every read the document holds, where they moved, so a surface that mounts
  * after they landed draws them in its first frame, as the docs' guide to
- * data pushed over a socket writes each push into the cache; and a failed
+ * data pushed over a socket writes each push into the cache; a read query
+ * reset where the document holds its rows no more, as a sign-out clears
+ * them, so it draws pending again rather than what stood; and a failed
  * query reset where its read stands failed no more, as Try again leaves it.
  */
 function writeLiveReads(client: QueryClient): void {
@@ -297,8 +306,11 @@ function writeLiveReads(client: QueryClient): void {
   }
   for (const query of client.getQueryCache().getAll()) {
     const live = liveReadOf(query);
-    if (live === undefined || query.state.status !== "error") continue;
-    if (heldAt(document, live.read, live.ids)?.failed !== true) {
+    if (live === undefined) continue;
+    const held = heldAt(document, live.read, live.ids);
+    const cleared = query.state.status === "success" && held?.rows === undefined;
+    const recovered = query.state.status === "error" && held?.failed !== true;
+    if (cleared || recovered) {
       void client.resetQueries({ queryKey: query.queryKey, exact: true });
     }
   }

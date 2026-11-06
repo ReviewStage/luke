@@ -62,6 +62,8 @@ let sent: { kind: PortActKind; payload: unknown }[] = [];
 let refuseSave: GitHubTokenRejection | undefined;
 /** How many of the next reads go unanswered. */
 let unansweredReads = 0;
+/** Whether the host holds no read of the token at all, as after a sign-out. */
+let cleared = false;
 /** Lays the token on the window's document, as the host lays its read and each write's answer. */
 let layToken: () => void = () => undefined;
 /** Every place in Settings the window was asked to open, in order. */
@@ -75,10 +77,12 @@ beforeEach(() => {
   sent = [];
   refuseSave = undefined;
   unansweredReads = 0;
+  cleared = false;
   opened = [];
   handState({}, { account: ADA });
   // Note that the token is laid as the host holds it, and a write's answer is laid before it answers.
   layToken = holdGitHubToken(() => {
+    if (cleared) return undefined;
     if (unansweredReads === 0) return { rows: { token: stored } };
     unansweredReads -= 1;
     return { failed: true };
@@ -341,6 +345,23 @@ test("a read that went unanswered says so as an alert with Retry in place of Add
   await settle();
   // Note that Add stands once the token read again reaches its query.
   await vi.waitFor(() => button("Add"));
+});
+
+test("a token the host clears, as a sign-out does, is drawn no more", async () => {
+  stored = KEPT;
+  await mountAndOpen(false);
+  button("Manage");
+
+  cleared = true;
+  act(() => layToken());
+  await settle();
+  await vi.waitFor(() =>
+    assert.equal(
+      [...document.querySelectorAll("button")].some((each) => each.textContent === "Manage"),
+      false,
+    ),
+  );
+  assert.ok(!(document.body.textContent ?? "").includes("octo-member"), "the token is gone");
 });
 
 test("the row draws no other account's token when Profile is drawn for another account", async () => {
