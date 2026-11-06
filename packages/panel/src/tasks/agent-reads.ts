@@ -8,12 +8,13 @@
  * and a failure is answered at once, never tried again on its own.
  */
 
-import type { AgentMessagesParams } from "@repo/features/agent-view";
+import type { AgentChangesAnswerView, AgentMessagesParams } from "@repo/features/agent-view";
 import type { TasksSkillsParams } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import { queryOptions } from "@tanstack/react-query";
 import { askAct } from "../act.js";
 import { QUERY_ROOT } from "../query-keys.js";
+import { pullRequestAsked } from "./pull-request-number.js";
 
 /** An agent's page, as a link to it or a row naming it by its id alone reads it. */
 export function agentPageQueryOptions(agentId: string) {
@@ -68,6 +69,42 @@ export function terminalListQueryOptions(agentId: string) {
   return queryOptions({
     queryKey: [QUERY_ROOT.TERMINAL_LIST, agentId],
     queryFn: () => askAct(ACT_KIND.TERMINAL_LIST, { agentId }),
+    retry: false,
+  });
+}
+
+/** An agent's changes the service did not carry, as their query's error, carrying the answer it gave. */
+export class ChangesFailed extends Error {
+  readonly answer: Extract<AgentChangesAnswerView, { readonly failure: unknown }>;
+
+  constructor(answer: Extract<AgentChangesAnswerView, { readonly failure: unknown }>) {
+    super("The service did not carry this read of the changes.");
+    this.answer = answer;
+  }
+}
+
+/** An agent's changes as read, a failure thrown as `ChangesFailed`. */
+function landedChanges(answer: AgentChangesAnswerView) {
+  if ("failure" in answer) throw new ChangesFailed(answer);
+  return answer;
+}
+
+/**
+ * An agent's changes, its pull request's files, or those of the pull request
+ * of its repository by the number given. Its Changes tab reads them as it is
+ * first shown, as its agent ends, and on Refresh, so the query is read on
+ * those asks alone; a failure stands as the query's error, the changes last
+ * read standing beside it.
+ */
+export function agentChangesQueryOptions(agentId: string, number: number | undefined) {
+  return queryOptions({
+    queryKey: [QUERY_ROOT.AGENT_CHANGES, agentId, number ?? null],
+    queryFn: () =>
+      askAct(ACT_KIND.AGENTS_CHANGES, pullRequestAsked(agentId, number)).then(landedChanges),
+    staleTime: Number.POSITIVE_INFINITY,
+    // Note that each answer is its own, an answer alike to the last included, since the tab reads the
+    // marks again with every answer and lets go of a file read whole for the one before.
+    structuralSharing: false,
     retry: false,
   });
 }

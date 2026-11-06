@@ -2794,7 +2794,7 @@ function ConversationView({
   );
 }
 
-/** One of the overview's reads, as `useAgentRead` holds it, and whether it has been asked yet. */
+/** One of the overview's reads, as `useChangesReads` holds the changes, and whether it has been asked yet. */
 function askedYet(read: { readonly answer: unknown; readonly out: boolean }): boolean {
   return read.answer !== undefined || read.out;
 }
