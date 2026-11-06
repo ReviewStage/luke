@@ -5,7 +5,7 @@ import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { test } from "vitest";
 import { ChangelogPage, RELEASES } from "../src/ChangelogPage";
-import { changelogRoutes, changelogViewForPath } from "../src/changelog-releases";
+import { CHANGELOG_VIEW, changelogRoutes, changelogViewForPath } from "../src/changelog-releases";
 
 /* React reports a hydration mismatch as a recoverable error and quietly
    renders the client's tree instead, so a page that drew the wrong view would
@@ -56,4 +56,18 @@ test("the pager's arrows are named for where they go, not for which way they poi
     `Newer release, v${RELEASES[0]?.version}`,
     `Older release, v${RELEASES[2]?.version}`,
   ]);
+});
+
+test("each release on a page is a heading under the page's title, so a screen reader steps by release", () => {
+  const page = ROUTES.find((route) => route.path === "/changelog");
+  assert.ok(page !== undefined && page.view.kind === CHANGELOG_VIEW.PAGE);
+  const root = document.createElement("div");
+  root.innerHTML = renderToString(createElement(ChangelogPage, { view: page.view }));
+  const versions = Array.from(root.querySelectorAll("h2")).map((heading) =>
+    heading.textContent?.trim(),
+  );
+  assert.deepEqual(
+    versions,
+    page.view.releases.map((release) => `v${release.version}`),
+  );
 });

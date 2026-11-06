@@ -13,8 +13,7 @@
 
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useRef } from "react";
-import { ROUTED_PLACE } from "./route-gates.js";
-import { useRoutedLocation } from "./routed-location.js";
+import { ROUTED_PLACE, useWindowPlace } from "./places/routed-places.js";
 
 /** A workspace's Board as the router stands it. */
 export interface BoardRoute {
@@ -48,7 +47,7 @@ export interface PersonRoute {
 export function useBoardRoute(input: { onClose: () => void; onStay: () => void }): BoardRoute {
   const router = useRouter();
   const navigate = useNavigate();
-  const here = useRoutedLocation();
+  const here = useWindowPlace();
   const open = here.place === ROUTED_PLACE.BOARD;
   const standingIn = open ? here.params.workspace : undefined;
   const onOpen = (workspace: string) => {
@@ -73,7 +72,7 @@ export function useBoardRoute(input: { onClose: () => void; onStay: () => void }
 export function usePersonRoute(input: { onClose: () => void; onStay: () => void }): PersonRoute {
   const router = useRouter();
   const navigate = useNavigate();
-  const here = useRoutedLocation();
+  const here = useWindowPlace();
   // Only grows: each name a page was opened with, by the person, which the address leaves out.
   const names = useRef(new Map<string, string>()).current;
   const open = here.place === ROUTED_PLACE.PERSON;

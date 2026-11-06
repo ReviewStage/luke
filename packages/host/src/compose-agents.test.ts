@@ -1099,6 +1099,9 @@ function subject(
     };
     return {
       call,
+      /** The composer's declared acts, each handed its input as the port reads it. */
+      acts: composer.acts,
+      flushHeldCloses: composer.flushHeldCloses,
       transcripts,
       /** Each of `transcript`'s rows the host laid, in order. */
       held: (transcript?: { readonly agentId: string; readonly callId?: string }) =>
@@ -1191,7 +1194,7 @@ function subject(
 
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
-    const { call, asked, sealTranscript } = yield* subject();
+    const { call, acts, asked, sealTranscript } = yield* subject();
     sealTranscript(LIVE_ANSWERED);
 
     assert.deepEqual(
@@ -1322,14 +1325,14 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_ATTACHMENT, {
+      yield* acts.AGENTS_INBOX_ATTACHMENT({
         itemId: ITEM.id,
         attachmentId: ATTACHMENT_ID,
       }),
       { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_PICTURE, {
+      yield* acts.AGENTS_PICTURE({
         agentId: AGENT_ID,
         pictureId: PICTURE_ID,
         callId: "call-worker",
@@ -1345,7 +1348,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { part: { type: "reasoning", text: "Whole." } },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_ANSWER, {
+      yield* acts.AGENTS_INBOX_ANSWER({
         itemId: ITEM.id,
         revision: 2,
         reply: INBOX_REPLY.ACKNOWLEDGED,
@@ -1354,7 +1357,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { item: { ...ITEM, revision: 3, status: INBOX_STATUS.ANSWERED }, taken: true },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
+      yield* acts.AGENTS_INBOX_CLOSE({
         itemId: ITEM.id,
         revision: 2,
         clientKey: "close-1",
@@ -1365,7 +1368,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
+      yield* acts.AGENTS_INBOX_MESSAGE({
         itemId: ITEM.id,
         text: "Also page on-call.",
         attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
@@ -1385,14 +1388,14 @@ it.effect("each method asks the service once and answers what it said, whole", (
         },
       },
     );
-    yield* call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
+    yield* acts.AGENTS_INBOX_MESSAGE({
       itemId: ITEM.id,
       text: "Ship it.",
       clientKey: "message-2",
       answers: { ask: MESSAGE_ID, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] },
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_START, {
+      yield* acts.AGENTS_INBOX_START({
         agentId: AGENT_ID,
         title: "Annual plan copy",
         text: "Draft the annual plan's line too.",
@@ -1413,23 +1416,23 @@ it.effect("each method asks the service once and answers what it said, whole", (
         },
       },
     );
+    assert.deepEqual(yield* acts.AGENTS_INBOX_READ_STATE({ itemId: ITEM.id, unread: true }), {
+      id: ITEM.id,
+      unread: true,
+    });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
-      { id: ITEM.id, unread: true },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
+      yield* acts.AGENTS_INBOX_READ_STATE({
         itemId: ITEM.id,
         unread: false,
       }),
       { id: ITEM.id, unread: false },
     );
+    assert.deepEqual(yield* acts.AGENTS_INBOX_REMIND({ itemId: ITEM.id, until: 5_000 }), {
+      id: ITEM.id,
+      unread: false,
+    });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_REMIND, { itemId: ITEM.id, until: 5_000 }),
-      { id: ITEM.id, unread: false },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_ALL, {
+      yield* acts.AGENTS_INBOX_READ_ALL({
         workspaceId: WORKSPACE_ID,
         itemIds: [],
       }),
@@ -1526,32 +1529,27 @@ it.effect(
 );
 
 it.effect(
-  "a provider key passes through to the service once and is answered back, and held for the windows, as its hint alone, each write's answer laid where the keys are held, and a save the schema refuses is refused in words that hold no key",
+  "a provider key passes through to the service once and is answered back, and held for the windows, as its hint alone, each write's answer laid where the keys are held",
   () =>
     Effect.gen(function* () {
-      const { call, asked, providerKeys } = yield* subject();
+      const { call, acts, asked, providerKeys } = yield* subject();
 
       yield* call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW);
       yield* settled;
       const read = providerKeys().at(-1);
-      const saved = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
+      const saved = yield* acts.PROVIDER_KEYS_SAVE({
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
         key: PROVIDER_KEY,
       });
-      const removed = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, {
+      const removed = yield* acts.PROVIDER_KEYS_REMOVE({
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
       });
-      const refused = yield* Effect.flip(
-        call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, { provider: "google", key: PROVIDER_KEY }),
-      );
 
       assert.deepEqual(read, { "user-dana": { rows: { keys: [KEPT] } } });
       assert.deepEqual(saved, { keys: [KEPT] });
       assert.deepEqual(removed, { keys: [] });
       assert.deepEqual(providerKeys().at(-1), { "user-dana": { rows: { keys: [] } } });
       assert.ok(!JSON.stringify([providerKeys(), saved, removed]).includes(PROVIDER_KEY));
-      assert.equal(refused._tag, "InvalidParamsRefusal");
-      assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
       assert.deepEqual(asked, [
         "keys",
         `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
@@ -1607,13 +1605,13 @@ it.effect(
 );
 
 it.effect(
-  "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held once the repository lists moved, and a save the schema refuses is refused in words that hold no token",
+  "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held once the repository lists moved",
   () =>
     Effect.gen(function* () {
       // The token the windows held as each write's read of the repository lists landed, a turn after it was asked.
       const movedUnder: unknown[] = [];
       let held: () => unknown[] = () => [];
-      const { call, asked, githubToken } = yield* subject({
+      const { call, acts, asked, githubToken } = yield* subject({
         repositoriesMoved: Effect.andThen(
           Effect.yieldNow,
           Effect.sync(() => void movedUnder.push(held().at(-1))),
@@ -1624,12 +1622,9 @@ it.effect(
       yield* call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW);
       yield* settled;
       const read = githubToken().at(-1);
-      const saved = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: GITHUB_TOKEN });
+      const saved = yield* acts.GITHUB_TOKEN_SAVE({ token: GITHUB_TOKEN });
       const afterSave = githubToken().at(-1);
-      const removed = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE);
-      const refused = yield* Effect.flip(
-        call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: `${GITHUB_TOKEN} spaced` }),
-      );
+      const removed = yield* acts.GITHUB_TOKEN_REMOVE(undefined);
 
       assert.deepEqual(read, { "user-dana": { rows: { token: null } } });
       assert.deepEqual(saved, { token: SAVED_TOKEN });
@@ -1637,8 +1632,6 @@ it.effect(
       assert.deepEqual(removed, { token: null });
       assert.deepEqual(githubToken().at(-1), { "user-dana": { rows: { token: null } } });
       assert.ok(!JSON.stringify([githubToken(), saved, removed]).includes(GITHUB_TOKEN));
-      assert.equal(refused._tag, "InvalidParamsRefusal");
-      assert.ok(!JSON.stringify(refused).includes(GITHUB_TOKEN));
       assert.deepEqual(asked, ["token", "save-token:the token", "remove-token"]);
       assert.deepEqual(movedUnder, [read, afterSave], "each write's lists move before its token");
     }),
@@ -2537,16 +2530,16 @@ it.effect(
         asked.filter((ask) => ask === `picture:${AGENT_ID}:${PICTURE_ID}:`).length;
 
       const kept = yield* subject();
-      const first = yield* kept.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
-      const again = yield* kept.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+      const first = yield* kept.acts.AGENTS_PICTURE(picture);
+      const again = yield* kept.acts.AGENTS_PICTURE(picture);
       assert.deepEqual(again, first);
       assert.equal(pictureReads(kept.asked), 1);
 
       let account = "user-dana";
       const switched = yield* subject({ accountId: () => account });
-      yield* switched.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+      yield* switched.acts.AGENTS_PICTURE(picture);
       account = "user-eli";
-      yield* switched.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+      yield* switched.acts.AGENTS_PICTURE(picture);
       assert.equal(pictureReads(switched.asked), 2);
 
       type Harness = Effect.Success<ReturnType<typeof subject>>;
@@ -2558,9 +2551,9 @@ it.effect(
       ];
       for (const letGo of lettingGo) {
         const harness = yield* subject();
-        yield* harness.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+        yield* harness.acts.AGENTS_PICTURE(picture);
         yield* letGo(harness);
-        yield* harness.call(GATEWAY_METHOD.AGENTS_PICTURE, picture);
+        yield* harness.acts.AGENTS_PICTURE(picture);
         assert.equal(pictureReads(harness.asked), 2);
       }
     }),
@@ -3183,7 +3176,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, sealScope, sealItems, live, commitIn, changeFirst } = harness;
+      const { call, acts, sealScope, sealItems, live, commitIn, changeFirst } = harness;
       sealScope(LIVE_ANSWERED);
       sealItems(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
@@ -3205,7 +3198,7 @@ it.effect(
       const unread = (item: InboxItem) => item.unread === true;
 
       commitIn("9200");
-      const marked = yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
+      const marked = yield* acts.AGENTS_INBOX_READ_STATE({
         itemId: ITEM.id,
         unread: true,
       });
@@ -3229,7 +3222,7 @@ it.effect(
       changeFirst(overtaken);
       commitIn(undefined);
       const closing = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
+        acts.AGENTS_INBOX_CLOSE({
           itemId: ITEM.id,
           revision: ITEM.revision,
           clientKey: "close-1",
@@ -3249,7 +3242,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const pool = yield* entityPool({ mintKey: () => "mark-key", replayRefused: Effect.void });
-      const { call, sealScope, live, told, answerMarks, markKeys } = yield* subject({ pool });
+      const { call, acts, sealScope, live, told, answerMarks, markKeys } = yield* subject({ pool });
       sealScope(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
@@ -3257,7 +3250,7 @@ it.effect(
       yield* toldTimes(told, 1);
 
       answerMarks(false);
-      const marked = yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
+      const marked = yield* acts.AGENTS_INBOX_READ_STATE({
         itemId: ITEM.id,
         unread: false,
       });
@@ -3288,7 +3281,7 @@ it.effect(
   "ten marks asked in a row each draw at once and answer once the service takes them, an item arriving meanwhile draws at once, and no mark is taken back on the way to the read carrying them",
   () =>
     Effect.gen(function* () {
-      const { call, sealScope, live, commitIn, told } = yield* subject();
+      const { call, acts, sealScope, live, commitIn, told } = yield* subject();
       sealScope(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
@@ -3309,8 +3302,7 @@ it.effect(
       const marking = yield* Effect.forkChild(
         Effect.forEach(
           unread,
-          (item) =>
-            call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, { itemId: item.id, unread: false }),
+          (item) => acts.AGENTS_INBOX_READ_STATE({ itemId: item.id, unread: false }),
           { concurrency: "unbounded" },
         ),
       );
@@ -3350,7 +3342,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, sealScope, sealItems, live } = harness;
+      const { call, acts, sealScope, sealItems, live } = harness;
       sealScope(LIVE_ANSWERED);
       sealItems(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
@@ -3363,7 +3355,7 @@ it.effect(
       const replied = (item: InboxItem) => JSON.stringify(item).includes(MESSAGE_ID);
       assert.deepEqual(bothHold(harness, replied), [false, false]);
 
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
+      yield* acts.AGENTS_INBOX_MESSAGE({
         itemId: ITEM.id,
         text: "Push it after the tests pass.",
         clientKey: "reply-1",
@@ -3378,7 +3370,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, sealScope, sealItems, live, commitIn } = harness;
+      const { call, acts, sealScope, sealItems, live, commitIn } = harness;
       sealScope(LIVE_ANSWERED);
       sealItems(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
@@ -3400,7 +3392,7 @@ it.effect(
       const replied = (item: InboxItem) => JSON.stringify(item).includes(MESSAGE_ID);
 
       commitIn("9400");
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
+      yield* acts.AGENTS_INBOX_MESSAGE({
         itemId: ITEM.id,
         text: "Push it after the tests pass.",
         clientKey: "reply-1",
@@ -3415,7 +3407,7 @@ it.effect(
   "an answer the agent posts over before the service answers it is drawn once, where the service wrote it, never again under its key below the agent's post",
   () =>
     Effect.gen(function* () {
-      const { call, sealScope, live, commitIn, told, holdMessages } = yield* subject();
+      const { call, acts, sealScope, live, commitIn, told, holdMessages } = yield* subject();
       sealScope(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
@@ -3451,7 +3443,7 @@ it.effect(
       const answering = yield* Deferred.make<void>();
       holdMessages(Deferred.await(answering));
       const sending = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
+        acts.AGENTS_INBOX_MESSAGE({
           itemId: ITEM.id,
           text: "",
           clientKey: "answer-1",
@@ -3495,7 +3487,7 @@ it.effect(
   "a close drops its question from what waits across the account, its task counting one fewer, the moment it is asked, answers once the service takes it, and stands over the account's read until it carries it",
   () =>
     Effect.gen(function* () {
-      const { call, sealAccount, live, commitIn, accountInboxes } = yield* subject();
+      const { call, acts, sealAccount, live, commitIn, accountInboxes } = yield* subject();
       sealAccount(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
@@ -3515,7 +3507,7 @@ it.effect(
       assert.deepEqual(waiting(), { items: 1, toDo: [1] });
 
       commitIn("9300");
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
+      yield* acts.AGENTS_INBOX_CLOSE({
         itemId: ITEM.id,
         revision: ITEM.revision,
         clientKey: "close-1",
@@ -3531,6 +3523,127 @@ it.effect(
       live.account.set({ ...parts, items: [], plans: [{ ...plan, toDo: 0 }] }, ["9300"]);
       yield* nextPoll;
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
+    }),
+);
+
+it.effect(
+  "a close held for its Undo drops its question at once and asks the service nothing until it is let go: undone, it stands again and the service never hears of it; let go, it is sent",
+  () =>
+    Effect.gen(function* () {
+      const { call, acts, sealAccount, live, asked, accountInboxes } = yield* subject();
+      sealAccount(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+      const plan = { planId: TASK_ID, items: 1, toDo: 1, updatedAt: ITEM.updatedAt };
+      const parts = { planless: [], automations: [], failedRuns: [] };
+      live.account.set({ ...parts, items: [WAITING], plans: [plan] }, ["9100"]);
+      yield* toldTimes(accountInboxes, 1);
+      /** How many items wait, as the account inbox was last told. */
+      const waiting = () => {
+        const told = accountInboxes().at(-1);
+        assert.ok(isRecord(told) && Array.isArray(told.items));
+        return told.items.length;
+      };
+      const closes = () => asked.filter((each) => each.startsWith("close:"));
+      const close = { itemId: ITEM.id, revision: ITEM.revision, held: true };
+
+      const undone = yield* Effect.forkChild(
+        acts.AGENTS_INBOX_CLOSE({ ...close, clientKey: "close-1" }),
+      );
+      yield* settled;
+      assert.equal(waiting(), 0);
+      const undo = yield* acts.AGENTS_INBOX_CLOSE_RELEASE({
+        clientKey: "close-1",
+        send: false,
+      });
+      yield* Fiber.join(undone);
+      yield* settled;
+      assert.deepEqual(undo, { held: true });
+      assert.equal(waiting(), 1);
+      assert.deepEqual(closes(), []);
+
+      const sent = yield* Effect.forkChild(
+        acts.AGENTS_INBOX_CLOSE({ ...close, clientKey: "close-2" }),
+      );
+      yield* settled;
+      yield* acts.AGENTS_INBOX_CLOSE_RELEASE({ clientKey: "close-2", send: true });
+      yield* Fiber.join(sent);
+      yield* settled;
+      assert.deepEqual(closes(), [`close:${ITEM.id}:${ITEM.revision}:close-2`]);
+      // Note that an Undo past the send finds nothing held to take back.
+      assert.deepEqual(
+        yield* acts.AGENTS_INBOX_CLOSE_RELEASE({
+          clientKey: "close-2",
+          send: false,
+        }),
+        { held: false },
+      );
+    }),
+);
+
+it.effect(
+  "an Undo pressed while its close waits behind a write the service has not answered is kept: the close, sent at last, is taken back and never reaches the service",
+  () =>
+    Effect.gen(function* () {
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
+      const { acts, asked, answerMarks } = yield* subject({ pool });
+      const closes = () => asked.filter((each) => each.startsWith("close:"));
+
+      answerMarks(false);
+      yield* acts.AGENTS_INBOX_READ_STATE({ itemId: ITEM.id, unread: false });
+      yield* settled;
+      assert.equal(pool.queued().length, 1, "the mark waits for the service");
+      const closing = yield* Effect.forkChild(
+        acts.AGENTS_INBOX_CLOSE({
+          itemId: ITEM.id,
+          revision: ITEM.revision,
+          clientKey: "close-1",
+          held: true,
+        }),
+      );
+      yield* settled;
+      assert.equal(pool.queued().length, 2, "the close waits behind the mark");
+      assert.deepEqual(
+        yield* acts.AGENTS_INBOX_CLOSE_RELEASE({
+          clientKey: "close-1",
+          send: false,
+        }),
+        { held: true },
+      );
+
+      answerMarks(true);
+      yield* pool.resend;
+      yield* settled;
+      yield* Fiber.join(closing);
+      assert.deepEqual(closes(), []);
+      assert.deepEqual(pool.queued(), []);
+    }),
+);
+
+it.effect(
+  "a close held for its Undo is sent, not dropped, when the host quits before its window lets it go",
+  () =>
+    Effect.gen(function* () {
+      const { acts, asked, flushHeldCloses } = yield* subject();
+      const closing = yield* Effect.forkChild(
+        acts.AGENTS_INBOX_CLOSE({
+          itemId: ITEM.id,
+          revision: ITEM.revision,
+          clientKey: "close-1",
+          held: true,
+        }),
+      );
+      yield* settled;
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [],
+      );
+      yield* flushHeldCloses;
+      yield* Fiber.join(closing);
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [`close:${ITEM.id}:${ITEM.revision}:close-1`],
+      );
     }),
 );
 
@@ -3687,7 +3800,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, live, answerForgets } = harness;
+      const { call, acts, live, answerForgets } = harness;
       const shown = () => memoryIdsOf(harness.memories().at(-1));
       yield* call(GATEWAY_METHOD.MEMORIES_FOLLOW, { workspaceId: WORKSPACE_ID });
       yield* settled;
@@ -3699,7 +3812,7 @@ it.effect(
       const answering = yield* Deferred.make<void>();
       answerForgets({ memories: [OTHER_MEMORY], txid: "9200" }, Deferred.await(answering));
       const forgetting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: MEMORY.id }),
+        acts.MEMORIES_FORGET({ workspaceId: WORKSPACE_ID, id: MEMORY.id }),
       );
       yield* settled;
       assert.equal(forgetting.pollUnsafe(), undefined, "no answer while the service is asked");
@@ -3718,7 +3831,7 @@ it.effect(
       const refusing = yield* Deferred.make<void>();
       answerForgets({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }, Deferred.await(refusing));
       const refused = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: OTHER_MEMORY.id }),
+        acts.MEMORIES_FORGET({ workspaceId: WORKSPACE_ID, id: OTHER_MEMORY.id }),
       );
       yield* settled;
       assert.deepEqual(shown(), []);
@@ -3795,27 +3908,19 @@ it.effect(
 );
 
 it.effect(
-  "a forget naming no memory id, or a hold naming no workspace, is refused before the service is asked, and a closed gate answers a forget unanswered",
+  "a hold naming no workspace is refused before the service is asked, and a closed gate answers a forget unanswered",
   () =>
     Effect.gen(function* () {
       const { call, asked } = yield* subject();
       const signedOut = yield* subject({ signedIn: false });
 
-      const refused = [
-        yield* Effect.flip(
-          call(GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId: WORKSPACE_ID, id: "not-a-memory" }),
-        ),
-        yield* Effect.flip(call(GATEWAY_METHOD.MEMORIES_FOLLOW, {})),
-      ];
-      const unanswered = yield* signedOut.call(GATEWAY_METHOD.MEMORIES_FORGET, {
+      const refused = yield* Effect.flip(call(GATEWAY_METHOD.MEMORIES_FOLLOW, {}));
+      const unanswered = yield* signedOut.acts.MEMORIES_FORGET({
         workspaceId: WORKSPACE_ID,
         id: MEMORY.id,
       });
 
-      assert.deepEqual(
-        refused.map((refusal) => refusal._tag),
-        ["InvalidParamsRefusal", "InvalidParamsRefusal"],
-      );
+      assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.deepEqual(unanswered, GATE_CLOSED_SIGNED_OUT);
       assert.deepEqual(asked, []);
       assert.deepEqual(signedOut.asked, []);

@@ -239,8 +239,9 @@ export function replayVerb(replay: Replay): ReplayVerb {
   return replay.messageId === undefined ? REPLAY_VERB.CONTINUED : REPLAY_VERB.FORKED;
 }
 
-/** How many steps the replay kept, and of how many where it left the earliest out: "38 steps", "38 of 212 steps". */
-export function replayCount(replay: Replay): string {
+/** How many steps the replay kept, and of how many where it left the earliest out: "38 steps", "38 of 212 steps"; nothing for a transcript carried whole, which replays no step. */
+export function replayCount(replay: Replay): string | undefined {
+  if (replay.carried === true) return undefined;
   const kept = replay.steps.length;
   if (kept < replay.totalSteps) return `${kept} of ${replay.totalSteps} steps`;
   return kept === 1 ? "1 step" : `${kept} steps`;

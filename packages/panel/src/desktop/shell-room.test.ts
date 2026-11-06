@@ -9,6 +9,7 @@ import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
+import { draftTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { act, createElement, type ReactElement, useState } from "react";
@@ -164,8 +165,8 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
       // Note that the panel stands beside a draft agent's tab, since the task's details take its room.
       mainTabs: {
         ...tasksControl().mainTabs,
-        tabs: [MAIN_TAB.OVERVIEW, { draft: "draft" }],
-        tab: { draft: "draft" },
+        tabs: [MAIN_TAB.OVERVIEW, draftTab("draft")],
+        tab: draftTab("draft"),
       },
       sidePanel,
     }),

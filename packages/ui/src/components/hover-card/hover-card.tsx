@@ -293,6 +293,9 @@ export function HoverCardFigures({
  * A row of a card: its glyph, its words on one line, and what stands at its
  * end; a button where a press opens what it names, and otherwise text. What
  * else it is handed, a hint's handlers and description, it hands on to the row.
+ * A `null` glyph keeps the glyph's column empty, setting the words on the
+ * head's name; no glyph at all draws no column, for a card whose head wears
+ * none.
  */
 export function HoverCardRow({
   look = HOVER_CARD_ROW_LOOK.LINE,
@@ -304,7 +307,7 @@ export function HoverCardRow({
   ...anchor
 }: {
   look?: HoverCardRowLook;
-  glyph: ReactNode;
+  glyph?: ReactNode;
   label: ReactNode;
   /** What stands muted at the row's end: a size, a time, or a mark. */
   end?: ReactNode;
@@ -316,7 +319,7 @@ export function HoverCardRow({
   const linkAddress = useLinkAddress(linkHref);
   const row = (
     <>
-      <span className={ROW_GLYPH}>{glyph}</span>
+      {glyph === undefined ? null : <span className={ROW_GLYPH}>{glyph}</span>}
       <ClippedLine className={ROW_LABEL} as={ONE_LINE_ELEMENT.SPAN} end={ONE_LINE_END.FADE}>
         {label}
       </ClippedLine>

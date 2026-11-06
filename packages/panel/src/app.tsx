@@ -79,8 +79,8 @@ import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider, PreloadPersonProvider } from "./person-door.js";
 import { forgetPictures } from "./picture-query.js";
+import { ROUTED_PLACE } from "./places/routed-places.js";
 import { forgetAccountReads } from "./query-keys.js";
-import { ROUTED_PLACE } from "./route-gates.js";
 import { useOpenHostConnect } from "./settings/host-connect-dialog.js";
 import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { type SettingsRoute, useSettingsRoute } from "./settings-link.js";
@@ -514,6 +514,7 @@ function AppWindow(): React.JSX.Element {
     !accountGated,
     room,
     adminView.open ? adminView.view : undefined,
+    routedHere?.place,
   );
   // A fixture run's profile opens the window on its place once, as a link to it would; an Automations page once its workspace is listed, whose address it stands under.
   const launchedOnce = useRef(false);
@@ -631,7 +632,7 @@ function AppWindow(): React.JSX.Element {
       }
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: Settings, a description's version history, an agent's or a person's page, the Automations page, or the Board, back to wherever it was
-      // opened from, then a side panel filling the window back beside its
+      // opened from, then an agent's threads back to its transcript, then a side panel filling the window back beside its
       // task, then an open task back to the page it was opened from. A menu and the
       // settings search answer their own Escapes and keep them — the search
       // clearing, then letting go of the caret — so neither is a layer here,
@@ -647,6 +648,8 @@ function AppWindow(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
       if (runAppCommand(APP_COMMAND.EXIT_ADMIN)) return;
+      // An agent's card showing its threads goes back to its transcript before the task is left.
+      if (runAppCommand(APP_COMMAND.EXIT_AGENT_THREADS)) return;
       // An open task steps back through the history, as the toolbar's Back
       // does, to the page it was opened from, which leaves it; a task with no step behind it is left for Home
       // (`desktop-home.tsx`), where a press does nothing. A side panel
@@ -857,6 +860,7 @@ function AppWindow(): React.JSX.Element {
                               <TabSwitcher
                                 available={!accountGated}
                                 tab={tab}
+                                place={routedHere?.place}
                                 onTabChange={changeTab}
                                 tasks={tasks}
                               />

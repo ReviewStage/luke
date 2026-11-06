@@ -13,10 +13,15 @@ import {
   readAgent,
   readAgentByKey,
   readAgentContext,
+  readAgentRouting,
   readNewestAgentPlace,
   taskPilotStands,
 } from "@repo/database/models/agent-store";
 import type { HandedFile } from "@repo/database/models/attached-file-parts";
+import {
+  copySessionEntries,
+  holdsSessionEntries,
+} from "@repo/database/models/claude-session-entries";
 import { devicesNamed } from "@repo/database/models/device-store";
 import { hostRemoved } from "@repo/database/models/host-store";
 import { listAccountProviderKeyRows } from "@repo/database/models/provider-key-store";
@@ -944,6 +949,46 @@ function startRuntimeOf(userId: string, model: string, keys: AccountKeyRows) {
 }
 
 /**
+ * The source's CLI session a continue or a fork of a whole agent forks as
+ * its own, in place of a replay of its steps: one the service keeps the
+ * transcript of, on the harness the new agent runs, for an agent in the
+ * cloud, where its runner reads the transcript back; none for a fork at a
+ * message, which is replayed to that message, and wherever else.
+ */
+const carriedSessionOf = Effect.fnUntraced(function* (
+  userId: string,
+  ask: Pick<StartAsk, "runsOn">,
+  from: StartFrom,
+  model: string,
+  keys: AccountKeyRows,
+) {
+  if (from.told.messageId !== undefined) return undefined;
+  const { source } = from;
+  const place = ask.runsOn ?? { machine: source.machine ?? AGENT_MACHINE.VERCEL };
+  if (place.machine !== AGENT_MACHINE.VERCEL) return undefined;
+  const routing = yield* hostedStoreOrUnavailable(readAgentRouting(source.userId, source.id));
+  const read = Option.getOrUndefined(routing);
+  if (read?.nativeSession == null) return undefined;
+  const runtime = yield* startRuntimeOf(userId, model, keys);
+  if (runtime.runtime !== read.runtime) return undefined;
+  const held = yield* hostedStoreOrUnavailable(
+    holdsSessionEntries(source.userId, source.conversationId),
+  );
+  return held ? read.nativeSession : undefined;
+});
+
+/** The source as a Start hands it on where its transcript is carried: none of its steps replayed, and its session named. */
+function carryingTranscript(from: StartFrom, session: string): StartFrom {
+  return {
+    ...from,
+    steps: [],
+    totalSteps: 0,
+    carriedSummary: undefined,
+    told: { ...from.told, transcript: session },
+  };
+}
+
+/**
  * Where a new agent runs (`agentMachineChoice`): a sandbox, or the starter's
  * Mac the Start names where it is one Start offers them, and one that works
  * in a repository reached on the starter's own token where its host does so
@@ -1316,10 +1361,22 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       ? yield* bothInOrder(accepted, landingOf(userId, ask, undefined, undefined, ask.landed))
       : yield* Effect.flatMap(accepted, (read) =>
           Effect.gen(function* () {
-            const fitter = yield* replayFitterOf(userId, from, read.choice, ask.summaryModel, [
-              ...from.attachments,
-              ...(ask.attachments ?? []),
-            ]);
+            // A transcript the service keeps of the source is carried whole in place of its replayed steps.
+            const session = yield* carriedSessionOf(
+              userId,
+              ask,
+              from,
+              read.choice.model,
+              read.keys,
+            );
+            const handedFrom = session === undefined ? from : carryingTranscript(from, session);
+            const fitter = yield* replayFitterOf(
+              userId,
+              handedFrom,
+              read.choice,
+              ask.summaryModel,
+              [...from.attachments, ...(ask.attachments ?? [])],
+            );
             // The note's files go after the source's in each group eve is handed, so the marker counts them by group.
             const noteFiles = noteFilesOf(ask.attachments ?? []);
             return [read, yield* landingOf(userId, ask, fitter, noteFiles, ask.landed)] as const;
@@ -1429,6 +1486,15 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { agent, created, txid } = started.value;
   if (!created) return { agent, created };
+  // The source's transcript is the new agent's own before its first open forks it.
+  if (from !== undefined && agent.startedFrom?.session !== undefined) {
+    yield* hostedStoreOrUnavailable(
+      copySessionEntries(
+        { userId: from.source.userId, conversationId: from.source.conversationId },
+        agent.conversationId,
+      ),
+    );
+  }
   // A blank agent opens no session: its first words open one as they reach it (`steer.ts`).
   const handed = brief.prompt ?? brief.descriptionSnapshot;
   if (handed !== null) {

@@ -1,7 +1,6 @@
 import type { AgentPullRequest } from "@repo/features/agent-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import {
-  AttentionMark,
   GAP,
   GROUP_HEADING,
   GroupHeader,
@@ -11,11 +10,10 @@ import {
   ListRow,
   RowHint,
   RowHintOptions,
-  VisuallyHidden,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
+import { agentTab, isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { useChangesPeople } from "../tasks/changes-people.js";
@@ -30,6 +28,7 @@ import type { MenuAction } from "./action-menu.js";
 import { SUMMARY_GLYPH } from "./agent-archive.js";
 import { agentEntries } from "./main-tabs.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
+import { WaitingCount } from "./task-row-parts.js";
 
 /**
  * plan-agents.tsx -- the open task's agents at the head of its description, as a group: one dense row each, its tab's glyph and name, where it runs, its failure where it failed, and its pull request.
@@ -50,11 +49,11 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * plan opens the agent as its tab's own press does. The chip opens the pull
  * request as the agent's own pull request chip does, in its Pull request
  * tab; it is still a link to its page, so a right-click offers its address.
- * An agent with a thread waiting on the developer is marked as that
- * thread's Inbox row is: the attention mark at its end, before where it
- * runs, so a task opened on its plan says which agent waits, with no pill
- * or word beside the mark for the eye; the thread itself, title and all,
- * is the Inbox's to say, so the row stays one dense line.
+ * An agent with threads waiting on the developer counts them at its end,
+ * before where it runs, in the orange figure its tab and the sidebar's
+ * Inbox row draw (`WaitingCount`), so a task opened on its plan says which
+ * agent waits and on how much; the threads themselves, titles and all, are
+ * the Inbox's to say, so the row stays one dense line.
  * Those agents come first, then those at work, then the newest started; an
  * archived agent is not listed. New agent follows them at every width, as
  * the strip's "+" offers it (`newAgentStarts`), so the group stands even on a
@@ -101,7 +100,7 @@ function listedOrder(
   );
 }
 
-/** One agent's row: its tab's look, whether a thread of it waits on the developer, where it runs, its failed mark, and its pull request's chip where it opened one. */
+/** One agent's row: its tab's look, how many of its threads wait on the developer, where it runs, its failed mark, and its pull request's chip where it opened one. */
 function PlanAgentRow({
   entry,
   waits,
@@ -112,8 +111,8 @@ function PlanAgentRow({
   onOpenPullRequest,
 }: {
   entry: AddEntry;
-  /** Whether a thread of it waits on the developer. */
-  waits: boolean;
+  /** How many of its threads wait on the developer. */
+  waits: number;
   pullRequest: AgentPullRequest | undefined;
   agents: AgentsControl;
   held: HeldTranscripts;
@@ -122,7 +121,7 @@ function PlanAgentRow({
 }): React.JSX.Element {
   const { row, endMark, card } = entry;
   const agentId = row.id;
-  const chosen = tab !== undefined && sameTab({ agent: agentId }, tab);
+  const chosen = tab !== undefined && sameTab(agentTab(agentId), tab);
   const changesPeople = useChangesPeople(pullRequest === undefined ? undefined : agentId);
   const people = pullRequest === undefined ? undefined : peopleOf(changesPeople, pullRequest);
   return (
@@ -134,12 +133,7 @@ function PlanAgentRow({
         hint={card === undefined ? undefined : { Hint: RowHint, label: row.label }}
         meta={
           <Inline gap={GAP.ITEM} wrap={false}>
-            {!waits ? null : (
-              <>
-                <AttentionMark />
-                <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
-              </>
-            )}
+            <WaitingCount count={waits} />
             <ReplayMask>
               {entry.agent === undefined ? null : (
                 <RunsOnPlace agent={entry.agent} devices={agents.macs} />
@@ -258,7 +252,7 @@ export function PlanAgents({
                   <PlanAgentRow
                     key={entry.row.id}
                     entry={entry}
-                    waits={waiting.has(entry.row.id)}
+                    waits={waiting.get(entry.row.id)?.length ?? 0}
                     pullRequest={agents.pullRequests.get(entry.row.id)}
                     agents={agents}
                     held={held}

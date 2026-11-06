@@ -23,16 +23,16 @@ import {
   recordAutomationRun,
 } from "@repo/database/models/automation-store";
 import { keepConversationPicture } from "@repo/database/models/conversation-pictures";
+import { listRevisions } from "@repo/database/models/description-revisions";
 import { deviceAgentLinesWaiting } from "@repo/database/models/device-agent-store";
 import { registerDevice } from "@repo/database/models/device-store";
 import { linkIntegrationInstallation } from "@repo/database/models/integration-installation-store";
 import { listMemories } from "@repo/database/models/memory-store";
-import { writePage } from "@repo/database/models/task-pages";
-import { listRevisions } from "@repo/database/models/description-revisions";
 import {
   listProviderKeyRows,
   setProviderKeyFastAccess,
 } from "@repo/database/models/provider-key-store";
+import { writePage } from "@repo/database/models/task-pages";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
   createTask,
@@ -147,8 +147,6 @@ import {
 } from "../../testing/github-app-fake.js";
 import { scriptedHarness } from "../../testing/native-harness-fake.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
-import { AGENT_ROLE } from "../agent-runtime/role.js";
-import { toolsOf } from "../agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
   LIST_MODELS_REFUSAL,
@@ -4531,19 +4529,6 @@ test("while its starter has Memory off, a coding agent's remember and recall are
   assert.deepEqual(
     (await database.run(listMemories(workspaceId))).map((memory) => memory.text),
     ["Deploys go out from main."],
-  );
-});
-
-test("remember and recall are a coding agent's alone, never a worker's", () => {
-  assert.deepEqual(
-    [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY].map((tool) => [
-      toolsOf(AGENT_ROLE.CODER).has(tool),
-      toolsOf(AGENT_ROLE.CODER_WORKER).has(tool),
-    ]),
-    [
-      [true, false],
-      [true, false],
-    ],
   );
 });
 

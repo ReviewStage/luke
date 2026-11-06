@@ -1,4 +1,3 @@
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { remedyLabel } from "@repo/features/failure-remedy";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
@@ -7,48 +6,42 @@ import {
   type TerminalAsk,
   terminalTarget,
 } from "@repo/features/terminal-entry";
-import { shellsAsked } from "@repo/features/terminal-store";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { STATUS_TONE } from "@repo/ui";
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
 import { TerminalPicker } from "./terminal-picker.js";
+import { TERMINAL_KIND } from "./terminal-session.js";
 import type { AgentsControl } from "./use-agents.js";
 import type { SidePanelControl } from "./use-side-panel.js";
+import { useOpenTerminalTab } from "./use-terminal-session.js";
 
 /**
- * terminal-commands.tsx -- Show terminal (⌘J) and New terminal while a task is drawn: which agent each means by the rules, its Terminal tab shown, and the offer to start an agent on a task with none.
+ * terminal-commands.tsx -- Show terminal (⌘J) and New terminal while a task is drawn: which agent each means by the rules, its cloud terminal tab shown, and the offer to start an agent on a task with none.
  *
  * Both commands are offers on the window's one keymap (`app-commands.ts`), so
  * the menu bar and ⌘K run them as ⌘J does. Each decides the agent
  * (`terminal-entry.ts`) from where the developer is, never asking, then
- * shows that agent's Terminal tab in the side panel, New terminal asking its
- * sandbox for a new shell first (`terminal-store.ts`'s `shellsAsked`), which
- * the tab starts once the sandbox runs. A task with no agent offers to start one; one whose
+ * shows that agent's cloud terminal tab viewed last in the side panel, New
+ * terminal opening a new one ("Cloud 2"), whose tab starts its shell once the
+ * sandbox runs. A task with no agent offers to start one; one whose
  * agents are still being read waits on them, and lands as the rules have it
  * once they are.
  */
 
 /**
- * Opens an agent's terminal as a command means it: its Terminal tab shown,
- * after a new shell is asked of its sandbox where the command was New
- * terminal. The panel's "+" opens its Terminal rows through the same door.
+ * Opens an agent's cloud terminal as a command means it: its tab viewed
+ * last shown, or a new one where the command was New terminal. The panel's
+ * "+" opens its cloud rows through the same door.
  */
 export function useOpenTerminal(
-  sidePanel: Pick<SidePanelControl, "onChoose">,
+  sidePanel: Pick<SidePanelControl, "onChoose" | "terminals" | "locals" | "viewedAt">,
   onShown: () => void,
 ): (agentId: string, ask: TerminalAsk) => void {
-  const registry = useContext(RegistryContext);
-  return useCallback(
-    (agentId, ask) => {
-      if (ask === TERMINAL_ASK.NEW) registry.update(shellsAsked(agentId), (asked) => asked + 1);
-      sidePanel.onChoose({ terminal: agentId });
-      onShown();
-    },
-    [registry, sidePanel.onChoose, onShown],
-  );
+  const open = useOpenTerminalTab(TERMINAL_KIND.CLOUD, sidePanel, onShown);
+  return (agentId, ask) => open(agentId, ask === TERMINAL_ASK.NEW);
 }
 
 export function TerminalCommands({
@@ -60,7 +53,10 @@ export function TerminalCommands({
   /** The agent whose own tab, Changes tab, or Terminal tab holds the developer, if any. */
   here: string | undefined;
   agents: AgentsControl;
-  sidePanel: Pick<SidePanelControl, "onChoose" | "lastTerminal">;
+  sidePanel: Pick<
+    SidePanelControl,
+    "onChoose" | "terminals" | "locals" | "viewedAt" | "lastTerminal"
+  >;
   /** Hands the keyboard to the side panel, where the terminal now stands. */
   onShown: () => void;
 }): React.JSX.Element {

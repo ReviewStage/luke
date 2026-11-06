@@ -13,7 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { installShownFailureReporter } from "../failure-report.js";
 import { type AnyAct, FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
-import { withQueryClient } from "../testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "../testing/copy-feedback.js";
 import { UpdatesSection } from "./updates.js";
 
 /**
@@ -174,7 +174,7 @@ test("an install a read-only volume refused offers the move beside the Download,
   const uninstall = installShownFailureReporter((report) => {
     reports.push(report);
     return undefined;
-  });
+  }, testQueryClientNow());
   const { page, moved } = about({
     status: UPDATE_STATUS.ERROR,
     currentVersion: "0.17.0",

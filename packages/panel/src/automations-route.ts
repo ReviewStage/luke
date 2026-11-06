@@ -17,8 +17,8 @@
 
 import { type NavigateOptions, useNavigate, useRouter } from "@tanstack/react-router";
 import { useRef } from "react";
-import { ROUTED_PLACE } from "./route-gates.js";
-import { pathUnder, useRoutedLocation } from "./routed-location.js";
+import { ROUTED_PLACE, useWindowPlace } from "./places/routed-places.js";
+import { pathUnder } from "./route-gates.js";
 import { AUTOMATIONS_PAGE, type AutomationsPlace } from "./tasks/use-tasks-tab.js";
 
 /** The list, where the pages open with none asked for and stand while none does. */
@@ -118,7 +118,7 @@ export function useAutomationsRoute(input: {
 }): AutomationsRoute {
   const router = useRouter();
   const navigate = useNavigate();
-  const here = useRoutedLocation();
+  const here = useWindowPlace();
   // Only grows: every automation the window has seen deleted.
   const deleted = useRef(new Set<string>()).current;
   const standing =

@@ -1,4 +1,4 @@
-import { type InboxItem, inboxAddressedTo } from "@repo/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem, inboxAddressedTo } from "@repo/features/inbox-wire";
 import type { CatalogModel } from "@repo/features/models-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskStatus } from "@repo/features/task-wire";
@@ -83,6 +83,7 @@ import {
   useState,
 } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import {
   holdsPicks,
@@ -113,7 +114,7 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { type InboxCloser, useInboxCloseAsk } from "./inbox-close.js";
+import type { InboxResolver } from "./inbox-close.js";
 import {
   INBOX_COLUMNS,
   type InboxColumnsShown,
@@ -172,12 +173,12 @@ import { cardTitle } from "./tool-call-model.js";
  * show. The tile hangs the agent's tab's card while the pointer rests on
  * it (`agent-ref.tsx`), and leaves the press to its row, whose pane opens
  * the agent. An item that needs the developer's answer, an open one their
- * own agent asks (`needsReader`), wears the attention mark before its time
- * (`attention-mark.tsx`), filtered or not; a
- * teammate's open item waits on the teammate, whose face stands in that
- * place, and any member may still answer it; an answered one wears
- * neither. Apart from whether it waits, an item is unread where it changed
- * since the developer last read it, or they marked it so: the blue dot in
+ * own agent asks (`needsReader`), says Needs you to a reader, filtered or
+ * not, and draws no mark for it: the Open scope and the counts that lead
+ * there say it to the eye; a teammate's open item waits on the teammate,
+ * whose face stands before its time, and any member may still answer it.
+ * Apart from whether it waits, an item is unread where it changed since
+ * the developer last read it, or they marked it so: the blue dot in
  * a gutter before its tile, its title in the unread weight; opening it
  * reads it, and its row, its menu, U, and Mark all as read, which the
  * sidebar's Inbox row offers on a right-click, ⌘K, and a
@@ -191,7 +192,7 @@ import { cardTitle } from "./tool-call-model.js";
  * what the developer set a reminder on, or Reminders, those items alone; then Addressed
  * to, the developer's own, anyone's, or one teammate's by face and name,
  * which a chip over the list then says, its × listing the developer's own
- * again. Open addressed to the developer is Needs you, the threads the
+ * again. Open addressed to the developer is what Open lists, the threads the
  * sidebar's Inbox row counts, where the Inbox opens. Each choice stands
  * checked, and every choice is kept across launches. An Inbox narrowed to one
  * task lists every item it holds, open and settled, addressed to anyone,
@@ -251,7 +252,7 @@ const SKELETON_TIME = "20px";
 
 /** What each scope is called, in the view's menu and the list's region's name, and its glyph in the menu. */
 const SCOPE_WORDS = {
-  [INBOX_SHOW.NEEDS_ME]: { label: "Needs you", icon: <GLYPH.PERSON /> },
+  [INBOX_SHOW.NEEDS_ME]: { label: "Questions", icon: <GLYPH.PERSON /> },
   [INBOX_SHOW.OPEN]: { label: "Open", icon: <GLYPH.TODOS /> },
   [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
   [INBOX_SHOW.REMINDERS]: { label: "Reminders", icon: <GLYPH.TIME /> },
@@ -270,14 +271,14 @@ const INBOX_TITLE = "Inbox";
 
 /**
  * Whether the list holds only what needs the reader, the window's Inbox's
- * Needs you: its rows then leave Needs you unsaid (`needsYouShown`), and its
+ * Questions: its rows then leave Needs you unsaid (`needsYouShown`), and its
  * region says it once.
  */
 function needsYouListed(head: InboxListHead): boolean {
   return head.view?.show === INBOX_SHOW.NEEDS_ME;
 }
 
-/** Addressed to's choice where it narrows the scope shown (`narrowedByWhose`), for the chip it calls for; none under Needs you, or where the Inbox offers no view. */
+/** Addressed to's choice where it narrows the scope shown (`narrowedByWhose`), for the chip it calls for; none under Questions, or where the Inbox offers no view. */
 function narrowingWhose(view: InboxViewChoices | undefined): InboxWhoseChoice | undefined {
   return view !== undefined && narrowedByWhose(view.show) ? view : undefined;
 }
@@ -296,7 +297,7 @@ function whoseWords(whose: InboxWhose): string {
 
 /**
  * The list's region's name, saying what it lists, since the head names the
- * Inbox alone: Needs you by its scope's name alone, whom Addressed to names
+ * Inbox alone: Questions by its scope's name alone, whom Addressed to names
  * leaving it as it is; else the scope and whom Addressed to names. A task's
  * own Inbox lists everything, so its region is named alone.
  */
@@ -316,25 +317,25 @@ const NO_REMINDERS = "No reminders";
 /** What Open says holding no thread the reader is not done with. */
 const NOTHING_OPEN = "Nothing open";
 
-/** What Needs you says holding no question that waits on the reader, whomever Addressed to names. */
-const NOTHING_NEEDS_ME = "Nothing needs your response";
+/** What Questions says holding no question that waits on the reader, whomever Addressed to names. */
+const NOTHING_QUESTIONS = "No questions wait on you";
 
 /** What the list says where its scope and Addressed to leave out every item it holds, by whom Addressed to names. */
 const SHOW_EMPTY = {
   [INBOX_WHOSE.MINE]: {
-    [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
+    [INBOX_SHOW.NEEDS_ME]: NOTHING_QUESTIONS,
     [INBOX_SHOW.OPEN]: NOTHING_OPEN,
     [INBOX_SHOW.ALL]: "Nothing addressed to you",
     [INBOX_SHOW.REMINDERS]: NO_REMINDERS,
   },
   [INBOX_WHOSE.EVERYONE]: {
-    [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
+    [INBOX_SHOW.NEEDS_ME]: NOTHING_QUESTIONS,
     [INBOX_SHOW.OPEN]: NOTHING_OPEN,
     [INBOX_SHOW.ALL]: NOTHING_HERE,
     [INBOX_SHOW.REMINDERS]: NO_REMINDERS,
   },
   [INBOX_WHOSE.PERSON]: {
-    [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
+    [INBOX_SHOW.NEEDS_ME]: NOTHING_QUESTIONS,
     [INBOX_SHOW.OPEN]: "Nothing addressed to them",
     [INBOX_SHOW.ALL]: "Nothing addressed to them",
     [INBOX_SHOW.REMINDERS]: NO_REMINDERS,
@@ -456,11 +457,10 @@ interface InboxHeadSelecting {
  * (`APP_COMMAND.TOGGLE_READ`). Its menu, opened by the row's ⋯, a
  * right-click, a long press, and the menu key
  * alike (`ListRow`'s `menu`), offers
- * Copy link, the item's link under the task or the agent that holds it, where
+ * Copy link, the item's link by its id alone (`inbox-item-actions.tsx`), where
  * the list hands down a workspace to write it under. Where the list
- * hands down `onAskClose`, an open item's row offers to close it without an
- * answer, asked first through the list's one question (`inbox-close.tsx`),
- * as the last item of its menu. The row is drawn again only where it is
+ * hands down `onResolve`, an open item's row offers Resolve beside them, at
+ * once with Undo (`inbox-close.tsx`). The row is drawn again only where it is
  * handed another prop (`memo`), as ⌘K's rows are: its listed item, which the
  * list keeps while the item and its holder do (`inboxListed`), whether it
  * is chosen, and what it shows of its draft as the list read it once for
@@ -484,7 +484,7 @@ export const InboxItemRow = memo(function InboxItemRow({
   selectKey,
   onChoose,
   onMark,
-  onAskClose,
+  onResolve,
   onRemind,
   onPickRemind,
   several,
@@ -516,8 +516,8 @@ export const InboxItemRow = memo(function InboxItemRow({
   onChoose: (listed: InboxListed) => void;
   /** Marks the item read or unread; none where the row offers no mark. */
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
-  /** Asks to close an open item without an answer, through the list's one question; none where the row offers no close. */
-  onAskClose?: ((item: InboxItem) => void) | undefined;
+  /** Resolves open items without an answer; none where the row offers no resolve. */
+  onResolve?: InboxResolver | undefined;
   /** Sets the item's reminder, or cancels it; none where the row offers no reminder. */
   onRemind?: InboxReminder | undefined;
   /** Opens the date picker on the row for a reminder at the reader's own time, where the row offers a reminder. */
@@ -539,10 +539,10 @@ export const InboxItemRow = memo(function InboxItemRow({
   const addressedTo = inboxAddressedTo(item);
   const addressee = usePerson(addressedTo);
   const coarse = useCoarsePointer();
-  // Note that U and H act only on the chosen item, so only its row names their chords.
+  // Note that U, H, and E act only on the chosen item, so only its row names their chords.
   const { groups } = useInboxItemActions(item, {
     onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
-    onAskClose,
+    onResolve,
     keyed: chosen,
     remind:
       onRemind === undefined || onPickRemind === undefined
@@ -643,8 +643,8 @@ function whoseEntries(
 
 /**
  * The window's Inbox's head's button that drops the view's menu: first what
- * it shows, Needs you, Open, All, or Reminders, the one shown checked; then, but
- * under Needs you, Addressed to, a submenu of Anyone, Me, or a teammate by
+ * it shows, Questions, Open, All, or Reminders, the one shown checked; then, but
+ * under Questions, Addressed to, a submenu of Anyone, Me, or a teammate by
  * face and name, its choice checked.
  */
 function ViewOptions({
@@ -871,11 +871,11 @@ function FilterChips({
 }
 
 /**
- * The way on from an empty scope: from Needs you, Open of whom Addressed to
+ * The way on from an empty scope: from Questions, Open of whom Addressed to
  * names where it holds anything; else All where it holds anything; else,
  * where Addressed to narrows the scope, back to the reader's own from a
  * teammate's, or to anyone's from the reader's own; none from anyone's, or
- * from Needs you, where nothing else holds anything.
+ * from Questions, where nothing else holds anything.
  */
 function emptyWayOn(
   view: InboxViewChoices,
@@ -895,7 +895,7 @@ function emptyWayOn(
   if (view.show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) {
     return turn(SHOW_INSTEAD.ALL, () => view.onShow(INBOX_SHOW.ALL));
   }
-  // Note that Addressed to never narrows Needs you, so naming another lists nothing more.
+  // Note that Addressed to never narrows Questions, so naming another lists nothing more.
   if (!narrowedByWhose(view.show)) return undefined;
   if (view.whose.kind === INBOX_WHOSE.PERSON) {
     return turn(SHOW_INSTEAD.MINE, () => view.onWhose(MINE));
@@ -1143,7 +1143,7 @@ function ListHead({
         <PaneBar mark={all} title={heading} titleReplayUnmasked actions={actions} />
       ) : (
         <Toolbar
-          lead={all}
+          lead={all ?? head.lead}
           title={barTitle}
           titleReplayUnmasked
           actions={actions}
@@ -1330,6 +1330,14 @@ export interface InboxListHead {
   readonly link?: MenuAction | undefined;
   /** The task the window's Inbox is narrowed to, which a chip over the list names and clears; none where it lists every task's items. */
   readonly task?: InboxTaskHead | undefined;
+  /**
+   * What leads the head's title: an agent's card's way back to its
+   * transcript (`agent-threads.tsx`); none on the window's Inbox. Note that
+   * select-all stands in its place while rows are chosen, because a list as
+   * narrow as the Inbox's has no room for both beside the selection's acts,
+   * and choosing is a passing mode its × and Escape end.
+   */
+  readonly lead?: React.ReactNode | undefined;
 }
 
 /** The task the window's Inbox is narrowed to, as the chip over its list names it: its name and its status, none while it is not listed yet, and the × that clears it. */
@@ -1360,7 +1368,7 @@ interface RowFocus {
 
 /**
  * Keeps the keyboard in the list when the row holding it is no longer
- * drawn, as Needs you leaves out an item answered on another Mac while its
+ * drawn, as Questions leaves out an item answered on another Mac while its
  * row is focused: the keyboard goes to View options, the control that
  * chooses what the list leaves out, as it does from a row leaving the list
  * while it fades. Note that a removed row fires no blur, so the row last focused is
@@ -1521,8 +1529,8 @@ export function InboxList({
   onChoose: (listed: InboxListed) => void;
   /** Marks an item read or unread from its row or the selection's bar, answering whether the service took it; none where the rows offer no mark. */
   onMark?: InboxListMark | undefined;
-  /** Closes an open item without an answer from its row or the selection's bar; none where the rows offer no close. */
-  onClose?: InboxCloser | undefined;
+  /** Resolves open items without an answer from a row, the selection's head, or E; none where the rows offer no resolve. */
+  onClose?: InboxResolver | undefined;
   /** Sets an item's reminder from its row's menu or H, or cancels it; none where the rows offer no reminder. */
   onRemind?: InboxReminder | undefined;
   /** Told as the pointer comes onto the list and leaves it, while which its rows hold their places (`use-held-inbox-list.ts`); none where nothing holds them. */
@@ -1593,7 +1601,6 @@ export function InboxList({
   const remindMany = useRemindMany(onRemind);
   const selection = useInboxSelection({
     listed: picks,
-    shown: head.shown,
     onClear: unpick,
     onMark,
     onClose,
@@ -1613,13 +1620,21 @@ export function InboxList({
   // Note that a phone's head is its own, so a phone keeps the acts in a bar at the list's foot.
   const phone = usePhoneRoom();
   const footed = head.phone !== undefined || (head.tab === true && phone);
-  // Note that every row asks its close through the list's one question, rather than each drawing its own shut.
-  const closing = useInboxCloseAsk(
-    onClose,
-    head.shown,
-    (itemId) => listedItems(view).find(({ item }) => item.id === itemId)?.item,
+  const resolve = useSteadyDoor(onClose);
+  // Note that E resolves every item chosen where several are, else the item open beside the list, as U and H act on it.
+  const resolvable = picks.length > 0 ? picks : drawn.filter(({ item }) => item.id === chosen);
+  useAppCommand(
+    APP_COMMAND.RESOLVE,
+    head.shown &&
+      onClose !== undefined &&
+      resolvable.some(({ item }) => item.status === INBOX_STATUS.OPEN)
+      ? () => {
+          onClose(resolvable.map(({ item }) => item));
+          unpick();
+        }
+      : undefined,
   );
-  // Note that a row whose item is done with is drawn gray, the chosen row kept on Needs you and every such row on All alike.
+  // Note that a row whose item is done with is drawn gray, the chosen row kept on Questions and every such row on All alike.
   // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
   const row = (listed: InboxListed, leaving: boolean, at?: VirtualRowPlace) => (
     <InboxItemRow
@@ -1642,7 +1657,7 @@ export function InboxList({
       selectKey={leaving ? undefined : listed.item.id}
       onChoose={choose}
       onMark={mark}
-      onAskClose={onClose === undefined ? undefined : closing.ask}
+      onResolve={onClose === undefined ? undefined : resolve}
       onRemind={onRemind === undefined ? undefined : remind}
       onPickRemind={onRemind === undefined ? undefined : pickRemind}
       several={several !== undefined && picked.has(listed.item.id) ? several : undefined}
@@ -1722,8 +1737,6 @@ export function InboxList({
           </ReplayUnmask>
         </Stack>
       ) : null}
-      {selection.dialog}
-      {closing.dialog}
       {reminding.popover}
       {columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>

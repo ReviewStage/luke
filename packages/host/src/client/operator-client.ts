@@ -6,6 +6,7 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import type { GatewayHost, NodeRegistry } from "@repo/gateway";
 import type { AppSettings } from "@repo/settings/wire";
 import { Effect, Option, type Scope } from "effect";
+import type { HostActTable } from "../host-acts.js";
 import type { HostBootstrap, HostOperator } from "../host-operator.js";
 import { type AppStateStore, bootstrapPatch } from "./app-state-store.js";
 import { type GatewayWiringDependencies, wireGateway } from "./gateway-wiring.js";
@@ -15,6 +16,8 @@ export interface OperatorClient {
   readonly name: string;
   /** The host's own method vocabulary, as this client calls it. */
   readonly host: HostOperator;
+  /** The host's declared acts, which a window's act port answers directly. */
+  readonly acts: HostActTable;
   settings: () => AppSettings | undefined;
   /** The settings this launch decides its windows from, read from the host once and written down. */
   ensureSettings: () => Effect.Effect<AppSettings | undefined>;
@@ -37,6 +40,8 @@ export interface OperatorClientDependencies {
   report: (message: string) => void;
   /** The host this client operates. */
   gateway: GatewayHost;
+  /** The host's declared acts' handlers (`HostAssembly`'s). */
+  acts: HostActTable;
   /** The host's node registry, where this process's native capabilities are offered. */
   nodes: NodeRegistry;
   node: GatewayWiringDependencies["node"];
@@ -203,6 +208,7 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
     return {
       name: "operator",
       host: gateway.host,
+      acts: dependencies.acts,
       settings: () => state.snapshot().settings,
       ensureSettings: () =>
         Effect.gen(function* () {

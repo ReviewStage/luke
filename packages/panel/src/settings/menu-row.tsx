@@ -9,6 +9,7 @@ import {
   type SettingsFoldRun,
   SettingsRow,
   type SettingsRowControl,
+  type SettingsRowControls,
   type SettingsRowIndent,
   Tooltip,
   useMenu,
@@ -62,6 +63,8 @@ interface MenuRowWords {
   describedControl?: (control: SettingsRowControl) => ReactNode;
   /** Whether the row just arrived, which lights it once. */
   landed?: boolean;
+  /** Where its control and ⋯ stand where they would leave its words less than a legible stretch; dropped below them where none is named. */
+  controls?: SettingsRowControls;
   /** Whether the row stands inset under the row above, one of its things, as GitHub's accounts stand under GitHub's. */
   indent?: SettingsRowIndent;
   /** What the row folds open under its words from a chevron after its ⋯ (`SettingsFoldRow`), its lines, or many drawn only near the view (`run`) with its foot as `lines`, the chevron's name, and whether it starts open. */
@@ -176,6 +179,7 @@ export function MenuRow({
             description={row.description}
             error={replayMaskedError(row.error)}
             landed={row.landed}
+            controls={row.controls}
             below={row.below === undefined || row.below === null ? undefined : () => row.below}
           >
             {(control) => (

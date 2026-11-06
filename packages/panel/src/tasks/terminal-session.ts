@@ -53,7 +53,7 @@ export const SERVICE_UNREACHED: TerminalState = {
 };
 
 /** A shell opened, or the state the tab is left in where none could be. */
-export type ShellOpened = { readonly terminalId: string } | { readonly state: TerminalState };
+type ShellOpened = { readonly terminalId: string } | { readonly state: TerminalState };
 
 /** What an attach answered: asked, so the port is on its way, or the state the tab is left in. */
 export type ShellAttached = { readonly asked: true } | { readonly state: TerminalState };
@@ -169,6 +169,11 @@ export class TerminalSession {
     });
     this.#screen.attach(host);
     this.#screen.dim(terminalLook(this.#state).dim);
+  }
+
+  /** Says on the shell's port that its tab is shown in the window the developer is using; nothing while no port stands. */
+  sayShown(): void {
+    this.#post({ type: TERMINAL_PORT_MESSAGE.SHOWN });
   }
 
   /** Takes the screen out of its box; the shell and the screen go on. */

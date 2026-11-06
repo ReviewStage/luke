@@ -5,9 +5,10 @@
  * can spell these kinds in `ACT_KIND` without resolving the contract behind
  * them, and so the lint rule `anti-slop/no-follow-outside-host-read` can
  * load this file as it stands to read `PORT_ACT_USE`: that is why each
- * kind's use is declared here rather than on its procedure. A kind here is
- * the key of its procedure in `actContract`, so the panel's act door calls a
- * kind by its own name.
+ * kind's use is declared here rather than on its procedure, and why a
+ * declared act (`declared-act.ts`) reads its kind and use from here by its
+ * name rather than restating them. A kind here is the key of its procedure
+ * in `actContract`, so the panel's act door calls a kind by its own name.
  */
 
 /** The account's asks: a sign-in begun, begun again, or canceled, a sign-out, the account deleted, and its grant of support access. */
@@ -262,6 +263,8 @@ export const AGENT_INBOX_ACT_KIND = {
   AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
   AGENTS_INBOX_CLOSE: "agents.inboxClose",
+  /** A held close let go once its Undo can no longer be pressed, sent to the service, or taken back by its Undo. */
+  AGENTS_INBOX_CLOSE_RELEASE: "agents.inboxCloseRelease",
   /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
   AGENTS_INBOX_MESSAGE: "agents.inboxMessage",
   /** A new thread with one agent, its subject and first message, under the panel's own key. */
@@ -875,6 +878,7 @@ export const PORT_ACT_USE = {
   AGENTS_INBOX_ITEMS_RETRY: ACT_USE.READ,
   AGENTS_INBOX_ANSWER: ACT_USE.WRITE,
   AGENTS_INBOX_CLOSE: ACT_USE.WRITE,
+  AGENTS_INBOX_CLOSE_RELEASE: ACT_USE.WRITE,
   AGENTS_INBOX_MESSAGE: ACT_USE.WRITE,
   AGENTS_INBOX_START: ACT_USE.WRITE,
   AGENTS_INBOX_READ_STATE: ACT_USE.WRITE,

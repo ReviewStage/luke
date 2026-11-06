@@ -69,6 +69,11 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * (`SETTINGS_ROW_INDENT.MARK`) to its parent's words, its rule starting
  * there too, so the card reads as one subject with its parts under it.
  *
+ * A row that keeps its controls beside its words at any width says so
+ * (`SETTINGS_ROW_CONTROLS.BESIDE`): its words wrap rather than its controls
+ * dropping, as a list whose rows each end in a short button and a ⋯ keeps
+ * every row's end on one line; under 380px its name still keeps to one line.
+ *
  * A row whose one control is set by a press, a switch, says so
  * (`labelsControl`): its label is then that control's `<label>`, so a press
  * on the words sets it as a press on the control does, and under a finger
@@ -116,6 +121,20 @@ export type SettingsRowLead = (typeof SETTINGS_ROW_LEAD)[keyof typeof SETTINGS_R
 
 /** A face's width, in which a mark in the card beside it stands centered. */
 const FACE_LEAD = "w-avatar-card justify-center";
+
+/**
+ * Where a card's or a list's row stands its controls where they would leave
+ * its words less than a legible stretch: dropped below the words, or kept
+ * beside them, the words wrapping instead, as a row of a list whose every row
+ * ends in a short button and a ⋯ keeps them all on one line.
+ */
+export const SETTINGS_ROW_CONTROLS = {
+  DROP: "drop",
+  BESIDE: "beside",
+} as const;
+
+export type SettingsRowControls =
+  (typeof SETTINGS_ROW_CONTROLS)[keyof typeof SETTINGS_ROW_CONTROLS];
 
 /** What a row hands the controls it holds. */
 export interface SettingsRowControl {
@@ -192,6 +211,7 @@ export function SettingsRow({
   indent = SETTINGS_ROW_INDENT.NONE,
   lead = SETTINGS_ROW_LEAD.MARK,
   labelsControl = false,
+  controls = SETTINGS_ROW_CONTROLS.DROP,
   landed = false,
   children,
   below,
@@ -212,6 +232,8 @@ export function SettingsRow({
   lead?: SettingsRowLead | undefined;
   /** Whether the row's words label its one control, a switch, wearing `controlId`: a press on them sets it, and it stays beside them. */
   labelsControl?: boolean | undefined;
+  /** Where its controls stand where they would leave its words less than a legible stretch; dropped below them where none is named. */
+  controls?: SettingsRowControls | undefined;
   /** Whether the row just arrived, which lights it once. */
   landed?: boolean | undefined;
   /** The row's controls at its end, handed the row's ids to name and describe them by. */
@@ -248,6 +270,7 @@ export function SettingsRow({
       data-density={density}
       data-indent={indent}
       data-labels-control={labelsControl}
+      data-controls={controls}
       {...landedMark(landed, LANDED.WITHIN)}
     >
       <Item size={density} className={indent === SETTINGS_ROW_INDENT.MARK ? "ps-0" : undefined}>

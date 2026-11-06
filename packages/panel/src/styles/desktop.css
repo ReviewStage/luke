@@ -782,6 +782,18 @@ body,
   --ui-button-ground: var(--ui-color-ground);
 }
 
+/* An agent's threads stand in its transcript's place, the transcript kept
+   drawn beneath, hidden, so going back finds it where it was; and they stand
+   inside its card, under the window's own bar, so their bars are no drag
+   strip of the window's (`agent-threads.tsx`). */
+.desktop-agent[hidden] {
+  display: none;
+}
+
+[data-ui-profile="desktop"] .agent-threads .ui-toolbar {
+  -webkit-app-region: no-drag;
+}
+
 /* A unit only one side holds is drawn whole: one written in on the green
    wash's edge, one struck out struck and dimmed, as its words would be. */
 .desktop-document .description-unit.version-added {

@@ -10,6 +10,7 @@
  * that stage them.
  */
 
+import type { QueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 type TasksModule = typeof import("./tasks-fixture.js");
@@ -31,6 +32,9 @@ type TasksFixture = {
 
 let landed: TasksFixture | undefined;
 let loading: Promise<void> | undefined;
+
+/** The Query client the window's document is written into, whose `run` a fixture run's acts are staged by (`act.ts`). */
+let documentClient: QueryClient | undefined;
 
 /** The tasks fixture with the Inbox's tasks, answers, and document laid over its own, which come last. */
 function laidOver(tasks: TasksModule, inbox: InboxModule): TasksFixture {
@@ -60,6 +64,24 @@ export function loadTasksFixture(): Promise<void> {
     () => undefined,
   );
   return loading;
+}
+
+/**
+ * Hands the fixture the Query client the window's document is written into,
+ * and answers what takes it back: the subscription writing it hands it on
+ * as it mounts (`useAppStateSubscription`), so an act staged by a fixture
+ * run reads the run from the cache rather than a copy of its own.
+ */
+export function handFixtureClient(client: QueryClient): () => void {
+  documentClient = client;
+  return () => {
+    if (documentClient === client) documentClient = undefined;
+  };
+}
+
+/** The Query client the window's document is written into, once the subscription has handed it on. */
+export function fixtureClient(): QueryClient | undefined {
+  return documentClient;
 }
 
 /** The fixture, once it has landed. */

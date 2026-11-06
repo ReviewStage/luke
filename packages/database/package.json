@@ -16,6 +16,7 @@
     "./models/abandoned-turns": "./src/models/abandoned-turns.js",
     "./models/account-store": "./src/models/account-store.js",
     "./models/agent-name": "./src/models/agent-name.js",
+    "./models/claude-session-entries": "./src/models/claude-session-entries.js",
     "./models/agent-browser-tabs": "./src/models/agent-browser-tabs.js",
     "./models/automation-store": "./src/models/automation-store.js",
     "./models/attached-file-parts": "./src/models/attached-file-parts.js",

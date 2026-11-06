@@ -11,14 +11,22 @@ import {
   type InboxItem,
 } from "@repo/features/inbox-wire";
 import { TASK_STATUS } from "@repo/features/task-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding } from "@repo/host/app-state";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
 import { act } from "react";
 import { beforeAll, onTestFinished, test, vi } from "vitest";
+import { appBridge } from "../app-bridge.js";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { FAKE_ANSWER } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActs,
+  fakeActsAnswer,
+} from "../testing/app-bridge.js";
 import { editorBundleLanded } from "../testing/composer.js";
 import {
   ACME,
@@ -32,7 +40,6 @@ import {
   backToList,
   chooseView,
   columnsShown,
-  confirmClose,
   EXPIRY,
   EXPIRY_ASK,
   headTitle,
@@ -44,6 +51,7 @@ import {
   itemPane,
   keyOn,
   layOut,
+  letResolvesGo,
   listEdge,
   listed,
   menuItem,
@@ -127,7 +135,7 @@ function scopes(page: HTMLElement): string[] {
   return [headTitle(page) ?? "", ...words];
 }
 
-test("the list holds every task's items in one run, the latest changed first, each wearing the attention mark while it needs you, none chosen", async () => {
+test("the list holds every task's items in one run, the latest changed first, each saying while it needs you, none chosen", async () => {
   const { page } = mount();
   await settle();
   assert.deepEqual(listed(page), [
@@ -176,8 +184,8 @@ function rowUnread(page: HTMLElement, title: string): boolean {
   );
 }
 
-test("⌘-clicking two open items chooses both across their tasks, opening neither, and the bar's Resolve asks once for both, red, then resolves each at the revision drawn and lets the selection go", async () => {
-  const { page } = mount();
+test("⌘-clicking two open items chooses both across their tasks, opening neither, and the bar's Resolve resolves each at once at the revision drawn under one toast, lets the selection go, and reaches the service only once the toast is gone", async () => {
+  const { page } = mount([], { toasts: true });
   await settle();
   const sent = takenCloses();
   const threshold = "Alert at 80%?";
@@ -191,52 +199,76 @@ test("⌘-clicking two open items chooses both across their tasks, opening neith
 
   act(() => barButton(page, "Resolve").click());
   await settle();
-  assert.deepEqual(sent, [], "Resolve asks first");
-  const question =
-    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Resolve asks");
-  assert.match(question.textContent ?? "", /Resolve 2 items without answering\?/u);
-  assert.match(question.textContent ?? "", /Their agents are told/u);
-  await confirmClose();
-
-  assert.deepEqual(
-    sent.map(({ itemId }) => itemId).sort(),
-    [THRESHOLD.id, EXPIRY.id].sort(),
-    "both items are resolved",
-  );
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "Resolve asks nothing");
+  assert.match(newestToastSays() ?? "", /2 items resolved/u);
   assert.equal(selectionBar(page), null, "the selection is let go");
   assert.deepEqual(picked(page), []);
+  assert.deepEqual(sent, [], "nothing reaches the service while Undo stands");
+
+  await letResolvesGo();
+  assert.deepEqual(
+    sent.map(({ itemId, revision }) => `${itemId}:${revision}`).sort(),
+    [`${THRESHOLD.id}:${THRESHOLD.revision}`, `${EXPIRY.id}:${EXPIRY.revision}`].sort(),
+    "both items are resolved once the toast is gone",
+  );
 });
 
-test("an agent changing an item the bar's Resolve asks about withdraws the question whole, resolving nothing", async () => {
-  const { page } = mount();
+test("the Undo of a resolve takes it back before any agent hears of it: the items stand open again and nothing reaches the service", async () => {
+  const { page } = mount([], { toasts: true });
   await settle();
   const sent = takenCloses();
-  commandClick(page, "Alert at 80%?");
-  commandClick(page, "Expire after 7 days?");
+  const threshold = "Alert at 80%?";
+  const expiry = "Expire after 7 days?";
+  commandClick(page, threshold);
+  commandClick(page, expiry);
   act(() => barButton(page, "Resolve").click());
   await settle();
-  assert.ok(document.querySelector('[role="alertdialog"]'), "Resolve asks first");
 
-  // The agent asks again under the same key, and main says the plan moved.
-  world.inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, updatedAt: 7_000 }, RETRY]);
-  act(() =>
-    world.setHolding([
-      { taskId: BILLING.id, items: 2, updatedAt: 7_000 },
-      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
-    ]),
+  const undo = newestToastAction() ?? assert.fail("the toast offers Undo");
+  assert.equal(undo.textContent, "Undo");
+  await act(async () => undo.click());
+  await settle();
+  await letResolvesGo();
+
+  assert.deepEqual(sent, [], "the service never hears of it");
+  assert.ok(
+    rowMenu(page, threshold).includes("Resolve") && rowMenu(page, expiry).includes("Resolve"),
+    "both stand open again",
   );
+});
+
+test("an Undo the host does not hear says so rather than too late, and its Try again takes the resolve back", async () => {
+  const { page } = mount([], { toasts: true });
+  await settle();
+  const sent = takenCloses();
+  // The first Undo's release fails on its way to the host, as a dropped act port does.
+  let dropped = false;
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_CLOSE_RELEASE && !dropped) {
+        dropped = true;
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "The act port closed." });
+      }
+      return previous(request);
+    },
+  });
+  commandClick(page, "Alert at 80%?");
+  act(() => barButton(page, "Resolve").click());
   await settle();
 
-  // Note that the item's change reaches its query one notify tick later.
-  await vi.waitFor(() =>
-    assert.equal(
-      document.querySelector('[role="alertdialog"]') === null,
-      true,
-      "the question goes",
-    ),
-  );
-  assert.deepEqual(sent, []);
-  assert.deepEqual(picked(page), ["Alert at 80%?", "Expire after 7 days?"], "the selection stands");
+  await act(async () => (newestToastAction() ?? assert.fail("the toast offers Undo")).click());
+  await settle();
+  assert.match(newestToastSays() ?? "", /Could not undo resolving/u);
+  const retry = newestToastAction() ?? assert.fail("the failure offers Try again");
+  assert.equal(retry.textContent, "Try again");
+  await act(async () => retry.click());
+  await settle();
+  await letResolvesGo();
+
+  assert.deepEqual(sent, [], "the service never hears of it");
+  assert.ok(rowMenu(page, "Alert at 80%?").includes("Resolve"), "it stands open again");
 });
 
 test("the bar's Mark as unread marks every item chosen at once under one toast, whose Undo marks each read again as it stood", async () => {
@@ -289,7 +321,7 @@ test("a right-click on a row chosen among several offers the selection's acts un
 
   commandClick(page, retry);
   commandClick(page, expiry);
-  assert.deepEqual(rowMenu(page, expiry), ["—", "Mark as read", "Remind me", "—", "Resolve"]);
+  assert.deepEqual(rowMenu(page, expiry), ["—", "Mark as read", "Remind me", "Resolve"]);
   assert.match(
     [...document.querySelectorAll('[role="menu"]')].at(-1)?.textContent ?? "",
     /^2 items/u,
@@ -408,18 +440,18 @@ test("a plan main says changed is read again, so an item answered on another Mac
   assert.deepEqual(listed(page), everything, "the pointer gone, the list sorts anew");
 
   showScope(page, "Open");
-  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Questions", "[Open]", "All"]);
   assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]);
 
   act(() => world.root?.unmount());
   world.root = undefined;
   ({ page } = mount([], { chosen: ON_THRESHOLD }));
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Questions", "[Open]", "All"]);
   await vi.waitFor(() => assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]));
 
   showScope(page, "All");
-  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "Open", "[All]"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Questions", "Open", "[All]"]);
   assert.deepEqual(listed(page), everything);
 });
 
@@ -492,7 +524,7 @@ test("a fresh profile opens the Inbox on Open addressed to Me, its head naming t
   window.localStorage.clear();
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Questions", "[Open]", "All"]);
   assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
   openViewOptions(page);
   act(() => viewItem("Addressed to").click());
@@ -533,7 +565,7 @@ test("a task done or canceled keeps its items listed and counted as any other's,
     },
   );
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Questions", "[Open]", "All"]);
   const rows = listed(page);
   for (const row of ["Alert at 80%?", "Expire after 7 days?", "Quarantine the flaky test?"]) {
     assert.ok(
@@ -586,7 +618,7 @@ test("a tab kept before the scopes opens the Inbox on the scope that lists what 
   world.root = undefined;
   ({ page } = mount());
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Questions", "[Open]", "All"]);
 }, 10_000);
 
 test("each row names its task on its first line with its time at that line's end, then its title on a line of its own, then its preview", async () => {
@@ -1043,7 +1075,7 @@ test("an item's row reads as its task line and time, then its title, over the la
   ]);
 });
 
-test("no row draws the attention mark, which an open item nearly always would: the reader's own open item says to a reader before its time that it needs them, its card showing it; a teammate's open item wears their face there with no ring, saying to a reader that it waits on them, a settled one wears neither, and none is drawn in the unread weight", async () => {
+test("the reader's own open item says to a reader before its time that it needs them, its card showing it; a teammate's open item wears their face there with no ring, saying to a reader that it waits on them, a settled one wears neither, and none is drawn in the unread weight", async () => {
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
@@ -1051,7 +1083,6 @@ test("no row draws the attention mark, which an open item nearly always would: t
     const row = rowNamed(page, title);
     const meta = row.querySelector(".ui-list-row-meta");
     return {
-      mark: meta?.querySelector(".attention-mark") !== null,
       face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
       said: meta?.querySelector(".ui-visually-hidden")?.textContent,
       dot: row.querySelector(".ui-unread-dot") !== null,
@@ -1059,21 +1090,18 @@ test("no row draws the attention mark, which an open item nearly always would: t
     };
   };
   assert.deepEqual(ends("Expire after 7 days?"), {
-    mark: false,
     face: undefined,
     said: "Needs you",
     dot: false,
     unread: false,
   });
   assert.deepEqual(ends("Alert at 80%?"), {
-    mark: false,
     face: "person",
     said: "Waiting on Charles Pan",
     dot: false,
     unread: false,
   });
   assert.deepEqual(ends("How is a failed email retried?"), {
-    mark: false,
     face: undefined,
     said: undefined,
     dot: false,
@@ -1215,8 +1243,7 @@ test("a row's menu and U each mark an item read or unread: Mark as unread on a r
     "—",
     "Mark as unreadU",
     "Remind meH",
-    "—",
-    "Resolve without answering",
+    "ResolveE",
   ]);
 
   pressKey("u");
@@ -1270,7 +1297,7 @@ test("a mark the service refuses is let go, and the dot stands as the reads hold
   assert.equal(unreadOf(page, "How is a failed email retried?"), false);
 });
 
-test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as read marks every unread item of the listed workspace read and clears the dots alone, the attention marks standing; with nothing unread ⌘K offers it no more", async () => {
+test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as read marks every unread item of the listed workspace read and clears the dots alone, what needs you still saying so; with nothing unread ⌘K offers it no more", async () => {
   world.listedWorkspace = ACME;
   // Note that the unread answered item is a teammate's, so the item standing chosen is the one that needs you, and nothing is read before the mark.
   world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true, startedBy: TEAMMATE }]);
@@ -1280,7 +1307,7 @@ test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(options, "the head offers the view's menu");
   act(() => options.click());
-  assert.deepEqual(menuWords(), ["Needs you", "Open", "All", "Reminders", "—", "Addressed to"]);
+  assert.deepEqual(menuWords(), ["Questions", "Open", "All", "Reminders", "—", "Addressed to"]);
   act(() => options.click());
   act(() => {
     runAppCommand(APP_COMMAND.MARK_INBOX_READ);
@@ -1469,7 +1496,7 @@ test("Me chosen in Addressed to with nothing of the reader's in the scope shown 
   assert.deepEqual(listEmpty(page), [undefined, "Nothing addressed to you", "Show anyone's"]);
 });
 
-test("an item its agent withdrew wears the slashed circle on its row's card where an answered item's card wears a check", async () => {
+test("an item its agent withdrew wears Withdrawn's own mark on its row's card where an answered item's card wears a check", async () => {
   const [asking] = EXPIRY.thread ?? [];
   assert.ok(asking?.ask !== undefined, "the item opens with its ask");
   const withdrawn: InboxItem = {
@@ -1499,11 +1526,11 @@ test("an item its agent withdrew wears the slashed circle on its row's card wher
       document.querySelector<HTMLElement>(".ui-tooltip-card [data-inbox-item-card]") ??
       assert.fail("the row's card is hung");
     return [
-      card.querySelector("svg.lucide-circle-slash") !== null,
+      card.querySelector("svg.lucide-circle-arrow-out-up-left") !== null,
       card.querySelector("svg.lucide-check") !== null,
     ];
   };
-  assert.deepEqual(settledGlyph("Expire after 7 days?"), [true, false], "withdrawn: slashed");
+  assert.deepEqual(settledGlyph("Expire after 7 days?"), [true, false], "withdrawn: its own mark");
   assert.deepEqual(
     settledGlyph("How is a failed email retried?"),
     [false, true],

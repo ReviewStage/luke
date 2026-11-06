@@ -7,6 +7,7 @@ import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
+import { pageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { act, createElement, useState } from "react";
@@ -63,7 +64,7 @@ const ACME = {
 const TASK_PATH = `/acme/task/${DOCUMENT_TASK.id}`;
 
 /** A page an agent wrote for the task, as its side panel tab names it. */
-const PAGE_TAB: SidePanelTab = { page: "page-1" };
+const PAGE_TAB: SidePanelTab = pageTab("page-1");
 
 /** An Inbox item of the task. */
 const ITEM: InboxChoice = { taskId: DOCUMENT_TASK.id, itemId: "item-1" };
@@ -283,6 +284,7 @@ function mount(
         onClose: automations.onClose,
       },
     };
+    const routed = useRoutedStanding();
     const copyLink = useCopyLink(
       tasks,
       settings.standing
@@ -291,11 +293,12 @@ function mount(
       true,
       room,
       admin.open ? admin.view : undefined,
+      routed?.place,
     );
     history = useWindowHistory({
       known: true,
       link: copyLink.placed,
-      routed: useRoutedStanding(),
+      routed,
       settingsList: settings.listAddress,
       onSettingsList: settings.list,
       automations,

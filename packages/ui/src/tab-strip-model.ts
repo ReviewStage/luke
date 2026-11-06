@@ -6,10 +6,12 @@
  * `tasks/use-side-panel.ts`). A tab is either a word
  * its column names it by, such as the plan's own or the side panel's Board,
  * or an object naming what it shows: one coding agent, a draft agent not yet
- * started, one subagent, one file, one agent's changes, one agent's
- * terminal, one page, or one Browser tab in an agent's cloud browser. Two
- * tabs are the same where they name the same thing, so a tab rebuilt on
- * every render is still the tab it was.
+ * started, one subagent, one file, one agent's changes, one terminal of
+ * an agent's, one page, or one Browser tab in an agent's cloud browser,
+ * tagged with its kind (`STRIP_TAB_KIND`) and built by its kind's
+ * constructor (`agentTab`, …). Two tabs are the same where they name the
+ * same thing, as each kind declares it (`TAB_IDENTITY`), so a tab rebuilt
+ * on every render is still the tab it was.
  *
  * Each strip keeps, per task, the order the developer moved its tabs into
  * and the tabs they viewed, the latest last. What follows is how both
@@ -23,6 +25,8 @@
  * tab was last viewed (`stampedViewed`), from which a tab left unviewed long
  * enough closes itself (`idleTabs`, the panel's `tasks/use-idle-tabs.ts`).
  */
+
+import { Schema } from "effect";
 
 /**
  * What each kind of tab whose name is not its subject's is called, wherever
@@ -38,15 +42,8 @@ export const TAB_WORDS = {
   NEW_AGENT: "New agent",
   AGENT: "Agent",
   PULL_REQUEST: "Pull request",
-  TERMINAL: "Terminal",
-  LOCAL: "Local",
   BROWSER: "Browser",
 } as const;
-
-/** A Local tab's name: the kind's word, then its terminal's. */
-export function localLabelOf(tab: Pick<LocalStripTab, "title">): string {
-  return `${TAB_WORDS.LOCAL} · ${tab.title}`;
-}
 
 /** A Pull request tab's name once its pull request is read: the pull request's number, then its title, as GitHub names it. */
 export function pullRequestLabelOf(pullRequest: {
@@ -56,13 +53,45 @@ export function pullRequestLabelOf(pullRequest: {
   return `#${pullRequest.number} ${pullRequest.title}`;
 }
 
+/**
+ * What a tab of either strip shows: a word of its column's own, or the one
+ * thing an object tab names, its kind spelled as the field naming it, which
+ * is how a tab kept before tabs carried their kind is told
+ * (`taggedStripTab`, `storedStripTab`).
+ */
+export const STRIP_TAB_KIND = {
+  WORD: "word",
+  AGENT: "agent",
+  TRANSCRIPT: "transcript",
+  DRAFT: "draft",
+  SUBAGENT: "subagent",
+  FILE: "file",
+  CHANGES: "changes",
+  TERMINAL: "terminal",
+  LOCAL: "local",
+  PAGE: "page",
+  CLOUD_BROWSER: "cloudBrowser",
+} as const;
+
+export type StripTabKind = (typeof STRIP_TAB_KIND)[keyof typeof STRIP_TAB_KIND];
+
+/** The kinds a tab names by an object, every kind but a word. */
+type ObjectStripTabKind = Exclude<StripTabKind, typeof STRIP_TAB_KIND.WORD>;
+
+/** The object kinds, which a tab kept without its kind is told by. */
+const OBJECT_STRIP_TAB_KINDS: readonly ObjectStripTabKind[] = Object.values(STRIP_TAB_KIND).filter(
+  (kind): kind is ObjectStripTabKind => kind !== STRIP_TAB_KIND.WORD,
+);
+
 /** One coding agent's tab, named by the agent it shows. */
 export interface AgentStripTab {
+  readonly kind: typeof STRIP_TAB_KIND.AGENT;
   readonly agent: string;
 }
 
 /** The tab of an agent not yet started, named by the key its first message will start it under. */
 export interface DraftStripTab {
+  readonly kind: typeof STRIP_TAB_KIND.DRAFT;
   readonly draft: string;
 }
 
@@ -74,6 +103,7 @@ interface SubagentDelegation {
 
 /** One subagent's tab, named by the call that started it: on the open task's work, or, with the delegation, on one of its agents' turns. */
 export interface SubagentStripTab {
+  readonly kind: typeof STRIP_TAB_KIND.SUBAGENT;
   readonly subagent: string;
   /** Absent for the brain's worker, whose session the task's work holds. */
   readonly delegation?: SubagentDelegation;
@@ -81,6 +111,7 @@ export interface SubagentStripTab {
 
 /** One file's tab, named by the file's path in the open task's repository. */
 export interface FileStripTab {
+  readonly kind: typeof STRIP_TAB_KIND.FILE;
   readonly file: string;
 }
 
@@ -94,22 +125,30 @@ export interface FileStripTab {
  * branch, or one no agent opened.
  */
 export interface ChangesStripTab {
+  readonly kind: typeof STRIP_TAB_KIND.CHANGES;
   readonly changes: string;
   readonly number?: number;
 }
 
-/** One agent's Terminal tab, named by the agent in whose sandbox its shells run. */
+/**
+ * One terminal in a coding agent's cloud sandbox, a tab of its own: named by
+ * the agent and the id the window minted the terminal under before its shell
+ * was opened, and carrying the terminal's name ("Cloud 1"), which titles the
+ * tab and never changes.
+ */
 export interface TerminalStripTab {
+  readonly kind: typeof STRIP_TAB_KIND.TERMINAL;
   readonly terminal: string;
+  readonly shell: string;
+  readonly title: string;
 }
 
 /**
  * One terminal on this Mac in a cloud agent's mirrored files, a tab of its
- * own: named by the agent and the id the window minted the terminal under
- * before main opened it, and carrying the terminal's name, which titles the
- * tab and never changes.
+ * own, on the same terms as a cloud one, named "Local 1".
  */
 export interface LocalStripTab {
+  readonly kind: typeof STRIP_TAB_KIND.LOCAL;
   readonly local: string;
   readonly shell: string;
   readonly title: string;
@@ -117,22 +156,24 @@ export interface LocalStripTab {
 
 /** One page's tab, named by the page an agent wrote for the task. */
 export interface PageStripTab {
+  readonly kind: typeof STRIP_TAB_KIND.PAGE;
   readonly page: string;
 }
 
 /** One Browser tab in an agent's cloud browser, named by the id the service keeps it under. */
 export interface CloudBrowserStripTab {
+  readonly kind: typeof STRIP_TAB_KIND.CLOUD_BROWSER;
   readonly cloudBrowser: string;
 }
 
 /** One coding agent's transcript and composer in the side panel, named by the agent, as an agent mention pressed beside the Inbox opens it. */
 export interface TranscriptStripTab {
+  readonly kind: typeof STRIP_TAB_KIND.TRANSCRIPT;
   readonly transcript: string;
 }
 
-/** A tab of either strip: a word of its column's own, or one naming what it shows. */
-export type StripTab =
-  | string
+/** A tab naming what it shows, of any object kind. */
+type ObjectStripTab =
   | AgentStripTab
   | TranscriptStripTab
   | DraftStripTab
@@ -144,57 +185,152 @@ export type StripTab =
   | PageStripTab
   | CloudBrowserStripTab;
 
+/** A tab of either strip: a word of its column's own, or one naming what it shows. */
+export type StripTab = string | ObjectStripTab;
+
+/** The tab of one kind. */
+type StripTabOf<K extends StripTabKind> = K extends typeof STRIP_TAB_KIND.WORD
+  ? string
+  : Extract<ObjectStripTab, { readonly kind: K }>;
+
+/** A tab of `T` as a build before tabs carried their kind kept it: a word as it is, an object without its kind. */
+export type UntaggedStripTab<T extends StripTab = StripTab> = T extends ObjectStripTab
+  ? Omit<T, "kind">
+  : T;
+
+/** One coding agent's tab. */
+export function agentTab(agent: string): AgentStripTab {
+  return { kind: STRIP_TAB_KIND.AGENT, agent };
+}
+
+/** One coding agent's transcript tab in the side panel. */
+export function transcriptTab(transcript: string): TranscriptStripTab {
+  return { kind: STRIP_TAB_KIND.TRANSCRIPT, transcript };
+}
+
+/** A draft agent's tab, by the key its first message will start it under. */
+export function draftTab(draft: string): DraftStripTab {
+  return { kind: STRIP_TAB_KIND.DRAFT, draft };
+}
+
+/** One subagent's tab, by the call that started it, and the delegation where one of the task's agents handed it over. */
+export function subagentTab(subagent: string, delegation?: SubagentDelegation): SubagentStripTab {
+  return delegation === undefined
+    ? { kind: STRIP_TAB_KIND.SUBAGENT, subagent }
+    : { kind: STRIP_TAB_KIND.SUBAGENT, subagent, delegation };
+}
+
+/** One file's tab, by its path in the open task's repository. */
+export function fileTab(file: string): FileStripTab {
+  return { kind: STRIP_TAB_KIND.FILE, file };
+}
+
+/** One agent's Pull request tab, naming a pull request by its number where it shows one other than the agent's own. */
+export function changesTab(changes: string, number?: number): ChangesStripTab {
+  return number === undefined
+    ? { kind: STRIP_TAB_KIND.CHANGES, changes }
+    : { kind: STRIP_TAB_KIND.CHANGES, changes, number };
+}
+
+/** One terminal in an agent's cloud sandbox, by the agent, the id its terminal was minted under, and its name. */
+export function terminalTab(terminal: string, shell: string, title: string): TerminalStripTab {
+  return { kind: STRIP_TAB_KIND.TERMINAL, terminal, shell, title };
+}
+
+/** One terminal on this Mac in an agent's mirrored files, on the same terms as a cloud one. */
+export function localTab(local: string, shell: string, title: string): LocalStripTab {
+  return { kind: STRIP_TAB_KIND.LOCAL, local, shell, title };
+}
+
+/** One page's tab. */
+export function pageTab(page: string): PageStripTab {
+  return { kind: STRIP_TAB_KIND.PAGE, page };
+}
+
+/** One Browser tab in an agent's cloud browser, by the id the service keeps it under. */
+export function cloudBrowserTab(cloudBrowser: string): CloudBrowserStripTab {
+  return { kind: STRIP_TAB_KIND.CLOUD_BROWSER, cloudBrowser };
+}
+
+/** A tab's kind: a word's for a string, and an object's own otherwise. */
+export function stripTabKind(tab: StripTab): StripTabKind {
+  return typeof tab === "string" ? STRIP_TAB_KIND.WORD : tab.kind;
+}
+
 /**
- * Whether a tab is one agent's. Note that each kind is told by the field
- * naming what it shows, which a word, having none, never holds.
+ * A tab a build before tabs carried their kind kept, tagged with the kind
+ * the one field naming what it shows spells; a word, or a tab already
+ * tagged, as it is; none for an object naming nothing a tab names.
  */
+export function taggedStripTab<T extends StripTab>(tab: T | UntaggedStripTab<T>): T | undefined {
+  // Note that a tab keeps its kind of `T` through the tag, the field it was found to hold, which the compiler cannot follow.
+  const held = tab as StripTab | UntaggedStripTab;
+  if (typeof held === "string" || "kind" in held) return tab as T;
+  const kind = OBJECT_STRIP_TAB_KINDS.find((each) => each in held);
+  return kind === undefined ? undefined : ({ kind, ...held } as T);
+}
+
+/**
+ * A tab of one kind as a record keeps it: `fields`, the tab's own, without
+ * its kind, which is told on read from the kind the schema is built for and
+ * left out on write, so a record reads and writes the bytes a build before
+ * tabs carried their kind did, and a rollback reads what this one wrote.
+ */
+export function storedStripTab<K extends ObjectStripTabKind, F extends Schema.Struct.Fields>(
+  kind: K,
+  fields: F,
+) {
+  return Schema.Struct({ kind: Schema.tagDefaultOmit(kind), ...fields });
+}
+
+/** Whether a tab is one agent's. */
 export function isAgentTab(tab: StripTab): tab is AgentStripTab {
-  return tab instanceof Object && "agent" in tab;
+  return stripTabKind(tab) === STRIP_TAB_KIND.AGENT;
 }
 
 /** Whether a tab is a draft agent's. */
 export function isDraftTab(tab: StripTab): tab is DraftStripTab {
-  return tab instanceof Object && "draft" in tab;
+  return stripTabKind(tab) === STRIP_TAB_KIND.DRAFT;
 }
 
 /** Whether a tab is one subagent's. */
 export function isSubagentTab(tab: StripTab): tab is SubagentStripTab {
-  return tab instanceof Object && "subagent" in tab;
+  return stripTabKind(tab) === STRIP_TAB_KIND.SUBAGENT;
 }
 
 /** Whether a tab is one file's. */
 export function isFileTab(tab: StripTab): tab is FileStripTab {
-  return tab instanceof Object && "file" in tab;
+  return stripTabKind(tab) === STRIP_TAB_KIND.FILE;
 }
 
 /** Whether a tab is one agent's changes. */
 export function isChangesTab(tab: StripTab): tab is ChangesStripTab {
-  return tab instanceof Object && "changes" in tab;
+  return stripTabKind(tab) === STRIP_TAB_KIND.CHANGES;
 }
 
 /** Whether a tab is one agent's transcript in the side panel. */
 export function isTranscriptTab(tab: StripTab): tab is TranscriptStripTab {
-  return tab instanceof Object && "transcript" in tab;
+  return stripTabKind(tab) === STRIP_TAB_KIND.TRANSCRIPT;
 }
 
 /** Whether a tab is one agent's terminal. */
 export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
-  return tab instanceof Object && "terminal" in tab;
+  return stripTabKind(tab) === STRIP_TAB_KIND.TERMINAL;
 }
 
 /** Whether a tab is one agent's Local tab. */
 export function isLocalTab(tab: StripTab): tab is LocalStripTab {
-  return tab instanceof Object && "local" in tab;
+  return stripTabKind(tab) === STRIP_TAB_KIND.LOCAL;
 }
 
 /** Whether a tab is one page's. */
 export function isPageTab(tab: StripTab): tab is PageStripTab {
-  return tab instanceof Object && "page" in tab;
+  return stripTabKind(tab) === STRIP_TAB_KIND.PAGE;
 }
 
 /** Whether a tab is one of an agent's cloud Browser tabs. */
 export function isCloudBrowserTab(tab: StripTab): tab is CloudBrowserStripTab {
-  return tab instanceof Object && "cloudBrowser" in tab;
+  return stripTabKind(tab) === STRIP_TAB_KIND.CLOUD_BROWSER;
 }
 
 /**
@@ -213,59 +349,7 @@ export function followedAgent(
     : undefined;
 }
 
-/**
- * The coding agent a tab is one of the agent's own: its tab, its Changes
- * tab, its Terminal tab, or its Local tab, which is where a terminal
- * command means that agent (`terminal-entry.ts`); none for any other tab.
- */
-export function agentOfTab(tab: StripTab | undefined): string | undefined {
-  if (tab === undefined) return undefined;
-  if (isAgentTab(tab)) return tab.agent;
-  if (isChangesTab(tab)) return tab.changes;
-  if (isLocalTab(tab)) return tab.local;
-  return isTerminalTab(tab) ? tab.terminal : undefined;
-}
-
-/**
- * Whether two tabs are the same tab. A delegated worker's call names it
- * within its agent, as the service names its conversation, so its tab is the
- * pair. No tab, as a column showing its plan has, is the same as none.
- */
-export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boolean {
-  if (a === undefined || b === undefined) return false;
-  if (isAgentTab(a)) return isAgentTab(b) && a.agent === b.agent;
-  if (isTranscriptTab(a)) return isTranscriptTab(b) && a.transcript === b.transcript;
-  if (isSubagentTab(a)) {
-    return (
-      isSubagentTab(b) && a.subagent === b.subagent && a.delegation?.agent === b.delegation?.agent
-    );
-  }
-  if (isDraftTab(a)) return isDraftTab(b) && a.draft === b.draft;
-  if (isFileTab(a)) return isFileTab(b) && a.file === b.file;
-  if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes && a.number === b.number;
-  if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
-  if (isLocalTab(a)) return isLocalTab(b) && a.local === b.local && a.shell === b.shell;
-  if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
-  if (isCloudBrowserTab(a)) return isCloudBrowserTab(b) && a.cloudBrowser === b.cloudBrowser;
-  return a === b;
-}
-
-/**
- * The key each agent's Terminal tab is drawn under, by agent, made the first
- * time it is asked for. Note that it is not the agent's id, because the
- * agent's Changes tab stands in the same strip under that.
- */
-const terminalKeys = new Map<string, string>();
-
-function terminalKey(agentId: string): string {
-  const held = terminalKeys.get(agentId);
-  if (held !== undefined) return held;
-  const made = crypto.randomUUID();
-  terminalKeys.set(agentId, made);
-  return made;
-}
-
-/** The key each agent's transcript tab in the side panel is drawn under, by agent, made the first time it is asked for, apart from its Changes tab's and its Terminal tab's. */
+/** The key each agent's transcript tab in the side panel is drawn under, by agent, made the first time it is asked for, apart from its Changes tab's. */
 const transcriptKeys = new Map<string, string>();
 
 function transcriptKey(agentId: string): string {
@@ -294,28 +378,103 @@ function numberedKey(agentId: string, number: number): string {
   return made;
 }
 
+/** What a kind declares of its tab's identity: when two of its tabs are one, the key a list draws its tab under, and the coding agent the tab is one of the agent's own. */
+interface TabIdentity<T extends StripTab> {
+  readonly same: (a: T, b: T) => boolean;
+  readonly key: (tab: T) => string;
+  readonly agent: (tab: T) => string | undefined;
+}
+
+/** No coding agent, for a tab that is none of an agent's own. */
+const NO_AGENT = (): undefined => undefined;
+
 /**
- * A tab's key for a list that draws one element per tab: a word tab's word,
- * the agent's, call's, or draft's own id, which no word spells, or the
- * file's path. A Changes tab is keyed by its agent's id, which no other tab
- * of the side panel, the one strip it stands in, is keyed by, one naming a
- * pull request by its number by a key made for the two (`numberedKey`), a Terminal tab
- * by a key made for its agent (`terminalKey`), a Local tab by the id its terminal was minted under, a page's by the page's
- * own id, and a cloud Browser tab's by the id the service keeps it under.
+ * Each kind's identity, a missing kind failing to compile. A delegated
+ * worker's call names it within its agent, as the service names its
+ * conversation, so its tab is the pair. A word is keyed by itself, an
+ * agent's, call's, or draft's tab by its own id, which no word spells, and
+ * a file's by its path. A Changes tab is keyed by its agent's id, which no
+ * other tab of the side panel, the one strip it stands in, is keyed by, one
+ * naming a pull request by its number by a key made for the two
+ * (`numberedKey`); a Terminal or Local tab by the id its terminal was minted
+ * under, a page's by the page's own id, and a cloud Browser tab's by the id
+ * the service keeps it under. An agent's tab, its Changes tab, its Terminal
+ * tab, and its Local tab are the agent's own, which is where a terminal
+ * command means that agent (`terminal-entry.ts`).
  */
+const TAB_IDENTITY = {
+  [STRIP_TAB_KIND.WORD]: { same: (a, b) => a === b, key: (tab) => tab, agent: NO_AGENT },
+  [STRIP_TAB_KIND.AGENT]: {
+    same: (a, b) => a.agent === b.agent,
+    key: (tab) => tab.agent,
+    agent: (tab) => tab.agent,
+  },
+  [STRIP_TAB_KIND.TRANSCRIPT]: {
+    same: (a, b) => a.transcript === b.transcript,
+    key: (tab) => transcriptKey(tab.transcript),
+    agent: NO_AGENT,
+  },
+  [STRIP_TAB_KIND.DRAFT]: {
+    same: (a, b) => a.draft === b.draft,
+    key: (tab) => tab.draft,
+    agent: NO_AGENT,
+  },
+  [STRIP_TAB_KIND.SUBAGENT]: {
+    same: (a, b) => a.subagent === b.subagent && a.delegation?.agent === b.delegation?.agent,
+    key: (tab) => tab.subagent,
+    agent: NO_AGENT,
+  },
+  [STRIP_TAB_KIND.FILE]: {
+    same: (a, b) => a.file === b.file,
+    key: (tab) => tab.file,
+    agent: NO_AGENT,
+  },
+  [STRIP_TAB_KIND.CHANGES]: {
+    same: (a, b) => a.changes === b.changes && a.number === b.number,
+    key: (tab) => (tab.number === undefined ? tab.changes : numberedKey(tab.changes, tab.number)),
+    agent: (tab) => tab.changes,
+  },
+  [STRIP_TAB_KIND.TERMINAL]: {
+    same: (a, b) => a.terminal === b.terminal && a.shell === b.shell,
+    key: (tab) => tab.shell,
+    agent: (tab) => tab.terminal,
+  },
+  [STRIP_TAB_KIND.LOCAL]: {
+    same: (a, b) => a.local === b.local && a.shell === b.shell,
+    key: (tab) => tab.shell,
+    agent: (tab) => tab.local,
+  },
+  [STRIP_TAB_KIND.PAGE]: {
+    same: (a, b) => a.page === b.page,
+    key: (tab) => tab.page,
+    agent: NO_AGENT,
+  },
+  [STRIP_TAB_KIND.CLOUD_BROWSER]: {
+    same: (a, b) => a.cloudBrowser === b.cloudBrowser,
+    key: (tab) => tab.cloudBrowser,
+    agent: NO_AGENT,
+  },
+} as const satisfies { readonly [K in StripTabKind]: TabIdentity<StripTabOf<K>> };
+
+/** The identity of a tab's kind, over any tab. Note that each entry is read only with a tab of its own kind, which is what makes the widening sound. */
+function identityOf(tab: StripTab): TabIdentity<StripTab> {
+  return TAB_IDENTITY[stripTabKind(tab)] as TabIdentity<StripTab>;
+}
+
+/** The coding agent a tab is one of the agent's own (`TAB_IDENTITY`); none for any other tab. */
+export function agentOfTab(tab: StripTab | undefined): string | undefined {
+  return tab === undefined ? undefined : identityOf(tab).agent(tab);
+}
+
+/** Whether two tabs are the same tab: of one kind, and the same as that kind declares it (`TAB_IDENTITY`). No tab, as a column showing its plan has, is the same as none. */
+export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boolean {
+  if (a === undefined || b === undefined) return false;
+  return stripTabKind(a) === stripTabKind(b) && identityOf(a).same(a, b);
+}
+
+/** A tab's key for a list that draws one element per tab, as its kind declares it (`TAB_IDENTITY`). */
 export function tabKey(tab: StripTab): string {
-  if (isAgentTab(tab)) return tab.agent;
-  if (isTranscriptTab(tab)) return transcriptKey(tab.transcript);
-  if (isTerminalTab(tab)) return terminalKey(tab.terminal);
-  if (isLocalTab(tab)) return tab.shell;
-  if (isDraftTab(tab)) return tab.draft;
-  if (isFileTab(tab)) return tab.file;
-  if (isChangesTab(tab)) {
-    return tab.number === undefined ? tab.changes : numberedKey(tab.changes, tab.number);
-  }
-  if (isPageTab(tab)) return tab.page;
-  if (isCloudBrowserTab(tab)) return tab.cloudBrowser;
-  return isSubagentTab(tab) ? tab.subagent : tab;
+  return identityOf(tab).key(tab);
 }
 
 /**

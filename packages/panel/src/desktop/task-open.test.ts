@@ -8,6 +8,7 @@ import {
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
 import type { Task } from "@repo/features/task-wire";
+import { agentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -125,9 +126,9 @@ function opened(input: { read: boolean; listed: boolean }): TasksControl {
       : { kind: DOCUMENT_REGION.READING },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: input.listed ? [{ agent: AGENT.id }] : [],
+      tabs: input.listed ? [agentTab(AGENT.id)] : [],
       // The tab the task's row chose before its agents were read (`use-main-tabs.ts`).
-      tab: { agent: AGENT.id },
+      tab: agentTab(AGENT.id),
       openAgents: input.listed ? [AGENT.id] : undefined,
     },
     agents: agentsControl({

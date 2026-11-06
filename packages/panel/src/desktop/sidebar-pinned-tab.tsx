@@ -29,7 +29,7 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
-import { isAgentTab, isChangesTab, isFileTab, pullRequestLabelOf } from "@repo/ui/tab-strip-model";
+import { isAgentTab, isChangesTab, pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { useCallback, useRef } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -41,6 +41,7 @@ import { useChangesPeople } from "../tasks/changes-people.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
 import { pullRequestOfTab } from "../tasks/pull-request-number.js";
+import { stripTabLook } from "../tasks/strip-tab-kinds.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
 import { useListedPullRequest } from "../tasks/use-agent-pull-request.js";
 import type { HeldPeople } from "../tasks/use-agents.js";
@@ -137,14 +138,10 @@ function pinSubject(
   agent: TaskAgentLine | undefined,
   pullRequest: PinnedPullRequest | undefined,
 ): TabSubject {
-  if (isAgentPin(pin)) {
-    return { kind: TAB_KIND.AGENT, name: pin.label, agent: agent ?? { model: pin.model } };
-  }
-  const { tab } = pin;
-  if (isChangesTab(tab)) return { kind: TAB_KIND.CHANGES, pullRequest };
-  if (isFileTab(tab)) return { kind: TAB_KIND.FILE, path: tab.file };
   const plan = "task" in on ? { name: on.task.name, status: on.task.status } : undefined;
-  return { kind: TAB_KIND.PANEL, tab, plan };
+  // An agent's pin is named as it was pinned, at rest in the harness it was pinned in where its task's row does not say.
+  const standing = agent ?? (isAgentPin(pin) ? { model: pin.model } : undefined);
+  return stripTabLook(pin.tab, { plan, pullRequest, agent: { name: pin.label, agent: standing } });
 }
 
 /** What a pin's pull request is drawn and named from: its number, title, and where it stands. */

@@ -1,9 +1,9 @@
-import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
   taskCommentsLiveRowsSchema,
   threadsOfLiveRows,
 } from "@repo/features/description-comment-live";
 import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
+import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import { COMMENT_SUBJECT, type TasksCommentsFollow } from "@repo/features/tasks-view";
 import { type EntityPool, fieldKind, type HeldRows } from "@repo/sync";
 import { Data, Effect, Option, Schema } from "effect";

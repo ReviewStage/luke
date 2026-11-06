@@ -30,7 +30,9 @@ import {
   recordAgentNativeSession,
   updateAgentChoice,
 } from "@repo/database/models/agent-store";
+import { appendSessionEntries } from "@repo/database/models/claude-session-entries";
 import { readNativeRewind, rewindConversation } from "@repo/database/models/conversation-rewind";
+import { deviceAgentLinesWaiting } from "@repo/database/models/device-agent-store";
 import { registerDevice } from "@repo/database/models/device-store";
 import { installSkill } from "@repo/database/models/installed-skill-store";
 import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
@@ -50,6 +52,10 @@ import { messages } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_FAILURE, AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import {
+  DEVICE_AGENT_LINE_KIND,
+  deviceAgentLaunchSecretsSchema,
+} from "@repo/features/device-agent-wire";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -71,6 +77,7 @@ import {
   Option,
   Redacted,
   Result,
+  Schema,
 } from "effect";
 import type { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
@@ -97,7 +104,9 @@ import {
 } from "../../testing/runner-sandbox-fake.js";
 import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import { AGENT_DRIVE, agentDriveName } from "../agent-drive.js";
+import { AGENT_TAG, SANDBOX_NAME } from "../agent-sandbox-open.js";
 import { BASE_DRIVE } from "../base-drive.js";
+import { claimedDeviceAgentLine } from "../device-agent.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -105,7 +114,8 @@ import {
   KEY_REFUSAL,
   PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
-import { AGENT_TAG, SANDBOX_NAME, vercelMachineLayer } from "../machine/vercel-machine.js";
+import { agentMachinesLayer } from "../machine/agent-machines.js";
+import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
@@ -133,6 +143,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 const IMAGE = "agent-image:fixture";
 const EVENTS_URL = "https://app.test/api/agents/runner/events";
 const LINES_URL = "https://app.test/api/agents/runner-lines";
+const TRANSCRIPTS_URL = "https://app.test/api/agents/runner-transcripts";
 const MCP_URL = "https://app.test/api/agents/mcp";
 /** The host every address above names, which the firewall swaps the runner's bearer in on. */
 const SERVICE_HOST = "app.test";
@@ -248,6 +259,7 @@ function sessionsFor(userId: string, sequence: { next: number }) {
     eventsUrl: EVENTS_URL,
     linesUrl: LINES_URL,
     mcpUrl: MCP_URL,
+    transcriptsUrl: TRANSCRIPTS_URL,
     integrations: () => Effect.succeed([LINEAR_SERVER]),
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
@@ -624,6 +636,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           eventsUrl: EVENTS_URL,
           linesUrl: LINES_URL,
           mcpUrl: MCP_URL,
+          transcriptsUrl: TRANSCRIPTS_URL,
           integrations: [LINEAR_SERVER],
           allowedDomains: [],
           installedSkills: "/opt/agent/installed-skills",
@@ -915,11 +928,28 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           new Date(0),
         );
         const onKey = runnerSandboxApi();
-        const keyed = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(onKey)));
+        const machines = agentMachinesLayer({
+          readToken: deploymentOidcToken,
+          run: () => assert.fail("a Mac's launch runs no sandbox checkout"),
+        }).pipe(Layer.provide(onKey.layer));
+        // Note that the machines are provided innermost, so the Mac's machine answers rather than the fake sandbox's.
+        const keyed = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(machines),
+          Effect.provide(services(onKey)),
+        );
         assert.equal((yield* keyed.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const [launch] = yield* deviceAgentLinesWaiting(userId, deviceId);
+        assert.ok(launch?.kind === DEVICE_AGENT_LINE_KIND.LAUNCH);
+        const claimed = Option.getOrThrow(
+          yield* claimedDeviceAgentLine(userId, deviceId, launch.id).pipe(
+            Effect.provide(Layer.succeed(HostedEnvironment, NO_KEYS)),
+          ),
+        );
+        assert.ok("secrets" in claimed);
+        const { env } = Schema.decodeUnknownSync(deviceAgentLaunchSecretsSchema)(claimed.secrets);
         // A Mac has no firewall of ours, so its CLI is handed the key itself, and no swap is set.
-        assert.equal(onKey.commands[0]?.env[RUNNER_ENV.API_KEY], API_KEY);
-        assert.equal(onKey.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
+        assert.equal(env[RUNNER_ENV.API_KEY], API_KEY);
+        assert.equal(env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         assert.deepEqual(onKey.policies, []);
       }),
   );
@@ -1610,68 +1640,79 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
     }),
   );
 
-  it.effect(
-    "a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox under the same name on the same drive, with no CLI session to resume and the installed skills written again",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = runnerSandboxApi();
-        const { userId, agent } = yield* openAgent;
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.SKILLS]: true } });
-        yield* installSkill(userId, {
-          owner: { scope: INSTALLED_SKILL_SCOPE.PERSONAL },
-          name: "incident-notes",
-          description: "Write incident notes.",
-          userInvocable: false,
-          source: { type: INSTALLED_SKILL_SOURCE.TEXT },
-          files: [{ path: "SKILL.md", bytes: new TextEncoder().encode("Write them.\n") }],
-        });
-        const skillUploads = () =>
-          api.uploads.filter((upload) =>
-            [...upload.keys()].some((path) => path.startsWith("/tmp/agent-installed-skills/")),
-          ).length;
-        const sequence = { next: 0 };
-        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
-        sequence.next = 42;
-        yield* runnerTook(agent.id);
-        yield* runnerEnded({
-          target: { userId, conversationId: agent.conversationId },
-          sessionId: opened.sessionId,
-          sequence: 41,
-        }).pipe(Effect.provide(api.layer));
-        const [expired] = api.sandboxes;
-        assert.ok(expired !== undefined);
-        expired.snapshotExpired = true;
+  // Note that an agent from before the store keeps no transcript there, so its session starts fresh.
+  for (const stored of [true, false]) {
+    it.effect(
+      `a message after the stopped sandbox's snapshot expired deletes it and goes on in a fresh sandbox under the same name on the same drive, ${stored ? "resuming the CLI's session from the transcript the service keeps" : "starting the CLI's session fresh where the service keeps no transcript of it"}, and the installed skills written again`,
+      () =>
+        Effect.gen(function* () {
+          vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+          const api = runnerSandboxApi();
+          const { userId, agent } = yield* openAgent;
+          yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.SKILLS]: true } });
+          yield* installSkill(userId, {
+            owner: { scope: INSTALLED_SKILL_SCOPE.PERSONAL },
+            name: "incident-notes",
+            description: "Write incident notes.",
+            userInvocable: false,
+            source: { type: INSTALLED_SKILL_SOURCE.TEXT },
+            files: [{ path: "SKILL.md", bytes: new TextEncoder().encode("Write them.\n") }],
+          });
+          const skillUploads = () =>
+            api.uploads.filter((upload) =>
+              [...upload.keys()].some((path) => path.startsWith("/tmp/agent-installed-skills/")),
+            ).length;
+          const sequence = { next: 0 };
+          const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+          const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+          assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+          assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+          if (stored) {
+            yield* appendSessionEntries(
+              userId,
+              agent.conversationId,
+              { projectKey: "-workspace-repository", sessionId: CLI_SESSION },
+              [{ type: "user", uuid: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e01" }],
+            );
+          }
+          sequence.next = 42;
+          yield* runnerTook(agent.id);
+          yield* runnerEnded({
+            target: { userId, conversationId: agent.conversationId },
+            sessionId: opened.sessionId,
+            sequence: 41,
+          }).pipe(Effect.provide(api.layer));
+          const [expired] = api.sandboxes;
+          assert.ok(expired !== undefined);
+          expired.snapshotExpired = true;
 
-        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+          const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
 
-        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(expired.deleted, true);
-        const fresh = api.sandboxes[1];
-        assert.ok(fresh !== undefined);
-        assert.equal(fresh.status, "running");
-        assert.equal(fresh.name, expired.name);
-        assert.equal(fresh.tags[SESSION_TAG], opened.sessionId);
-        // The drive outlives the expired sandbox, so what the agent left on it is there again.
-        assert.deepEqual(fresh.mounts, expired.mounts);
-        assert.deepEqual([...api.drives], [agentDriveName(opened.sessionId)]);
-        const relaunch = api.commands[1];
-        assert.equal(relaunch?.sandboxSessionId, fresh.currentSessionId);
-        const [config, line] = (yield* launchLines(relaunch)) as [ClaudeCodeConfig, InputLine];
-        assert.equal(config.resume, undefined);
-        assert.ok(line.type === INPUT_LINE.MESSAGE);
-        assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
-        // The installed skills went with the expired disk, so the fresh sandbox is handed them again.
-        assert.equal(skillUploads(), 2);
-        // The session is found again by its tag, in the new sandbox alone.
-        const found = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
-        assert.equal(found.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(api.sandboxes.length, 2);
-      }),
-  );
+          assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+          assert.equal(expired.deleted, true);
+          const fresh = api.sandboxes[1];
+          assert.ok(fresh !== undefined);
+          assert.equal(fresh.status, "running");
+          assert.equal(fresh.name, expired.name);
+          assert.equal(fresh.tags[SESSION_TAG], opened.sessionId);
+          // The drive outlives the expired sandbox, so what the agent left on it is there again.
+          assert.deepEqual(fresh.mounts, expired.mounts);
+          assert.deepEqual([...api.drives], [agentDriveName(opened.sessionId)]);
+          const relaunch = api.commands[1];
+          assert.equal(relaunch?.sandboxSessionId, fresh.currentSessionId);
+          const [config, line] = (yield* launchLines(relaunch)) as [ClaudeCodeConfig, InputLine];
+          assert.equal(config.resume, stored ? CLI_SESSION : undefined);
+          assert.ok(line.type === INPUT_LINE.MESSAGE);
+          assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
+          // The installed skills went with the expired disk, so the fresh sandbox is handed them again.
+          assert.equal(skillUploads(), 2);
+          // The session is found again by its tag, in the new sandbox alone.
+          const found = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+          assert.equal(found.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+          assert.equal(api.sandboxes.length, 2);
+        }),
+    );
+  }
 
   it.effect(
     "a replacement for an expired sandbox that could not launch leaves the session standing for the next message",
@@ -2302,6 +2343,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           eventsUrl: EVENTS_URL,
           linesUrl: LINES_URL,
           mcpUrl: MCP_URL,
+          transcriptsUrl: TRANSCRIPTS_URL,
           integrations: () => Effect.sync(() => handed.servers),
           instructions: () => Effect.succeed(INSTRUCTIONS),
           nextSequence: () => Effect.sync(() => sequence.next),
@@ -2768,6 +2810,39 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           ],
           [0, 0, 0],
         );
+      }),
+  );
+
+  it.effect(
+    "an agent continued from another whose transcript was carried forks the source's CLI session at its first open",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        assert.ok(agent.taskId !== null);
+        const started = yield* createAgent(userId, {
+          taskId: agent.taskId,
+          idempotencyKey: `start-${randomUUID()}`,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          descriptionSnapshot: "# Invitations\n",
+          prompt: null,
+          repository: null,
+          startedFrom: { agentId: agent.id, steps: 0, totalSteps: 0, session: CLI_SESSION },
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        });
+        const continued = Option.getOrThrow(started).agent;
+
+        const opened = yield* sessions.open(message(continued, "Go on."));
+
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [config] = (yield* launchLines(api.commands[0])) as [ClaudeCodeConfig, InputLine];
+        assert.equal(config.resume, CLI_SESSION);
+        assert.equal(config.fork, true);
       }),
   );
 

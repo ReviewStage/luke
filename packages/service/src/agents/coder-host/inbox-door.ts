@@ -2,7 +2,7 @@
  * inbox-door.ts -- the door every runtime's call of a coding agent's thread tools goes through: the agent the conversation is, then the tool.
  *
  * A native harness's runner reaches it through our MCP server
- * (`../workspace-mcp/tools.ts`). It imports no
+ * (`../tool-catalog/catalog.ts`). It imports no
  * eve runtime, because the web function that serves the MCP server bundles
  * no sandbox.
  */

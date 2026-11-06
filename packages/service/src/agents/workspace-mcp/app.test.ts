@@ -83,6 +83,12 @@ import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
+  isServedTool,
+  refusedByDoor,
+  TOOL_CATALOG,
+  type WorkspaceMcpServices,
+} from "../tool-catalog/catalog.js";
+import {
   WORKSPACE_INTEGRATION_MCP_PATH,
   WORKSPACE_MCP_PATH,
   WORKSPACE_MCP_PROTOCOL_VERSIONS,
@@ -92,7 +98,6 @@ import {
 import { admitRunnerBearer, runnerTokenDigest } from "./bearer.js";
 import { NATIVE_CALL_KEY_WINDOW_MS } from "./call-key.js";
 import { workspaceMcpDoorSeams } from "./door-seams.js";
-import { refusedByDoor, WORKSPACE_MCP_TOOLS, type WorkspaceMcpServices } from "./tools.js";
 
 /**
  * Our MCP server, answered by its group the way a function answers it,
@@ -617,7 +622,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
         for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
         for (const tool of listed.tools) {
-          const served = WORKSPACE_MCP_TOOLS.get(tool.name);
+          const served = isServedTool(tool.name) ? TOOL_CATALOG.get(tool.name) : undefined;
           assert.ok(served !== undefined);
           assert.equal(tool.description, served.description);
           assert.deepEqual(tool.inputSchema, served.inputSchema);
