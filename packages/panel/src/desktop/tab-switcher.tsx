@@ -61,6 +61,7 @@ import {
   TAB_WORDS,
 } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
+import { useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
@@ -79,7 +80,7 @@ import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../ta
 import { isOverviewTab, type MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability } from "../use-app-state.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { type HeldLook, heldLook, LOOK_STRIP } from "./switcher-looks.js";
 import {
   forgotten,
@@ -368,7 +369,9 @@ export function TabSwitcher({
   onTabChange: (tab: PanelTab) => void;
   tasks: TasksControl;
 }): React.JSX.Element | null {
-  const desktop = useCapability(HOST_CAPABILITY.DESKTOP_APP);
+  const desktop =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.DESKTOP_APP) }).data ===
+    true;
   const answers = available && desktop;
   const { act } = useAct();
   const [state, setState] = useState<SwitcherState>(SWITCHER_LET_GO);

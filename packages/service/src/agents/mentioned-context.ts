@@ -573,13 +573,15 @@ export function mentionedServers(words: string, repository: string | null): read
  * agents and people they mention, as the send read them into `reads`, and a note for
  * each MCP server or tool they mention; nothing where they mention none of
  * these. An agent with no plan is handed the notes, the agents, and the
- * pages it showed itself, which `agentId` names it by.
+ * pages it showed itself, which `agentId` names it by; one whose starter has
+ * Plans off (`plans-on.ts`) is handed no excerpt of the plan.
  */
 export function mentionedContext(
   words: string,
   task: Task | undefined,
   reads: MentionedReads = NO_MENTIONED_READS,
   agentId?: string | undefined,
+  plansOn = true,
 ): string | undefined {
   const owner = pagesOwnerOf(task, agentId);
   const named: HandedMention[] = [];
@@ -588,6 +590,9 @@ export function mentionedContext(
   for (const { mention, label, target } of handedMentionsIn(words, repository, { taskIdOf })) {
     const handed = handedMention(mention, target, task, owner);
     if (handed === undefined) continue;
+    if (!plansOn && (handed.kind === MENTION_KIND.TASK || handed.kind === MENTION_KIND.SECTION)) {
+      continue;
+    }
     // A bare address is named by what it says of the thing, a section by its anchor, as its chip is.
     const name = linkMention(label, target, repository)?.name ?? mentionName(label);
     if (!named.some((each) => sameMention(each.mention, handed))) {

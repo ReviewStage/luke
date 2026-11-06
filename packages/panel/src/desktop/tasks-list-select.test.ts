@@ -174,6 +174,14 @@ async function mountPage(): Promise<{
   hold: (tasks: readonly TaskSummary[], taskSections?: TaskSections) => void;
 }> {
   let restand: ((view: TasksView) => void) | undefined;
+  /** A status the service keeps, written down. */
+  const keepStanding = (payload: unknown) => {
+    const standing = Option.getOrUndefined(readStanding(payload));
+    if (standing !== undefined) asked.push([standing.taskId, standing.status]);
+    return Promise.resolve(true);
+  };
+  // Note that ⌘Z and Undo send a status on its mutation, which reaches the act port.
+  fakeActPort({ [ACT_KIND.TASKS_SET_STANDING]: keepStanding });
   function Page() {
     const [view, setView] = useState(viewOf(TASKS));
     restand = setView;
@@ -181,6 +189,7 @@ async function mountPage(): Promise<{
       acts: {
         // SAFETY: the kinds the test answers are the status and section writes and deletes, each answered as kept; every other kind is refused.
         act: ((kind: PortActKind, payload: unknown) => {
+          if (kind === ACT_KIND.TASKS_SET_STANDING) return keepStanding(payload);
           if (kind === ACT_KIND.TASKS_DELETE) {
             const doomed = Option.getOrUndefined(readDelete(payload));
             if (doomed !== undefined) deleted.push(doomed.taskId);
@@ -191,10 +200,7 @@ async function mountPage(): Promise<{
             for (const place of places) placed.push([place.taskId, place.sectionId]);
             return Promise.resolve(true);
           }
-          if (kind !== ACT_KIND.TASKS_SET_STANDING) return Promise.reject(new Error("unasked"));
-          const standing = Option.getOrUndefined(readStanding(payload));
-          if (standing !== undefined) asked.push([standing.taskId, standing.status]);
-          return Promise.resolve(true);
+          return Promise.reject(new Error("unasked"));
         }) as ActHandle["act"],
         press: () => Promise.resolve(),
         tell: () => undefined,

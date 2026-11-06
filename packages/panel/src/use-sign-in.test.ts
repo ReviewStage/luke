@@ -67,7 +67,7 @@ async function pressedOver(answer: FakeActAnswer): Promise<HTMLElement> {
   document.body.append(container);
   const root = createRoot(container);
   mounted.push(root);
-  act(() => root.render(createElement(SignInScreen)));
+  act(() => root.render(onRegistry(rendererRegistry, createElement(SignInScreen))));
   const google = [...container.querySelectorAll("button")].find(
     (each) => each.textContent === "Continue with Google",
   );
@@ -123,11 +123,9 @@ test("a Cancel main refuses says why in a toast, and the gate is offered again a
   mounted.push(root);
   act(() =>
     root.render(
-      createElement(
-        Fragment,
-        null,
-        createElement(SignInScreen),
-        onRegistry(rendererRegistry, createElement(ToastHost)),
+      onRegistry(
+        rendererRegistry,
+        createElement(Fragment, null, createElement(SignInScreen), createElement(ToastHost)),
       ),
     ),
   );

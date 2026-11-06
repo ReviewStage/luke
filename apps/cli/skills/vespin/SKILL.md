@@ -1,6 +1,6 @@
 ---
 name: vespin
-description: Drive Vespin from a shell with the `vespin` command: create tasks, read and write their plans, start coding agents and wait on them, check out an agent's branch, and answer the inbox threads agents post. Load it when asked to work with Vespin tasks, plans, agents, or inbox from a terminal, to script or pipe Vespin, or to wait on an agent and bring its branch local. Prefer Vespin's MCP server only when you have no shell.
+description: Drive Vespin from a shell with the `vespin` command: create tasks, read and write their descriptions, start coding agents and wait on them, check out an agent's branch, and answer the inbox threads agents post. Load it when asked to work with Vespin tasks, their descriptions, agents, or inbox from a terminal, to script or pipe Vespin, or to wait on an agent and bring its branch local. Prefer Vespin's MCP server only when you have no shell.
 ---
 
 # vespin
@@ -25,7 +25,7 @@ vespin agent wait <agent-id> --timeout 1800   # exit code says how the turn ende
 vespin agent checkout <agent-id>              # fetch its branch and check it out here
 ```
 
-- `task create` takes the repository from this folder's `origin` (override with `-R owner/name`). With `-q` it prints the task id, then the agent id. `--start` hands the agent the plan (`-F plan.md`); `--prompt <file|->` hands it a prompt instead.
+- `task create` takes the repository from this folder's `origin` (override with `-R owner/name`). With `-q` it prints the task id, then the agent id. `--start` hands the agent the description (`-F description.md`); `--prompt <file|->` hands it a prompt instead.
 - To see the work live, use `vespin agent logs <id> --follow`. Without `--follow` it prints the transcript so far.
 - `agent checkout` must run inside a clone of the task's repository. `agent view <id>` prints the branch, pull request, and checks.
 - Tasks are named by id, number, or key (`ACME-42`). Agents and threads are named by id.
@@ -35,14 +35,14 @@ Other commands:
 | Command | What it does |
 | --- | --- |
 | `task list [--mine] [--status s]` · `task view <task>` · `task update <task> [--status] [--priority] [--assignee] [--name]` | Find, read, and change tasks; `--status done` marks one done |
-| `plan show <task>` · `plan edit <task> -F <file\|->` | Print the plan as Markdown; replace it whole |
+| `description show <task>` · `description edit <task> -F <file\|->` | Print the description as Markdown; replace it whole |
 | `agent start <task> [-F prompt] [--model m --effort e] [--branch b] [--cloud\|--on <device>] [--follow\|--wait]` | Start an agent; `vespin models` lists `--model` and `--effort` values |
 | `agent list [<task>] [--offset n]` · `agent view <id>` | Agents, newest first, the workspace's 50 a page (`--offset` the `nextOffset` it printed); one agent's status |
 | `agent send <id> -F <msg\|->` · `agent stop <id>` | Message an agent; stop its turn (what it pushed stays) |
 | `inbox list [--unread]` · `inbox view <thread>` | Threads agents posted, and one thread with its open ask |
 | `inbox answer <thread> <option>` · `inbox answer <thread> -F <json\|->` · `inbox reply <thread> -F <msg\|->` · `inbox close <thread>` | Answer a decide's option, `done` for a to-do, or a form as JSON by field; write on the thread; close it |
 
-`plan edit` replaces the whole plan, so run `plan show` first and edit that. Run `vespin <group> --help` for any flag not listed here.
+`description edit` replaces the whole description, so run `description show` first and edit that; piped, `show` prints JSON, so take its `body` (`jq -r .body`). Run `vespin <group> --help` for any flag not listed here.
 
 ## Conventions
 
@@ -76,10 +76,10 @@ b=$(echo "Update the docs for the redirect" | vespin agent start ACME-42 -F - -q
 vespin agent wait "$a" && vespin agent wait "$b" && vespin agent checkout "$a"
 ```
 
-Edit a plan in a pipe:
+Edit a description in a pipe:
 
 ```sh
-vespin plan show ACME-42 | sed 's/- \[ \] Tests/- [x] Tests/' | vespin plan edit ACME-42 -F -
+vespin description show ACME-42 | jq -r .body | sed 's/- \[ \] Tests/- [x] Tests/' | vespin description edit ACME-42 -F -
 ```
 
 Answer the first unread thread:

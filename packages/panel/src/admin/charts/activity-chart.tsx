@@ -35,7 +35,7 @@ const ACTIVITY_CHART = {
     color: "var(--ui-color-chart-1)",
   },
   [ACTIVITY_FEATURE.PLAN_REVISIONS]: {
-    label: "Plan revisions",
+    label: "Description revisions",
     color: "var(--ui-color-chart-2)",
   },
   [ACTIVITY_FEATURE.INBOX_ANSWERED]: {

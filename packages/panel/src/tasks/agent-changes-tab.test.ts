@@ -1156,6 +1156,8 @@ test("a refused write flips the switch back and is said in a toast, and the swit
     "true",
     "the switch flips before the write answers",
   );
+  // Note that the write reaches the act port a few steps after the press, as its mutation sends it.
+  await vi.waitFor(() => assert.equal(held.length, 1));
   held[0]?.("Could not save that setting.");
   await flush();
 
@@ -1865,8 +1867,10 @@ test("a mark GitHub took stands where the press queued after it is refused, as G
 
   act(() => viewedBox("c.ts").click());
   act(() => viewedBox("c.ts").click());
+  await vi.waitFor(() => assert.equal(held.length, 1));
   held[0]?.answer(DONE);
   await flush();
+  await vi.waitFor(() => assert.equal(held.length, 2));
   held[1]?.answer(REFUSED);
   await flush();
 

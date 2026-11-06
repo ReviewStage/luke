@@ -210,6 +210,10 @@ const decodeFound = Schema.decodeUnknownSync(
 /** The plan a stranger's task and a member's both hold, and the words a thread stands on in it. */
 const PLAN_NOTE = { kind: NOTE_KIND.ADD, section: "Problem", text: "Seats drift." } as const;
 
+/** Plans turned on or off for the account, as Settings › Experimental turns it. */
+const plansFor = (userId: string, on: boolean) =>
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
+
 /** Memory turned on for the account, as Settings › Experimental turns it on. */
 const memoryOn = (userId: string) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
@@ -700,6 +704,7 @@ it.effect(
       const member = yield* Effect.promise(() => signUp(auth));
       const agentId = yield* Effect.gen(function* () {
         const own = yield* openWorkspace(member.userId);
+        yield* plansFor(member.userId, true);
         return yield* openTaskAgent(member.userId, own, null);
       }).pipe(Effect.provide(services));
       const token = yield* Effect.promise(() =>
@@ -962,13 +967,14 @@ it.layer(getTestDB())("the member's inbox over a started agent", (it) => {
 });
 
 it.effect(
-  "a member's thread and reply are their own and reach the agent in the thread as the window's do, and resolving settles it",
+  "a member's thread and reply are their own and reach the agent in the thread as the window's do, and resolving settles it; with Plans off no thread is started on the plan",
   () =>
     Effect.gen(function* () {
       const { auth, fetch, services, heard } = yield* standing;
       const member = yield* Effect.promise(() => signUp(auth));
       const { taskId, agentId } = yield* Effect.gen(function* () {
         const own = yield* openWorkspace(member.userId);
+        yield* plansFor(member.userId, true);
         yield* connectAgentApiKeys(member.userId);
         const task = yield* createTask(member.userId, { organizationId: own, name: "Seats" });
         yield* recordMemberPlanNotes(
@@ -1005,6 +1011,15 @@ it.effect(
       const resolved = decodeThread(
         yield* call(MEMBER_MCP_TOOL.UPDATE_COMMENT, { taskId, thread, resolved: true }),
       );
+      yield* plansFor(member.userId, false).pipe(Effect.provide(services));
+      const planless = decodeAnswer(
+        yield* Effect.promise(() =>
+          client.callTool({
+            name: MEMBER_MCP_TOOL.COMMENT_ON_PLAN,
+            arguments: { taskId, quote: PLAN_NOTE.text, words: "Still drifting?" },
+          }),
+        ),
+      );
       yield* Effect.promise(() => client.close());
       const lines = yield* Effect.gen(function* () {
         const db = yield* Database;
@@ -1032,6 +1047,8 @@ it.effect(
         ],
       );
       assert.equal(resolved.state, PLAN_COMMENT_STATUS.RESOLVED);
+      assert.equal(planless.isError, true);
+      assert.match(planless.content[0].text, /has Plans off/u);
       // The thread was handed to the agent once for each comment, as the member's words, as a reply in the window hands it.
       assert.deepEqual(
         lines.map(({ words }) => words),

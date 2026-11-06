@@ -114,6 +114,7 @@ import {
   workspaceSections,
 } from "@repo/ui/task-sections-model";
 import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { useQuery } from "@tanstack/react-query";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
@@ -149,7 +150,7 @@ import {
 } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useAdminAccess } from "../use-app-state.js";
+import { appStateQuery, selectAdminAccess } from "../use-app-state.js";
 import { IDLE_TIMEOUT_MS, useWhenIdle } from "../use-when-idle.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
@@ -1565,7 +1566,7 @@ function SidebarAdminRow({
   onOpen: () => void;
   onPreload: () => void;
 }): React.JSX.Element | null {
-  const admin = useAdminAccess();
+  const admin = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
   if (!admin) return null;
   return (
     <NavItem

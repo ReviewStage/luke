@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import os from "node:os";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import type { LoopbackConsentOptions } from "@repo/credentials";
 import { loopbackConsent } from "@repo/credentials/node";
@@ -16,6 +17,7 @@ import {
   hostKernelLayer,
   IdSource,
   LoopbackListener,
+  MirrorPlatform,
   oauthAccountSourceLayer,
   RunMode,
   reporterLayer,
@@ -25,7 +27,7 @@ import {
   StateRoot,
   TerminalSocket,
 } from "@repo/host/effect";
-import { listenOnLoopbackOverNet, openTerminalSocketOverWs } from "@repo/host/node";
+import { listenOnLoopbackOverNet, mirrorPlatform, openTerminalSocketOverWs } from "@repo/host/node";
 import { ConfigProvider, Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { net } from "electron";
@@ -62,6 +64,8 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
     // A forwarded cloud port is listened on at 127.0.0.1 alone, over `node:net`.
     Layer.succeed(LoopbackListener, listenOnLoopbackOverNet),
+    // Cloud agents' mirrors stand beside the local agents' clones under the member's own home, `~/.vespin`.
+    Layer.succeed(MirrorPlatform, mirrorPlatform(os.homedir())),
     thisMacHostLayer(),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
     // cipher. Its consent is a loopback on this Mac: the browser hands the

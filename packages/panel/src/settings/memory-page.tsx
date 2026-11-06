@@ -50,6 +50,7 @@ import {
   useConfirmDialog,
   useLeaving,
   useMenu,
+  usePageScroll,
   VisuallyHidden,
 } from "@repo/ui";
 import { ACTOR_KIND, type Actor, actorName, personActor } from "@repo/ui/actor-model";
@@ -57,8 +58,14 @@ import { GLYPH, ListFilterIcon } from "@repo/ui/icons";
 import { markdownTree } from "@repo/ui/markdown-words";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import {
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+} from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { type ReactNode, useCallback, useId, useRef, useState } from "react";
+import { type ReactNode, useCallback, useId, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -104,7 +111,11 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * the list the moment it is sent, and back only where the service refused
  * it; several are forgotten one after another, the first refusal stopping
  * the rest, and the memories the reader may not forget are left chosen and
- * said so. The whole page is
+ * said so. The list draws only the memories near the view (`VirtualRows`),
+ * in the page's own scroller, so a workspace's thousand draw as quickly as a
+ * few; ⇧-clicks, ⇧↑↓, and ⌘A reach the memories it leaves undrawn, and the
+ * memory holding the keyboard stays drawn wherever the page is scrolled.
+ * The whole page is
  * kept out of the screen recording, since a memory is members' own words
  * about their work.
  */
@@ -180,8 +191,14 @@ const MEMORY_WORDS = "memory-words [&_a]:pointer-events-auto [&_a]:relative [&_a
 const SEARCH_LINE =
   "memory-search flex items-center gap-control-gap [&>:first-child]:min-w-0 [&>:first-child]:flex-1";
 
-/** The memories' list, a column of rows. */
-const MEMORY_LIST = "memory-list m-0 flex flex-col gap-ui-2 p-0";
+/** The memories' list, a run of rows. */
+const MEMORY_LIST = "memory-list";
+
+/** How tall a memory is taken to stand before it is measured: a name over a line of words, in pixels. */
+const MEMORY_ESTIMATE_PX = 72;
+
+/** The room between two memories, in pixels: the theme's `ui-2`. */
+const MEMORY_GAP_PX = 2;
 
 /** Where the selection bar floats: at the foot of the page, over the rows, as the Tasks list's does. */
 const SELECTION_FOOT =
@@ -247,6 +264,7 @@ function anchorOnly(): void {}
 /** One memory's row: its note, and its ⋯ and right-click. */
 function MemoryRow({
   shown,
+  place,
   found,
   locked,
   chosen,
@@ -254,6 +272,8 @@ function MemoryRow({
   onCopy,
 }: {
   shown: ShownMemory;
+  /** Where the row stands in the run drawing only the rows near the view, which its item wears. */
+  place: VirtualRowPlace;
   /** The words the search asks for, lit where they landed. */
   found: readonly string[];
   /** Whether a forget is out, which every Forget waits out. */
@@ -281,7 +301,7 @@ function MemoryRow({
     ],
   ];
   return (
-    <li className={MEMORY_ROW}>
+    <li {...place} className={MEMORY_ROW}>
       <CardPress
         selectKey={memory.id}
         selectBox={SELECT_BOX_PLACE.GUTTER}
@@ -581,6 +601,14 @@ function MemoryList({
     setKept(new Set());
   };
   const keepers = keepersOf(searched);
+  const { scroller, shiftedBy } = usePageScroll();
+  const run = useRef<VirtualRowsHandle>(null);
+  const keys = useMemo(() => listed.map((each) => each.memory.id), [listed]);
+  const order = useMemo(() => [keys], [keys]);
+  const bringIn = useCallback(
+    (key: string, then: () => void) => run.current?.bringIn(key, then) ?? false,
+    [],
+  );
   return (
     <SettingsSection anchor={SETTINGS_SEARCH_ROW.MEMORY} frame={SETTINGS_SECTION_FRAME.NONE}>
       <Stack gap={GAP.SECTION}>
@@ -602,22 +630,41 @@ function MemoryList({
         {listed.length === 0 ? (
           <NothingShown narrowed={found.length > 0 || kept.size > 0} onClear={clear} />
         ) : (
-          <SelectionRegion id={regionId} selection={{ selected: standing, onChange: setSelected }}>
-            <ul className={MEMORY_LIST}>
-              {listed.map((shown) => (
-                <MemoryRow
-                  key={shown.memory.id}
-                  shown={shown}
-                  found={found}
-                  locked={forgetting}
-                  chosen={
-                    several !== undefined && standing.has(shown.memory.id) ? several : undefined
-                  }
-                  onForget={() => askForget([shown.memory])}
-                  onCopy={() => copyAll([shown.memory])}
-                />
-              ))}
-            </ul>
+          <SelectionRegion
+            id={regionId}
+            selection={{ selected: standing, onChange: setSelected }}
+            order={order}
+            bringIn={bringIn}
+          >
+            <VirtualRows
+              scroller={scroller}
+              shiftedBy={shiftedBy}
+              keys={keys}
+              estimate={MEMORY_ESTIMATE_PX}
+              gap={MEMORY_GAP_PX}
+              anchor={VIRTUAL_ROWS_ANCHOR.START}
+              listItems
+              holdsFocus
+              className={MEMORY_LIST}
+              handle={run}
+            >
+              {(index, place) => {
+                const shown = listed[index];
+                return shown === undefined ? null : (
+                  <MemoryRow
+                    shown={shown}
+                    place={place}
+                    found={found}
+                    locked={forgetting}
+                    chosen={
+                      several !== undefined && standing.has(shown.memory.id) ? several : undefined
+                    }
+                    onForget={() => askForget([shown.memory])}
+                    onCopy={() => copyAll([shown.memory])}
+                  />
+                );
+              }}
+            </VirtualRows>
           </SelectionRegion>
         )}
       </Stack>

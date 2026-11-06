@@ -14,6 +14,7 @@ import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { ERROR_STATE_PLACEMENT, ErrorState, Toolbar } from "@repo/ui";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import { useQuery } from "@tanstack/react-query";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
@@ -74,7 +75,7 @@ import {
 } from "../tasks/use-side-panel.js";
 import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useCapability } from "../use-app-state.js";
+import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
 import {
   COLUMN,
@@ -831,7 +832,9 @@ function InboxSidePanel({
   phone: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
   const { panel } = drawing;
-  const terminals = useCapability(HOST_CAPABILITY.TERMINALS);
+  const terminals =
+    useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
+    true;
   // A row opens what it names as a link to it would beside the item (`route.ts`): an agent of the
   // item's task reads beside it as the panel's preview, and any other task or agent is gone to.
   const openTarget = (target: ToolTarget) => {

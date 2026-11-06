@@ -7,6 +7,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { type PullRequestComment, PullRequestCommentBox } from "./pull-request-comment-box.js";
 
 /**
@@ -58,7 +59,7 @@ test("Esc in the comment box lets go of it, keeps its words, and never reaches t
   const holder = document.body.appendChild(document.createElement("div"));
   const root = createRoot(holder);
   roots.push(root);
-  act(() => root.render(createElement(Tab, { start: "Looks right to me." })));
+  act(() => root.render(withQueryClient(createElement(Tab, { start: "Looks right to me." }))));
   const element =
     holder.querySelector<TiptapEditorHTMLElement>('.ProseMirror[aria-label="Comment"]') ??
     assert.fail("the box's editor is mounted");
@@ -82,7 +83,7 @@ test("Esc that closes the / menu keeps the caret in the box, and the next Esc le
   const holder = document.body.appendChild(document.createElement("div"));
   const root = createRoot(holder);
   roots.push(root);
-  act(() => root.render(createElement(Tab, { start: "Looks right" })));
+  act(() => root.render(withQueryClient(createElement(Tab, { start: "Looks right" }))));
   const element =
     holder.querySelector<TiptapEditorHTMLElement>('.ProseMirror[aria-label="Comment"]') ??
     assert.fail("the box's editor is mounted");

@@ -47,7 +47,7 @@ interface SampleTab {
 }
 
 const SAMPLE_TABS: readonly SampleTab[] = [
-  { id: "plan", icon: <DocumentIcon />, label: "Plan" },
+  { id: "plan", icon: <DocumentIcon />, label: "Description" },
   {
     id: "inbox",
     icon: <FolderIcon />,
@@ -158,7 +158,12 @@ function Cards(): React.JSX.Element {
   const [chosen, setChosen] = useState(1);
   const [picked, setPicked] = useState<string | undefined>(undefined);
   const cards = [
-    { icon: <DocumentIcon />, label: "Fix token refresh", detail: "Plan · Code", still: STILL },
+    {
+      icon: <DocumentIcon />,
+      label: "Fix token refresh",
+      detail: "Description · Code",
+      still: STILL,
+    },
     { icon: <FolderIcon />, label: "Inbox", detail: undefined, still: undefined },
     {
       icon: <DocumentIcon />,

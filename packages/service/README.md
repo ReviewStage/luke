@@ -1291,8 +1291,8 @@ Code sees them as `mcp__workspace__<tool>`, Codex as the `workspace` server. Its
 files, search, and page reads are the harness's own. Among Vespin's tools,
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`) takes notes
 (`@repo/features/plan-notes`'s `planNotesSchema`)
-into the plan of the task the call names, the agent's own or any other of
-its workspace, through the plan's one write (`plan-notes.ts`): an open
+into the description of the task the call names, the agent's own or any other of
+its workspace, through the description's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
 corrected in the code, a decision it made. The save is journaled on the task's
 row (`task.agent_edits`, the last fifty, the agent's id and its notes as
@@ -1301,7 +1301,7 @@ by" line and the "recent edits by agents" every agent on the task
 is handed say what the row says now, and a turn may take only so many
 notes. Every agent is offered `edit_plan`, `show_page`, `look_at_picture`,
 and the comment tools, one on no task among them, as an automation's run
-starts one: its pages stand on the agent itself, a look names its plan by
+starts one: its pages stand on the agent itself, a look names its description by
 the picture's address, and every `edit_plan` and comment call names its
 task, any of its workspace.
 Beside them stand
@@ -1335,9 +1335,9 @@ mention of a page points the agent at; `list_tasks`, the workspace's
 open tasks, and its archived ones too where asked, each with the sidebar
 section the agent's starter keeps it in, and those sections; `read_task`
 and `create_task` (`src/agents/task-tools.ts`), which read one task of the
-workspace with its plan and its brief, and
+workspace with its description and its brief, and
 make one for the starter, on the repository named or the agent's own,
-confirmed through the workspace's installation, with a brief and a plan to
+confirmed through the workspace's installation, with a brief and a description to
 start from and no agent on it, under an id drawn from the call's key
 (`src/agents/called-id.ts`), so a call run again makes one, which
 `start_agent` then starts on by its id;
@@ -1374,7 +1374,7 @@ choice it lists is one `start_agent` takes. A list, a read, or a start of an age
 `show_page`, and `read_page` answer each thing's mention ready to write, `[@name](link)` under
 the workspace's slug (`src/agents/written-mentions.ts`), and the agent's
 instructions show it the mention of every kind it names, under its own
-task's link, so its replies, Inbox items, and plan notes draw them as chips.
+task's link, so its replies, Inbox items, and description notes draw them as chips.
 A line from another agent hands the agent it reaches no MCP server it
 mentions, since an agent's servers are its developer's to switch.
 `gh` and `git` run through the shell, authenticated at the firewall.
@@ -1474,12 +1474,12 @@ Sync. The runner is retired when its turn goes idle, and its end takes the
 credential off the firewall and stops the sandbox, unless a Terminal holds
 it. The instructions (`src/agents/coder-host/instructions.ts`, worded for the
 harness and handed to it at every launch) tell the agent to read `AGENTS.md`
-and `CLAUDE.md` first, reread the code the plan names and say where it no
+and `CLAUDE.md` first, reread the code the description names and say where it no
 longer fits, run the repository's checks, work on an `agent/<slug>` branch and
 never push the default branch, and decide on a pull request and its draft
-state itself; the plan is the session's first message, or for an agent started
-on a developer's prompt, the prompt is, the agent is never handed the plan,
-and the instructions are worded for a prompt in the plan's place. The service
+state itself; the description is the session's first message, or for an agent started
+on a developer's prompt, the prompt is, the agent is never handed the description,
+and the instructions are worded for a prompt in the description's place. The service
 needs `PROVIDER_KEY_ENCRYPTION_KEYS`, under which each account's own keys are
 sealed, `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
 credentials.
@@ -1829,7 +1829,7 @@ asked of GitHub; it refuses a task whose repository the installation of
 the task's workspace no longer reaches, read at the start rather than when
 the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the
-task's plan as the Markdown Copy puts on the clipboard
+task's description as the Markdown Copy puts on the clipboard
 (`@repo/features/plan-markdown`); then
 makes the agent and its conversation
 (`createAgent`), and opens the agent's session on its harness under the
@@ -1837,7 +1837,7 @@ developer's own bearer with the snapshot as the first message of a typed
 turn. A Start
 naming a prompt (`task`), the developer's own words bounded as a message is, opens the
 session with the prompt as that first message instead: the agent is never
-handed the plan, its row keeps the prompt and no snapshot, and it still works
+handed the description, its row keeps the prompt and no snapshot, and it still works
 in the task's repository under the same checks; a session that
 did not open discards the agent again (`discardAgent`) and answers
 `unavailable`, so a retry starts afresh. A retry under the same key answers
@@ -1874,7 +1874,7 @@ migration drops them.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, status, `brief` (`plan` or `task`, what it was handed first, so its
-tab draws a plan as the plan's card and a prompt as the developer's message),
+tab draws a description as the description's card and a prompt as the developer's message),
 and `turnId`, the newest turn the status is read from
 (null before the first), so a reader keying an agent's run by agent and
 turn sees the run a message opens as its own (`src/agents/coder-host/status.ts`):
@@ -1958,7 +1958,7 @@ gated as the member's read of the agent is (`agentVisibleTo`), its task's
 reach among it, so an agent they cannot see is neither pinned nor unpinned:
 a pin is the account's own row of `agent_pin`, as a task's is of
 `plan_pin`, kept from the first pin's instant and gone with the agent or the
-account; the plan list's `planlessAgents` answer it as `pinnedAt` only where
+account; the task list's `planlessAgents` answer it as `pinnedAt` only where
 the reader holds one, and its live follow carries the reader's pins of
 agents on a task as `taskAgentPins`.
 `POST /api/agents/{id}/stop` is the harness's cancel of the turn under way, a
@@ -2320,7 +2320,7 @@ reaches the route because the grouped function's dispatcher reads its own
 path override from `route-path` (`apps/web/server/function-dispatch.ts`): it once
 read `path`, and every File tab read was answered 404.
 
-`GET /api/plans/{id}/revisions` reads the plan's history for the Mac's
+`GET /api/plans/{id}/revisions` reads the description's history for the Mac's
 version history (`packages/database/src/models/plan-revisions.ts`): fifty revisions a page,
 newest first, each its writer as the "Edited by" line names it, when it
 began and last moved, how many changes it made, and for a restore the
@@ -2330,9 +2330,9 @@ before while one stands. `GET /api/plans/{id}/revisions/{seq}` reads one
 revision's content and the content before it, null for the first, each
 formatted under the task's name as it stands now, so a rename since is no
 difference between them. `POST /api/plans/{id}/revisions/{seq}/restore`
-puts that revision's text back through the plan's one
+puts that revision's text back through the description's one
 locked save (`src/tasks/plan-notes.ts`'s `restoreRevision`), kept as a
-revision of the developer's naming the one restored, and answers the plan.
+revision of the developer's naming the one restored, and answers the description.
 It takes no body and no base: what it replaced is the revision before it,
 so a restore over a save that landed meanwhile is undone by restoring that.
 Every member of the task's workspace reads the history any of them wrote;
@@ -2371,17 +2371,17 @@ is `other-workspace`, naming that workspace, since an installation stands
 for one workspace alone and moving the task there is what reaches the repository:
 a task a personal workspace held before #2524 is left that way.
 
-A plan's text has one write, `src/tasks/plan-notes.ts`, and three
+A description's text has one write, `src/tasks/plan-notes.ts`, and three
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
 whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what others wrote meanwhile
 where it can be, and answered as a conflict with the text as it stands and
-the plan's last edit, naming who wrote it, with nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
+the description's last edit, naming who wrote it, with nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
 restore above is the second. An agent's
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`), the third, answers with notes
 (`packages/features/src/plan-notes.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
-text as it stands, passing over a note that names a phrase the plan does not
+text as it stands, passing over a note that names a phrase the description does not
 hold, and saves it under a binding of account and task the service built
 rather than anything the model sends, answering the document as saved or
 why nothing was: a text past its bound,
@@ -2604,7 +2604,7 @@ the rest still run, and any failure fails the cron's check-in. In order:
   ("Automations" below), at most twenty-five a sweep, and the runs still
   queued from the last hour acted on, at most twelve a sweep and four at
   once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
-- `purgedPictures`: plan pictures uploaded a day ago that no save named.
+- `purgedPictures`: description pictures uploaded a day ago that no save named.
 - `tokenPullRequests`: the open pull requests of agents on a member's own
   GitHub token, which no webhook reaches, read on that token, their reviews,
   comments, and checks among them, and the agent woken with what changed

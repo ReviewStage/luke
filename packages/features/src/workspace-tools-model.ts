@@ -30,7 +30,7 @@ export const WORKSPACE_TOOL_GROUP = {
   THREADS: "Threads",
   AGENTS: "Agents and tasks",
   AUTOMATIONS: "Automations",
-  PLAN: "Plan and comments",
+  PLAN: "Description and comments",
   PAGES: "Pages and pictures",
   WEB: "Browser and web",
   CODE: "Code",
@@ -100,7 +100,7 @@ const WORKSPACE_TOOL_WORDS = {
   },
   [AGENT_TOOL.READ_TASK]: {
     group: WORKSPACE_TOOL_GROUP.AGENTS,
-    summary: "Reads a task and its plan",
+    summary: "Reads a task and its description",
   },
   [AGENT_TOOL.CREATE_TASK]: {
     group: WORKSPACE_TOOL_GROUP.AGENTS,
@@ -140,11 +140,11 @@ const WORKSPACE_TOOL_WORDS = {
   },
   [AGENT_TOOL.EDIT_PLAN]: {
     group: WORKSPACE_TOOL_GROUP.PLAN,
-    summary: "Takes notes in its task's plan",
+    summary: "Takes notes in its task's description",
   },
   [AGENT_TOOL.READ_COMMENTS]: {
     group: WORKSPACE_TOOL_GROUP.PLAN,
-    summary: "Reads the comment threads on the plan",
+    summary: "Reads the comment threads on the description",
   },
   [AGENT_TOOL.REPLY_TO_COMMENT]: {
     group: WORKSPACE_TOOL_GROUP.PLAN,
@@ -168,7 +168,7 @@ const WORKSPACE_TOOL_WORDS = {
   },
   [AGENT_TOOL.LOOK_AT_PICTURE]: {
     group: WORKSPACE_TOOL_GROUP.PAGES,
-    summary: "Looks at a picture in the plan",
+    summary: "Looks at a picture in the description",
   },
   [AGENT_TOOL.BROWSER]: {
     group: WORKSPACE_TOOL_GROUP.WEB,

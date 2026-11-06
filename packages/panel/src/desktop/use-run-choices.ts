@@ -1,10 +1,12 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
 import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { useCallback, useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
 import { useAgentDefault, useOfferedModels } from "../account-choices.js";
-import { useAct } from "../act.js";
+import { pressMutation } from "../act-mutations.js";
 import { useWorkspaceAgents, type WorkspaceAgents } from "../tasks/use-workspace-agents.js";
+import { workspaceAgentSearchQueryOptions } from "../tasks/workspace-agent-search.js";
 import { HOST_READ_STATUS } from "../use-host-read.js";
 
 /**
@@ -52,54 +54,39 @@ export function useRunChoices(input: {
   readonly repository: string | null;
   readonly wantsAgents: boolean;
 }): RunChoices {
-  const { act, press } = useAct();
+  const { mutate: refreshTasks } = useMutation(pressMutation(ACT_KIND.TASKS_REFRESH));
   const { workspaceId, repository, wantsAgents } = input;
   const offered = useOfferedModels();
   const drawnDefault = useAgentDefault();
   const agents = useWorkspaceAgents(wantsAgents ? workspaceId : undefined, repository);
-  const [found, setFound] = useState<readonly AgentSummary[] | undefined>(undefined);
-  const [searchFailed, setSearchFailed] = useState(false);
   const [words, setWords] = useState("");
-  // Each press of Retry searches again.
-  const [searches, setSearches] = useState(0);
   const retryModels = offered.retry;
   const readModels = useCallback(() => {
     void retryModels();
   }, [retryModels]);
   // Once a word is typed the service finds the agents it names, however many the repository holds.
   const asked = words.trim();
-  useEffect(() => {
-    if (!wantsAgents || workspaceId === undefined || asked === "") return;
-    let live = true;
-    // Nothing another repository's search found stands while this one's is out.
-    setFound(undefined);
-    setSearchFailed(false);
-    act(ACT_KIND.AGENTS_WORKSPACE_LIST, {
-      workspaceId,
-      words: asked,
-      ...(repository === null ? undefined : { repository }),
-    }).then(
-      (answer) => {
-        if (!live) return;
-        setSearchFailed("failure" in answer);
-        setFound("failure" in answer ? undefined : answer.agents);
-      },
-      () => {
-        if (!live) return;
-        setSearchFailed(true);
-        setFound(undefined);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, workspaceId, repository, wantsAgents, asked, searches]);
+  const searching = wantsAgents && workspaceId !== undefined && asked !== "";
+  const search = useQuery({
+    ...workspaceAgentSearchQueryOptions(workspaceId, asked, {
+      repository: repository ?? undefined,
+    }),
+    enabled: searching,
+  });
+  const searchAgain = search.refetch;
+  // Note that nothing a search found stands while it is asked again, nor another repository's while this one's is out.
+  const answer = searching && !search.isFetching ? search : undefined;
+  const found =
+    answer?.data !== undefined && !("failure" in answer.data) ? answer.data.agents : undefined;
+  const searchFailed =
+    answer !== undefined &&
+    (answer.isError || (answer.data !== undefined && "failure" in answer.data));
   const listFailed = agents !== undefined && "failed" in agents;
   const retryAgents = useCallback(() => {
     // Note that the newest are the task list's, so where it failed the list's own Try again reads it.
-    if (listFailed) press(ACT_KIND.TASKS_REFRESH);
-    setSearches((count) => count + 1);
-  }, [press, listFailed]);
+    if (listFailed) refreshTasks();
+    if (searching) void searchAgain();
+  }, [refreshTasks, listFailed, searching, searchAgain]);
   return {
     models: offered.rows?.models,
     modelsFailed: offered.status === HOST_READ_STATUS.FAILED,
@@ -107,8 +94,8 @@ export function useRunChoices(input: {
     defaultChoice: drawnDefault.choice,
     defaultFailed: drawnDefault.status === HOST_READ_STATUS.FAILED,
     agents,
-    found: asked === "" ? undefined : found,
-    searchFailed: asked !== "" && searchFailed,
+    found,
+    searchFailed,
     retryAgents,
     searched: asked,
     searchAgents: setWords,

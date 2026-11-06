@@ -54,6 +54,7 @@ import {
   type TaskMark,
 } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
+import { useQuery } from "@tanstack/react-query";
 import {
   type RefObject,
   useCallback,
@@ -110,7 +111,7 @@ import { useReadMark, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { APP_SLICE, useAppSlice, useExperiment } from "../use-app-state.js";
+import { APP_SLICE, appStateQuery, selectExperiment, useAppSlice } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuAction, type MenuEntry, type MenuSubmenu, rowMenu } from "./action-menu.js";
 import { useMoveTaskDialog } from "./move-task-dialog.js";
@@ -715,7 +716,8 @@ function TaskMenuFooter({
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const origin = useTaskMaker(task)?.actor;
   // Note that the open task's last editor is its plan's, so while Plans is off it is said only by when the task last changed, as another task is.
-  const plans = useExperiment(EXPERIMENT.PLANS);
+  const plans =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const edit = opened === undefined || !plans ? undefined : lastEditOf(opened.task);
   const place: EditPlace = {
     reader,
@@ -848,7 +850,8 @@ export function useTaskMenuItems(
       : undefined;
   const setStanding = useStandingDoor(tasks);
   const relationId = useId();
-  const plans = useExperiment(EXPERIMENT.PLANS);
+  const plans =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const assignees = useAssigneeRows(task?.assignee);
   const standing =
     doors.surface === TASK_MENU_SURFACE.ROW && task !== undefined
@@ -954,7 +957,9 @@ export function TaskActions({
   useAppCommand(APP_COMMAND.MARK_TASK_DONE, actions.markDone);
   useAppCommand(
     APP_COMMAND.VERSION_HISTORY,
-    useExperiment(EXPERIMENT.PLANS) ? () => tasks.history.onOpen(task.id) : undefined,
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true
+      ? () => tasks.history.onOpen(task.id)
+      : undefined,
   );
   return actions.dialog;
 }

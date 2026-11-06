@@ -365,6 +365,9 @@
     var(--ui-list-row-depth, 0) *
     (var(--ui-control-icon) + var(--ui-icon-gap))
   );
+  /* A nav item nested under a place (`NavItem`'s `nested`) starts where that
+     place's name does: its row's inset, a glyph, and the glyph's gap. */
+  --spacing-nav-item-nest: calc(var(--ui-row-inset) + var(--ui-control-icon) + var(--ui-icon-gap));
 
   /* The panel's places beside the sidebar (`@repo/panel`: Automations,
      Settings, a version history, the Admin place, the sign-in): the

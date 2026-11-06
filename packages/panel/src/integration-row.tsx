@@ -18,6 +18,7 @@ import {
   INTEGRATION_LABEL_MAX,
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
+  INTEGRATION_PURPOSE,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
@@ -58,6 +59,7 @@ import {
 import type { ServerRow } from "@repo/ui/agent-servers-model";
 import { GLYPH, PlusIcon, RefreshCwIcon } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
+import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useId, useRef, useState } from "react";
 import { type ActHandle, useAct } from "./act.js";
@@ -77,9 +79,11 @@ import { MenuRow } from "./settings/menu-row.js";
  * Acme"), and under it says where the connection stands once that needs
  * saying: connected with the count of its server's tools, a sign-in the
  * browser is waited on with Reopen and Cancel, one that failed or never
- * finished with Try again, or one expired with Reconnect. Its ⋯ keeps
- * Reconnect, Disconnect (asked first), and, where the provider allows,
- * Add another account and Rename. A surface that hands it the server's
+ * finished with Try again, or one expired with Reconnect. A row with nothing
+ * of that to say and not connected says instead what the provider gives
+ * agents (`INTEGRATION_PURPOSE`), so a Connect is never pressed blind. Its
+ * ⋯ keeps Reconnect, Disconnect (asked first), and, where the provider
+ * allows, Add another account and Rename. A surface that hands it the server's
  * tools (`tools`) lets the row open onto them in place; one that hands none
  * says their count alone. Settings › Integrations' own words
  * (`settings/integrations-page.tsx`) say the rest of how a row behaves.
@@ -336,6 +340,7 @@ function RowToolsPanel({
   const rows = useRef(new Map<string, HTMLElement>());
   const body = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const run = useRef<VirtualRowsHandle>(null);
   // A tool the search no longer finds hands its place to the first that it does.
   const current = shown.find((tool) => tool.name === held) ?? shown[0];
 
@@ -368,7 +373,11 @@ function RowToolsPanel({
     // Note that Escape stops here, because it hands the focus back to the list rather than leaving Settings.
     event.preventDefault();
     event.stopPropagation();
-    if (current !== undefined) rows.current.get(current.name)?.focus({ preventScroll: true });
+    if (current === undefined) return;
+    const row = rows.current.get(current.name);
+    // Note that the tool held may have been scrolled out of the rows drawn, so it is brought in first.
+    if (row !== undefined) row.focus({ preventScroll: true });
+    else run.current?.bringIn(current.name, () => rows.current.get(current.name)?.focus());
   };
 
   return (
@@ -378,6 +387,8 @@ function RowToolsPanel({
           {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
           <div className="integration-tools-list p-ui-4" onFocus={onRowFocus}>
             <IntegrationToolList
+              scroller={list}
+              handle={run}
               server={name}
               toolWordsShown={toolWordsShown}
               tools={shown}
@@ -437,6 +448,7 @@ function disconnectAccount(
   );
 }
 
+/** One account's row at a provider, or a provider's where the account holds none there. */
 export function IntegrationRow({
   row,
   status,
@@ -605,7 +617,11 @@ export function IntegrationRow({
           description:
             connected && tools !== undefined && tools.all.length > 0 ? (
               <ToolsLine name={name} panelId={panelId} tools={tools} />
-            ) : line === undefined ? null : (
+            ) : line === undefined ? (
+              connected ? null : (
+                INTEGRATION_PURPOSE[provider]
+              )
+            ) : (
               <RowLineText
                 line={line}
                 act={

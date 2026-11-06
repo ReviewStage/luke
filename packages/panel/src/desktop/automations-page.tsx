@@ -66,9 +66,11 @@ import {
 import { ACTOR_KIND, actorName } from "@repo/ui/actor-model";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useState } from "react";
-import { unreachedAs, useAct } from "../act.js";
+import { unreachedAs } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -255,15 +257,13 @@ function MakerCell({
  * the row has no line of its own to say it in, as the editor does.
  */
 function useRunNow(automationId: string): { readonly running: boolean; readonly run: () => void } {
-  const { act } = useAct();
+  const runAutomation = useMutation(actMutation(ACT_KIND.AUTOMATIONS_RUN));
   const toast = useToast();
-  const [running, setRunning] = useState(false);
   const run = () => {
-    setRunning(true);
-    act(ACT_KIND.AUTOMATIONS_RUN, { automationId, idempotencyKey: crypto.randomUUID() })
+    runAutomation
+      .mutateAsync({ automationId, idempotencyKey: crypto.randomUUID() })
       .catch(unreachedAs(AUTOMATION_CALL_FAILURE.UNANSWERED))
       .then((answer) => {
-        setRunning(false);
         if ("failure" in answer) {
           toast({
             words: RUN_REFUSAL_WORDS[answer.failure],
@@ -279,7 +279,7 @@ function useRunNow(automationId: string): { readonly running: boolean; readonly 
         }
       });
   };
-  return { running, run };
+  return { running: runAutomation.isPending, run };
 }
 
 /**
@@ -950,21 +950,17 @@ const SENTRY_UNREAD: SentryOffer = {
  * browser, a refusal (only owners and admins install) said at its row.
  */
 function useWorkspaceSentry(workspaceId: string): SentryOffer {
-  const { act } = useAct();
+  const installSentry = useMutation(actMutation(ACT_KIND.WORKSPACE_SENTRY_INSTALL));
   const integrations = useHostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, workspaceId);
   // Note that a read that failed offers what one still out does, so a saved Sentry trigger stays editable; the editor says the failure above its rows.
   const read = integrations.rows?.sentry;
   const failed = read === undefined && integrations.status === HOST_READ_STATUS.FAILED;
   const retry = integrations.retry;
-  const [installing, setInstalling] = useState(false);
-  const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  const installing = installSentry.isPending;
+  const refusal = installSentry.error?.message;
   const onInstall = () => {
     if (installing) return;
-    setInstalling(true);
-    setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId })
-      .catch((refused: Error) => setRefusal(refused.message))
-      .finally(() => setInstalling(false));
+    installSentry.mutate({ workspaceId });
   };
   return { read, failed, onRetry: retry, installing, refusal, onInstall };
 }

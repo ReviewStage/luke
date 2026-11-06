@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { type Agent, type AgentBriefText, createAgent } from "@repo/database/models/agent-store";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
 import {
@@ -19,6 +20,7 @@ import {
   PLAN_COMMENT_STATUS,
 } from "@repo/features/plan-comment-wire";
 import { planSections } from "@repo/features/plan-document";
+import { EXPERIMENT } from "@repo/settings";
 import { Clock, Effect, Option } from "effect";
 import { ACTION_RESULT_STATUS, unparsedWire } from "../../core.js";
 import { COMMENT_TOOL_REFUSAL } from "../../tasks/comment-tools.js";
@@ -76,35 +78,45 @@ const ON_CLAUDE_CODE = {
   payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
 } as const;
 
-/** An agent of the member's on the task named, with the brief given. */
+/** The member's Plans turned on or off, which their agents' plan tools stand on. */
+const plansFor = (userId: string, on: boolean) =>
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
+
+/** An agent of the member's on the task named, with the brief given, its member's Plans on. */
 const agentOn = (
   userId: string,
   taskId: string,
   brief: AgentBriefText = { planSnapshot: PLAN_TEXT, prompt: null },
 ) =>
   Effect.map(
-    createAgent(userId, {
-      ...ON_CLAUDE_CODE,
-      ...brief,
-      taskId,
-      repository: "acme/relay",
-      idempotencyKey: randomUUID(),
-    }),
+    Effect.andThen(
+      plansFor(userId, true),
+      createAgent(userId, {
+        ...ON_CLAUDE_CODE,
+        ...brief,
+        taskId,
+        repository: "acme/relay",
+        idempotencyKey: randomUUID(),
+      }),
+    ),
     (started) => Option.getOrThrow(started).agent,
   );
 
-/** An agent of the member's in the workspace on no task and no repository, handed the prompt given. */
+/** An agent of the member's in the workspace on no task and no repository, handed the prompt given, its member's Plans on. */
 const tasklessAgentOn = (userId: string, workspaceId: string) =>
   Effect.map(
-    createAgent(userId, {
-      ...ON_CLAUDE_CODE,
-      taskId: null,
-      organizationId: workspaceId,
-      planSnapshot: null,
-      prompt: "Answer the open comments.",
-      repository: null,
-      idempotencyKey: randomUUID(),
-    }),
+    Effect.andThen(
+      plansFor(userId, true),
+      createAgent(userId, {
+        ...ON_CLAUDE_CODE,
+        taskId: null,
+        organizationId: workspaceId,
+        planSnapshot: null,
+        prompt: "Answer the open comments.",
+        repository: null,
+        idempotencyKey: randomUUID(),
+      }),
+    ),
     (started) => Option.getOrThrow(started).agent,
   );
 
@@ -262,7 +274,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent's notes naming no task, or a task of another workspace its member is also in, are refused and save nothing",
+    "an agent's notes naming no task, or a task of another workspace its member is also in, or made once its member turned Plans off, are refused and save nothing, as is its look at a plan's picture",
     () =>
       Effect.gen(function* () {
         const { userId, admitted } = yield* openAgent();
@@ -292,6 +304,24 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         });
         const after = Option.getOrThrow(yield* readTask(userId, other.id));
         assert.equal(after.text, before.text);
+
+        // Note that a harness may call a tool it was not listed, so the door refuses it on its own.
+        yield* plansFor(userId, false);
+        const off = yield* runAgentEditPlan(
+          admitted,
+          unparsedWire({ taskId: other.id, notes }),
+          0,
+          noSandbox,
+        );
+        const looked = yield* runAgentLookAtPicture(
+          admitted,
+          unparsedWire({ taskId: other.id, attachmentId: randomUUID() }),
+        );
+        assert.deepEqual(off, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: PLAN_EDIT_REFUSAL.OFF,
+        });
+        assert.deepEqual(looked, pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF));
       }),
   );
 

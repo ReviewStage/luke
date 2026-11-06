@@ -145,8 +145,8 @@ const CONNECTED_SKELETON_ROWS = 2;
 /**
  * The sections that stand while the statuses are read, a row to each offered
  * provider: a few connected, each ending in its ⋯ under its line, and the
- * rest not, each in its Connect with no line, as `rowLine` draws a provider
- * with none, every one led by its mark, so the rows land in the height they
+ * rest not, each in its Connect under the line saying what it gives agents,
+ * every one led by its mark, so the rows land in the height they
  * stood in.
  */
 const INTEGRATIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
@@ -161,7 +161,7 @@ const INTEGRATIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   {
     headed: true,
     rows: INTEGRATION_PROVIDER_LIST.slice(CONNECTED_SKELETON_ROWS).map(() => ({
-      described: false,
+      described: true,
       mark: SETTINGS_ROW_MARK_WIDTH,
       controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
     })),

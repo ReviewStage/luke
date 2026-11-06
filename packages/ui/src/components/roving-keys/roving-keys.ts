@@ -257,6 +257,11 @@ export function rovingItem(): { readonly "data-roving-item": "" } {
   return { [ITEM_ATTRIBUTE]: "" };
 }
 
+/** The item of a roving set `row` holds, the element in it that takes the focus; none where it holds none. */
+export function rovingItemIn(row: Element): HTMLElement | undefined {
+  return row.querySelector<HTMLElement>(`[${ITEM_ATTRIBUTE}]`) ?? undefined;
+}
+
 /** What the box of a roving set takes, spread on it: its ref and the keys and focus it hears; its key handler says whether the key stepped. */
 export interface RovingBox<T extends HTMLElement> {
   readonly "data-roving": "";

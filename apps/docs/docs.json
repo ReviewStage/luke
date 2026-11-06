@@ -64,6 +64,14 @@
       {
         "group": "Get started",
         "pages": ["index", "install", "quickstart"]
+      },
+      {
+        "group": "Guides",
+        "pages": ["vespin-mcp", "cli", "automations", "slack"]
+      },
+      {
+        "group": "Reference",
+        "pages": ["shortcuts"]
       }
     ]
   },

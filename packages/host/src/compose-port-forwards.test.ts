@@ -88,7 +88,6 @@ function subject(options: { taken?: number[] } = {}) {
       },
       client: {
         list: (agentId) => Effect.sync(() => ({ running: true, ports: ports.get(agentId) ?? [] })),
-        startForwarding: () => Effect.succeed({ started: false }),
       },
       openSocket: (url) =>
         Effect.gen(function* () {

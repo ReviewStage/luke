@@ -14,7 +14,7 @@ import {
   MinusIcon,
   XIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useCallback } from "react";
 import { ActorRef, ActorStack, type StackFace } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 
@@ -70,7 +70,10 @@ const FACE_GLYPHS = {
 /** Names the people as the members around the caller say. */
 export function useNamer(): (person: GitHubPerson) => Actor {
   const { members, readerId, former } = useMemberDirectory();
-  return (person) => githubActor(person, { members, readerId, former });
+  return useCallback(
+    (person: GitHubPerson) => githubActor(person, { members, readerId, former }),
+    [members, readerId, former],
+  );
 }
 
 /**

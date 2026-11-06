@@ -15,9 +15,12 @@
 
 import { CHECKOUT_IDENTITY_VARIABLE } from "@repo/features/checkout-identity";
 import { Effect } from "effect";
-import type { SandboxCommandResult, SandboxRunOptions } from "eve/sandbox";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
-import type { RepositorySandbox } from "../agents/repository-shell.js";
+import type {
+  CommandResult,
+  RepositorySandbox,
+  SandboxRunOptions,
+} from "../agents/repository-shell.js";
 import { composePolicy, type FirewallSources } from "../agents/sandbox-firewall.js";
 import { type NetworkPolicy, OPEN_INTERNET_POLICY } from "../agents/vercel-sandbox-api.js";
 
@@ -62,11 +65,11 @@ export interface SandboxDouble extends RepositorySandbox {
 }
 
 /** What a command in the checkout answers, from the test's own table; a command off the table exits 127. */
-export type CommandTable = (command: string) => SandboxCommandResult | undefined;
+export type CommandTable = (command: string) => CommandResult | undefined;
 
 const EXIT = { OK: 0, FAILED: 1, NOT_FOUND: 127 } as const;
 
-function result(exitCode: number, stdout = "", stderr = ""): SandboxCommandResult {
+function result(exitCode: number, stdout = "", stderr = ""): CommandResult {
   return { exitCode, stdout, stderr };
 }
 

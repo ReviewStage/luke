@@ -4,10 +4,7 @@ import {
   type GitHubAccess,
   type GitHubRepository,
 } from "@repo/features/github-repositories-wire";
-import {
-  GITHUB_TOKEN_CREATE_URL,
-  type GitHubTokenRejection,
-} from "@repo/features/github-token-wire";
+import { GITHUB_TOKEN_CREATE_URL } from "@repo/features/github-token-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -31,8 +28,9 @@ import {
   Text,
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
+import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { rejectionLabel } from "../settings/github-dialog.js";
 import {
   AddTokenRepository,
@@ -123,16 +121,9 @@ function reachedRoute(repositories: readonly GitHubRepository[]): GitHubAccess {
 
 /** The App's card: one press sends the browser to GitHub's install page. */
 function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
-  const { act } = useAct();
-  const [opening, setOpening] = useState(false);
-  const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const install = () => {
-    setOpening(true);
-    setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId })
-      .catch((refused: Error) => setRefusal(refused.message))
-      .finally(() => setOpening(false));
-  };
+  const connectGitHub = useMutation(actMutation(ACT_KIND.WORKSPACE_GITHUB_CONNECT));
+  const refusal = connectGitHub.error?.message;
+  const install = () => connectGitHub.mutate({ workspaceId });
   return (
     <>
       <ProviderButton
@@ -141,7 +132,7 @@ function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
         words="Install on GitHub"
         size={PROVIDER_BUTTON_SIZE.GATE}
         primary
-        busy={opening}
+        busy={connectGitHub.isPending}
         busyLabel="Opening GitHub"
         onPress={install}
       />
@@ -156,7 +147,7 @@ function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
 
 /** The token's card: a classic token made on GitHub and pasted here, then the repositories it may push to. */
 function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
-  const { act } = useAct();
+  const saveToken = useMutation(actMutation(ACT_KIND.GITHUB_TOKEN_SAVE));
   const openLink = useOpenLink();
   const repositories = useTokenRepositories(workspaceId);
   const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
@@ -164,26 +155,22 @@ function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element
   // Note that a token read that failed is taken for none, so the card offers a paste rather than waiting.
   const token = held.status === HOST_READ_STATUS.FAILED ? null : held.rows?.token;
   const [pasted, setPasted] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [rejection, setRejection] = useState<GitHubTokenRejection | undefined>(undefined);
-  const [failed, setFailed] = useState(false);
+  const saved = saveToken.data;
+  const saving = saveToken.isPending;
+  const failed = saveToken.isError || (saved !== undefined && "failure" in saved);
+  const rejection = saved === undefined || "failure" in saved ? undefined : saved.rejected;
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const save = () => {
     const typed = pasted.trim();
     if (typed === "" || saving) return;
-    setSaving(true);
-    setRejection(undefined);
-    setFailed(false);
-    act(ACT_KIND.GITHUB_TOKEN_SAVE, { token: typed })
-      .then(
-        (answer) => {
-          if ("failure" in answer) return setFailed(true);
-          setRejection(answer.rejected);
-          if (answer.rejected === undefined) setPasted("");
+    saveToken.mutate(
+      { token: typed },
+      {
+        onSuccess: (answer) => {
+          if (!("failure" in answer) && answer.rejected === undefined) setPasted("");
         },
-        () => setFailed(true),
-      )
-      .finally(() => setSaving(false));
+      },
+    );
   };
   if (token !== undefined && token !== null) {
     return (

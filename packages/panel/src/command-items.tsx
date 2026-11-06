@@ -81,7 +81,7 @@ function keyed(command: KeyedCommand, icon: React.JSX.Element, noun?: string): P
 
 /**
  * One thing's item for a chord several kinds of thing share, worded here,
- * since the table's label names them all: "Copy plan" and "Copy concise
+ * since the table's label names them all: "Copy description" and "Copy concise
  * transcript" for the one ⌥⌘C. Note that it is not what ⌘K finds the
  * command by, which is the table's own item (`keyed`).
  */
@@ -102,7 +102,7 @@ function unkeyed(verb: string, icon: React.JSX.Element, noun?: string): PanelCom
 /** Every command a menu offers beside ⌘K, by what it does. */
 export const PANEL_COMMAND = {
   COPY_CONTENT: keyed(APP_COMMAND.COPY_CONTENT, <GLYPH.COPY />),
-  COPY_PLAN: keyedAs(APP_COMMAND.COPY_CONTENT, "Copy plan", <GLYPH.COPY />),
+  COPY_PLAN: keyedAs(APP_COMMAND.COPY_CONTENT, "Copy description", <GLYPH.COPY />),
   COPY_LINK: keyed(APP_COMMAND.COPY_LINK, <GLYPH.LINK />),
   MARK_TASK_DONE: unkeyed("Mark done", <GLYPH.DONE />),
   DELETE: keyed(APP_COMMAND.DELETE, <GLYPH.DELETE />),

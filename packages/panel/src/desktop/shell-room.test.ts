@@ -204,7 +204,7 @@ function mount(width: number, onTask = true): HTMLElement {
   act(() =>
     root?.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         underRouter(createElement(Window, { onTask })),
       ),
     ),

@@ -69,12 +69,13 @@ import {
   holdAutomations,
   registryWith,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { openTaskMenu } from "../testing/task-menu.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -156,7 +157,9 @@ function openPalette(
     readFiles,
     page,
   });
-  act(() => root.render(registry === undefined ? palette : onRegistry(registry, palette)));
+  act(() =>
+    root.render(registry === undefined ? withQueryClient(palette) : onRegistry(registry, palette)),
+  );
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });
@@ -173,7 +176,7 @@ function Looker({ looked }: { looked: typeof DOCUMENT_TASK | undefined }): null 
 function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const tasks = tasksControl({
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     activeTaskId: DOCUMENT_TASK.id,
@@ -221,7 +224,7 @@ function markRows(): string[] {
   );
 }
 
-test("⌘K marks the task on screen unread, and offers no mark for a task Settings or the Inbox covers", () => {
+test("⌘K marks the task on screen unread, and offers no mark for a task Settings or the Inbox covers", async () => {
   const draw = paletteOverTask();
   draw(undefined);
   assert.deepEqual(markRows(), []);
@@ -239,8 +242,9 @@ test("⌘K marks the task on screen unread, and offers no mark for a task Settin
   draw(DOCUMENT_TASK);
   assert.deepEqual(markRows(), ["Mark as unread"]);
   press("Mark as unread");
-  // Note that the plan on screen is looked at as it opens, so the mark by hand is the newest asked.
-  assert.equal(marks.at(-1), `unread:${DOCUMENT_TASK.id}`);
+  // Note that the plan on screen is looked at as it opens, so the mark by hand is the newest asked,
+  // which reaches the act port a few steps after the press, as its mutation sends it.
+  await vi.waitFor(() => assert.equal(marks.at(-1), `unread:${DOCUMENT_TASK.id}`));
 });
 
 /** Whether the palette stands where a reader meets it: its card drawn, and hidden by nothing around it. */
@@ -648,7 +652,7 @@ function OffersPlaces(): null {
 function openPaletteOverPlaces(): void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(createElement(OffersPlaces)));
+  act(() => root.render(withQueryClient(createElement(OffersPlaces))));
   openPalette();
 }
 
@@ -703,7 +707,7 @@ test("the menu bar's Back and Forward, a mouse's side buttons among them, leave 
   const moves: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(createElement(MenuWindow, { moves })));
+  act(() => root.render(withQueryClient(createElement(MenuWindow, { moves }))));
   openPalette();
 
   act(() => menuListener?.(APP_COMMAND.BACK));
@@ -936,7 +940,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     act(() =>
       root.render(
         onRegistry(
-          registryWith(experimentsOn(EXPERIMENT.PLANS)),
+          registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
           createElement(ListedAutomations, { tasks, children: palette }),
         ),
       ),
@@ -1139,7 +1143,7 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
       ]),
     }),
   });
-  handState(experimentsOn(EXPERIMENT.PLANS));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   openPalette(
     tasks,
     () =>
@@ -1155,7 +1159,7 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   type("#42");
   const pulls = rows().filter((row) => row.startsWith("#42"));
@@ -1640,7 +1644,7 @@ test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its
   document.body.append(host);
   const root = createRoot(host);
   roots.push(root);
-  act(() => root.render(createElement(OffersMyTasks, { ran })));
+  act(() => root.render(withQueryClient(createElement(OffersMyTasks, { ran }))));
   openPalette();
   type("my tasks");
   assert.ok(rows().includes("Show my tasks"), "Show my tasks is listed");
@@ -1661,7 +1665,7 @@ test("a command whose only key is Esc is no row in ⌘K, though it is still offe
   const ran: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(createElement(OffersEscapes, { ran })));
+  act(() => root.render(withQueryClient(createElement(OffersEscapes, { ran }))));
   openPalette();
   chooseFilter("Commands");
   type("exit settings");
@@ -1687,7 +1691,7 @@ function itemChord(label: string): string | null {
   return item.querySelector(".ui-shortcut")?.textContent ?? null;
 }
 
-test("a task's command wears the same chord in ⌘K as in the open task's Plan tab ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none", () => {
+test("a task's command wears the same chord in ⌘K as in the open task's Plan tab ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none", async () => {
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
@@ -1697,8 +1701,8 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
   roots.push(root);
-  handState(experimentsOn(EXPERIMENT.PLANS));
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   act(() =>
     root.render(
       onRegistry(
@@ -1707,26 +1711,26 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
       ),
     ),
   );
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
   openPalette(tasks, undefined, undefined, DESKTOP_CAPABILITIES, PANEL_TAB.TASKS, registry);
   type("permanently delete");
   const deleteKeys = rowChord("Permanently delete");
   type("mark done");
   const doneKeys = rowChord("Mark done");
-  type("copy plan");
-  const copyKeys = rowChord("Copy plan or transcript");
+  type("copy description");
+  const copyKeys = rowChord("Copy description or transcript");
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
   });
 
-  // The task's menu is its Plan tab's, in the side panel's bar; Mark done is the plan's status chip's there, and a row's.
-  const more = host.querySelector<HTMLButtonElement>('.task-topbar button[aria-label$=" actions"]');
-  assert.ok(more, "the topbar's ⋯ is drawn");
-  act(() => more.click());
+  // The task's menu is its name's right-click in the topbar; Mark done is the details' status chip's there, and a row's.
+  openTaskMenu(host);
   assert.equal(deleteKeys, "⌘⌫");
   assert.equal(itemChord("Permanently delete"), deleteKeys);
   assert.equal(doneKeys, null);
   assert.equal(copyKeys, "⌥⌘C");
-  assert.equal(itemChord("Copy plan"), copyKeys);
+  assert.equal(itemChord("Copy description"), copyKeys);
 });
 
 test("an agent tab's right-click words and keys Close and Show terminal as ⌘K does, ⌘K naming the tab where the menu says the verb alone", async () => {
@@ -1747,7 +1751,7 @@ test("an agent tab's right-click words and keys Close and Show terminal as ⌘K 
   act(() =>
     root.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
       ),
     ),
@@ -1788,7 +1792,7 @@ function drawToasts(): void {
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
   roots.push(root);
-  act(() => root.render(createElement(ToastHost)));
+  act(() => root.render(withQueryClient(createElement(ToastHost))));
 }
 
 const LINKED_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -2057,7 +2061,7 @@ test("People lists the listed workspace's members as every people menu does, the
     undefined,
     undefined,
     undefined,
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
@@ -2132,7 +2136,7 @@ test("under All, a query nothing else matches says the repository's files are st
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
   type("zqx");
@@ -2188,7 +2192,7 @@ test("Files says a failed read with a Retry that reads the repository's files ag
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
   chooseFilter("Files");
@@ -2241,7 +2245,7 @@ test("People says the members are being read until they answer, and a refused re
     undefined,
     undefined,
     undefined,
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   chooseFilter("People");
   await settle();
@@ -2387,7 +2391,7 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
   assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
 });
 
-test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark while no agent's page stands", () => {
+test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark while no agent's page stands", async () => {
   const agent = {
     id: "agent-8",
     planId: null,
@@ -2429,7 +2433,7 @@ test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark
   assert.deepEqual(draw(undefined), []);
   assert.deepEqual(draw(agent.id), ["Mark as unread"]);
   press("Mark as unread");
-  assert.deepEqual(marks, [`unread:${agent.id}`]);
+  await vi.waitFor(() => assert.deepEqual(marks, [`unread:${agent.id}`]));
 });
 
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */
@@ -2499,7 +2503,7 @@ test("with a task open, ⌘K offers Pin task, which pins it under Pinned and tur
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(PinnableTask)),
+      onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(PinnableTask)),
     ),
   );
 
@@ -2521,7 +2525,7 @@ async function paletteUnderState(tasks: TasksControl): Promise<void> {
   act(() =>
     root.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(WindowPalette, {
           available: true,
           tab: PANEL_TAB.TASKS,
@@ -2627,7 +2631,7 @@ test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages t
   assert.ok(listed.includes(`Review notes · ${DOCUMENT_TASK.name}`), "the Inbox's page is listed");
 });
 
-test("with a task on screen, ⌘K offers its Version history, Cancel task, and Change repository, each running on it what its ⋯ item runs", () => {
+test("with a task on screen, ⌘K offers its Version history, Cancel task, and Change repository, each running on it what its ⋯ item runs", async () => {
   const task = { ...DOCUMENT_TASK, repository: "acme/relay" };
   const ran: string[] = [];
   const base = tasksControl();
@@ -2639,12 +2643,13 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, and C
     onSettleTasks: (taskIds, status) => ran.push(`settle:${taskIds.join()}:${status}`),
     onChangeRepository: (taskId) => ran.push(`repository:${taskId}`),
   });
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   act(() =>
     root.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(
           Fragment,
           null,
@@ -2669,6 +2674,8 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, and C
       ),
     ),
   );
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
   for (const command of ["Version history", "Cancel task", "Change repository"]) {
     act(() => {
       assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
@@ -2706,7 +2713,7 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
   act(() =>
     root.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(
           ShellRoomContext.Provider,
           { value: room },
@@ -2978,7 +2985,7 @@ function paletteOverInbox(inbox: FedInbox, changed = 9_000) {
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   return { deliver: (next: FedInbox) => deliver(fedOf(next)), opened };
 }
@@ -3174,11 +3181,14 @@ test("a key pressed in the search field is timed under ⌘K's own keystroke span
   );
 });
 
-test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", () => {
+test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", async () => {
   const places = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(places);
-  act(() => places.render(createElement(OffersPlaces)));
+  act(() => places.render(withQueryClient(createElement(OffersPlaces))));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   paletteOverTask()(DOCUMENT_TASK);
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });

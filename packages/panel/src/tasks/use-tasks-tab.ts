@@ -107,6 +107,7 @@ import {
 } from "@repo/ui/tasks-model";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -119,6 +120,7 @@ import {
   notKept,
   unreachedAs,
 } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -1138,7 +1140,7 @@ type AgentPinAsked =
 const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
 
 /** What the toast says once Copy plan has put the plan on the clipboard. */
-const TASK_COPIED_NOTE = "Plan copied";
+const TASK_COPIED_NOTE = "Description copied";
 
 /** Whether a task New task starts opens, as Settings › Profile › Tasks says; until the first document arrives it does. */
 const OPENS_NEW_TASK = Atom.map(
@@ -1868,7 +1870,7 @@ export function useTasksTab(input: {
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
   // The version history is the task's, so another task, or none, leaves it, and so does Plans turned off, whose it is.
-  const plansOn = experimentOn(experiments, EXPERIMENT.PLANS);
+  const plansOn = experimentOn(experiments, EXPERIMENT.DESCRIPTIONS);
   if (historyFor !== undefined && (historyFor.taskId !== boundFor || !plansOn)) {
     setHistoryFor(undefined);
   }
@@ -2043,17 +2045,39 @@ export function useTasksTab(input: {
     return { ...DELETE_REFUSED, cause: deleted.cause };
   };
 
-  // The tasks the tab draws as they stand at each call, and its act, which
-  // ⌘Z reads a press's rows and sends its writes through (`undo-stack.ts`).
+  // The tasks the tab draws as they stand at each call, and each row write's
+  // mutation, which ⌘Z reads a press's rows and sends its writes through (`undo-stack.ts`).
   const drawnTasks = useRef(tasks);
   drawnTasks.current = tasks;
-  const rowDoors: RowDoors<TasksView> = { rows: () => drawnTasks.current, act };
+  const drawnRows = () => drawnTasks.current;
+  const { mutateAsync: sendTaskRename } = useMutation(actMutation(ROW_WRITE.TASK_RENAME.kind));
+  const { mutateAsync: sendTaskPin } = useMutation(actMutation(ROW_WRITE.TASK_PIN.kind));
+  const { mutateAsync: sendAgentPin } = useMutation(actMutation(ROW_WRITE.AGENT_PIN.kind));
+  const { mutateAsync: sendStandingRow } = useMutation(actMutation(ROW_WRITE.TASK_STANDING.kind));
+  const renameDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_RENAME.kind> = {
+    rows: drawnRows,
+    send: sendTaskRename,
+  };
+  const taskPinDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_PIN.kind> = {
+    rows: drawnRows,
+    send: sendTaskPin,
+  };
+  const agentPinDoors: RowDoors<TasksView, typeof ROW_WRITE.AGENT_PIN.kind> = {
+    rows: drawnRows,
+    send: sendAgentPin,
+  };
+  const standingDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_STANDING.kind> = {
+    rows: drawnRows,
+    send: sendStandingRow,
+  };
 
   // A fixture's tasks are renamed nowhere, as they are read from nowhere. A
   // rename the service kept is ⌘Z's to take back.
   const renameTask = async (taskId: string, name: string): Promise<boolean> => {
     if (fixture !== undefined) return false;
-    const pressed = pressRows(ROW_WRITE.TASK_RENAME, rowDoors, [{ id: taskId, after: { name } }]);
+    const pressed = pressRows(ROW_WRITE.TASK_RENAME, renameDoors, [
+      { id: taskId, after: { name } },
+    ]);
     const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
     if (renamed) pressed.keep(TASK_RENAMED_NOTE);
     return renamed;
@@ -2073,7 +2097,7 @@ export function useTasksTab(input: {
   const markTask = (taskId: string, mark: TaskMark): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
     const pinned = mark === TASK_MARK.PIN;
-    const pressed = pressRows(ROW_WRITE.TASK_PIN, rowDoors, [
+    const pressed = pressRows(ROW_WRITE.TASK_PIN, taskPinDoors, [
       { id: taskId, after: { pinned, position: null } },
     ]);
     return askKept(act(ACT_KIND.TASKS_PIN, { taskId, pinned })).then((changed) => {
@@ -2151,7 +2175,7 @@ export function useTasksTab(input: {
   };
   const pinAgent = (agentId: string, pinned: boolean) => {
     if (fixture !== undefined) return;
-    const pressed = pressRows(ROW_WRITE.AGENT_PIN, rowDoors, [
+    const pressed = pressRows(ROW_WRITE.AGENT_PIN, agentPinDoors, [
       { id: agentId, after: { pinned, position: null } },
     ]);
     askAgentPin(agentId, pinned).then((asked) => {
@@ -2314,7 +2338,7 @@ export function useTasksTab(input: {
     if (asked.length === 0) return;
     const pressed = pressRows(
       ROW_WRITE.TASK_STANDING,
-      rowDoors,
+      standingDoors,
       asked.map((change) => ({ id: change.taskId, after: { status: change.status } })),
     );
     sendStatuses(asked).then(({ landed, refused, cause }) => {
@@ -2448,7 +2472,7 @@ export function useTasksTab(input: {
         : {
             assignee: assigneeId === null ? null : { userId: assigneeId, name: assigneeName ?? "" },
           };
-    const pressed = pressRows(ROW_WRITE.TASK_STANDING, rowDoors, [
+    const pressed = pressRows(ROW_WRITE.TASK_STANDING, standingDoors, [
       { id: taskId, after: { ...rest, ...assignee } },
     ]);
     return sendStanding(taskId, standing, assigneeName).then((kept) => {
@@ -2999,15 +3023,31 @@ export function useTasksTab(input: {
     showColumnTab(taskId, { agent: source.agentId });
   };
 
+  // A task named anywhere, by a chip, a link, an Inbox crumb, or a call's row, opens on its
+  // agents, its main view, as one gone back to does (`resumeListed`), a panel filling the window
+  // giving way; a task already open on its details goes back to the agents they were opened over.
+  // Only a place in its description opens the details.
+  const showTaskAgents = (taskId: string) => {
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    setStandIn(undefined);
+    setHistoryFor(undefined);
+    const returnTab = taskId === tasks.activeTaskId ? mainTabs.returnTab : undefined;
+    if (returnTab !== undefined && isOverviewTab(mainTabs.tab)) {
+      mainTabs.onChoose(returnTab);
+      return;
+    }
+    resumeListed(taskId);
+  };
+
   // Each ask is its own, so the same section asked twice scrolls twice.
-  // Note that a section is the plan's, so while Plans is off a mention of one opens its task's Overview at its top.
+  // Note that a section is the description's, so while descriptions are off a mention of one opens its task's agents.
   const showMention = (mention: PlanMention) => {
     const anchor = mention.kind === MENTION_KIND.SECTION && plansOn ? mention.anchor : undefined;
-    showOverview(
-      anchor === undefined
-        ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
-        : { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor },
-    );
+    if (anchor === undefined) {
+      showTaskAgents(mention.taskId);
+      return;
+    }
+    showOverview({ kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor });
     sectionAsks.current += 1;
     setSectionReveal({ taskId: mention.taskId, reveal: { anchor, ask: sectionAsks.current } });
   };
@@ -3299,9 +3339,12 @@ export function useTasksTab(input: {
         showMention({ kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor });
         return;
       case LINK_PLACE.COMMENT:
+        // A comment is the description's, so while descriptions are off its link opens the task's agents.
+        if (!plansOn) {
+          showTaskAgents(place.planId);
+          return;
+        }
         showOverview(place);
-        // A comment is the plan's, so while Plans is off its link opens the task's Overview alone.
-        if (!plansOn) return;
         commentAsks.current += 1;
         setCommentReveal({
           planId: place.planId,
@@ -3845,8 +3888,8 @@ export function useTasksTab(input: {
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab.
     onShowSource: guard(showSource),
-    // The call card's way back lands where the task's call bar is in sight.
-    onShowTask: guard((taskId: string) => showOverview({ kind: LINK_PLACE.TASK, planId: taskId })),
+    // A task named by an Inbox item or a call's row opens on its agents.
+    onShowTask: guard(showTaskAgents),
     // Each ask is its own, so the same section asked twice scrolls twice.
     onShowMention: guard(showMention),
     onOpenLink: guard((link: ReadLink) => openLink(link)),

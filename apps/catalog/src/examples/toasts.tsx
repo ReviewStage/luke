@@ -77,12 +77,12 @@ function Toasts(): React.JSX.Element {
         <ToastStack
           label="Notifications"
           polite="Link copied. Task archived. Should withdrawn invitations count? Linear's sign-in expired"
-          alert="Couldn't save the plan"
+          alert="Couldn't save the description"
         >
           <Toast tone={STATUS_TONE.COMPLETE} words="Link copied" />
           <Toast
             tone={STATUS_TONE.DANGER}
-            words="Couldn't save the plan"
+            words="Couldn't save the description"
             detail="Your change is kept here until you are back online."
           />
           <Acting
@@ -145,7 +145,7 @@ function Failures(): React.JSX.Element {
         <ToastStack
           label="Failure notifications"
           polite=""
-          alert="Your plan edits could not be saved."
+          alert="Your description edits could not be saved."
         >
           <Toast
             tone={STATUS_TONE.DANGER}
@@ -155,7 +155,7 @@ function Failures(): React.JSX.Element {
           />
           <Toast
             tone={STATUS_TONE.DANGER}
-            words="Your plan edits could not be saved."
+            words="Your description edits could not be saved."
             actions={
               <ToastActions
                 label="Retry"
@@ -174,9 +174,9 @@ function Failures(): React.JSX.Element {
 
 /** What the working toast says, by what came of its work. */
 const SAYING = {
-  [STATUS_TONE.WORKING]: "Adding to the plan…",
-  [STATUS_TONE.COMPLETE]: "Added to the plan",
-  [STATUS_TONE.DANGER]: "The plan could not be saved.",
+  [STATUS_TONE.WORKING]: "Adding to the description…",
+  [STATUS_TONE.COMPLETE]: "Added to the description",
+  [STATUS_TONE.DANGER]: "The description could not be saved.",
 } as const;
 
 type Outcome = keyof typeof SAYING;

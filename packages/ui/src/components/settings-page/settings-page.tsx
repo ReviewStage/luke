@@ -1,4 +1,5 @@
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, useRef, useState } from "react";
+import { type PageScroll, PageScrollContext } from "../page-frame/page-scroll.js";
 import { useHeadingAway } from "../page-header/heading-away.js";
 import { PAGE_HEADER_END, PageHeader } from "../page-header/page-header.js";
 import { RevealArea, revealArea } from "../reveal/reveal.js";
@@ -42,6 +43,11 @@ import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolb
  * page's whole content fills the room under the title and stands in its
  * middle. Rows scrolled up dissolve into the page's top edge rather than
  * being sliced against it, and a page at rest at its top is left whole.
+ *
+ * A long list on a page draws only the rows near the view (`VirtualRows`),
+ * in the page's own scroller, which the page hands its sections
+ * (`usePageScroll`) with the column of sections, whose resizing
+ * moves where such a list stands.
  *
  * A page whose name is not yet known, Settings while its chunk loads, stands
  * as a whole page of placeholders (`SettingsPageSkeleton`): the page itself,
@@ -103,6 +109,7 @@ export function SettingsPage({
   const head = useRef<HTMLDivElement>(null);
   const sections = useRef<HTMLDivElement>(null);
   const named = useHeadingAway(page, head);
+  const [scroll] = useState((): PageScroll => ({ scroller: page, shiftedBy: sections }));
   const phone = look === TOOLBAR_LOOK.PHONE;
   return (
     <div className="ui-settings-page-frame flex h-full min-h-0 min-w-0 grow basis-0 flex-col">
@@ -153,7 +160,7 @@ export function SettingsPage({
               className="ui-settings-page-sections flex min-w-0 flex-col gap-page-section-gap"
               {...revealArea()}
             >
-              {children}
+              <PageScrollContext value={scroll}>{children}</PageScrollContext>
             </div>
           </RevealArea>
         </div>

@@ -24,7 +24,7 @@ import {
   registryWith,
   signedInAs,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -33,9 +33,9 @@ import { PlanBody } from "./plan-body.js";
 import type { TaskLooks } from "./use-task-looks.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 // Note that each case starts with the document handing Plans on, whatever an earlier case handed.
-beforeEach(() => handState(experimentsOn(EXPERIMENT.PLANS)));
+beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * plan-body.test.ts -- the open task's document says who created it and who last wrote it,
@@ -128,7 +128,7 @@ interface Drawn {
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   fakeAppBridge({});
   fakeActPort({});
-  const experiments = drawn.experiments ?? experimentsOn(EXPERIMENT.PLANS);
+  const experiments = drawn.experiments ?? experimentsOn(EXPERIMENT.DESCRIPTIONS);
   handState(
     experiments,
     drawn.account === undefined ? {} : { account: signedInAs(drawn.account).account },
@@ -188,7 +188,7 @@ function cardOf(
 }
 
 test("the saved body is drawn as Markdown", () => {
-  const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK }));
+  const markup = renderToStaticMarkup(withQueryClient(createElement(PlanBody, { task: TASK })));
 
   assert.match(markup, /<p class="ui-markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
@@ -454,7 +454,7 @@ test("a plan read and not edited names itself by one h1, its title, with its Cop
 test("an empty plan that cannot be edited draws no line saying to write it", async () => {
   const view = await draw({ ...TASK, document: { body: "", assumptions: [] } });
 
-  assert.ok(!view.textContent?.includes("Write the plan"), "no line under the byline");
+  assert.ok(!view.textContent?.includes("Write the description"), "no line under the byline");
 });
 
 test("a save that writes a section above the one the keyboard stands on leaves Tab entering at that section", async () => {
@@ -474,11 +474,11 @@ test("a save that writes a section above the one the keyboard stands on leaves T
   };
   fakeAppBridge({});
   fakeActPort({});
-  handState(experimentsOn(EXPERIMENT.PLANS));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   handMembers(() => ({ rows: { members: MEMBERS } }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = mountRoot(container);
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const drawPlan = (task: Task) =>
     act(() =>
       root.render(

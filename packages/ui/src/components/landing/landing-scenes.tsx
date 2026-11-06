@@ -230,7 +230,7 @@ const QUESTION = {
   TASK: "Teammate invitations",
   AGENT: "Invite emails",
   WORDS:
-    "An invite is a pending membership row, so withdrawing one deletes it. The plan leaves open who may.",
+    "An invite is a pending membership row, so withdrawing one deletes it. The description leaves open who may.",
   OPTIONS: [
     {
       value: "sender",

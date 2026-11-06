@@ -12,16 +12,20 @@ import {
   type CSSProperties,
   type FocusEvent,
   Fragment,
+  type KeyboardEventHandler,
   type PointerEventHandler,
   type ReactNode,
+  type Ref,
   type RefObject,
   useCallback,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import { joinRefs } from "../../join-refs.js";
 import { motionRows } from "../list-motion/list-motion.js";
 
 /**
@@ -78,6 +82,12 @@ import { motionRows } from "../list-motion/list-motion.js";
  * `data-row-drop-rows`), the drag counting a place from the first row drawn
  * (`data-index`).
  *
+ * A run that is a list of the caller's own, whose block wears what the list
+ * itself wears, as `List`'s run of `ListRow`s does, is handed that
+ * (`block`): its id, its data attributes, the keys it hears, and what holds
+ * it, beside the run's own, so the list's sheet reaches its rows as its
+ * children and its keys walk them.
+ *
  * A list of several runs, a list's groups each one, holds each while it
  * stands (`useVirtualRuns`), so a row any of them leaves undrawn is brought
  * in by its key alone.
@@ -133,6 +143,15 @@ const DEFAULT_OVERSCAN = 4;
 /** How near its end, in pixels, a run anchored to its end counts as standing there, so a row appended follows on to it: the docs' chat guide's. */
 const END_THRESHOLD_PX = 80;
 
+/** What a run's block wears for a list of the caller's own (`block`): what holds it, its id, the keys and focus it hears, and its data attributes. */
+export interface VirtualRowsBlock {
+  readonly ref?: Ref<HTMLElement> | undefined;
+  readonly id?: string | undefined;
+  readonly onKeyDown?: KeyboardEventHandler<HTMLElement> | undefined;
+  readonly onFocus?: ((event: FocusEvent<HTMLElement>) => void) | undefined;
+  readonly [data: `data-${string}`]: string | undefined;
+}
+
 /** Where a row stands in its block, as the docs place one: absolutely, across the block, its top the virtualizer's to write. */
 const ROW_STYLE: CSSProperties = { position: "absolute", insetInline: 0 };
 
@@ -159,8 +178,8 @@ export interface VirtualRowPlace {
  * which a scroller in a tab kept but not shown measures: the rows drawn
  * there stay drawn, so showing the tab again draws nothing anew.
  */
-function sizeWhileShown(
-  instance: Virtualizer<HTMLElement, HTMLElement>,
+export function sizeWhileShown<Item extends Element>(
+  instance: Virtualizer<HTMLElement, Item>,
   hear: (rect: Rect) => void,
 ): (() => void) | undefined {
   return observeElementRect(instance, (rect) => {
@@ -270,6 +289,7 @@ export function VirtualRows({
   "aria-label": label,
   onPointerDown,
   "data-row-drop-rows": dropRows,
+  block: wears,
   children,
 }: {
   /** The element that scrolls, which the rows stand in. */
@@ -305,6 +325,8 @@ export function VirtualRows({
   onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
   /** Says the run keeps an order of its own that a row dragged into it is dropped at a place in (`use-row-drag.ts`). */
   "data-row-drop-rows"?: "" | undefined;
+  /** What the block wears beside the run's own, where the run is a list of the caller's own, as `List`'s is. */
+  block?: VirtualRowsBlock | undefined;
   /** Draws the row at an index, which wears `place` where its rows are list items or options of the caller's own. */
   children: (index: number, place: VirtualRowPlace) => ReactNode;
 }): ReactNode {
@@ -376,6 +398,11 @@ export function VirtualRows({
       virtualizer.containerRef(element);
     },
     [virtualizer],
+  );
+  const blockRef = wears?.ref;
+  const heldBlock = useMemo(
+    () => (blockRef === undefined ? holdBlock : joinRefs(holdBlock, blockRef)),
+    [holdBlock, blockRef],
   );
   // How often the scroller, or the box that moves the run, has been sized anew, which can move what stands above the rows.
   const [sized, setSized] = useState(0);
@@ -467,7 +494,8 @@ export function VirtualRows({
   const items: VirtualItem[] = virtualizer.getVirtualItems();
   const own = listItems || options ? "ui-virtual-rows ui-virtual-items" : "ui-virtual-rows";
   const run = {
-    ref: holdBlock,
+    ...wears,
+    ref: heldBlock,
     className: className === undefined ? own : `${own} ${className}`,
     "aria-label": label,
     onPointerDown,
@@ -480,6 +508,7 @@ export function VirtualRows({
             focused.current =
               rowHolding(block.current, event.target)?.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE) ??
               undefined;
+            wears?.onFocus?.(event);
           },
           onBlur: () => {
             focused.current = undefined;

@@ -71,8 +71,9 @@ import {
 } from "@repo/ui";
 import { UNREPORTED } from "@repo/ui/reported-failure";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
+import { useMutation } from "@tanstack/react-query";
 import { type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { useAct } from "./act.js";
+import { actMutation } from "./act-mutations.js";
 import { enterKeyHint, enterSubmitKey } from "./enter-sends.js";
 import { failureShown } from "./failure-report.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
@@ -322,7 +323,7 @@ export function FeedbackDialog({
   onKind: (kind: FeedbackKind) => void;
   onClose: () => void;
 }): React.JSX.Element | null {
-  const { act } = useAct();
+  const { mutateAsync: sendFeedback } = useMutation(actMutation(ACT_KIND.FEEDBACK_SEND));
   const [drafts, setDrafts, latestDrafts] = useStateWithRef<FeedbackDrafts>(FRESH_DRAFTS);
   /**
    * Counts each kind's discards, so a screenshot still being read when its
@@ -433,7 +434,7 @@ export function FeedbackDialog({
     if (latestBusy() || !hasWords(current)) return;
     setBusy(true);
     setRejection(undefined);
-    const refusal = await act(ACT_KIND.FEEDBACK_SEND, {
+    const refusal = await sendFeedback({
       submission: draftSubmission(kind, current, signature, about),
     }).then(
       (result) => (result.delivered ? undefined : (result.reason ?? SEND_REFUSAL)),

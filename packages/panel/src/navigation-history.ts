@@ -1780,7 +1780,10 @@ export function useWindowHistory(input: {
       return to.workspaceId === listedWorkspace && !deletedAutomations.has(to.page.automationId);
     }
     // A task's version history is the plan's, which stands only while the account has Plans on.
-    if (to.kind === PLACE_KIND.VERSION_HISTORY && !experimentOn(experiments, EXPERIMENT.PLANS)) {
+    if (
+      to.kind === PLACE_KIND.VERSION_HISTORY &&
+      !experimentOn(experiments, EXPERIMENT.DESCRIPTIONS)
+    ) {
       return false;
     }
     // The Board is a workspace's tasks, so Back passes over it once another is listed.

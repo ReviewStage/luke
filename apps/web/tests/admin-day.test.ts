@@ -202,7 +202,7 @@ test("a loaded day names itself and states its totals and accounts under their h
   ]);
   expect(page.textContent).toContain("Active developers4");
   expect(page.textContent).toContain("Agents started12");
-  expect(page.textContent).toContain("Plan revisions15");
+  expect(page.textContent).toContain("Description revisions15");
   expect(page.textContent).toContain("Inbox items answered2");
   expect(page.textContent).toContain("Automation runs1");
   expect(page.textContent).toContain("Active accounts3");
@@ -213,7 +213,7 @@ test("the accounts read busiest first, an admin marked in words and an email sho
   const { page } = await openDay(detail());
 
   expect(rows(page, "Accounts active this day")).toEqual([
-    ["Account", "Tasks", "Plan revisions", "Agents", "Inbox answered", "Automation runs"],
+    ["Account", "Tasks", "Description revisions", "Agents", "Inbox answered", "Automation runs"],
     ["AAda LovelaceAdminada@example.test", "3", "14", "9", "2", "1"],
     ["LLinlin@example.test", "1", "0", "2", "0", "0"],
   ]);
