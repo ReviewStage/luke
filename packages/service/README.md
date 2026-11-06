@@ -1418,10 +1418,12 @@ with no model call, and never falls back to the account's key. The other
 calls beside an account's agents run on its own key, through `ownKeyOf`
 (`src/agents/coder-host/account-keys.ts`), the provider they prefer first and
 the other where it saved only that, and never on Vespin's: a pull request's
-chapters on Haiku, on the key of the member who asks for them, Anthropic's
-first whatever the agent runs on, and a Continue's or Fork's replay summary on
-the new agent's own model, or the other provider's balanced model. An account that saved no API
-key, as one on a plan alone, has its replays carried without a summary.
+chapters on the key of the member who asks for them, whatever the agent
+runs on: Haiku at Anthropic on their Anthropic key, or OpenAI's `gpt-6-luna`
+at OpenAI where they saved only an OpenAI key; and a Continue's or Fork's
+replay summary on the new agent's own model, or the other provider's balanced
+model. An account that saved no API key, as one on a plan alone, has its
+replays carried without a summary.
 
 The sandbox is one Vercel Sandbox per agent
 (`src/agents/machine/vercel-machine.ts`), booted from the agents' custom image
