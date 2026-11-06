@@ -123,7 +123,6 @@
   --spacing-pick-glyph-lift: calc((1lh - var(--ui-icon-12)) / 2);
   --spacing-inbox-field-short: calc(10 * var(--ui-space-16));
   --spacing-inbox-field-words: calc(var(--ui-type-body-leading) + 2 * var(--ui-item-gap));
-  --spacing-attention-glyph-small: 10px; /* off-scale: the attention mark's glyph at a row's time */
   /* A box or a range a choice is drawn in: a field's ground inside a
      chosen row's edge, filled in the accent where it is on. */
   --color-field: var(--ui-color-input);

@@ -27,7 +27,6 @@ import { MARK_PROVIDER, ProviderMark } from "../../marks/provider-mark.js";
 import { TaskStatusMark } from "../../marks/task-marks.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import { PROFILE, surfaceAttributes, THEME } from "../../tokens/surface.js";
-import { AttentionMark } from "../attention-mark/attention-mark.js";
 import { AVATAR_SHAPE, AVATAR_SIZE, Avatar } from "../avatar/avatar.js";
 import { Badge } from "../badge/badge.js";
 import { BarAction, BarItem, BarItems } from "../bar-item/bar-item.js";
@@ -212,7 +211,6 @@ function InboxRow({ item }: { item: InboxItem }): React.JSX.Element {
       }
       meta={
         <span className="ui-landing-row-marks">
-          {open && item.unread === true ? <AttentionMark /> : null}
           <Time at={STORY_NOW - item.ago * MINUTE} now={STORY_NOW} hint={false} />
         </span>
       }

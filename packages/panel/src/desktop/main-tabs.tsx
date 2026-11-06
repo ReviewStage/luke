@@ -16,14 +16,12 @@ import {
   InlineEdit,
   PlusIcon,
   RetryButton,
-  STATUS_TONE,
   TABS_GROUND,
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
   Toolbar,
   Tooltip,
   useMenu,
-  VisuallyHidden,
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@repo/ui/tab-strip-model";
@@ -42,7 +40,6 @@ import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
 import { useFailedAgents } from "../tasks/failed-lines.js";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
 import type { AgentFork } from "../tasks/fork-model.js";
-import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { AgentThreads } from "../tasks/threads-dock.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
@@ -73,6 +70,7 @@ import {
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { tabCard } from "./tab-card.js";
 import { TabStrip } from "./tab-strip.js";
+import { WaitingCount } from "./task-row-parts.js";
 
 /**
  * main-tabs.tsx -- the task's topbar and its column's tabs: the topbar naming the task, its name opening its details, and the task's ⋯, each agent's tab and the draft agent's under it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
@@ -123,14 +121,6 @@ import { TabStrip } from "./tab-strip.js";
  * tabs are closed, and those archived, stand behind History at the bar's
  * end (`agent-history.tsx`), which opens them again.
  */
-
-/**
- * A count at a summary row's end, or a tab's, in the quiet count a folded
- * sidebar group shows after its name; the Inbox's, of what needs the reader,
- * in the tone its `data-tone` names.
- */
-export const ROW_COUNT =
-  "inbox-row-count flex-none text-caption-inline text-muted-foreground tabular-nums data-[tone]:text-tone-ink";
 
 /** The section the task's agents stand under where they are listed among other things, as ⌘K lists them, and the details' way back names. */
 export const AGENTS_SECTION = "Agents";
@@ -312,6 +302,7 @@ function agentTabs(input: {
     const placeMark = chosen(tab)
       ? undefined
       : (leftMark(failed.includes(agent.id), drafted.includes(agent.id)) ?? undefined);
+    const waits = waiting?.get(agent.id)?.length ?? 0;
     return {
       tab,
       agent,
@@ -319,7 +310,7 @@ function agentTabs(input: {
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
         // A count of threads waiting on the developer leads, as the task's Inbox row counts them.
         endMark:
-          waitingMark(waiting?.get(agent.id)?.length ?? 0) ??
+          (waits === 0 ? undefined : <WaitingCount count={waits} />) ??
           agentEndMark(agent, false) ??
           placeMark,
         card: <AgentTabCard name={label} models={models} read={readCard} />,
@@ -417,19 +408,9 @@ export function agentEntries(
 function inboxEntry(waiting: number, onPick: () => void): AddEntry {
   return {
     row: { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) },
-    endMark: waitingMark(waiting),
+    endMark: waiting === 0 ? undefined : <WaitingCount count={waiting} />,
     onPick,
   };
-}
-
-/** What waits on the developer counted at a row's or a tab's end in the attention tone the Inbox's rows wear; nothing at none. */
-function waitingMark(waiting: number): React.JSX.Element | undefined {
-  return waiting === 0 ? undefined : (
-    <span className={ROW_COUNT} data-tone={STATUS_TONE.ATTENTION}>
-      {waiting}
-      <VisuallyHidden> {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}</VisuallyHidden>
-    </span>
-  );
 }
 
 /**
