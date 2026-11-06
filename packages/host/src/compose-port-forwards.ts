@@ -283,6 +283,9 @@ export function composePortForwards(
         if (started === undefined) {
           return yield* Effect.fail(new RefusedRefusal({ message: "the service did not answer" }));
         }
+        // Note that a sign-out or another turn-on may have landed while the service woke the sandbox.
+        if (!gate()) return yield* Effect.fail(new RefusedRefusal({ message: "signed out" }));
+        if (forwarding?.agentId === agentId) return;
         yield* turnOff;
         const current: Forwarding = {
           agentId,

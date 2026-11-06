@@ -1,7 +1,3 @@
-import net from "node:net";
-import { type Cause, Effect, Queue, Stream } from "effect";
-import type { ListenOnLoopback, LoopbackConnection } from "../compose-port-forwards.js";
-
 /**
  * loopback-listener-over-net.ts -- one forwarded port's listener on this Mac's `127.0.0.1`, over `node:net`: the seam the port-forward composer listens through.
  *
@@ -13,6 +9,10 @@ import type { ListenOnLoopback, LoopbackConnection } from "../compose-port-forwa
  * handed on unbounded, since the tunnel it crosses has no backpressure; no
  * byte of it is read, logged, or kept here.
  */
+
+import net from "node:net";
+import { type Cause, Effect, Queue, Stream } from "effect";
+import type { ListenOnLoopback, LoopbackConnection } from "../compose-port-forwards.js";
 
 const LOOPBACK = "127.0.0.1";
 
