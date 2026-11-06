@@ -20,6 +20,7 @@ import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js"
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { onTerminals, windowTerminals } from "../testing/terminals.js";
 import { ToastHost } from "../toast.js";
 import type { MainTab } from "./use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
@@ -145,11 +146,14 @@ async function mount(input: {
     root.render(
       onRegistry(
         registry,
-        createElement(
-          Fragment,
-          null,
-          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
-          createElement(ToastHost),
+        onTerminals(
+          windowTerminals(),
+          createElement(
+            Fragment,
+            null,
+            createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+            createElement(ToastHost),
+          ),
         ),
       ),
     ),
