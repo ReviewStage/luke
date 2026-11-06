@@ -148,8 +148,9 @@ export function agentForkDoors(input: {
   }
   // An agent with no task opens on its own page, listed or not; on a task, an unlisted one is archived.
   const opens = (agentId: string) => standing.has(agentId) || agent.planId === null;
-  // Note that an agent with no task is forked and continued as a task's is, its draft on its own page.
-  const drafts = control.onUnarchive === undefined;
+  // Note that an agent with no task is forked and continued as a task's is, its draft on its own page,
+  // and that an archived one, on its page or in its task's tab, opens no draft.
+  const drafts = control.onUnarchive === undefined && agent.archivedAt === undefined;
   // Note that a local agent has no sandbox snapshot to fork from, so it offers no fork, and
   // that a pilot task's agents fork to none, since a fork is an agent of the developer's own.
   const forkable =

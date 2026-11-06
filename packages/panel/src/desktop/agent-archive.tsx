@@ -60,7 +60,7 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * dialog stands until the answer to say a refusal, the agent leaves its tab
  * and the sidebar's card and marks for History's Archived, while its
  * transcript and its pull request are kept, ⌘K still finds it, saying it is
- * archived and opening its own page, and a toast offers Undo
+ * archived and opening its tab again, and a toast offers Undo
  * (`use-agents.ts`).
  *
  * The archived agents are folded away behind the header every group of the
@@ -78,8 +78,7 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * long press offering both. The
  * row hangs the agent's card beside it as a standing row does, saying it
  * was archived and when (`agent-ref.tsx`), and a press opens the agent's
- * own page, since its tab is gone, where its transcript is read and
- * Unarchive brings it back. It draws nothing while no agent is archived, and
+ * tab again, where its transcript is read and Unarchive brings it back. It draws nothing while no agent is archived, and
  * starts folded, then stands as the reader left it, kept on this Mac.
  */
 
@@ -213,7 +212,7 @@ export function useAgentArchive(
 /** What an archived agent's row is, naming its ⋯ and menu "Archived agent actions". */
 const ARCHIVED_THING = "Archived agent";
 
-/** One archived agent: its glyph and name, muted, hanging its card, opening its own page on a press, its Unarchive and its ⋯ at its end, and its right-click, long press, and the menu key opening the ⋯'s menu. */
+/** One archived agent: its glyph and name, muted, hanging its card, opening its tab on a press, its Unarchive and its ⋯ at its end, and its right-click, long press, and the menu key opening the ⋯'s menu. */
 export function ArchivedAgentRow({
   agent,
   agents,
@@ -282,7 +281,7 @@ export function ArchivedAgents({
   agents: AgentsControl;
   /** Whether the summary is on screen: off it, an archived row's menu stands over nothing. */
   shown: boolean;
-  /** Opens an archived agent's own page, where its transcript is read and it is brought back. */
+  /** Opens an archived agent's tab, where its transcript is read and it is brought back. */
   onOpen: (agentId: string) => void;
 }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useKept(KEPT.UNFOLDED, false);

@@ -37,8 +37,8 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * and a press opens its tab again and chooses it, as its tab's own press
  * does. An archived agent's row is the one the summary's Archived fold once
  * drew (`ArchivedAgentRow`): muted, its Unarchive on hover and its ⋯
- * offering the agent's menu, and a press opens the agent's own page, read
- * only, since looking at an agent never unarchives it. Each press puts the
+ * offering the agent's menu, and a press opens the agent's tab, read only,
+ * since looking at an agent never unarchives it. Each press puts the
  * panel away. An agent whose tab stands open is in the bar already, so it
  * is not listed; ⌘K still finds every agent. While nothing is closed or
  * archived the button stays, disabled, saying so, so the bar never shifts as
@@ -204,7 +204,7 @@ export function AgentHistory({
   held: HeldTranscripts;
   /** Whether the task's page is on screen, for the panel and an archived row's menu not to outlive it. */
   shown: boolean;
-  /** Opens an agent: a closed one's tab in the column, an archived one's own page. */
+  /** Opens an agent's tab in the column, a closed one's or an archived one's. */
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);

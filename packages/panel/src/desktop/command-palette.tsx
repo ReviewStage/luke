@@ -1050,9 +1050,8 @@ function agentRows(
 /**
  * The open plan's archived agents, in the order started, each in its tab's
  * look and found by its name as a standing one is, its detail saying it is
- * archived before the plan's name, and hanging its card. Note that one opens
- * on its own page, as an archived agent the sidebar lists does, because its
- * tab is gone from the plan's column and its page is where it is read and
+ * archived before the plan's name, and hanging its card. One opens its tab
+ * in the plan's column, as a standing one does, where it is read and
  * brought back.
  */
 function archivedAgentRows(
@@ -1079,7 +1078,12 @@ function archivedAgentRows(
         />
       ),
       terms: [look.label, ...(taskName === undefined ? [] : [taskName])],
-      onChoose: () => show(() => tasks.agentView.onOpen(agent.id)),
+      onChoose: () =>
+        show(() =>
+          agent.planId === null
+            ? tasks.agentView.onOpen(agent.id)
+            : tasks.onShowAgent(agent.planId, agent.id),
+        ),
     };
   });
 }

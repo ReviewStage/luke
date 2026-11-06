@@ -1166,20 +1166,18 @@ test("a Vespin link to another plan's section opens that plan and asks its page 
   });
 });
 
-test("a Vespin link keyed by the agent alone opens on the agent's task where it has one, else on the agent's page, as an archived agent's does", async () => {
+test("a Vespin link keyed by the agent alone opens on the agent's task where it has one, else on the agent's page", async () => {
   const ELSEWHERE = "5e3b6f1d-2a10-4c7a-9a55-7b0f5f3e2c1d";
   const TASKLESS = "2b7c9e4d-1f3a-4b6e-8d2c-9a1e5f7b3c40";
   const UNREAD = "6d4e2c1b-9a8f-4e7d-b6c5-3a2f1e0d9c8b";
   const SLOW = "1a9b8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d";
-  const ARCHIVED = "8f7e6d5c-4b3a-4c2d-9e1f-0a9b8c7d6e5f";
   const LISTED = "3f2e1d0c-9b8a-4f7e-8d6c-5b4a39281706";
   let answerSlow: () => void = () => undefined;
   const read = (agentId: unknown) => ({
     agent: {
       ...RUNNING_AGENT,
       id: String(agentId),
-      planId: agentId === ELSEWHERE || agentId === ARCHIVED ? OTHER_TASK_ID : null,
-      ...(agentId === ARCHIVED ? { archivedAt: 3 } : undefined),
+      planId: agentId === ELSEWHERE ? OTHER_TASK_ID : null,
       automationId: null,
       workspaceId: "acme",
       repository: null,
@@ -1243,14 +1241,6 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
     "an agent the list carries on another task opens that task without the service",
   );
 
-  open({ kind: LINK_PLACE.AGENT, agentId: ARCHIVED });
-  await settle();
-  assert.equal(
-    tab.control().agentView.agentId,
-    ARCHIVED,
-    "an archived agent of a task, whose tab is never drawn, opens on its page",
-  );
-
   // A link opened at once, to the open task's own agent, wins over an earlier read answering late.
   open({ kind: LINK_PLACE.AGENT, agentId: SLOW });
   open({ kind: LINK_PLACE.AGENT, agentId: AGENT_ID });
@@ -1259,57 +1249,6 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   await settle();
   assert.deepEqual(tab.control().mainTabs.tab, agentTab(AGENT_ID));
   assert.equal(tab.told.length, told, "the late read opens no other task");
-});
-
-test("a Vespin link to a worker of an archived agent's task, opened before the list followed live lands, reads the agent and opens its page, a side panel gone full screen meanwhile giving way", async () => {
-  const ARCHIVED = "8f7e6d5c-4b3a-4c2d-9e1f-0a9b8c7d6e5f";
-  let answer: () => void = () => undefined;
-  const tab = mount(
-    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
-    {
-      [ACT_KIND.AGENTS_PAGE]: () =>
-        new Promise((resolve) => {
-          answer = () =>
-            resolve({
-              agent: {
-                ...RUNNING_AGENT,
-                id: ARCHIVED,
-                planId: OTHER_TASK_ID,
-                archivedAt: 3,
-                automationId: null,
-                workspaceId: "acme",
-                repository: null,
-              },
-            });
-        }),
-    },
-  );
-  await settle();
-  const told = tab.told.length;
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "acme",
-      place: {
-        kind: LINK_PLACE.WORKER,
-        planId: OTHER_TASK_ID,
-        agentId: ARCHIVED,
-        callId: "3c2b1a09-8f7e-4d6c-b5a4-9382716f5e4d",
-      },
-    }),
-  );
-  // Note that the panel goes full screen while the read is out, and the worker's page keeps its panel shown, so only its answer reading the panel as it stands then has it give way.
-  act(() => tab.control().sidePanel.onChoose(PULLS));
-  act(() => tab.control().sidePanel.onToggleFullScreen());
-  assert.equal(tab.control().sidePanel.fullScreen, true);
-  answer();
-  await settle();
-  assert.equal(tab.control().agentView.agentId, ARCHIVED);
-  assert.equal(tab.control().sidePanel.fullScreen, false, "the full-screen panel gives way");
-  assert.equal(
-    tab.told.slice(told).includes(ACT_KIND.TASKS_SELECT),
-    false,
-    "its task, which never draws its tab, is not opened",
-  );
 });
 
 test("a Vespin link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages held for it", async () => {
@@ -3257,6 +3196,26 @@ test("archiving a task's last agent takes its tab at once, and a refused archive
   await act(async () => archived.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
   await settle();
   assert.deepEqual(tab.control().mainTabs.tab, agentTab(AGENT_ID));
+});
+
+test("an archived agent opens in a tab of its task's column, which stays once it is brought back and closes as it is archived again", async () => {
+  const archived = { ...RUNNING_AGENT, archivedAt: 5 };
+  const tab = mount({ shown: true, tasks: withAgents([archived]) });
+  await settle();
+  const agentTabs = () => tab.control().mainTabs.tabs.filter((each) => isAgentTab(each));
+  assert.deepEqual(agentTabs(), [], "an archived agent's tab stands only once opened");
+
+  act(() => tab.control().onShowAgent(TASK.id, AGENT_ID));
+  assert.equal(tab.control().agentView.agentId, undefined, "no page of its own stands");
+  assert.deepEqual(tab.control().mainTabs.tab, agentTab(AGENT_ID));
+
+  tab.stand({ tasks: withAgents([RUNNING_AGENT]) });
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, agentTab(AGENT_ID), "brought back, its tab stays");
+
+  tab.stand({ tasks: withAgents([{ ...RUNNING_AGENT, archivedAt: 6 }]) });
+  await settle();
+  assert.deepEqual(agentTabs(), [], "archived again, its tab closes");
 });
 
 test("a task started, with an agent or without, leaves a hidden side panel hidden", async () => {

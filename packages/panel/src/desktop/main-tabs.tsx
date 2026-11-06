@@ -298,7 +298,10 @@ function agentTabs(input: {
     selected: chosen(tab),
     onSelect: () => main.onChoose(tab),
   });
-  const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
+  // An archived agent's tab stands once opened, drawn as a live one's is.
+  const open = [...(agents.agents ?? []), ...(agents.archived ?? [])].filter((agent) =>
+    main.openAgents?.includes(agent.id),
+  );
   const own = open.map((agent) => {
     const tab = agentTab(agent.id);
     const label = agentName(agent, agents.models);
@@ -768,7 +771,9 @@ export function mainTabLabel(tab: MainTab, agents: AgentsControl): string | unde
   return stripTabTitle(tab, {
     ...UNREAD_TAB_NAMES,
     agent: (agentId) => {
-      const agent = agents.agents?.find((each) => each.id === agentId);
+      const agent =
+        agents.agents?.find((each) => each.id === agentId) ??
+        agents.archived?.find((each) => each.id === agentId);
       return agent === undefined ? undefined : agentName(agent, agents.models);
     },
   });
@@ -834,8 +839,11 @@ export function MainTabContent({
       // on an agent reads it beside the task's list of agents rather than after
       // it; what needs the agent itself waits for the list in the tab's shape.
       // Note that the tab stands for an agent the list no longer holds only until
-      // the column moves back to the task, a render away.
-      const agent = agents.agents?.find((each) => each.id === agentId);
+      // the column moves back to the task, a render away; an archived agent's
+      // stands while it is opened.
+      const agent =
+        agents.agents?.find((each) => each.id === agentId) ??
+        agents.archived?.find((each) => each.id === agentId);
       return (
         <ForkProvider
           key={agentId}

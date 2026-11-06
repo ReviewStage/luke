@@ -54,8 +54,8 @@ import { useOpenPlace } from "./use-open-link.js";
  * sidebar's list names it by, which says where it stands but holds no
  * transcript; or nothing, where the task's list was read and holds no such
  * agent, when the card says so under the name it goes by. A press on an
- * archived agent, whose tab is never drawn, opens its own page, where its
- * transcript is read and Unarchive brings it back; one on an agent gone
+ * archived agent opens its tab too, where its transcript is read and
+ * Unarchive brings it back; one on an agent gone
  * opens its task, as the column does for any tab whose subject is missing
  * (`use-main-tabs.ts`).
  * A name inside a row whose press does something of its own, an Inbox
