@@ -418,6 +418,9 @@ export function composeMacCommands(
         return Effect.raceFirst(follow, Effect.asVoid(left(userId)));
       });
 
+    /** The account the commands in the running set were claimed for, none before the first follow. */
+    let runningFor: string | undefined;
+
     /**
      * One turn of the loop: the commands followed until the gate leaves the
      * account, the read asked again after a pause, or as soon as the service
@@ -429,9 +432,6 @@ export function composeMacCommands(
      * Every turn begins by letting go of the asks of any account but the one
      * signed in, since a follow ends as the account changes.
      */
-    /** The account the commands in the running set were claimed for, none before the first follow. */
-    let runningFor: string | undefined;
-
     const turn = (running: FiberSet.FiberSet) =>
       Effect.gen(function* () {
         yield* withdrawOtherAccounts;
@@ -440,6 +440,8 @@ export function composeMacCommands(
         if (userId !== runningFor) {
           yield* FiberSet.clear(running);
           runningFor = userId;
+          // Note that the clear waits out any claim under way, during which the gate may have moved again, so the next turn starts from where it stands now.
+          if ((yield* SubscriptionRef.get(gate)) !== userId) return;
         }
         if (userId === undefined) return yield* Effect.asVoid(opened);
         const sealed = yield* seal(userId, false);
