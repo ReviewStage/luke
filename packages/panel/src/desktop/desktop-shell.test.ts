@@ -777,24 +777,26 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   assert.deepEqual(tabs, []);
 });
 
-test("New task, by its chord or the sidebar's row, opens over the Inbox and leaves nothing, and from Settings brings the Tasks tab forward", async () => {
+test("New task, by its chord or the sidebar's row, opens its card over the Inbox and leaves nothing, and from Settings brings the Tasks tab forward", async () => {
   const tabs: PanelTab[] = [];
-  let asked = 0;
-  const onNewTask = () => (asked += 1);
-  const page = mount(true, { onNewTask }, PANEL_TAB.TASKS, (tab) => tabs.push(tab), {
-    collapsed: false,
-  });
+  const card = () => document.querySelector('[role="dialog"][aria-modal="true"]');
+  const page = mount(true, {}, PANEL_TAB.TASKS, (tab) => tabs.push(tab), { collapsed: false });
   await settle();
   act(() => runAppCommand(APP_COMMAND.NEW_TASK));
+  const byChord = card() !== null;
+  act(() => {
+    card()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
   act(() => placeRow(page, "New task")?.click());
+  const byRow = card() !== null;
 
   // Note that leaving would stand the window's state, a task or Home, behind the card in the Inbox's place.
-  assert.deepEqual([asked, tabs], [2, []]);
+  assert.deepEqual([byChord, byRow, tabs], [true, true, []]);
   act(() => root?.unmount());
 
-  mount(false, { onNewTask }, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  mount(false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
   act(() => runAppCommand(APP_COMMAND.NEW_TASK));
-  assert.deepEqual([asked, tabs], [3, [PANEL_TAB.TASKS]]);
+  assert.deepEqual(tabs, [PANEL_TAB.TASKS]);
 });
 
 test("the Tasks row pressed while the Board stands leaves nothing, the Board being the router's place it opens", async () => {
