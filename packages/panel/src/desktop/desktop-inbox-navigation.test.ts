@@ -962,6 +962,11 @@ test("an item the feed holds opens whole, with no failure under its thread, thou
   await settle();
 
   await vi.waitFor(() => assert.equal(itemPane(page).getAttribute("aria-label"), QUARANTINE.title));
+  assert.equal(
+    itemPane(page).querySelector("[data-inbox-message-text]")?.textContent,
+    "A failed email is retried as the agent sets it up.",
+    "the thread is drawn from the feed",
+  );
   assert.ok(world.agentReads.includes(SWEEP_AGENT), "the agent's own read was asked, and failed");
   assert.equal(itemPane(page).querySelector('[role="alert"]')?.textContent, undefined);
 });
