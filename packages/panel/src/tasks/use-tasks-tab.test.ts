@@ -37,9 +37,9 @@ import { ACT_UNREACHED_WORDS } from "@repo/features/words";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
+  type AppDescriptionDocuments,
   type AppInboxTask,
   type AppInboxTaskHolding,
-  type AppDescriptionDocuments,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
@@ -58,6 +58,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { KEPT, type Kept } from "../act.js";
+import { ADMIN_PAGE, type AdminView } from "../admin/routing.js";
 import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
@@ -65,7 +66,6 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   type PanelSpan,
 } from "../panel-spans.js";
-import { PANEL_TAB } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
@@ -90,7 +90,7 @@ import {
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { listedAgent } from "../testing/tasks-control.js";
+import { ADMIN_AWAY, listedAgent } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { windowRouter } from "../testing/window-router.js";
 import { ToastHost } from "../toast.js";
@@ -99,9 +99,9 @@ import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
+import { HISTORY_READ } from "./use-description-history.js";
 import { useInboxTask } from "./use-inbox-task.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
-import { HISTORY_READ } from "./use-description-history.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -176,6 +176,8 @@ interface Standing {
   history: boolean;
   /** The descriptions the host holds for the window as the tab mounts (`LIVE_READ.DESCRIPTION_DOCUMENT`). */
   descriptions: AppDescriptionDocuments;
+  /** Whether Admin stands over the tab, as the router stands it (`admin-route.ts`). */
+  admin?: boolean;
 }
 
 /**
@@ -241,6 +243,8 @@ function mount(
   const agentActs: PortActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
+  /** Each time the tab opened Admin through its own door, by the view it named, none for its Overview. */
+  const adminOpens: (AdminView | undefined)[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
   const payloads: { readonly kind: PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
@@ -275,11 +279,8 @@ function mount(
     windowHistory = useWindowHistory({
       known: true,
       link: undefined,
-      tab: PANEL_TAB.TASKS,
-      onTabChange: () => undefined,
-      settingsView: SETTINGS_VIEW.ACCOUNT,
-      onSettingsViewChange: () => undefined,
-      settingsListed: true,
+      routed: undefined,
+      settingsList: undefined,
       onSettingsList: () => undefined,
       room,
       tasks,
@@ -331,6 +332,11 @@ function mount(
       onOpenSettings: (link) => links.push(link),
       leaveGuard: useLeaveGuard(),
       room: held.room,
+      adminView: {
+        ...ADMIN_AWAY,
+        open: held.admin === true,
+        onOpen: (view) => adminOpens.push(view),
+      },
     });
     return held.history
       ? createElement(WindowHistoryProbe, { tasks: control, room: held.room })
@@ -354,6 +360,7 @@ function mount(
     told,
     agentActs,
     shownAgents,
+    adminOpens,
     payloads,
     /** Every Settings link the tab followed, in order. */
     links,
@@ -1698,35 +1705,6 @@ test("a Vespin link to a person opens their page in the workspace its slug names
   assert.equal(tab.control().inboxView.open, false);
   assert.equal(tab.control().personView.userId, "user-charles");
   assert.equal(tab.control().personView.workspaceId, PERSONAL.id);
-});
-
-test("a Vespin link to the Admin place opens it on its Overview, and one to a view opens that view, in the place of the Inbox, listing no other workspace", () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  const listed = tab.control().workspace?.id;
-  act(() => tab.control().inboxView.onOpen());
-
-  act(() => tab.control().onOpenLink({ workspace: "personal", place: { kind: LINK_PLACE.ADMIN } }));
-  assert.equal(tab.control().inboxView.open, false);
-  assert.equal(tab.control().adminView.open, true);
-  assert.deepEqual(tab.control().adminView.view, { kind: "dashboard" });
-
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "personal",
-      place: { kind: LINK_PLACE.ADMIN, userId: "user-charles" },
-    }),
-  );
-  assert.deepEqual(tab.control().adminView.view, { kind: "account", id: "user-charles" });
-
-  act(() =>
-    tab.control().onOpenLink({
-      workspace: "personal",
-      place: { kind: LINK_PLACE.ADMIN, section: "workspaces" },
-    }),
-  );
-  assert.deepEqual(tab.control().adminView.view, { kind: "workspaces" });
-  // The place reads every workspace's accounts, so its link's workspace lists none.
-  assert.equal(tab.control().workspace?.id, listed);
 });
 
 test("a Vespin link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
@@ -4021,3 +3999,43 @@ it.effect(
       ]);
     }),
 );
+
+test("an agent's page under Admin is off screen, so main hears no agent shown while Admin stands over it", async () => {
+  const tab = mount({ shown: true });
+  act(() => tab.control().agentView.onOpen("agent-under-admin"));
+  await settle();
+  assert.equal(tab.shownAgents.at(-1), "agent-under-admin");
+
+  tab.stand({ admin: true });
+  await settle();
+  assert.equal(tab.shownAgents.at(-1), null);
+});
+
+test("Admin opened while a page holds unsaved work waits on the leave question, and opens once it is answered", () => {
+  const tab = mount({ shown: true });
+  const asked: (() => void)[] = [];
+  act(() => void tab.control().leaveGuard.stand((leave) => asked.push(leave)));
+  act(() => tab.control().adminView.onOpen());
+  assert.deepEqual(tab.adminOpens, [], "Admin waits on the question");
+
+  act(() => asked[0]?.());
+  assert.deepEqual(tab.adminOpens, [undefined]);
+});
+
+test("New task over Home under Admin opens its dialog, since Home's composer is not on screen", () => {
+  const tab = mount({ shown: true, admin: true });
+  act(() => tab.control().onNewTask());
+  assert.equal(tab.control().newTask.open, true);
+});
+
+test("a link to Admin opens it through the router's door on the view it names, and its Overview where it names none", () => {
+  const tab = mount({ shown: true });
+  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.ADMIN } }));
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.ADMIN, userId: "user-charles" },
+    }),
+  );
+  assert.deepEqual(tab.adminOpens, [undefined, { kind: ADMIN_PAGE.ACCOUNT, id: "user-charles" }]);
+});

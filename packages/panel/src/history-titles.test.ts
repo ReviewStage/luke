@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { test } from "vitest";
 import { liveStepTitle, NAMED_STEP, stepTitle } from "./history-titles.js";
-import { PANEL_TAB } from "./panel-tabs.js";
+import { ROUTED_PLACE } from "./route-gates.js";
 import { MAIN_TAB } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "./tasks/use-side-panel.js";
 import type { InboxChoice } from "./tasks/use-tasks-tab.js";
@@ -42,17 +42,17 @@ function onTask(
 }
 
 test("a task's step is named by the task, with the side panel's tab while it is open", () => {
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, onTask(SIDE_PANEL_TAB.COMMENTS)), {
+  assert.deepEqual(stepTitle(undefined, onTask(SIDE_PANEL_TAB.COMMENTS)), {
     label: "Auth refactor",
     detail: "Comments",
     panes: { column: undefined, side: "Comments" },
   });
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, onTask({ file: "apps/web/session-store.ts" })), {
+  assert.deepEqual(stepTitle(undefined, onTask({ file: "apps/web/session-store.ts" })), {
     label: "Auth refactor",
     detail: "session-store.ts",
     panes: { column: undefined, side: "session-store.ts" },
   });
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, onTask(undefined)), {
+  assert.deepEqual(stepTitle(undefined, onTask(undefined)), {
     label: "Auth refactor",
     detail: undefined,
   });
@@ -60,7 +60,7 @@ test("a task's step is named by the task, with the side panel's tab while it is 
 
 test("a task on its way, its strips still another's, is named by the task alone", () => {
   const opening = { ...onTask(SIDE_PANEL_TAB.COMMENTS), activeTaskId: "task-before" };
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, opening), { label: "Auth refactor" });
+  assert.deepEqual(stepTitle(undefined, opening), { label: "Auth refactor" });
 });
 
 test("a task's step listed later on its Overview is named by the task and its panel's tab, Overview being the task itself", () => {
@@ -76,14 +76,15 @@ test("a task's step listed later on its Overview is named by the task and its pa
   });
 });
 
-test("the Inbox's step names the task its item is of, and Settings and Home are named alone", () => {
+test("the Inbox's step names the task its item is of, Settings and Home are named alone, and Admin's step as the place under it", () => {
   const chosen: InboxChoice = { itemId: "item-1", taskId: TASK.id };
   const base = tasksControl({ tasks: [TASK] });
   const inbox = tasksControl({
     tasks: [TASK],
     inboxView: { ...base.inboxView, open: true, chosen },
   });
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, inbox), { label: "Inbox", detail: "Auth refactor" });
-  assert.deepEqual(stepTitle(PANEL_TAB.SETTINGS, base), { label: "Settings" });
-  assert.deepEqual(stepTitle(PANEL_TAB.TASKS, base), { label: "Home" });
+  assert.deepEqual(stepTitle(undefined, inbox), { label: "Inbox", detail: "Auth refactor" });
+  assert.deepEqual(stepTitle(ROUTED_PLACE.SETTINGS, base), { label: "Settings" });
+  assert.deepEqual(stepTitle(undefined, base), { label: "Home" });
+  assert.deepEqual(stepTitle(ROUTED_PLACE.ADMIN, base), { label: "Home" });
 });

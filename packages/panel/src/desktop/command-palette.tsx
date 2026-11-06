@@ -2033,10 +2033,11 @@ export function CommandPalette({
   const onTasks = useCallback(
     (run: () => void) =>
       choose(() => {
-        if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+        // A routed place standing, Settings or Admin, is left for what was chosen.
+        onTabChange(PANEL_TAB.TASKS);
         run();
       }),
-    [choose, tab, onTabChange],
+    [choose, onTabChange],
   );
   // The seek for a setting's row gives itself up once another is asked
   // for or Settings is left, so it never lands on a later visit's page.
@@ -2047,7 +2048,7 @@ export function CommandPalette({
   useEffect(() => () => landing.current?.(), []);
   const land = (page: SettingsView, id: string) =>
     choose(() => {
-      onTabChange(PANEL_TAB.SETTINGS);
+      // Choosing a page opens Settings on it, or turns the page of Settings standing.
       settings.onViewChange(page);
       landing.current?.();
       landing.current = landOnSettingsRow(id);
@@ -2056,7 +2057,6 @@ export function CommandPalette({
     choose(() => {
       landing.current?.();
       landing.current = undefined;
-      onTabChange(PANEL_TAB.SETTINGS);
       settings.onViewChange(page);
     });
 

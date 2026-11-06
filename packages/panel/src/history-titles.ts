@@ -13,7 +13,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { mainTabLabel } from "./desktop/main-tabs.js";
 import type { StepTitle } from "./navigation-history.js";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
+import { ROUTED_PLACE, type RoutedPlace } from "./route-gates.js";
 import { agentName } from "./tasks/agent-model.js";
 import { isOverviewTab, type MainTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelTab } from "./tasks/use-side-panel.js";
@@ -127,8 +127,12 @@ function taskName(tasks: StepNameTasks, taskId: string | undefined): string | un
 }
 
 /** What the step the window stands on is called; none while nothing names it, as a task not yet listed. */
-export function stepTitle(tab: PanelTab, tasks: StepTitleTasks): StepTitle | undefined {
-  if (tab === PANEL_TAB.SETTINGS) return { label: "Settings" };
+export function stepTitle(
+  routed: RoutedPlace | undefined,
+  tasks: StepTitleTasks,
+): StepTitle | undefined {
+  if (routed === ROUTED_PLACE.SETTINGS) return { label: "Settings" };
+  // Note that Admin's step is named as the place the window's state holds under it, as it was while Admin stood in for that place.
   if (tasks.inboxView.open) {
     const { chosen } = tasks.inboxView;
     const holder = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;

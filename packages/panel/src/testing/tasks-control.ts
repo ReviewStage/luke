@@ -33,10 +33,11 @@ import {
   agentRenameMutation,
   MODELS_READ,
 } from "../tasks/use-agents.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-description-history.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { DRAWN_KINDS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
+  type AdminViewControl,
   AUTOMATIONS_PAGE,
   type TasksControl,
   taskDeleteMutation,
@@ -379,6 +380,15 @@ export function agentHoldingsOf(
   return [...held.values()];
 }
 
+/** Admin as a window not standing on it holds it, every door ignored. */
+export const ADMIN_AWAY: AdminViewControl = {
+  open: false,
+  view: { kind: "dashboard" },
+  onOpen: ignore,
+  onClose: ignore,
+  onPreload: ignore,
+};
+
 /**
  * A signed-in Tasks tab on screen on Home with no tasks, every
  * press ignored, bound for whichever task it is given as open; the agents
@@ -427,7 +437,9 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
     descriptionEdit: (taskId) =>
-      descriptionEditMutation(taskId, () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED })),
+      descriptionEditMutation(taskId, () =>
+        Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+      ),
     mainTabs: {
       tabs: [MAIN_TAB.OVERVIEW],
       tab: MAIN_TAB.OVERVIEW,
@@ -547,12 +559,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     inboxTaskless: [],
     failedRuns: [],
-    adminView: {
-      open: false,
-      view: { kind: "dashboard" },
-      onOpen: ignore,
-      onClose: ignore,
-    },
+    adminView: ADMIN_AWAY,
     boardView: { open: false, onOpen: ignore, onClose: ignore },
     unknownWorkspace: { open: false, onClose: ignore },
     automationsView: {
