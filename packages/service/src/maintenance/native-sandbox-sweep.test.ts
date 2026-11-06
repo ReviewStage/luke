@@ -58,6 +58,8 @@ function vercel(
   /** The detached commands, by id, with their exit code, or null while they run, and what they printed on stderr. */
   const commands = new Map<string, ReadCommand & { readonly stderr?: string }>();
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
+  /** Each network policy sent, by the session it was sent to. */
+  const policies: { readonly session: string; readonly policy: unknown }[] = [];
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
     const method = init.method ?? "GET";
@@ -87,7 +89,11 @@ function vercel(
     }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(parsed.pathname);
     assert.ok(session !== null, `an unexpected call: ${method} ${parsed.pathname}`);
-    const [, , rest = ""] = session;
+    const [, sessionId = "", rest = ""] = session;
+    if (rest === "network-policy") {
+      policies.push({ session: sessionId, policy: JSON.parse(String(init.body)) });
+      return Response.json({});
+    }
     const command = /^cmd\/([^/]+)(\/logs)?$/u.exec(rest);
     assert.ok(command !== null, `an unexpected call: ${method} ${parsed.pathname}`);
     const found = commands.get(command[1] ?? "");
@@ -97,7 +103,7 @@ function vercel(
       found.stderr === undefined ? "" : JSON.stringify({ stream: "stderr", data: found.stderr });
     return new Response(`${line}\n`, { headers: { "content-type": "application/x-ndjson" } });
   };
-  return { layer: fakeHttpClientLayer(respond), sandboxes, commands, pagesListed };
+  return { layer: fakeHttpClientLayer(respond), sandboxes, commands, pagesListed, policies };
 }
 
 /** An agent on the runtime given, its newest turn in the status given where one is, settled at the instant given. */
@@ -191,7 +197,7 @@ afterEach(() => {
 
 it.layer(getTestDB())("the native sandbox sweep", (it) => {
   it.effect(
-    "a runner that exited mid-turn has its turn settled failed with its exit code and stderr and the projection's turn dropped, reported by its exit code alone; a runner still up keeps its turn",
+    "a runner that exited mid-turn has its turn settled failed with its exit code and stderr and the projection's turn dropped, reported by its exit code alone, every credential taken off its firewall; a runner still up keeps its turn",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -257,6 +263,9 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           .from(conversations)
           .where(eq(conversations.id, crashed.conversationId));
         assert.deepEqual(projection?.projection, { session: "cli-session" });
+        assert.deepEqual(api.policies, [
+          { session: dead.currentSessionId, policy: { mode: "allow-all" } },
+        ]);
         assert.equal(dead.status, "running");
         assert.equal(alive.status, "running");
       }),

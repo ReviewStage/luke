@@ -17,7 +17,9 @@
  * than running for a day. The turn keeps how the runner ended, its exit code
  * and the redacted tail of its stderr, after the fixed sentence, and the
  * settle is logged as an error under the agent's ids and reported as an
- * issue, each with the exit code alone. Nothing is relaunched or stopped.
+ * issue, each with the exit code alone. Every credential then comes off its
+ * firewall, as at any turn's end, since the sandbox stops on its timeout with
+ * its policy saved. Nothing is relaunched or stopped.
  *
  * Every call is bounded so the sweep's minute holds: a few pages of the
  * list, and a set number of sandboxes read against the store, taken from a
@@ -53,6 +55,7 @@ import {
   taggedRunner,
 } from "../agents/machine/vercel-machine.js";
 import { FAILURE_CHARS } from "../agents/native-events/runner-moments.js";
+import { sandboxFirewall } from "../agents/sandbox-firewall.js";
 import {
   COMMAND_GONE,
   type CommandExit,
@@ -253,8 +256,8 @@ const runGoesOn = (sandbox: NativeSandbox) =>
 
 /**
  * One running native sandbox dealt with: its run's open turns settled
- * failed where its runner exited while the run still goes on, and left
- * otherwise. The run and the runner are read again just before the settle,
+ * failed where its runner exited while the run still goes on, and every
+ * credential taken off its firewall, and left otherwise. The run and the runner are read again just before the settle,
  * so a message that relaunched the runner since keeps its turn.
  */
 const endSandbox = (
@@ -282,6 +285,17 @@ const endSandbox = (
       return SANDBOX_ENDING.LEFT;
     }
     yield* settledLostRunner(writer, sandbox, going.value, lostTurns, { ...exited, stderr }, now);
+    // Note that the credentials come off as at any turn's end, because the sandbox then stops on its
+    // timeout with its policy saved, and a later resume would wear them again.
+    yield* sandboxFirewall(api)
+      .clear(sandbox.running)
+      .pipe(
+        Effect.catch((failure) =>
+          Effect.logWarning(
+            `a lost runner's credentials stayed on its sandbox: ${failure.message}`,
+          ),
+        ),
+      );
     return SANDBOX_ENDING.LOST;
   });
 
