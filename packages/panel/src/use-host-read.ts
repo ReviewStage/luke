@@ -36,10 +36,11 @@ import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect } from "react";
 import { askAct, tellAct } from "./act.js";
 import { streamFrom } from "./act-stream.js";
+import type { LiveQueryRead } from "./live-reads.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 
 /**
- * use-host-read.ts -- the one way a surface reads server data: a read the host holds for the panel, drawn from app state, with where it stands and Try again.
+ * use-host-read.ts -- the way a surface reads server data not yet moved onto TanStack Query (`live-reads.ts`): a read the host holds for the panel, drawn from app state, with where it stands and Try again.
  *
  * The host follows each read for as long as its lifetime holds it
  * (`@repo/host`'s `live-collection.ts`) and lays its rows in the app-state
@@ -56,8 +57,8 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * where its read stands. Each read is one entry of `HOST_READS`, which the
  * one hook path reads, so a read added is an entry rather than a hook.
  * Nothing in `packages/panel` or `packages/ui` but a test reads server
- * data outside this hook, and nothing but this hook and the door's own test
- * imports `act-stream.ts`, the door it holds its follows open by
+ * data outside this hook and `live-reads.ts`, and nothing but those two and
+ * the door's own test imports `act-stream.ts`, the door it holds its follows open by
  * (`anti-slop/no-follow-outside-host-read`).
  */
 
@@ -103,8 +104,8 @@ function commentsFollowOf({ taskId, pageId }: CommentSubject): TasksCommentsFoll
 /** The integration server whose tools a surface reads: its provider, and its account where the server is not the provider's own. */
 export type IntegrationServer = Pick<IntegrationProviderParams, "provider" | "connection">;
 
-/** A read the host holds for the panel, by its name (`AppHostReads`). */
-type HostReadName = keyof AppHostReads;
+/** A read the host holds for the panel, by its name (`AppHostReads`), but those read as queries (`live-reads.ts`). */
+type HostReadName = Exclude<keyof AppHostReads, LiveQueryRead>;
 
 /** Where a read stands, from what the host holds of it. */
 function statusOf(held: AppHostRead<unknown> | undefined): HostReadStatus {
@@ -222,10 +223,8 @@ function pullRequestPartRead(part: PullRequestPart) {
 }
 
 /**
- * Every read a surface reads through `useHostRead`, by its name: the
- * account's preferences row, by the account, held for the session, which
- * every surface drawing the default agent, the chapters model, or the Slack
- * notifications switch reads; the feed of
+ * Every read a surface reads through `useHostRead`, by its name, but
+ * those moved onto TanStack Query (`live-reads.ts`): the feed of
  * every item the account reaches, held for the session; one holder's own
  * inbox; where the account's integrations stand, by the account, which every
  * surface drawing an integration holds; one task's pages, or one agent's on no task, which the open task's
@@ -236,18 +235,9 @@ function pullRequestPartRead(part: PullRequestPart) {
  * agent's pull request's chapters, by the number its Pull request tab's own
  * read of it found; one task's cloud Browser tabs,
  * every one of its agents', or one agent's, which a side panel listing them
- * holds; the account's devices' beats, by the account, which every surface
- * drawing a device's standing holds; the account's hosts, by the account,
- * which Settings › Hosts holds; This Mac's host, by the account, which
- * the host reads on its own and holds for the session; one agent's own tools, which its
+ * holds; one agent's own tools, which its
  * servers popover holds; one integration server's tools, by the account it
- * stands for, which a list of the servers holds; the account's provider
- * keys, by the account, which the window holds while signed in and
- * Settings › Agents draws; the models the account is offered and its
- * devices, by the account, which every model menu, setup, and New task's
- * Runs on hold; the account's own GitHub token, by the account,
- * which Settings › Account, a workspace's Add repository, and onboarding's
- * GitHub step hold; the outside MCP clients the account allowed, by
+ * stands for, which a list of the servers holds; the outside MCP clients the account allowed, by
  * the account, which Settings › MCP holds; one agent's or worker's
  * transcript, by the agent and then the worker's call or the agent's own,
  * which its tab holds while it shows; one workspace's
@@ -271,21 +261,10 @@ function pullRequestPartRead(part: PullRequestPart) {
  * because the host reads those that did not answer again on its own, and
  * those it was refused, a plan's or an agent's the reader cannot reach,
  * stand failed until every surface lets them go and one holds them anew
- * (`@repo/host`'s `live-push.ts`). The beats, which the host asks for again
- * every `MAC_PRESENCE.POLL_MS` while they are held (`held-fetch.ts`), offer
- * theirs to the window coming back online (`device-presence.ts`), never to
- * a press. This Mac's host offers none, since the host reads it again every
- * few seconds on its own (`compose-this-mac-host.ts`), and a workspace's
- * photo none, since the host fetches it again as the workspaces next move.
+ * (`@repo/host`'s `live-push.ts`). A workspace's photo offers
+ * none, since the host fetches it again as the workspaces next move.
  */
 const HOST_READS = {
-  [LIVE_READ.ACCOUNT_PREFERENCES]: hostRead(LIVE_READ.ACCOUNT_PREFERENCES, {
-    slice: APP_SLICE.ACCOUNT_PREFERENCES,
-    path: (accountId: string) => [accountId],
-    // Note that the host holds the row of whoever is signed in for the session, so no surface holds it and its Try again names no account.
-    hold: undefined,
-    retry: () => tellAct(ACT_KIND.AGENTS_PREFERENCES_RETRY),
-  }),
   [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
     slice: APP_SLICE.AGENT_ORIGINS,
     path: (agentId: string) => [agentId],
@@ -336,13 +315,6 @@ const HOST_READS = {
     hold: (workspaceId) => askAct(ACT_KIND.MEMORIES_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.MEMORIES_RETRY, { workspaceId }),
   }),
-  [LIVE_READ.MODELS]: hostRead(LIVE_READ.MODELS, {
-    slice: APP_SLICE.MODELS,
-    path: (accountId: string) => [accountId],
-    // Note that the host holds the models of whoever is signed in, so neither act names an account, and that Try again answers once its ask has landed, which New task waits on for its devices.
-    hold: () => askAct(ACT_KIND.AGENTS_MODELS_FOLLOW),
-    retry: () => askAct(ACT_KIND.AGENTS_MODELS_RETRY),
-  }),
   [LIVE_READ.PAGES]: hostRead(LIVE_READ.PAGES, {
     slice: APP_SLICE.PAGES,
     path: (place: PagePlace) =>
@@ -353,13 +325,6 @@ const HOST_READS = {
         "taskId" in place ? { taskId: place.taskId } : { agentId: place.agentId },
       ),
     retry: undefined,
-  }),
-  [LIVE_READ.PROVIDER_KEYS]: hostRead(LIVE_READ.PROVIDER_KEYS, {
-    slice: APP_SLICE.PROVIDER_KEYS,
-    path: (accountId: string) => [accountId],
-    // Note that the host holds the keys of whoever is signed in, so neither act names an account.
-    hold: () => askAct(ACT_KIND.PROVIDER_KEYS_FOLLOW),
-    retry: () => tellAct(ACT_KIND.PROVIDER_KEYS_RETRY),
   }),
   [LIVE_READ.PULL_REQUEST]: hostRead(LIVE_READ.PULL_REQUEST, {
     slice: APP_SLICE.PULL_REQUEST,
@@ -391,13 +356,6 @@ const HOST_READS = {
     hold: (workspace) => askAct(ACT_KIND.TASKS_REPOSITORIES_FOLLOW, repositoryScope(workspace)),
     retry: (workspace) => tellAct(ACT_KIND.TASKS_REPOSITORIES_RETRY, repositoryScope(workspace)),
   }),
-  [LIVE_READ.GITHUB_TOKEN]: hostRead(LIVE_READ.GITHUB_TOKEN, {
-    slice: APP_SLICE.GITHUB_TOKEN,
-    path: (accountId: string) => [accountId],
-    // Note that the host holds the token of whoever is signed in, so neither act names an account.
-    hold: () => askAct(ACT_KIND.GITHUB_TOKEN_FOLLOW),
-    retry: () => tellAct(ACT_KIND.GITHUB_TOKEN_RETRY),
-  }),
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: hostRead(LIVE_READ.PULL_REQUEST_CHAPTERS, {
     slice: APP_SLICE.PULL_REQUEST_CHAPTERS,
     path: (key: PullRequestChaptersReadParams) => [key.agentId, String(key.number)],
@@ -414,31 +372,11 @@ const HOST_READS = {
       ),
     retry: undefined,
   }),
-  [LIVE_READ.DEVICE_PRESENCE]: hostRead(LIVE_READ.DEVICE_PRESENCE, {
-    slice: APP_SLICE.DEVICE_PRESENCE,
-    path: (accountId: string) => [accountId],
-    // Note that the host holds the beats of whoever is signed in, so the hold and its asking again name no account.
-    hold: () => askAct(ACT_KIND.HOSTS_PRESENCE_FOLLOW),
-    retry: () => tellAct(ACT_KIND.HOSTS_PRESENCE_REFRESH),
-  }),
-  [LIVE_READ.HOSTS]: hostRead(LIVE_READ.HOSTS, {
-    slice: APP_SLICE.HOSTS,
-    path: (accountId: string) => [accountId],
-    // Note that the host holds the hosts of whoever is signed in, so neither act names an account.
-    hold: () => askAct(ACT_KIND.HOSTS_FOLLOW),
-    retry: () => tellAct(ACT_KIND.HOSTS_RETRY),
-  }),
   [LIVE_READ.WORKSPACE_INVITATIONS]: hostRead(LIVE_READ.WORKSPACE_INVITATIONS, {
     slice: APP_SLICE.WORKSPACE_INVITATIONS,
     path: (workspaceId: string) => [workspaceId],
     hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_INVITATIONS_RETRY, { workspaceId }),
-  }),
-  [LIVE_READ.THIS_MAC_HOST]: hostRead(LIVE_READ.THIS_MAC_HOST, {
-    slice: APP_SLICE.THIS_MAC_HOST,
-    path: (accountId: string) => [accountId],
-    hold: undefined,
-    retry: undefined,
   }),
   [LIVE_READ.TRANSCRIPT]: hostRead(LIVE_READ.TRANSCRIPT, {
     slice: APP_SLICE.TRANSCRIPT,

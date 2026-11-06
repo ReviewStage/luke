@@ -14,7 +14,7 @@ import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "./open-settings.js";
 import { OpenAiKeyProvider } from "./openai-key.js";
 import { DictateButton } from "./tasks/dictation-strip.js";
@@ -111,8 +111,9 @@ async function settle(): Promise<void> {
 
 test("with no OpenAI key saved, Dictate says to add one in settings, and the press opens Codex's row in Settings › Agents rather than dictating", async () => {
   const page = await mount({ rows: { keys: [ANTHROPIC_KEY] } });
-  const press = page.button(HINT)[0];
-  assert.ok(press, "the press says to add the key");
+  const press = await vi.waitFor(
+    () => page.button(HINT)[0] ?? assert.fail("the press says to add the key"),
+  );
   assert.equal(page.button("Dictate").length, 0);
   assert.equal(press.disabled, false, "the press is the way to Settings");
   act(() => press.click());
@@ -130,14 +131,14 @@ test("an OpenAI key the service can no longer open counts as none, while one Ope
   const unreadable = await mount({
     rows: { keys: [{ ...OPENAI_KEY, status: PROVIDER_KEY_STATUS.UNREADABLE }] },
   });
-  assert.equal(unreadable.button(HINT).length, 1);
+  await vi.waitFor(() => assert.equal(unreadable.button(HINT).length, 1));
   act(() => roots.pop()?.unmount());
 
   const refused = await mount({
     rows: { keys: [{ ...OPENAI_KEY, status: PROVIDER_KEY_STATUS.INVALID }] },
   });
+  await vi.waitFor(() => assert.equal(refused.button("Dictate").length, 1));
   assert.equal(refused.button(HINT).length, 0);
-  assert.equal(refused.button("Dictate").length, 1);
 });
 
 test("until the keys are read, when the read fails, and while no one is signed in, nothing is turned away", async () => {

@@ -78,7 +78,7 @@ export function MacCommandsSection({
   return (
     <>
       <SettingsSection>
-        <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.THIS_MAC} view={view} writes={writes} />
+        <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.THIS_MAC} view={view} />
         {notifications.status === NOTIFICATIONS_STATUS.OFF ? (
           <NotificationsOff control={notifications} />
         ) : null}
@@ -89,7 +89,6 @@ export function MacCommandsSection({
             page={SCHEMA_SETTINGS_PAGE.THIS_MAC}
             section={SETTING_SECTION.STARTUP}
             view={view}
-            writes={writes}
           />
         </SettingsSection>
       ) : null}

@@ -65,11 +65,15 @@ export const rendererFork = (effect: Effect.Effect<void>): (() => void) => {
 /**
  * An effect run to a promise on the renderer's services, for a caller that
  * awaits one: a TanStack Query `queryFn` (`use-app-state.ts`'s
- * `appStateQuery`). Note that a failure rejects with `Cause.squash` of its
+ * `appStateQuery`, `live-reads.ts`'s reads), interrupted as `signal`
+ * aborts where it is handed one. Note that a failure rejects with `Cause.squash` of its
  * cause, so the caller holds the failure the effect raised rather than a
  * fiber's own wrapping of it.
  */
-export const rendererPromise = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
-  Effect.runPromiseExitWith(rendererServicesNow())(effect).then((exit) =>
+export const rendererPromise = <A, E>(
+  effect: Effect.Effect<A, E>,
+  signal?: AbortSignal,
+): Promise<A> =>
+  Effect.runPromiseExitWith(rendererServicesNow())(effect, { signal }).then((exit) =>
     Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
   );

@@ -93,7 +93,6 @@ export function PrivacySection({
         page={SCHEMA_SETTINGS_PAGE.ACCOUNT}
         section={SETTING_SECTION.PRIVACY}
         view={view}
-        writes={writes}
       />
       <SupportAccessRow />
     </SettingsSection>

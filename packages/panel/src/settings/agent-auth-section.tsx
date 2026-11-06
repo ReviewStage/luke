@@ -1,7 +1,6 @@
 import { signedInAccountId } from "@repo/credentials/snapshot";
 import { INTEGRATION_STATUS_WORDS } from "@repo/features/integration-status-words";
 import { INTEGRATION_STATUS } from "@repo/features/integration-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PROVIDER_KEY_KIND,
@@ -74,16 +73,16 @@ import {
 } from "@repo/ui";
 import { InfoIcon } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
+import { providerKeysQuery, providerKeysRetryMutation } from "../live-reads.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { useHeldThroughExit } from "../use-held-through-exit.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { ConnectCodexDialog } from "./connect-codex-dialog.js";
 
 /**
@@ -820,6 +819,13 @@ function ClaudePlanRow({
 }): React.JSX.Element {
   const { secret, removal } = useClaudePlan(plan, field);
   const ok = plan !== undefined && standing(plan);
+  // Note that a plan leaving while the dialog stands puts focus in the form it brings back, since its read can land after Disconnect's question handed focus back.
+  const held = plan !== undefined;
+  const wasHeld = useRef(held);
+  useEffect(() => {
+    if (wasHeld.current && !held) field.current?.focus();
+    wasHeld.current = held;
+  }, [held, field]);
   return (
     <>
       <SettingsRow
@@ -1535,9 +1541,10 @@ function useCredentials({
   onConnected?: ((connected: boolean) => void) | undefined;
 }): Credentials {
   const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
-  const keys = useHostRead(LIVE_READ.PROVIDER_KEYS, signedIn ? accountId : undefined);
-  const answer = keys.rows;
-  const readFailed = keys.status === HOST_READ_STATUS.FAILED;
+  const keys = useQuery(providerKeysQuery(signedIn ? accountId : undefined));
+  const retryKeys = useMutation(providerKeysRetryMutation());
+  const answer = keys.data;
+  const readFailed = keys.isError;
 
   // The Default model row hears every answer, so nothing there says what a key used to be.
   useEffect(() => {
@@ -1556,7 +1563,7 @@ function useCredentials({
     );
   }, [answer, onConnected]);
 
-  return { answer, readFailed, retry: keys.retry };
+  return { answer, readFailed, retry: () => retryKeys.mutate() };
 }
 
 /** The harnesses' section: signed out, a row each over the answer, a read that failed, or the rows' skeleton while it is out. */

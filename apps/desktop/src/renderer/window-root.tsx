@@ -13,6 +13,7 @@ import { ACT_PORT, type PreloadBridge } from "@repo/host/bridge";
 import { actPort, installActPort, installAppBridge, openPushStream } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
 import { installShownFailureReporter } from "@repo/panel/failure-report";
+import { LiveReadSubscription } from "@repo/panel/live-reads";
 import {
   endWindowSpanOnFirstDraw,
   installPanelSpanRecorder,
@@ -126,6 +127,7 @@ export function mountWindow(
       <RegistryContext.Provider value={rendererRegistry}>
         <QueryProvider>
           <AppStateSubscription />
+          <LiveReadSubscription />
           {surface}
         </QueryProvider>
       </RegistryContext.Provider>,
