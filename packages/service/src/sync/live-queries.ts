@@ -43,6 +43,9 @@ import {
   automationRunSync,
   automationSync,
   conversationsSync,
+  descriptionCommentSync,
+  descriptionCommentThreadSync,
+  descriptionRevisionSync,
   deviceAgentLineSync,
   deviceSync,
   githubInstallationSync,
@@ -61,15 +64,12 @@ import {
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
-  descriptionCommentSync,
-  descriptionCommentThreadSync,
-  taskPageVersionSync,
-  descriptionRevisionSync,
   pullRequestChaptersSync,
   repositoryPinSync,
   slackChannelRepositorySync,
   slackInstallationSync,
   taskBlockSync,
+  taskPageVersionSync,
   taskPinSync,
   taskReadSync,
   taskSectionEntrySync,
@@ -77,6 +77,7 @@ import {
   taskSync,
   turnsSync,
   userSync,
+  workspaceExperimentSync,
   workspaceFormerSlugSync,
 } from "@repo/database/sync/tables";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
@@ -220,7 +221,7 @@ export const tasksLive = defineLiveQuery({
 });
 
 /**
- * The account's workspaces and the GitHub installations connected to them,
+ * The account's workspaces, the GitHub installations connected to them, and the experiments chosen for them,
  * woken on the account's topic and on each of its workspaces'. A
  * workspace's name and photo, the slugs it stood under before, its members, its installations, and the name
  * of the account it was made for name the workspace; the account's
@@ -236,6 +237,7 @@ export const workspacesLive = defineLiveQuery({
     userSync,
     githubInstallationSync,
     workspaceFormerSlugSync,
+    workspaceExperimentSync,
   ],
   topics: ({ userId }) => readerAndWorkspaceTopics(userId),
   statements: ({ userId }) => workspacesLiveStatements(userId),

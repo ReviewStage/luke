@@ -8,8 +8,8 @@
  * A workspace's photo, served as its bytes, stays on its own route.
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { workspaceIdSchema } from "../task-wire.js";
@@ -18,6 +18,7 @@ import {
   WORKSPACE_PHOTO_BOUNDS,
   workspaceAnswerSchema,
   workspaceCreateRequestSchema,
+  workspaceExperimentSetRequestSchema,
   workspaceLeaveAnswerSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
@@ -79,6 +80,13 @@ export const workspacesContract = {
     .meta(bodyCap(PHOTO_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.WORKSPACES_PHOTO_SET }))
     .input(exactInput(workspacePhotoSetRequestSchema))
+    .output(EffectSchema.flip(workspaceAnswerSchema)),
+  setExperiment: hostedProcedure
+    .meta(bodyCap(BODY_BYTES))
+    .meta(
+      openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.WORKSPACES_EXPERIMENT_SET }),
+    )
+    .input(exactInput(workspaceExperimentSetRequestSchema))
     .output(EffectSchema.flip(workspaceAnswerSchema)),
   members: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS }))

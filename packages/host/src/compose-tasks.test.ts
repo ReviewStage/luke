@@ -15,12 +15,6 @@ import {
 import { BROWSER_TABS_PLACE, browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@repo/features/agent-wire";
-import type { GitHubConnection } from "@repo/features/github-connection-wire";
-import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
-import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
-import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
-import { PAGE_OWNER, PAGE_SHOWER, type PageVersion, pagePlaceId } from "@repo/features/page-wire";
-import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -31,6 +25,12 @@ import {
   type DescriptionCommentThread,
 } from "@repo/features/description-comment-wire";
 import type { DescriptionEditAnswer } from "@repo/features/description-edit";
+import type { GitHubConnection } from "@repo/features/github-connection-wire";
+import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
+import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
+import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
+import { PAGE_OWNER, PAGE_SHOWER, type PageVersion, pagePlaceId } from "@repo/features/page-wire";
+import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import type { SlackListedChannel, WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import {
@@ -100,9 +100,9 @@ import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Layer, Result, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import {
-  type AppHostRead,
   type AppDescriptionComments,
   type AppDescriptionDocuments,
+  type AppHostRead,
   NO_KEYS_HELD,
 } from "./app-state.js";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
@@ -280,7 +280,7 @@ interface FakeService extends TasksClient {
    * their rows.
    */
   readonly live: {
-    readonly workspaces: PolledLive<"workspaces" | "installations">;
+    readonly workspaces: PolledLive<"workspaces" | "installations" | "experiments">;
     readonly sidebar: PolledLive<"sections" | "entries" | "agentEntries" | "pins">;
     readonly people: PolledLive<
       "members" | "former",
@@ -400,6 +400,14 @@ function workspacesLiveRows(workspaces: readonly Workspace[]) {
         linkedAt,
       })),
     ),
+    experiments: workspaces.flatMap((each) =>
+      (each.experiments ?? []).map(({ changedBy, ...choice }) => ({
+        workspaceId: each.id,
+        ...choice,
+        changedById: changedBy?.id ?? null,
+        changedByName: changedBy?.name ?? null,
+      })),
+    ),
   };
 }
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
@@ -483,8 +491,9 @@ function fakeService(tasks: Task[]): FakeService {
   const listAt: ListAt = new Map();
   let followMisses = false;
   const live: FakeService["live"] = {
-    workspaces: polledLive<"workspaces" | "installations">(["workspaces", "installations"], () =>
-      workspacesLiveRows(memberships),
+    workspaces: polledLive<"workspaces" | "installations" | "experiments">(
+      ["workspaces", "installations", "experiments"],
+      () => workspacesLiveRows(memberships),
     ),
     sidebar: polledLive<"sections" | "entries" | "agentEntries" | "pins">(
       ["sections", "entries", "agentEntries", "pins"],

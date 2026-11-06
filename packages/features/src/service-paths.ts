@@ -409,6 +409,8 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES_SLUG_SET: "/api/workspaces/slug/set",
   /** A workspace's photo set as a `data:` URL, or removed with null, by an owner or an admin (POST), answering the workspace. */
   WORKSPACES_PHOTO_SET: "/api/workspaces/photo/set",
+  /** One experiment turned on or off for everyone in a workspace by an owner or an admin (POST), answering the workspace. */
+  WORKSPACES_EXPERIMENT_SET: "/api/workspaces/experiment/set",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
   /** The owner removes an admin or a member, and an admin a member (POST), answered with those who remain. */

@@ -76,6 +76,7 @@
     "./models/soft-delete": "./src/models/soft-delete.js",
     "./models/sync-log": "./src/models/sync-log.js",
     "./models/workspace-seams": "./src/models/workspace-seams.js",
+    "./models/workspace-experiment-store": "./src/models/workspace-experiment-store.js",
     "./models/workspace-slug-store": "./src/models/workspace-slug-store.js",
     "./models/workspace-store": "./src/models/workspace-store.js",
     "./models/workspace-token-repository-store": "./src/models/workspace-token-repository-store.js",

@@ -1312,11 +1312,16 @@ it.layer(getTestDB())("the account's workspaces' live read", (it) => {
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
         const answer = Schema.decodeUnknownSync(workspacesLiveAnswerSchema)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
-        assert.deepEqual(Object.keys(answer.queries).toSorted(), ["installations", "workspaces"]);
+        assert.deepEqual(Object.keys(answer.queries).toSorted(), [
+          "experiments",
+          "installations",
+          "workspaces",
+        ]);
         assert.deepEqual(
           Schema.decodeUnknownSync(workspacesLiveRowsSchema)({
             workspaces: answer.queries.workspaces.rows,
             installations: answer.queries.installations.rows,
+            experiments: answer.queries.experiments.rows,
           }).workspaces.map(({ id }) => id),
           [workspaceId],
         );
@@ -1340,6 +1345,7 @@ it.layer(getTestDB())("the account's workspaces' live read", (it) => {
         return Schema.decodeUnknownSync(workspacesLiveRowsSchema)({
           workspaces: answer.queries.workspaces.rows,
           installations: answer.queries.installations.rows,
+          experiments: answer.queries.experiments.rows,
         }).workspaces.map(({ id }) => id);
       });
       const first = yield* workspaceIds;

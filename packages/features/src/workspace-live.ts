@@ -28,10 +28,10 @@ import {
  */
 
 /**
- * The account's workspaces sealed for following: the address, and two
- * statements, its workspaces and the GitHub installations connected to
- * them, which the held read reads apart too, since a workspace holding
- * several would otherwise be a row for each. Asked to poll, or where
+ * The account's workspaces sealed for following: the address, and three
+ * statements, its workspaces, the GitHub installations connected to them,
+ * and the experiments chosen for them, which the held read reads apart too,
+ * since a workspace holding several would otherwise be a row for each. Asked to poll, or where
  * Realtime cannot seal them, the service answers each statement's rows
  * inline instead (`LIVE_POLL`).
  */
@@ -40,6 +40,7 @@ export const workspacesLiveAnswerSchema = EffectSchema.Struct({
   queries: EffectSchema.Struct({
     workspaces: sealedLiveQuerySchema,
     installations: sealedLiveQuerySchema,
+    experiments: sealedLiveQuerySchema,
   }),
 });
 
@@ -74,11 +75,25 @@ const workspaceInstallationLiveRowSchema = EffectSchema.Struct({
   linkedAt: countedNumber,
 });
 
+/** One experiment chosen for a workspace the reader is a member of, as its row delivers it. */
+const workspaceExperimentLiveRowSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.String,
+  experiment: EffectSchema.String,
+  on: EffectSchema.Boolean,
+  /** Who changed it last and their name now; null where that account is gone. */
+  changedById: EffectSchema.NullOr(EffectSchema.String),
+  changedByName: EffectSchema.NullOr(EffectSchema.String),
+  changedAt: countedNumber,
+});
+
 /** The workspaces' rows as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const workspacesLiveRowsSchema = EffectSchema.Struct({
   workspaces: EffectSchema.Array(workspaceLiveRowSchema),
   installations: EffectSchema.Array(workspaceInstallationLiveRowSchema),
+  experiments: EffectSchema.Array(workspaceExperimentLiveRowSchema),
 });
+
+type WorkspaceExperimentLiveRow = typeof workspaceExperimentLiveRowSchema.Type;
 
 type WorkspaceInstallationLiveRow = typeof workspaceInstallationLiveRowSchema.Type;
 
@@ -95,6 +110,7 @@ function byText(a: string, b: string): number {
 function workspaceOfLiveRow(
   row: typeof workspaceLiveRowSchema.Type,
   installations: readonly WorkspaceInstallationLiveRow[],
+  experiments: readonly WorkspaceExperimentLiveRow[],
 ): Workspace {
   const githubInstallations = installations
     .toSorted((a, b) => a.linkedAt - b.linkedAt || a.installationId - b.installationId)
@@ -114,6 +130,21 @@ function workspaceOfLiveRow(
     ...(row.photoVersion === null ? undefined : { photoVersion: row.photoVersion }),
     ...(pictureUrl === undefined ? undefined : { pictureUrl }),
     ...(row.personal ? { personal: true } : undefined),
+    ...(experiments.length === 0
+      ? undefined
+      : {
+          experiments: experiments
+            .toSorted((a, b) => byText(a.experiment, b.experiment))
+            .map(({ experiment, on, changedById, changedByName, changedAt }) => ({
+              experiment,
+              on,
+              changedBy:
+                changedById === null || changedByName === null
+                  ? null
+                  : { id: changedById, name: changedByName },
+              changedAt,
+            })),
+        }),
   };
 }
 
@@ -125,11 +156,17 @@ export function workspacesOfLiveRows(
   for (const row of rows.installations) {
     installations.set(row.workspaceId, [...(installations.get(row.workspaceId) ?? []), row]);
   }
+  const experiments = new Map<string, WorkspaceExperimentLiveRow[]>();
+  for (const row of rows.experiments) {
+    experiments.set(row.workspaceId, [...(experiments.get(row.workspaceId) ?? []), row]);
+  }
   return rows.workspaces
     .toSorted(
       (a, b) => Number(b.own) - Number(a.own) || byText(a.name, b.name) || byText(a.id, b.id),
     )
-    .map((row) => workspaceOfLiveRow(row, installations.get(row.id) ?? []));
+    .map((row) =>
+      workspaceOfLiveRow(row, installations.get(row.id) ?? [], experiments.get(row.id) ?? []),
+    );
 }
 
 /**

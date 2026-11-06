@@ -50,6 +50,7 @@ import {
   workspaceOfSlug,
   workspacesAnswerSchema,
 } from "@repo/features/workspace-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { jsonResponse, recordingHttpClient } from "@repo/wire/testing";
@@ -241,6 +242,7 @@ const HOSTED_PATHS: ReadonlySet<string> = new Set([
   HOSTED_SERVICE_PATH.WORKSPACES_TRANSFER,
   HOSTED_SERVICE_PATH.WORKSPACES_LEAVE,
   HOSTED_SERVICE_PATH.WORKSPACES_SLUG_SET,
+  HOSTED_SERVICE_PATH.WORKSPACES_EXPERIMENT_SET,
 ]);
 
 /**
@@ -1049,6 +1051,28 @@ const settingSlug = (plugin: WorkspacePlugin, userId: string, workspaceId: strin
       plugin.seams,
       NO_GITHUB_TO_READ,
       bearerRequest(HOSTED_SERVICE_PATH.WORKSPACES_SLUG_SET, userId, { workspaceId, slug }),
+      plugin,
+    ),
+    ({ status, body }) => ({ status, body }),
+  );
+
+/** The account turning a workspace experiment on or off for everyone in the workspace, under its OAuth token. */
+const settingExperiment = (
+  plugin: WorkspacePlugin,
+  userId: string,
+  workspaceId: string,
+  experiment: string,
+  on: boolean,
+) =>
+  Effect.map(
+    send(
+      plugin.seams,
+      NO_GITHUB_TO_READ,
+      bearerRequest(HOSTED_SERVICE_PATH.WORKSPACES_EXPERIMENT_SET, userId, {
+        workspaceId,
+        experiment,
+        on,
+      }),
       plugin,
     ),
     ({ status, body }) => ({ status, body }),
@@ -1977,6 +2001,61 @@ it.effect(
           refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
         assert.deepEqual(yield* organizationOf(acme), { name: "Acme", slug: `acme-${ada}` });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "an owner or admin turns a workspace experiment on or off for every member, naming who did, and a member, an outsider, or an account's own experiment is refused",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const mallory = yield* openGithubAccount("Mallory");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "member" },
+        ]);
+
+        const byOwner = yield* settingExperiment(plugin, ada, acme, EXPERIMENT.PILOT, true);
+        const byAdmin = readAs(
+          yield* settingExperiment(plugin, grace, acme, EXPERIMENT.DESCRIPTIONS, true),
+          workspaceAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).workspace;
+        const byMember = yield* settingExperiment(plugin, alan, acme, EXPERIMENT.PILOT, false);
+        const byOutsider = yield* settingExperiment(plugin, mallory, acme, EXPERIMENT.PILOT, false);
+        const accountsOwn = yield* settingExperiment(plugin, ada, acme, EXPERIMENT.SKILLS, true);
+        const alansListed = yield* workspacesOf(plugin.seams, NO_GITHUB_TO_READ, alan);
+
+        assert.equal(byOwner.status, HOSTED_HTTP_STATUS.OK);
+        const chosen = (listed: Workspace | undefined) =>
+          (listed?.experiments ?? []).map(({ experiment, on, changedBy }) => ({
+            experiment,
+            on,
+            changedBy: changedBy?.name,
+          }));
+        const expected = [
+          { experiment: EXPERIMENT.DESCRIPTIONS, on: true, changedBy: "Grace Hopper" },
+          { experiment: EXPERIMENT.PILOT, on: true, changedBy: "Ada Lovelace" },
+        ];
+        assert.deepEqual(chosen(byAdmin), expected);
+        assert.deepEqual(chosen(alansListed.find((each) => each.id === acme)), expected);
+        assert.deepEqual(
+          byMember,
+          refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
+        );
+        assert.deepEqual(
+          byOutsider,
+          refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          accountsOwn,
+          refusedAs(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
       }).pipe(Effect.provide(plugin.database));
     }),
 );

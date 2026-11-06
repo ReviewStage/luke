@@ -7,6 +7,7 @@ import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
 } from "@repo/database/github-installation-vocabulary";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import {
   ensurePersonalWorkspace,
@@ -28,6 +29,7 @@ import {
 import { workspacesLiveRowsSchema, workspacesOfLiveRows } from "@repo/features/workspace-live";
 import { WORKSPACE_PHOTO_TYPE } from "@repo/features/workspace-wire";
 import { openWorkspacePlugin } from "@repo/service/testing/workspace-plugin";
+import { EXPERIMENT } from "@repo/settings";
 import { eq } from "drizzle-orm";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -102,6 +104,7 @@ const liveWorkspacesOf = (userId: string) =>
     const rows = yield* Effect.all({
       workspaces: sql.unsafe(statements.workspaces.sql, [...statements.workspaces.params]),
       installations: sql.unsafe(statements.installations.sql, [...statements.installations.params]),
+      experiments: sql.unsafe(statements.experiments.sql, [...statements.experiments.params]),
     });
     return workspacesOfLiveRows(yield* Schema.decodeUnknownEffect(workspacesLiveRowsSchema)(rows));
   });
@@ -232,7 +235,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
   );
 
   it.effect(
-    "the live statements deliver the workspaces the held read lists, photos and installations among them, to each member and none of them to an outsider",
+    "the live statements deliver the workspaces the held read lists, photos, installations, and experiments among them, to each member and none of them to an outsider",
     () =>
       Effect.gen(function* () {
         const seams = yield* fakeWorkspaceSeams;
@@ -250,6 +253,18 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         const later = new Date(now.getTime() + 1000);
         yield* connectInstallation(acme.id, 902, GITHUB_INSTALLATION_STATUS.ACTIVE, later);
         yield* connectInstallation(acme.id, 901, GITHUB_INSTALLATION_STATUS.SUSPENDED, now);
+        yield* setWorkspaceExperiment({
+          organizationId: acme.id,
+          experiment: EXPERIMENT.PILOT,
+          on: true,
+          by: owner,
+        });
+        yield* setWorkspaceExperiment({
+          organizationId: acme.id,
+          experiment: EXPERIMENT.DESCRIPTIONS,
+          on: false,
+          by: teammate,
+        });
 
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveWorkspacesOf(reader), yield* listWorkspaces(reader));
@@ -258,6 +273,17 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.ok(!theirs.includes(acme.id) && !theirs.includes(beta.id));
         const acmeListed = (yield* liveWorkspacesOf(teammate)).find((one) => one.id === acme.id);
         assert.deepEqual(acmeListed?.github, { login: "account-902", active: true });
+        assert.deepEqual(
+          acmeListed?.experiments?.map(({ experiment, on, changedBy }) => ({
+            experiment,
+            on,
+            changedBy: changedBy?.name,
+          })),
+          [
+            { experiment: EXPERIMENT.DESCRIPTIONS, on: false, changedBy: "Teammate" },
+            { experiment: EXPERIMENT.PILOT, on: true, changedBy: "Owner" },
+          ],
+        );
         assert.deepEqual(yield* workspaceGitHubAccountId(teammate, acme.id), Option.some(902));
         assert.deepEqual(yield* workspaceGitHubAccountId(outsider, acme.id), Option.none());
 
