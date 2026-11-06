@@ -158,6 +158,10 @@ export interface ToolbarTitlePress {
   readonly open: boolean;
   /** What the press opens, its hint ("Task details"). */
   readonly label: string;
+  /** The mark of what the title names, inside the press before its words, as a chip wears it: a task's status. */
+  readonly icon?: ReactNode;
+  /** The card the press hangs while the pointer rests on it, naming what the title names whole, as its chip's does. */
+  readonly card?: ReactNode;
   readonly onPress: () => void;
 }
 
@@ -218,13 +222,14 @@ function ToolbarTitle({
   if (press !== undefined) {
     return (
       <h1 className={`${TITLE} min-w-0`}>
-        <Tooltip label={press.label}>
+        <Tooltip label={press.label} card={press.card}>
           <button
             type="button"
             className={TITLE_PRESS}
             aria-expanded={press.open}
             onClick={press.onPress}
           >
+            {press.icon}
             <OneLine className="min-w-0" words={title}>
               <ReplayWords unmasked={unmasked}>{title}</ReplayWords>
             </OneLine>

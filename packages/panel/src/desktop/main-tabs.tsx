@@ -67,6 +67,7 @@ import {
   type TabViews,
 } from "./strip-tabs.js";
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
+import { tabCard } from "./tab-card.js";
 import { TabStrip } from "./tab-strip.js";
 
 /**
@@ -516,7 +517,8 @@ export const DETAILS_WORDS = { HINT: "Task details", PLACE: "agents" } as const;
 
 /**
  * The task's topbar, across the task's page over its column and its side
- * panel: the task's status mark and name, the name a press that opens the
+ * panel: the task's status mark and name, the two one press, hanging the
+ * task's card, that opens the
  * task's details across the page and, pressed again, goes back to the agents
  * (`details`), as a channel's name opens its details; then the task's ⋯, its
  * own menu (`planMenu`), standing whichever the page shows, and `actions`. The window's side panel toggle
@@ -530,7 +532,7 @@ export function TaskTopbar({
   actions,
 }: {
   /** The task as the list names it now, its name and status first there. */
-  task: Pick<TaskSummary, "name" | "status"> | undefined;
+  task: Pick<TaskSummary, "id" | "name" | "status"> | undefined;
   /** Whether the task's details stand in the column, and the press that opens or leaves them. */
   details: { readonly shown: boolean; readonly onToggle: () => void } | undefined;
   /** The task's own menu, which its ⋯ draws. */
@@ -545,12 +547,25 @@ export function TaskTopbar({
       : tabLook({ kind: TAB_KIND.PLAN, status: task.status, name: task.name });
   return (
     <Toolbar
-      lead={look?.icon}
+      // Note that the status mark stands inside the name's press, as a task's chip wears it, where the name opens the details.
+      lead={details === undefined ? look?.icon : undefined}
       title={task?.name}
       titlePress={
-        details === undefined
+        details === undefined || task === undefined
           ? undefined
-          : { open: details.shown, label: DETAILS_WORDS.HINT, onPress: details.onToggle }
+          : {
+              open: details.shown,
+              label: DETAILS_WORDS.HINT,
+              icon: look?.icon,
+              // The task's card, as its sidebar row and its chips hang it.
+              card: tabCard({
+                kind: TAB_KIND.PLAN,
+                taskId: task.id,
+                name: task.name,
+                status: task.status,
+              }),
+              onPress: details.onToggle,
+            }
       }
       measure
       actions={
