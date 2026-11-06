@@ -58,7 +58,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
@@ -510,18 +510,20 @@ test("once a repository is chosen, an @ offers its files, read through the works
   const draw = (recent: readonly string[]) =>
     act(() =>
       root.render(
-        createElement(NewTaskDialog, {
-          newTask: {
-            ...control.newTask,
-            open: true,
-            workspaceId: "workspace-acme",
-            repositoriesIn: () => ({ ...control.repositories, recent }),
-            start: (...asked) => {
-              started.push(asked[3]?.handed);
-              return Promise.resolve(undefined);
+        withQueryClient(
+          createElement(NewTaskDialog, {
+            newTask: {
+              ...control.newTask,
+              open: true,
+              workspaceId: "workspace-acme",
+              repositoriesIn: () => ({ ...control.repositories, recent }),
+              start: (...asked) => {
+                started.push(asked[3]?.handed);
+                return Promise.resolve(undefined);
+              },
             },
-          },
-        }),
+          }),
+        ),
       ),
     );
   // The card opens with no repository, and the words are begun before one is chosen.
@@ -533,10 +535,12 @@ test("once a repository is chosen, an @ offers its files, read through the works
   const focused = document.activeElement === composerEditor(document);
 
   typeInComposer(document, "@roll");
-  await settle();
-  const offered = [...document.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
-    (row) => row.textContent,
-  );
+  const optionLabels = () =>
+    [...document.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
+      (row) => row.textContent,
+    );
+  await vi.waitFor(() => assert.deepEqual(optionLabels(), ["rollout-store.ts"]));
+  const offered = optionLabels();
   pressInComposer(document, "Enter");
   await settle();
   const chips = [...composerEditor(document).querySelectorAll("[data-mention-ref]")];

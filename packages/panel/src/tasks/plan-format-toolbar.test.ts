@@ -17,6 +17,7 @@ import type { AnyAct, FakeActAnswer } from "../testing/app-bridge.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
 import { readExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
 import { CommentFocusScope } from "./plan-comments.js";
@@ -110,18 +111,20 @@ async function opened() {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        PlanCommentsProvider,
-        { value: control },
-        createElement(KeyedWindow, { opened: palette }),
-        createElement(CommentFocusScope, {
-          reveal: undefined,
-          children: createElement(PlanBody, {
-            task: PLAN,
-            sectionLinks: PAGE_LINKS,
-            onEdit: () => Promise.resolve({ saved: true } as const),
+      withQueryClient(
+        createElement(
+          PlanCommentsProvider,
+          { value: control },
+          createElement(KeyedWindow, { opened: palette }),
+          createElement(CommentFocusScope, {
+            reveal: undefined,
+            children: createElement(PlanBody, {
+              task: PLAN,
+              sectionLinks: PAGE_LINKS,
+              onEdit: () => Promise.resolve({ saved: true } as const),
+            }),
           }),
-        }),
+        ),
       ),
     ),
   );

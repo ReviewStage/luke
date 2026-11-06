@@ -2325,16 +2325,17 @@ test("a word typed in the Agent picker asks the service for the repository's age
     document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input'),
     "seat",
   );
-  await settle();
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      agentRows().map((row) => row.name),
+      ["Seat limits"],
+    ),
+  );
   assert.deepEqual(agentsAsked.at(-1), {
     workspaceId: WORKSPACE.id,
     repository: "acme/ledger",
     words: "seat",
   });
-  assert.deepEqual(
-    agentRows().map((row) => row.name),
-    ["Seat limits"],
-  );
 
   act(() => (document.querySelector<HTMLElement>("[role=option]") ?? assert.fail("found")).click());
   await settle();
@@ -3662,11 +3663,12 @@ test("a search of the Agent picker that failed says it failed rather than that n
     document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input'),
     "zzz",
   );
-  await settle();
   const dialog = document.querySelector('[role="dialog"][aria-label="Agent"]') ?? assert.fail();
-  assert.equal(
-    dialog.querySelector("[role=alert]")?.textContent,
-    "The search for agents could not be read.Retry",
+  await vi.waitFor(() =>
+    assert.equal(
+      dialog.querySelector("[role=alert]")?.textContent,
+      "The search for agents could not be read.Retry",
+    ),
   );
   assert.doesNotMatch(dialog.textContent ?? "", /No agents match/u);
 
@@ -3674,8 +3676,7 @@ test("a search of the Agent picker that failed says it failed rather than that n
   act(() =>
     (dialog.querySelector<HTMLButtonElement>("[role=alert] button") ?? assert.fail()).click(),
   );
-  await settle();
+  await vi.waitFor(() => assert.match(dialog.textContent ?? "", /No agents match/u));
 
-  assert.equal(dialog.querySelector("[role=alert]"), null);
-  assert.match(dialog.textContent ?? "", /No agents match/u);
+  assert.equal(dialog.querySelector("[role=alert]") === null, true);
 });
