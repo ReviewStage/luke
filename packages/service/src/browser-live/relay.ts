@@ -33,9 +33,10 @@
  * the panel's own pixels at the viewport it last sent, and is mapped onto
  * the page's CSS pixels. Mouse moves that queue behind a slower browser are
  * folded into the last of each run, so the pointer never lags behind the
- * member's hand. The tab is read again every `TAB_CHECK_EVERY`, so a
- * driver change another window made reaches this one, and a tab that closed
- * or that the member no longer reaches closes the socket; as the socket
+ * member's hand. The tab is read again whenever Sync hears a write on its
+ * task or the member's account (`watchTab`), so a driver change another
+ * window made reaches this one, and a tab that closed or that the member no
+ * longer reaches closes the socket; as the socket
  * closes, however it closes, a takeover it took or moved on is handed back, unless
  * another window of the same member moved it on since, and a hand-back the
  * store did not take is tried again. Input still queued when a takeover
@@ -62,6 +63,7 @@
 
 import type { ReachedBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { browserTabDriver } from "@repo/database/models/agent-browser-tabs";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import type { BrowserTabsPlace } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "@repo/features/browser-acts";
 import type { CdpCommand, CdpEvent, CdpFailure, CdpSession } from "@repo/features/browser-cdp";
@@ -105,6 +107,7 @@ import { EXCESS_KEYS, type UnparsedWireValue } from "../core.js";
 import type { ServerAgentTool } from "../events/server-events.js";
 import { SERVER_AGENT_TOOL } from "../events/server-events.js";
 import { jsonOf } from "../http/http-effect.js";
+import { NO_TOPICS, Sync } from "../sync/watch.js";
 import type { RelaySocket } from "../terminal/relay.js";
 import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
 
@@ -483,26 +486,64 @@ function publishDriver(view: LiveView, row: ReachedBrowserTab): Effect.Effect<vo
   });
 }
 
-/** The tab read again under the member's reach: its driver published, and whether it still stands; a store that could not say counts as standing. */
-function checkTab(view: LiveView): Effect.Effect<boolean> {
+/** The tab read again under the member's reach: its driver published, and whether it still stands; none where the store could not say. */
+function readStanding(view: LiveView): Effect.Effect<Option.Option<boolean>> {
   return Effect.gen(function* () {
     const { ask, deps } = view;
     const found = yield* Effect.result(deps.readTab(ask.userId, ask.place, ask.tabId));
-    if (Result.isFailure(found)) return true;
-    if (Option.isNone(found.success)) return false;
+    if (Result.isFailure(found)) return Option.none();
+    if (Option.isNone(found.success)) return Option.some(false);
     yield* publishDriver(view, found.success.value);
-    return true;
+    return Option.some(true);
   });
 }
 
-/** Ends as gone once the tab no longer stands for the member, read every `TAB_CHECK_EVERY`. */
+/** The tab read again, as `readStanding`; a store that could not say counts as standing. */
+function checkTab(view: LiveView): Effect.Effect<boolean> {
+  return Effect.map(
+    readStanding(view),
+    Option.getOrElse(() => true),
+  );
+}
+
+/**
+ * The topics a write that moves the tab, or the member's reach of it,
+ * notifies: the tab's task, which its row, its agent's, and the task's own
+ * name, and the member's account, which their memberships name. Note that a
+ * tab on no task names no topic of its own, so it is read on the clock
+ * alone, as before Sync.
+ */
+function tabTopics(view: LiveView): readonly SyncTopic[] {
+  const { taskId } = view.reached.tab;
+  if (taskId === null) return NO_TOPICS;
+  return [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, view.ask.userId],
+  ];
+}
+
+/**
+ * Ends as gone once the tab no longer stands for the member. The watch is
+ * opened before the first read, so a write that commits while it runs still
+ * wakes the next; after it, the tab is read again only when Sync wakes the
+ * watch, or every `TAB_CHECK_EVERY` where Sync cannot or the last read
+ * failed.
+ */
 function watchTab(view: LiveView): Effect.Effect<LiveEnd> {
-  return Effect.as(
-    Effect.repeat(checkTab(view), {
-      schedule: Schedule.spaced(BROWSER_LIVE_BOUNDS.TAB_CHECK_EVERY),
-      while: (standing) => standing,
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const sync = yield* Sync;
+      const watch = yield* sync.watch(tabTopics(view), BROWSER_LIVE_BOUNDS.TAB_CHECK_EVERY);
+      while (true) {
+        const standing = yield* readStanding(view);
+        if (Option.isSome(standing) && !standing.value) return BROWSER_LIVE_CLOSE_REASON.GONE;
+        // Note that a read the store could not answer is tried again on the clock, because the write
+        // that woke it may be the last, and a member who lost the tab must not keep watching it.
+        yield* Option.isSome(standing)
+          ? watch.next
+          : Effect.sleep(BROWSER_LIVE_BOUNDS.TAB_CHECK_EVERY);
+      }
     }),
-    BROWSER_LIVE_CLOSE_REASON.GONE,
   );
 }
 
