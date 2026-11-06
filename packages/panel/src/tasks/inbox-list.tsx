@@ -7,7 +7,6 @@ import { countWords, selectedWords, TERM } from "@repo/features/words";
 import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
   CHIP_LOOK,
-  Checkbox,
   Chip,
   ChipName,
   ComposeIcon,
@@ -43,6 +42,7 @@ import {
   SearchField,
   type SelectionAct,
   SelectionBar,
+  SelectionPicker,
   SelectionRegion,
   SelectionToolbar,
   Shortcut,
@@ -225,8 +225,8 @@ const ITEM_THING = "Inbox item";
 /** What the list's region is named. */
 const INBOX_ITEMS = "Inbox items";
 
-/** What the head's box says, which chooses every row drawn, or none once every one is. */
-const SELECT_ALL = "Select all";
+/** What the head's box's menu chooses the rows by: those read, or those unread. */
+const READ = "Read";
 
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
@@ -408,11 +408,15 @@ interface InboxChosen {
   readonly acts: readonly SelectionAct[];
 }
 
-/** The list's head while items are chosen: how many of the rows drawn, choosing every one or none, the acts on them, and letting them go. */
+/** The list's head while items are chosen: how many of the rows drawn, choosing every one, those read or unread, the acts on them, and letting them go. */
 interface InboxHeadSelecting {
   readonly count: number;
   readonly total: number;
-  readonly onAll: (all: boolean) => void;
+  /** How many of the rows drawn are unread. */
+  readonly unread: number;
+  readonly onAll: () => void;
+  /** Chooses the rows drawn that are unread, or those read. */
+  readonly onUnread: (unread: boolean) => void;
   readonly acts: InboxSelection["acts"];
   readonly onClear: () => void;
   /** The id of the region the rows are chosen in. */
@@ -999,8 +1003,9 @@ function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element 
  * sidebar's toggle, and the button keeping to the list's edge. Where the
  * list offers a search, its field stands under the head (`ListSearch`).
  * While items are chosen, but on a phone, the head says how many in the
- * name's place, led by a box choosing every row or none, the acts on them
- * and × in its buttons' (`SelectionToolbar`), as Mail's and Gmail's do.
+ * name's place, led by a box whose press chooses none and a menu beside it
+ * choosing all, none, the read, or the unread (`SelectionPicker`), the acts
+ * on them in its buttons' (`SelectionToolbar`), as Gmail's does.
  */
 function ListHead({
   head,
@@ -1088,14 +1093,22 @@ function ListHead({
       </>
     );
   const choosing = selecting !== undefined && selecting.count > 0 ? selecting : undefined;
-  // Note that a press on a box partly checked resolves to checked, so it chooses every row, and one on a box checked chooses none.
   const all =
     choosing === undefined ? null : (
-      <Checkbox
-        label={SELECT_ALL}
-        checked={choosing.count === choosing.total}
-        mixed={choosing.count < choosing.total}
-        onChange={choosing.onAll}
+      <SelectionPicker
+        count={choosing.count}
+        total={choosing.total}
+        onAll={choosing.onAll}
+        onNone={choosing.onClear}
+        controls={choosing.controls}
+        by={[
+          {
+            label: READ,
+            count: choosing.total - choosing.unread,
+            onSelect: () => choosing.onUnread(false),
+          },
+          { label: UNREAD, count: choosing.unread, onSelect: () => choosing.onUnread(true) },
+        ]}
       />
     );
   // Note that the toolbar stays mounted while none is chosen, drawing nothing, so a focus it held as the last row went is handed back to the list.
@@ -1668,7 +1681,16 @@ export function InboxList({
             : {
                 count: picks.length,
                 total: drawn.length,
-                onAll: (every) => setPicked(new Set(every ? drawn.map(({ item }) => item.id) : [])),
+                unread: drawn.filter(({ item }) => isUnread(item)).length,
+                onAll: () => setPicked(new Set(drawn.map(({ item }) => item.id))),
+                onUnread: (unread) =>
+                  setPicked(
+                    new Set(
+                      drawn
+                        .filter(({ item }) => isUnread(item) === unread)
+                        .map(({ item }) => item.id),
+                    ),
+                  ),
                 acts: selection.acts,
                 onClear: unpick,
                 controls: regionId,

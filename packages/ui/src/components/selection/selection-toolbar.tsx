@@ -1,5 +1,4 @@
-import { SELECTION_WORDS, selectedWords } from "@repo/features/words";
-import { GLYPH } from "../../icons/icons.js";
+import { selectedWords } from "@repo/features/words";
 import { IconButton } from "../button/button.js";
 import { Menu, type MenuAction, useMenu } from "../menu/menu.js";
 import { Tooltip } from "../tooltip/hint.js";
@@ -13,8 +12,9 @@ import { useSelectionKeys } from "./selection-keys.js";
  * words, this stands in the head's actions, the head's title saying "3
  * selected" in the list's name's place: each act a glyph its hint names,
  * pressed to do it on every chosen row, or dropping its menu of choices
- * under it (a reminder's times); then ×, which chooses none, as Esc does.
- * It draws nothing while no row is chosen. Its keys, focus, and
+ * under it (a reminder's times). Esc chooses none, as a press on the box
+ * leading the head does (`SelectionPicker`), so the toolbar draws no × of
+ * its own. It draws nothing while no row is chosen. Its keys, focus, and
  * announcement are every selection toolbar's (`selection-keys.ts`), its glyphs
  * spaced as a toolbar's own actions are, so the head's buttons keep their
  * places as it stands in for them, and it
@@ -51,7 +51,7 @@ function MenuGlyph({
   );
 }
 
-/** The glyphs acting on `count` chosen rows of the list `controls` names, and ×; nothing while none is chosen. */
+/** The glyphs acting on `count` chosen rows of the list `controls` names; nothing while none is chosen. */
 export function SelectionToolbar({
   count,
   acts,
@@ -62,7 +62,7 @@ export function SelectionToolbar({
   count: number;
   /** What may be done to every chosen row at once, in the order drawn. */
   acts: readonly SelectionGlyphAct[];
-  /** Chooses none, as × and Esc do. */
+  /** Chooses none, as Esc does. */
   onClear: () => void;
   /** The id of the list whose rows it acts on, which takes the focus once the toolbar goes. */
   controls: string;
@@ -85,14 +85,6 @@ export function SelectionToolbar({
           <MenuGlyph key={act.label} act={act} menu={act.menu} />
         ),
       )}
-      <Tooltip label={SELECTION_WORDS.CLEAR_SELECTION}>
-        <IconButton
-          roving
-          icon={<GLYPH.CLOSE />}
-          label={SELECTION_WORDS.CLEAR_SELECTION}
-          onClick={onClear}
-        />
-      </Tooltip>
     </div>
   );
 }

@@ -316,13 +316,49 @@ test("Esc lets the selection go, in the list as in its bar", async () => {
   assert.equal(asked.closed, 0, "the key goes no further than the list");
 
   commandClick(page, expiry);
-  const clear = barButton(page, "Clear selection");
-  act(() => clear.focus());
-  keyOn(clear, "Escape");
+  const resolve = barButton(page, "Resolve");
+  act(() => resolve.focus());
+  keyOn(resolve, "Escape");
   assert.deepEqual(picked(page), [], "Esc in the bar chooses none");
   assert.ok(
     document.activeElement?.matches(".inbox-tasks button.ui-list-row-main"),
     "the focus the bar held goes back to the list",
+  );
+});
+
+test("the head's box lets a selection go at a press, and the menu beside it chooses every row, or none where no row is unread, handing the focus to the list", async () => {
+  const { page } = mount();
+  await settle();
+  const expiry = "Expire after 7 days?";
+  const box = () =>
+    page.querySelector<HTMLElement>('.inbox-tasks .ui-selection-picker [role="checkbox"]') ??
+    assert.fail("the head's box stands");
+
+  commandClick(page, expiry);
+  act(() => box().focus());
+  act(() => box().click());
+  assert.deepEqual(picked(page), [], "a press on a box partly checked chooses none");
+  assert.equal(selectionBar(page), null);
+  assert.ok(
+    document.activeElement?.matches(".inbox-tasks button.ui-list-row-main"),
+    "the focus goes to the list as the box goes",
+  );
+
+  commandClick(page, expiry);
+  const select = page.querySelector<HTMLButtonElement>(
+    '.inbox-tasks .ui-selection-picker button[aria-label="Select"]',
+  );
+  act(() => select?.click());
+  act(() => menuItem("All").click());
+  assert.deepEqual(picked(page), ["How is a failed email retried?", expiry, "Alert at 80%?"]);
+
+  act(() => select?.focus());
+  act(() => select?.click());
+  act(() => menuItem("Unread").click());
+  assert.deepEqual(picked(page), [], "no row is unread");
+  assert.ok(
+    document.activeElement?.matches(".inbox-tasks button.ui-list-row-main"),
+    "the focus goes to the list as the menu's box goes",
   );
 });
 
