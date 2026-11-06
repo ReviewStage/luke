@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "sequoia",
+  "theme": "mint",
   "name": "Vespin",
   "description": "Vespin is an inbox for all your coding agents.",
   "colors": {
