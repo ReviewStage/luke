@@ -241,10 +241,15 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
       narrow: room === SHELL_ROOM.NARROW,
     });
     admin = useAdminRoute({ listedSlug: () => ACME.slug, onClose: () => undefined });
-    automations = useAutomationsRoute({ onClose: () => undefined });
+    automations = useAutomationsRoute({
+      narrow: room === SHELL_ROOM.NARROW,
+      onClose: () => undefined,
+      onStay: () => undefined,
+    });
     versions = useVersionHistoryRoute({
       narrow: room === SHELL_ROOM.NARROW,
       onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
     });
     const tab = tasksTab(at, setAt, room, versions);
     const tasks: TasksControl = {

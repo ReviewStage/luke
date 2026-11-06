@@ -275,8 +275,9 @@ function AppWindow(): React.JSX.Element {
   const settingsRoute = useRef<SettingsRoute | undefined>(undefined);
   const routedHere = useRoutedStanding();
   const tab = routedHere?.place === ROUTED_PLACE.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.TASKS;
-  // Leaves the routed place standing for the place the window's state says, once the history is read below.
+  // Leaves the routed place standing for the place the window's state says, or keeps it standing after all, once the history is read below.
   const leaveRouted = useRef<() => void>(() => undefined);
+  const stayRouted = useRef<() => void>(() => undefined);
   /** The note being written to the people who make the app, while its dialog stands. */
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
   /** The experiment that note is about, where an experiment's row opened it. */
@@ -410,10 +411,15 @@ function AppWindow(): React.JSX.Element {
   });
   const boardView = useBoardRoute({ onClose: () => leaveRouted.current() });
   const personView = usePersonRoute({ onClose: () => leaveRouted.current() });
-  const automationsView = useAutomationsRoute({ onClose: () => leaveRouted.current() });
+  const automationsView = useAutomationsRoute({
+    narrow: room === SHELL_ROOM.NARROW,
+    onClose: () => leaveRouted.current(),
+    onStay: () => stayRouted.current(),
+  });
   const versionHistoryView = useVersionHistoryRoute({
     narrow: room === SHELL_ROOM.NARROW,
     onClose: () => leaveRouted.current(),
+    onStay: () => stayRouted.current(),
   });
   const tasks = useTasksTab({
     tasks: planning ?? IDLE_TASKS_VIEW,
@@ -566,6 +572,7 @@ function AppWindow(): React.JSX.Element {
     tasks,
   });
   leaveRouted.current = history.onLeaveRouted;
+  stayRouted.current = history.onStayRouted;
   // The narrow screens' ways back to their lists go through the history, so the two never disagree.
   const shellTasks = useSteadyDoors(
     useMemo(() => throughHistory(tasks, history.lists), [tasks, history.lists]),

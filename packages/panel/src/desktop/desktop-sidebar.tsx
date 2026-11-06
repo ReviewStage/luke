@@ -1878,42 +1878,26 @@ function SidebarColumn({
   // forward from Settings as well as choosing; a task's row goes back to work
   // on it, on the agent waiting on the developer where one does (`onResume`).
   // A press for a place of the window's state leaves a routed place standing for it, Settings or Admin (`panel-router.tsx`).
-  const leaveRouted = () => onTabChange(PANEL_TAB.TASKS);
-  const openTask = (taskId: string) => {
-    leaveRouted();
-    tasks.onResume(taskId);
-  };
-  const showTasks = () => {
-    leaveRouted();
-  };
-  const newTask = () => {
-    showTasks();
-    tasks.onNewTask();
-  };
-  const openPinnedTab = (pin: SidebarPin) => {
-    leaveRouted();
-    tasks.onOpenPinnedTab(pin);
-  };
-  const openInbox = () => {
-    leaveRouted();
-    tasks.inboxView.onOpen();
-  };
+  // Note that the leave and the door are one way out, asked once, because a page holding unsaved work holds one question, which a second ask would take the place of.
+  const leaveFor = (door: () => void) =>
+    tasks.leaveGuard.guard(() => {
+      onTabChange(PANEL_TAB.TASKS);
+      door();
+    })();
+  const openTask = (taskId: string) => leaveFor(() => tasks.onResume(taskId));
+  const newTask = () => leaveFor(() => tasks.onNewTask());
+  const openPinnedTab = (pin: SidebarPin) => leaveFor(() => tasks.onOpenPinnedTab(pin));
+  const openInbox = () => leaveFor(() => tasks.inboxView.onOpen());
   // Note that the Board and the Automations pages are the router's places, which their navigation stands from wherever the window stands, as Admin's does.
   const openBoard = () => tasks.boardView.onOpen();
   const openAutomations = () => tasks.automationsView.onOpen();
   const openAdmin = () => tasks.adminView.onOpen();
-  const goHome = () => {
-    leaveRouted();
-    tasks.onGoHome();
-  };
+  const goHome = () => leaveFor(() => tasks.onGoHome());
   // Home is the place shown while no task is open and nothing stands in its
   // place. New task's composer is on it, so its row draws no Draft pencil
   // for the words shown there.
   const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME;
-  const newTaskIn = (repository: string) => {
-    leaveRouted();
-    tasks.onNewTaskIn(repository);
-  };
+  const newTaskIn = (repository: string) => leaveFor(() => tasks.onNewTaskIn(repository));
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
   // The Tasks head's own menu, on a right-click and a long press, drawn only once it offers more than the buttons beside it.
@@ -1936,10 +1920,7 @@ function SidebarColumn({
   const agentShown = onTasks && !inAdmin ? tasks.agentView.agentId : undefined;
   const currentRow = (row: TaskRow) =>
     row.kind === TASK_ROW.TASK ? current(row.task.id) : row.agent.id === agentShown;
-  const openAgent = (agentId: string) => {
-    leaveRouted();
-    tasks.agentView.onOpen(agentId);
-  };
+  const openAgent = (agentId: string) => leaveFor(() => tasks.agentView.onOpen(agentId));
   // The list is the chosen workspace's; the unread marks above read every task.
   const { listed: listedRows, listedAgents } = tasks;
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);

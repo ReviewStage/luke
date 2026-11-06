@@ -333,10 +333,15 @@ function mount(
     const router = useRouter();
     // Note that the router here is drawn by no provider, which is what reads its history's moves, so its own last location stays where it was made, `/app`, and the leave is written to the history itself.
     const leaveRouted = () => router.history.push("/app");
-    const automationsView = useAutomationsRoute({ onClose: leaveRouted });
+    const automationsView = useAutomationsRoute({
+      narrow: held.room === SHELL_ROOM.NARROW,
+      onClose: leaveRouted,
+      onStay: () => undefined,
+    });
     const versionHistoryView = useVersionHistoryRoute({
       narrow: held.room === SHELL_ROOM.NARROW,
       onClose: leaveRouted,
+      onStay: () => undefined,
     });
     restand = setHeld;
     control = useTasksTab({
@@ -1758,6 +1763,17 @@ test("a Vespin link whose slug names no workspace of the account's leaves the li
 
   assert.equal(tab.control().workspace?.id, listed);
   assert.equal(tab.control().automationsView.open, true);
+});
+
+test("an agent's page opened from the Automations pages leaves them for the page, as every door into a place of the window's state leaves a routed place", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().automationsView.onOpen());
+  assert.equal(tab.control().automationsView.open, true);
+
+  act(() => tab.control().agentView.onOpen("agent-run-1"));
+
+  assert.equal(tab.control().automationsView.open, false, "the Automations pages give way");
+  assert.equal(tab.control().agentView.agentId, "agent-run-1");
 });
 
 test("a Vespin link to a task's version opens its version history on that version, and one to the task opens the task on its agents", async () => {

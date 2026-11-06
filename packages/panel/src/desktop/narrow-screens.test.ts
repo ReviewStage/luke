@@ -212,6 +212,7 @@ function Shell({
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
       onLeaveRouted: ignore,
+      onStayRouted: ignore,
       away: undefined,
       onLeave: ignore,
     },

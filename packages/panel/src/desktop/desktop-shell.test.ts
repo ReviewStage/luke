@@ -150,6 +150,7 @@ function shellProps(
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
       onLeaveRouted: ignore,
+      onStayRouted: ignore,
       away: undefined,
       onLeave: ignore,
     },
@@ -532,6 +533,44 @@ test("Home, pressed or by its chord from Settings, brings the Tasks tab forward 
   const tasks = mount(false, { onGoHome: () => (home += 1) });
   act(() => homeRow(tasks).click());
   assert.equal(home, 2);
+});
+
+test("a sidebar press over a page holding unsaved work asks once, and Leave both leaves the routed place standing and opens the row", () => {
+  // As the window's guard does, the page holds one question, which a later ask takes the place of.
+  let asked: (() => void) | undefined;
+  let passing = false;
+  const guard: TasksControl["leaveGuard"]["guard"] =
+    (leave) =>
+    (...args) => {
+      if (passing) {
+        leave(...args);
+        return;
+      }
+      asked = () => {
+        passing = true;
+        try {
+          leave(...args);
+        } finally {
+          passing = false;
+        }
+      };
+    };
+  const went: string[] = [];
+  const control = tasksControl();
+  mount(
+    false,
+    {
+      leaveGuard: { ...control.leaveGuard, guard },
+      onGoHome: guard(() => went.push("home")),
+    },
+    PANEL_TAB.TASKS,
+    guard((tab: PanelTab) => went.push(tab)),
+  );
+
+  act(() => homeRow(document.body).click());
+  act(() => asked?.());
+
+  assert.deepEqual(went, [PANEL_TAB.TASKS, "home"]);
 });
 
 const ACME: Workspace = {
@@ -1202,6 +1241,7 @@ function PlacedShell({
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
       onLeaveRouted: ignore,
+      onStayRouted: ignore,
       away: undefined,
       onLeave: ignore,
     },

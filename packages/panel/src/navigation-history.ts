@@ -921,6 +921,8 @@ function sameReading(one: HistoryReading, other: HistoryReading): boolean {
 export interface WindowHistory extends NavigationHistory {
   /** Leaves the routed place standing, Settings, Admin, or a version history among them, for the place the window's state says, as a visit after it; nothing off one. */
   onLeaveRouted: () => void;
+  /** Keeps the routed place standing that a leave was just asked of, as a door asked for the place standing does, which moves nothing. */
+  onStayRouted: () => void;
   /** Leaves the version history for its task: a step back where the task is the step behind, else a visit. */
   onLeaveVersionHistory: () => void;
   /** The step `onLeave` goes back to; none where no step behind stands on another page. */
@@ -1898,6 +1900,7 @@ export function useWindowHistory(input: {
     onLeaveRouted: () => {
       if (routed !== undefined) setLeaving(routed.address);
     },
+    onStayRouted: () => setLeaving(undefined),
     onLeaveVersionHistory: () => {
       if (boundFor !== undefined && backTo({ kind: PLACE_KIND.TASK, taskId: boundFor })) return;
       tasks.history.onClose();

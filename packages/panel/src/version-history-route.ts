@@ -136,10 +136,11 @@ function standingOf(
   return { workspace, task: taskId, spot };
 }
 
-/** A task's version history as the router stands it, in a room `narrow` or not, left by `onClose`. */
+/** A task's version history as the router stands it, in a room `narrow` or not, left by `onClose`, and kept standing by `onStay` where a leave was asked of it before a door asked for where it stands. */
 export function useVersionHistoryRoute(input: {
   narrow: boolean;
   onClose: () => void;
+  onStay: () => void;
 }): VersionHistoryRoute {
   const router = useRouter();
   const navigate = useNavigate();
@@ -154,8 +155,11 @@ export function useVersionHistoryRoute(input: {
     return standingOf(last?.routeId, last?.params ?? {});
   };
   const go = (href: string, replace: boolean) => {
-    // Standing the history where it stands moves nothing, as pressing the place standing always has.
-    if (href === router.history.location.href) return;
+    // Standing the history where it stands moves nothing, as pressing the place standing always has, and keeps it standing.
+    if (href === router.history.location.href) {
+      input.onStay();
+      return;
+    }
     void navigate({ href, replace });
   };
   const onOpen = (into: string, named: string, at: HistorySpot = VERSION_LIST) => {

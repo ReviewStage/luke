@@ -3193,6 +3193,10 @@ export function useTasksTab(input: {
   const closeHistory = () => {
     if (historyRoute.open) historyRoute.onClose();
   };
+  // A door into a place of the window's state that the Automations pages open, a run's agent, leaves them for it, as the sidebar's presses do.
+  const leaveAutomations = () => {
+    if (input.automationsView.open) input.automationsView.onClose();
+  };
 
   // A task's own tab, its Inbox, and an agent's are in its column, so a
   // version history over it gives way, and so does a side panel filling the
@@ -4107,6 +4111,7 @@ export function useTasksTab(input: {
       pages: agentPages,
       onOpen: guard((agentId: string) => {
         closeHistory();
+        leaveAutomations();
         setStandIn({ kind: STAND_IN.AGENT, agentId });
       }),
       onClose: guard(() => setStandIn(undefined)),
