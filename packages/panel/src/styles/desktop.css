@@ -1142,10 +1142,13 @@ body,
 
 /* Hidden, not removed, while the panel fills the window: it keeps its layout
    beneath the panel, and is hidden only once the panel has grown over it. An
-   agent's page and the window's Inbox beside their panel are hidden alike. */
+   agent's page and the window's Inbox beside their panel are hidden alike.
+   Note that its endless loops pause, because a page hidden by `visibility`
+   still asks the window for every frame a loop moves in. */
 .desktop-task-main[hidden],
 .desktop-task > .agent-page[hidden],
 .desktop-task > .page-find[hidden] {
+  --ui-loop-motion: paused;
   visibility: hidden;
   transition: visibility 0s linear var(--ui-duration-pane);
 }
