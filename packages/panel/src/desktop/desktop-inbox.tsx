@@ -1,4 +1,5 @@
 import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@repo/features/agent-view";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
 import {
   type DescriptionMention,
@@ -282,32 +283,16 @@ export const DesktopInbox = memo(function DesktopInbox({
   // An item's box starts a new thread with its agent, which opens in its place.
   const { startInboxThread } = agents;
   const newThread: InboxNewThread | undefined = tasks.signedIn
-    ? {
-        onStart: (item, start) =>
-          startInboxThread({
-            agentId: item.agentId,
-            text: start.text,
-            ...(start.attachments.length === 0 ? undefined : { attachments: start.attachments }),
-            clientKey: start.clientKey,
-          })
-            .catch(
-              (): AgentInboxMessagedView => ({
-                failure: AGENT_CALL_FAILURE.UNANSWERED,
-              }),
-            )
-            .then((answer) => {
-              if ("failure" in answer) return messageFailureWords(answer.failure);
-              const holder = chosen?.item.id === item.id ? chosen.holder : undefined;
-              view.onChoose({
-                ...(holder?.kind === INBOX_HOLDER.TASK
-                  ? { taskId: holder.task.id }
-                  : { agentId: item.agentId }),
-                itemId: answer.item.id,
-                opened: true,
-              });
-              return undefined;
-            }),
-      }
+    ? startedThreads(startInboxThread, (item, itemId) => {
+        const holder = chosen?.item.id === item.id ? chosen.holder : undefined;
+        view.onChoose({
+          ...(holder?.kind === INBOX_HOLDER.TASK
+            ? { taskId: holder.task.id }
+            : { agentId: item.agentId }),
+          itemId,
+          opened: true,
+        });
+      })
     : undefined;
   const listedWorkspace = tasks.workspace;
   const { sidePanel } = tasks;
@@ -742,6 +727,38 @@ function DraftedInboxPane({
   const live = { ...control, ...useInboxCardDrafts(control, scope) };
   useNodOnOpen({ shown: opened, readerId, control: live });
   return <InboxPane {...pane} control={live} />;
+}
+
+/**
+ * What an item's box starts a new thread with instead of a reply: a thread
+ * with the item's agent, its words and files sent under the key the box
+ * minted, opened through `onStarted` once the service took it, or the words
+ * of why it did not, a send no answer came back for among them. An agent's
+ * card offers the same (`agent-threads.tsx`).
+ */
+export function startedThreads(
+  start: AgentsControl["startInboxThread"],
+  onStarted: (item: InboxItem, itemId: string) => void,
+): InboxNewThread {
+  return {
+    onStart: (item, begun) =>
+      start({
+        agentId: item.agentId,
+        text: begun.text,
+        ...(begun.attachments.length === 0 ? undefined : { attachments: begun.attachments }),
+        clientKey: begun.clientKey,
+      })
+        .catch(
+          (): AgentInboxMessagedView => ({
+            failure: AGENT_CALL_FAILURE.UNANSWERED,
+          }),
+        )
+        .then((answer) => {
+          if ("failure" in answer) return messageFailureWords(answer.failure);
+          onStarted(item, answer.item.id);
+          return undefined;
+        }),
+  };
 }
 
 /** A file the item names as its code names it: its path, and its lines where it names them. */

@@ -28,7 +28,7 @@ import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import type { TaskInboxControl } from "../tasks/use-task-inbox.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { paneDoors } from "./desktop-inbox.js";
+import { paneDoors, startedThreads } from "./desktop-inbox.js";
 
 /**
  * agent-threads.tsx -- an agent's threads inside its card in the task's column: the Inbox's list of the items it posted beside the one chosen, both the window's Inbox's own.
@@ -45,7 +45,8 @@ import { paneDoors } from "./desktop-inbox.js";
  * as the task's page holds it, with the window's Inbox's doors
  * (`desktop-inbox.tsx`'s `paneDoors`), bar its agent's crumb, which goes
  * back to the transcript, the agent's own. Choosing a row, or K and J,
- * shows its thread; an answer keeps the list beside it. Opening an item
+ * shows its thread; an answer keeps the list beside it, and a new thread
+ * started from the box opens in the card (`startedThreads`). Opening an item
  * reads it, and a notice is acknowledged as it opens, as in the Inbox. Too
  * narrow for both, the card shows one at a time as the Inbox does
  * (`inbox-columns.ts`).
@@ -254,6 +255,11 @@ export function AgentThreads({
             hidden={columns.shown === INBOX_COLUMNS.LIST}
             onBack={columns.onBack}
             pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+            newThread={
+              tasks.signedIn
+                ? startedThreads(agents.startInboxThread, (_item, itemId) => onChoose(itemId))
+                : undefined
+            }
             doors={{
               ...agentPaneDoors(tasks, listed, agentId, onBack),
               onMark: marks.onMark,
