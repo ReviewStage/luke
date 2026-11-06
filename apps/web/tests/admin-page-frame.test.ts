@@ -9,7 +9,7 @@ import { WorkspacesScreen } from "@repo/panel/admin/screens/workspaces";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-page-frame.test.ts -- every admin screen stands under the app's
@@ -132,6 +132,7 @@ async function open(screen: Screen, status: number | undefined): Promise<HTMLEle
   document.body.replaceChildren(page);
   root = createRoot(page);
   await act(async () => root?.render(underWebAdminDoors(screen.element())));
+  if (status !== undefined) await readLanded(page);
   return page;
 }
 

@@ -17,7 +17,7 @@ import { EXPERIMENT } from "@repo/settings";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-account.test.ts -- one account's page names the account, marks an
@@ -276,6 +276,7 @@ async function openAccount(
       ),
     );
   });
+  if (response !== undefined) await readLanded(page);
   return { page, backs };
 }
 

@@ -10,7 +10,7 @@ import { DashboardScreen } from "@repo/panel/admin/screens/dashboard";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 import { choose, menuItems, openViewOptions } from "./support/view-options";
 
 /**
@@ -175,7 +175,7 @@ async function render(replies: readonly Reply[], heard: string[] = []): Promise<
   });
   const container = document.createElement("div");
   document.body.replaceChildren(container);
-  for (const _ of replies) {
+  for (const reply of replies) {
     act(() => root?.unmount());
     root = createRoot(container);
     await act(async () =>
@@ -195,6 +195,10 @@ async function render(replies: readonly Reply[], heard: string[] = []): Promise<
         ),
       ),
     );
+    // Note that a failure over a shown answer draws no skeleton to wait out, so it waits for the failure itself.
+    if (reply === REPLY.FAILS) {
+      await vi.waitFor(() => expect(container.querySelector('[role="alert"]')).not.toBeNull());
+    } else if (reply !== REPLY.HANGS) await readLanded(container);
   }
   return container;
 }

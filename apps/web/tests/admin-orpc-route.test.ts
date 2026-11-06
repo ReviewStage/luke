@@ -10,7 +10,7 @@ import { Context, Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-orpc-route.test.ts -- the Users screen over the hosted oRPC route
@@ -132,6 +132,7 @@ async function mount(): Promise<HTMLElement> {
       ),
     );
   });
+  await readLanded(page);
   return page;
 }
 
@@ -146,11 +147,13 @@ test("an admin reads the roster through the route and stars an account for thems
   await act(async () => star?.click());
 
   await vi.waitFor(() => expect(written).toEqual(["admin-1 account-ada true"]));
-  expect(
-    page
-      .querySelector('button[aria-label="Unfavorite Ada Lovelace"]')
-      ?.getAttribute("aria-pressed"),
-  ).toBe("true");
+  await vi.waitFor(() =>
+    expect(
+      page
+        .querySelector('button[aria-label="Unfavorite Ada Lovelace"]')
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true"),
+  );
   expect(sent).toEqual([
     "GET /api/admin/users?scope=all&window=7 include null",
     "PUT /api/admin/favorite?id=account-ada include null",
