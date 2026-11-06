@@ -34,8 +34,9 @@ import { DesktopTasks } from "./desktop-tasks.js";
 /**
  * agent-threads.test.ts -- the dock over an agent's box opens the agent's
  * threads in its card, in its transcript's place: the Inbox's list of its
- * items alone beside the thread the dock names, the oldest waiting; Escape
- * gives the card its transcript back. Synthetic throughout.
+ * items alone beside the thread the dock names, the oldest waiting, or,
+ * with none waiting on the reader, the latest changed; Escape gives the
+ * card its transcript back. Synthetic throughout.
  */
 
 const TASK: Task = {
@@ -108,7 +109,10 @@ afterEach(() => {
 });
 
 /** The task's page on the agent's tab, wide enough for the list and the thread side by side; where it leaves for the window's Inbox; and which agent it says shows its threads, the latest last. */
-async function mount(): Promise<{
+async function mount(
+  items: readonly InboxItem[] = ITEMS,
+  me?: string,
+): Promise<{
   container: HTMLElement;
   inboxes: unknown[];
   covered: (string | undefined)[];
@@ -125,7 +129,7 @@ async function mount(): Promise<{
     DOMRect.fromRect({ width: 1200, height: 800 }),
   );
   handInboxItems({
-    rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: ITEMS }, [INBOX_SCOPE_KIND.AGENT]: {} },
+    rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: items }, [INBOX_SCOPE_KIND.AGENT]: {} },
   });
   pushedTranscripts(() => [
     { messages: [], cursor: "1:0", status: AGENT_STATUS.COMPLETED, title: null },
@@ -134,6 +138,7 @@ async function mount(): Promise<{
   const covered: (string | undefined)[] = [];
   const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
+    me,
     activeTaskId: TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
@@ -195,4 +200,27 @@ test("the dock opens the agent's threads in its card on the oldest waiting, its 
   assert.equal(container.querySelector(".agent-threads"), null);
   assert.equal(container.querySelector<HTMLElement>(".desktop-agent")?.hidden, false);
   assert.equal(covered.at(-1), undefined, "and in sight again");
+});
+
+test("with none waiting on the reader, the quiet dock opens the agent's latest changed thread, not its oldest open one", async () => {
+  const teammates: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000004", AGENT.id, "Asked of a teammate", 10),
+    waitsOn: { userId: "user-grace", name: "Grace Hopper" },
+  };
+  const answered: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000005", AGENT.id, "Answered lately", 40),
+    status: INBOX_STATUS.ANSWERED,
+  };
+  const { container } = await mount([teammates, answered], "user-ada");
+  const dock =
+    container.querySelector<HTMLElement>(
+      ".agent-threads-dock [role='button'], .agent-threads-dock button",
+    ) ?? assert.fail("the agent's box docks its threads, quiet");
+  assert.match(dock.textContent ?? "", /2 threads/u);
+  act(() => dock.click());
+
+  assert.equal(
+    container.querySelector(".agent-threads section[aria-label]")?.getAttribute("aria-label"),
+    "Answered lately",
+  );
 });
