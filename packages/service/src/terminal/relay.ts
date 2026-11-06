@@ -24,11 +24,15 @@
  * `agents/sandbox-keep-alive.ts`), so a developer typing after the agent's
  * turn ended is never cut off by it. While a terminal is connected, the GitHub token at the sandbox's firewall
  * is kept fresh on the rule the agent's own steps keep it by, claimed
- * through the lease so two windows mint one token between them; a renewal
- * that fails gives its claim back, is logged, and is tried again at the
- * next check. A member's own token, which never ages, is set at every check
- * instead, and stays on the firewall past the connection's close, until the
- * sandbox stops or the next write replaces it. The shell is said to be attached
+ * through the lease so two windows mint one token between them: the
+ * connection reads when the token was last set on its sandbox session,
+ * sleeps until that renewal is due, and reads again then, since another
+ * window may have renewed it meanwhile, renewing only what is still due. A
+ * renewal that fails gives its claim back, is logged, and is tried again
+ * after the retry bound. A member's own token, which never ages, is set once
+ * as the connection attaches instead, again after the retry bound only where
+ * that set failed, and stays on the firewall past the connection's close,
+ * until the sandbox stops or the next write replaces it. The shell is said to be attached
  * once the first renewal has ended, so a command typed at once finds the
  * token set, and what was typed before waits for it, up to a bound past
  * which the shell attaches at once.
@@ -73,8 +77,8 @@ const TERMINAL_RELAY_BOUNDS = {
   LEASE_WRITE_EVERY: Duration.minutes(1),
   /** How far past each write the lease reaches: two writes, so one slow write never lets it lapse. */
   LEASE_REACH: Duration.minutes(2),
-  /** How often a connection asks whether the GitHub token is due. */
-  CREDENTIAL_CHECK_EVERY: Duration.minutes(5),
+  /** How long a connection waits to try a credential again whose renewal or set it could not finish, or whose claim another window holds. */
+  CREDENTIAL_RETRY_AFTER: Duration.minutes(5),
   /** The most the desktop may send while its shell waits on its first token, a paste's largest piece; past it the shell attaches without waiting longer, so what was sent reaches it rather than piling up. */
   HELD_MAX_BYTES: 1024 * 1024,
   /** The environment the shell's PTY starts in: a terminal that speaks color, and text that is UTF-8. */
@@ -108,7 +112,7 @@ export interface RelayAgent {
   readonly sessionId: string | undefined;
   /** A fresh credential for the agent's repository: a token minted under the deployment's GitHub App, or its starter's own. */
   readonly repositoryCredential: Effect.Effect<RepositoryCredential, unknown>;
-  /** Whether the agent's credential is its starter's own GitHub token, set at every check rather than renewed. */
+  /** Whether the agent's credential is its starter's own GitHub token, set once as a connection attaches rather than renewed. */
   readonly memberToken: boolean;
 }
 
@@ -134,6 +138,11 @@ export interface RelayDependencies {
     now: Date,
     renewedBefore: Date,
   ) => Effect.Effect<boolean>;
+  /** When the token was last claimed for renewal on the running sandbox session; none where it never was there, or where the store could not say. */
+  readonly renewedAt: (
+    conversationId: string,
+    sandboxSessionId: string,
+  ) => Effect.Effect<Option.Option<Date>>;
   /** Gives back a renewal claimed at the instant given that did not finish. */
   readonly releaseRenewal: (
     conversationId: string,
@@ -175,7 +184,7 @@ function holdWhileConnected(
   return Effect.andThen(hold, Effect.asVoid(Effect.forkScoped(renewed)));
 }
 
-/** The credential set at the firewall; a set that failed is logged, and the next check tries again. */
+/** The credential set at the firewall. */
 function setCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
@@ -186,20 +195,15 @@ function setCredential(
   );
 }
 
-/** The GitHub token renewed at the firewall where this connection claims it, on the agent's own rule, or a member's token set at every check; a renewal that failed or was cut off gives the claim back, and the next check tries again. */
+/** The GitHub token renewed at the firewall where this connection claims it, answering whether it did; a renewal that failed or was cut off gives the claim back. */
 function renewCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
   session: FirewallSession,
-): Effect.Effect<void> {
+  at: Date,
+): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     const { sandboxSessionId } = session;
-    if (agent.memberToken) {
-      return yield* setCredential(deps, agent, session).pipe(
-        Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not set")),
-      );
-    }
-    const at = yield* DateTime.nowAsDate;
     const renewedBefore = new Date(at.getTime() - Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH));
     const claimed = yield* deps.claimRenewal(
       agent.conversationId,
@@ -207,13 +211,71 @@ function renewCredential(
       at,
       renewedBefore,
     );
-    if (!claimed) return;
-    yield* setCredential(deps, agent, session).pipe(
+    if (!claimed) return false;
+    return yield* setCredential(deps, agent, session).pipe(
+      Effect.as(true),
       // Note that a connection closing mid-renewal interrupts it, and the claim goes back then too.
       Effect.onError(() => deps.releaseRenewal(agent.conversationId, sandboxSessionId, at)),
-      Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not renewed")),
+      Effect.catch(() =>
+        Effect.as(Effect.logWarning("a terminal's GitHub credential was not renewed"), false),
+      ),
     );
   });
+}
+
+/**
+ * One round of keeping the token fresh, answering how long to sleep before
+ * the next: until the last renewal on this session is due, where it is not
+ * yet; a renewal's whole rule, where this connection renewed it; and the
+ * retry bound, where it could not, or another window's claim stands, whose
+ * instant the next round reads. The claim takes only a renewal strictly
+ * older than the rule, so the sleep reaches one millisecond past its due.
+ */
+function credentialRound(
+  deps: RelayDependencies,
+  agent: RelayAgent,
+  session: FirewallSession,
+): Effect.Effect<Duration.Duration> {
+  return Effect.gen(function* () {
+    const renewedAt = yield* deps.renewedAt(agent.conversationId, session.sandboxSessionId);
+    const at = yield* DateTime.nowAsDate;
+    const refresh = Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH);
+    if (Option.isSome(renewedAt)) {
+      const dueIn = renewedAt.value.getTime() + refresh - at.getTime();
+      if (dueIn >= 0) return Duration.millis(dueIn + 1);
+    }
+    const renewed = yield* renewCredential(deps, agent, session, at);
+    return renewed ? CODER.GITHUB_TOKEN_REFRESH : TERMINAL_RELAY_BOUNDS.CREDENTIAL_RETRY_AFTER;
+  });
+}
+
+/**
+ * The connection's GitHub token kept at the firewall for as long as its
+ * scope stands, `firstSet` done once the first round has ended: an App
+ * token renewed at each deadline, or a member's own set once, and again
+ * after the retry bound only where the set failed.
+ */
+function keepCredential(
+  deps: RelayDependencies,
+  agent: RelayAgent,
+  session: FirewallSession,
+  firstSet: Deferred.Deferred<void>,
+): Effect.Effect<void> {
+  const firstDone = Deferred.succeed(firstSet, undefined);
+  if (agent.memberToken) {
+    const set = setCredential(deps, agent, session).pipe(
+      Effect.tapError(() => Effect.logWarning("a terminal's GitHub credential was not set")),
+      Effect.ensuring(firstDone),
+    );
+    return Effect.ignore(
+      Effect.retry(set, {
+        schedule: Schedule.spaced(TERMINAL_RELAY_BOUNDS.CREDENTIAL_RETRY_AFTER),
+      }),
+    );
+  }
+  return Effect.forever(
+    Effect.flatMap(Effect.tap(credentialRound(deps, agent, session), firstDone), Effect.sleep),
+  );
 }
 
 /**
@@ -333,15 +395,7 @@ export function relayTerminal(
       sandboxSessionId: sandbox.sandboxSessionId,
     };
     const firstRenewed = yield* Deferred.make<void>();
-    yield* Effect.forkScoped(
-      Effect.repeat(
-        Effect.andThen(
-          renewCredential(deps, agent, session),
-          Deferred.succeed(firstRenewed, undefined),
-        ),
-        { schedule: Schedule.spaced(TERMINAL_RELAY_BOUNDS.CREDENTIAL_CHECK_EVERY) },
-      ),
-    );
+    yield* Effect.forkScoped(keepCredential(deps, agent, session, firstRenewed));
     const pty = yield* Effect.result(deps.connect(sandbox.shell));
     if (Result.isFailure(pty)) return yield* device.close(TERMINAL_RELAY_CLOSE.UNAVAILABLE);
     const start = attachTerminal(ask.terminalId);
