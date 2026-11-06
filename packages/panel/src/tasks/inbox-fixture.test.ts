@@ -138,7 +138,7 @@ it.effect(
       assert.equal(state.account.status, ACCOUNT_STATUS.SIGNED_IN);
 
       const listed = new Set(view.tasks.map((task) => task.id));
-      const page = personPage(state.account.id ?? "", view.tasks);
+      const page = personPage(state.account.id ?? "", view.tasks, view.taskAgents);
 
       assert.deepEqual(
         state.inbox.tasks.filter((holding) => !listed.has(holding.taskId)),
