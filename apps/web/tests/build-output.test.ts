@@ -14,7 +14,7 @@ import {
   functionEntryPath,
   HAND_WRITTEN_FUNCTIONS,
 } from "../server/build-output";
-import { functionBundlePlan } from "../server/function-bundles";
+import { functionBundlePlan, profilerBinaryFiles } from "../server/function-bundles";
 import { functionPublicPath, webFunctions } from "../server/function-layout";
 import { apiRewrites } from "../server/function-rewrites";
 
@@ -58,17 +58,21 @@ async function emitFromTask(): Promise<{
 }> {
   const task = await functionBundlePlan(WEB);
   const result = await build({ ...task.options, write: false });
+  const profilerBinary = await profilerBinaryFiles(result.metafile, WEB);
   const contentsOf = new Map(result.outputFiles.map((file) => [file.path, file.contents] as const));
   const outputDirectory = mkdtempSync(join(tmpdir(), "build-output-"));
   const functions: EmittedFunction[] = [
     ...task.functions.map((definition) => {
-      const contents = contentsOf.get(join(WEB, "dist-functions", `${definition.file}.js`));
+      const bundle = join(WEB, "dist-functions", `${definition.file}.js`);
+      const contents = contentsOf.get(bundle);
       assert.ok(contents, definition.file);
+      const binary = profilerBinary.get(bundle);
       return {
         path: functionPublicPath(definition),
         contents,
         maxDuration: definition.maxDuration,
         queueTopic: definition.queueTopic,
+        files: binary === undefined ? [] : [binary],
       };
     }),
     ...(await Promise.all(

@@ -1,5 +1,5 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join, relative } from "node:path";
+import { join, relative } from "node:path";
 import { AGENT_IMAGE_FILE } from "@repo/service/agents/coder-host/agent-image";
 import { build } from "esbuild";
 import {
@@ -12,8 +12,7 @@ import {
   FUNCTION_METAFILE,
   functionBundlePlan,
   localOnlyReach,
-  PROFILER_BINARY,
-  profilerBinarySource,
+  profilerBinaryFiles,
   undeclaredImports,
 } from "../server/function-bundles.js";
 import {
@@ -94,16 +93,7 @@ const shipsImage = new Set(
 );
 
 // The profiler's native binary ships beside every bundle that requires it, since no bundle can carry it.
-const profilerSource = profilerBinarySource(result.metafile, WEB);
-const profilerBinary = profilerSource && {
-  name: basename(PROFILER_BINARY),
-  contents: await readFile(profilerSource),
-};
-const shipsProfiler = new Set(
-  Object.entries(result.metafile.outputs)
-    .filter(([, output]) => output.imports.some((imported) => imported.path === PROFILER_BINARY))
-    .map(([file]) => join(WEB, file)),
-);
+const profilerBinary = await profilerBinaryFiles(result.metafile, WEB);
 
 const durationOf = new Map(
   task.functions.map((definition) => [join(WEB, bundlePath(definition)), definition.maxDuration]),
@@ -130,9 +120,9 @@ const emitted = await emitBuildOutput({
           ...(shipsImage.has(join(WEB, bundlePath(definition)))
             ? [{ name: AGENT_IMAGE_FILE, contents: agentImage }]
             : []),
-          ...(profilerBinary && shipsProfiler.has(join(WEB, bundlePath(definition)))
-            ? [profilerBinary]
-            : []),
+          ...[profilerBinary.get(join(WEB, bundlePath(definition)))].filter(
+            (file) => file !== undefined,
+          ),
         ],
       })),
     )),

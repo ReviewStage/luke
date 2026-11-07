@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { dirname, join, posix, relative, sep } from "node:path";
+import { basename, dirname, join, posix, relative, sep } from "node:path";
 import { Schema } from "effect";
 import type { BuildOptions, Metafile, Plugin } from "esbuild";
 import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
@@ -289,12 +289,28 @@ export function undeclaredImports(
   return [...undeclared].sort();
 }
 
-/** The profiler binary the bundles leave external, read from the package that requires it; none where no bundle does. */
-export function profilerBinarySource(metafile: Metafile, web: string): string | undefined {
+/**
+ * The profiler's binary as each bundle that requires it ships it beside
+ * itself, keyed by the bundle's absolute path; a bundle that does not require
+ * it is absent.
+ */
+export async function profilerBinaryFiles(
+  metafile: Metafile,
+  web: string,
+): Promise<ReadonlyMap<string, { readonly name: string; readonly contents: Uint8Array }>> {
   const importer = Object.entries(metafile.inputs).find(([, input]) =>
     input.imports.some((imported) => imported.external && imported.path === PROFILER_BINARY),
   );
-  return importer && join(web, dirname(importer[0]), PROFILER_BINARY);
+  if (importer === undefined) return new Map();
+  const file = {
+    name: basename(PROFILER_BINARY),
+    contents: await readFile(join(web, dirname(importer[0]), PROFILER_BINARY)),
+  };
+  return new Map(
+    Object.entries(metafile.outputs)
+      .filter(([, output]) => output.imports.some((imported) => imported.path === PROFILER_BINARY))
+      .map(([output]) => [join(web, output), file]),
+  );
 }
 
 /** Every bundle's external imports as the metafile records them, sorted and unique, keyed by bundle. */
