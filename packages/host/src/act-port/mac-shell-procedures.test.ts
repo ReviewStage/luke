@@ -270,3 +270,27 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "a second attach before the panel takes the first port closes the first, whose close leaves the second live",
+  () =>
+    Effect.gen(function* () {
+      const { actPort, shells, opened } = fixture();
+      const panel = panelOf();
+
+      yield* actPort.perform(open, panel);
+      yield* actPort.perform(attach("shell-1"), panel);
+      yield* actPort.perform(attach("shell-1"), panel);
+      const [first, second] = opened;
+      first?.hangUp();
+      shells[0]?.print("ls\r\n");
+
+      assert.equal(first?.closed, true);
+      assert.equal(second?.closed, false);
+      assert.deepEqual(carried(second), [
+        { type: TERMINAL_PORT_MESSAGE.STATE, state: TERMINAL_CONNECTION.ATTACHED },
+        "ls\r\n",
+      ]);
+      assert.ok(!shells[0]?.heard.includes("kill"));
+    }),
+);
