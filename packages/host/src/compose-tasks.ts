@@ -73,17 +73,10 @@ import {
   type TasksStartAnswer,
   type TasksStartRequest,
   type TasksView,
-  taskBrowserTabsFollowSchema,
-  taskDocumentFollowSchema,
-  taskHistoryFollowSchema,
-  taskPagesFollowSchema,
-  tasksCommentsFollowSchema,
-  tasksLinkStandingParamsSchema,
   tasksMarkReadParamsSchema,
   tasksPageParamsSchema,
   tasksPinParamsSchema,
   tasksRenameParamsSchema,
-  tasksRepositoriesParamsSchema,
   tasksSetStandingParamsSchema,
 } from "@repo/features/tasks-view";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
@@ -96,7 +89,7 @@ import {
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
-import { keepIdentity, type WireRecord } from "@repo/wire";
+import { keepIdentity } from "@repo/wire";
 import {
   Cache,
   Clock,
@@ -120,8 +113,6 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import {
   type AppLinkStanding,
-  type AppLinkStandings,
-  type AppRepositoryLists,
   EVERY_WORKSPACE,
   NO_BROWSER_TABS,
   NO_KEYS_HELD,
@@ -134,12 +125,8 @@ import type {
   WorkspacesTasksAct,
 } from "./compose-workspaces.js";
 import type { Composer } from "./composer.js";
-import type { TASKS_ACTS } from "./contract/index.js";
-import {
-  type CommentSubjectKey,
-  commentSubjectOf,
-  descriptionCommentReads,
-} from "./description-comment-reads.js";
+import { type TASKS_ACTS, TASKS_FOLLOWS } from "./contract/index.js";
+import { commentSubjectOf, descriptionCommentReads } from "./description-comment-reads.js";
 import { descriptionCommentWrites } from "./description-comment-writes.js";
 import { descriptionDocumentReads } from "./description-document-reads.js";
 import { lateService } from "./effect/kernel.js";
@@ -147,7 +134,7 @@ import { type EntityStore, KEPT_READ } from "./entity-store.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { heldFetch } from "./held-fetch.js";
-import type { HostActTable } from "./host-acts.js";
+import { type HostActTable, liveTold } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   DescriptionPictureKey,
@@ -424,9 +411,13 @@ export interface TasksLinks {
   workspacesRefreshed: Effect.Effect<void>;
 }
 
+/** The Tasks tab's acts this composer answers: its plain asks but those `compose-workspaces.ts` answers, and its live follows. */
+type TasksActs = Omit<HostActTable<typeof TASKS_ACTS>, WorkspacesTasksAct> &
+  HostActTable<typeof TASKS_FOLLOWS>;
+
 export interface TasksComposer extends Composer {
-  /** The Tasks tab's plain asks, answered directly as the panel's port asks them, but GitHub's connection's and the admin dashboard's (`compose-workspaces.ts`). */
-  readonly acts: Omit<HostActTable<typeof TASKS_ACTS>, WorkspacesTasksAct>;
+  /** The Tasks tab's plain asks and live follows, answered directly as the panel's port asks them, but GitHub's connection's and the admin dashboard's (`compose-workspaces.ts`). */
+  readonly acts: TasksActs;
   /** The view as this Mac holds it now. */
   snapshot: () => TasksView;
   /** Links what the tasks reach of a concern built after them; the first link stands. */
@@ -714,11 +705,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     gate,
     focus: dependencies.focus,
     fetch: linkStandingOf,
-    tell: (held: AppLinkStandings) =>
-      kernel.emit(GATEWAY_EVENT.LINK_STANDINGS_CHANGED, carried(held)),
+    tell: liveTold(kernel.emit, TASKS_FOLLOWS.TASKS_LINK_STANDING_FOLLOW),
   });
-  /** The windows' hold on each link's standing, one fiber standing until let go. */
-  const linkHolds = yield* FiberMap.make<LinkStandingKey>();
   /**
    * The repositories the account reaches in each workspace, or in every one,
    * fetched for the windows that hold them (`held-fetch.ts`): asked as a
@@ -737,21 +725,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         served(client.repositories(workspace === EVERY_WORKSPACE ? undefined : workspace)),
         (listed) => (listed.ok ? Option.some(listed.answer) : Option.none()),
       ),
-    tell: (held: AppRepositoryLists) =>
-      kernel.emit(GATEWAY_EVENT.REPOSITORY_LISTS_CHANGED, carried(held)),
+    tell: liveTold(kernel.emit, TASKS_FOLLOWS.TASKS_REPOSITORIES_FOLLOW),
   });
-  /** The windows' hold on each workspace's repositories, one fiber standing until let go. */
-  const repositoryHolds = yield* FiberMap.make<string>();
-  /** The workspace a repository list's params name, or every one where they name none. */
-  const repositoryScopeOf = (params: WireRecord) =>
-    Effect.map(
-      readParams(
-        tasksRepositoriesParamsSchema,
-        params,
-        "a repository list names the workspace it is for, or none",
-      ),
-      (read) => read.workspaceId ?? EVERY_WORKSPACE,
-    );
   /** The lists of the workspaces named asked again, and the list of every workspace's, which a change in any of them moves too. */
   const repositoriesMovedIn = (workspaceIds: ReadonlySet<string>) =>
     repositoryLists.wake(
@@ -861,10 +836,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     path: (taskId) => [taskId],
     gate,
     follow: followHistory,
-    tell: (held) => kernel.emit(GATEWAY_EVENT.HISTORIES_CHANGED, carried(held)),
+    tell: liveTold(kernel.emit, TASKS_FOLLOWS.TASKS_HISTORY_FOLLOW),
   });
-  /** The windows' hold on each task's history, one fiber standing until let go. */
-  const historyHolds = yield* FiberMap.make<string>();
 
   const decodeBrowserTabs = Schema.decodeUnknownOption(TASK_BROWSER_TABS_READ.rows);
 
@@ -967,10 +940,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     path: (owner) => [owner.kind, owner.id],
     gate,
     follow: followPages,
-    tell: (pages) => kernel.emit(GATEWAY_EVENT.PAGES_CHANGED, carried(pages)),
+    tell: liveTold(kernel.emit, TASKS_FOLLOWS.TASKS_PAGES_FOLLOW),
   });
-  /** The windows' hold on each owner's pages, one fiber standing until let go. */
-  const pageHolds = yield* FiberMap.make<PageOwnerKey>();
 
   /**
    * The Browser tabs each window's side panel lists, a task's agents' or one
@@ -985,10 +956,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     path: (owner) => [owner.kind, owner.id],
     gate,
     follow: followBrowserTabs,
-    tell: (tabs) => kernel.emit(GATEWAY_EVENT.BROWSER_TABS_CHANGED, carried(tabs)),
+    tell: liveTold(kernel.emit, TASKS_FOLLOWS.TASKS_BROWSER_TABS_FOLLOW),
   });
-  /** The windows' hold on each place's Browser tabs, one fiber standing until let go. */
-  const browserTabsHolds = yield* FiberMap.make<BrowserTabsOwnerKey>();
 
   /**
    * Each description's or page's comments the windows show, and the few let go
@@ -1011,10 +980,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ),
     accountId: dependencies.accountId,
     gate,
-    tell: (held) => kernel.emit(GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED, carried(held)),
+    tell: liveTold(kernel.emit, TASKS_FOLLOWS.TASKS_COMMENTS_FOLLOW),
   });
-  /** The windows' hold on each subject's comments, one fiber standing until let go. */
-  const commentHolds = yield* FiberMap.make<CommentSubjectKey>();
   /** The windows' writes to a task's comments, each drawn over its thread at once; behind a closed gate each answers unanswered, taken back as it is drawn. */
   const commentWrites = descriptionCommentWrites({
     start: (planId, start) =>
@@ -1042,7 +1009,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         client.liveRead(TASK_RECORD_READ, { id: taskId, userId }, poll ? { after } : undefined),
       ),
     listed: asListed,
-    tell: (held) => kernel.emit(GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED, carried(held)),
+    tell: liveTold(kernel.emit, TASKS_FOLLOWS.TASKS_DOCUMENT_FOLLOW),
   });
   /** Each edit's waits for its transaction, on its task's record and on the list, by the task, a newer edit's replacing an older one's. */
   const editWaits = yield* FiberMap.make<string>();
@@ -2376,34 +2343,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* resealList;
         return {};
       }),
-    // A link's standing is held for the windows while a chip draws it, and told only on the app state (`LINK_STANDINGS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.TASKS_LINK_STANDING_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const link = new LinkStandingKey(
-          yield* readParams(
-            tasksLinkStandingParamsSchema,
-            params,
-            "following a link names the workspace it is read through and its address",
-          ),
-        );
-        yield* FiberMap.run(
-          linkHolds,
-          link,
-          Effect.scoped(Effect.andThen(linkStandings.hold(link), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_LINK_STANDING_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const link = yield* readParams(
-          tasksLinkStandingParamsSchema,
-          params,
-          "letting a link go names the workspace it is read through and its address",
-        );
-        yield* FiberMap.remove(linkHolds, new LinkStandingKey(link));
-        return {};
-      }),
     // A page's version, answered to the frame that asked (`pageRead`).
     [GATEWAY_METHOD.TASKS_PAGE]: (params) =>
       Effect.gen(function* () {
@@ -2414,209 +2353,33 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksPageAnswer>(yield* pageRead(read));
       }),
-    // A plan's pages are answered to the Inbox that asked and held nowhere,
-    // since the view holds the active plan's alone.
-    // A task's description history is held for a window while its version history
-    // shows, and told only on the app state (`HISTORIES_CHANGED`). Note that
-    // the windows' hold is one fiber standing until let go, so a window
-    // holding it again holds nothing anew.
-    [GATEWAY_METHOD.TASKS_HISTORY_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          taskHistoryFollowSchema,
-          params,
-          "following a task's history names the task",
-        );
-        const { taskId } = read;
-        yield* FiberMap.run(
-          historyHolds,
-          taskId,
-          Effect.scoped(Effect.andThen(heldHistories.hold(taskId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          taskHistoryFollowSchema,
-          params,
-          "letting a task's history go names the task",
-        );
-        yield* FiberMap.remove(historyHolds, read.taskId);
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_HISTORY_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          taskHistoryFollowSchema,
-          params,
-          "reading a task's history again names the task",
-        );
-        if (gate()) yield* heldHistories.retry(read.taskId);
-        return {};
-      }),
-    // An agent's or a task's agents' Browser tabs are held for a window's
-    // side panel while it lists them, and told only on the app state
-    // (`BROWSER_TABS_CHANGED`), as the pages are.
-    [GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          taskBrowserTabsFollowSchema,
-          params,
-          "following Browser tabs names the agent or the task",
-        );
-        const owner = browserTabsOwnerOf(read);
-        yield* FiberMap.run(
-          browserTabsHolds,
-          owner,
-          Effect.scoped(Effect.andThen(heldBrowserTabs.hold(owner), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          taskBrowserTabsFollowSchema,
-          params,
-          "letting Browser tabs go names the agent or the task",
-        );
-        yield* FiberMap.remove(browserTabsHolds, browserTabsOwnerOf(read));
-        return {};
-      }),
-    // A plan's pages are held for a window while it draws them, the open
-    // task's, an Inbox item's plan's, or a chip's card's, and an agent's on no
-    // task while its page or a chip's card draws them, and told only on the
-    // app state (`PAGES_CHANGED`). Note that the windows' hold is one fiber
-    // standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.TASKS_PAGES_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          taskPagesFollowSchema,
-          params,
-          "following pages names the task or the agent",
-        );
-        const owner = pageOwnerOf(read);
-        yield* FiberMap.run(
-          pageHolds,
-          owner,
-          Effect.scoped(Effect.andThen(heldPageReads.hold(owner), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          taskPagesFollowSchema,
-          params,
-          "letting pages go names the task or the agent",
-        );
-        yield* FiberMap.remove(pageHolds, pageOwnerOf(read));
-        return {};
-      }),
-    // A task's description is held for a window while it has the task open, and
-    // told only on the app state (`DESCRIPTION_DOCUMENTS_CHANGED`). Note that the
-    // windows' hold is one fiber standing until let go, so a window holding
-    // it again holds nothing anew.
-    [GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          taskDocumentFollowSchema,
-          params,
-          "following a description names the task",
-        );
-        yield* documents.follow(read.taskId);
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          taskDocumentFollowSchema,
-          params,
-          "letting a description go names the task",
-        );
-        yield* documents.unfollow(read.taskId);
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_DOCUMENT_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          taskDocumentFollowSchema,
-          params,
-          "reading a description again names the task",
-        );
-        if (gate()) yield* documents.retry(read.taskId);
-        return {};
-      }),
-    // A description's comments, or a page's, are held for a window while it shows
-    // them, the open task's description's, or a page tab's beside the task or an
-    // Inbox item, and told only on the app state (`DESCRIPTION_COMMENTS_CHANGED`).
-    // Note that the windows' hold is one fiber standing until let go, so a
-    // window holding it again holds nothing anew.
-    [GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksCommentsFollowSchema,
-          params,
-          "following comments names the task and the page where it follows one's",
-        );
-        const subject = commentSubjectOf(read);
-        yield* FiberMap.run(
-          commentHolds,
-          subject,
-          Effect.scoped(Effect.andThen(comments.hold(subject), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_COMMENTS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksCommentsFollowSchema,
-          params,
-          "letting comments go names the task and the page where it held one's",
-        );
-        yield* FiberMap.remove(commentHolds, commentSubjectOf(read));
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_COMMENTS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksCommentsFollowSchema,
-          params,
-          "reading comments again names the task and the page where it reads one's",
-        );
-        yield* comments.retry(commentSubjectOf(read));
-        return {};
-      }),
-    // A workspace's repositories, or every one's, are held for the windows while a chip or a picker stands, and told only on the app state (`REPOSITORY_LISTS_CHANGED`). Note that the windows' hold is one fiber standing until let go.
-    [GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const workspace = yield* repositoryScopeOf(params);
-        yield* FiberMap.run(
-          repositoryHolds,
-          workspace,
-          Effect.scoped(Effect.andThen(repositoryLists.hold(workspace), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_REPOSITORIES_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        yield* FiberMap.remove(repositoryHolds, yield* repositoryScopeOf(params));
-        return {};
-      }),
-    [GATEWAY_METHOD.TASKS_REPOSITORIES_RETRY]: (params) =>
-      Effect.gen(function* () {
-        yield* repositoryLists.retry(yield* repositoryScopeOf(params));
-        return {};
-      }),
+  };
+
+  /** The Tasks tab's live follows, each window's hold the scope of its read's own counted hold (`act-port/live-follows.ts`). */
+  const taskFollows: HostActTable<typeof TASKS_FOLLOWS> = {
+    TASKS_REPOSITORIES_FOLLOW: {
+      hold: ({ workspaceId }) => repositoryLists.hold(workspaceId ?? EVERY_WORKSPACE),
+      retry: ({ workspaceId }) => repositoryLists.retry(workspaceId ?? EVERY_WORKSPACE),
+    },
+    TASKS_LINK_STANDING_FOLLOW: { hold: (link) => linkStandings.hold(new LinkStandingKey(link)) },
+    TASKS_BROWSER_TABS_FOLLOW: { hold: (place) => heldBrowserTabs.hold(browserTabsOwnerOf(place)) },
+    TASKS_PAGES_FOLLOW: { hold: (place) => heldPageReads.hold(pageOwnerOf(place)) },
+    TASKS_DOCUMENT_FOLLOW: {
+      hold: ({ taskId }) => documents.hold(taskId),
+      retry: ({ taskId }) => (gate() ? documents.retry(taskId) : Effect.void),
+    },
+    TASKS_HISTORY_FOLLOW: {
+      hold: ({ taskId }) => heldHistories.hold(taskId),
+      retry: ({ taskId }) => (gate() ? heldHistories.retry(taskId) : Effect.void),
+    },
+    TASKS_COMMENTS_FOLLOW: {
+      hold: (scope) => comments.hold(commentSubjectOf(scope)),
+      retry: (scope) => comments.retry(commentSubjectOf(scope)),
+    },
   };
 
   return {
-    acts: taskActs,
+    acts: { ...taskActs, ...taskFollows },
     methods,
     snapshot: () => view,
     link: (links) => Effect.asVoid(late.set(links)),

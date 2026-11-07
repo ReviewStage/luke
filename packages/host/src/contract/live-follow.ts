@@ -37,27 +37,34 @@ type ReadActName = {
 type FollowedSlice = LiveRead & HostReadSlice;
 
 /** What every live follow says, whatever it is held by. */
-interface LiveFollowSpecBase<Slice extends FollowedSlice, Retry extends ReadActName> {
+interface LiveFollowSpecBase<Slice extends FollowedSlice> {
   /** The app-state slice the read is told on (`LIVE_READ`). */
   readonly slice: Slice;
   /** The sentence the window draws when its hold is refused. */
   readonly refusal: string;
   /** Whether only a panel may hold it, every other window refused. */
   readonly panelOnly: boolean;
-  /** Its Try again: the name a call site spells it by, and the sentence drawn when it is refused. */
+}
+
+/** A follow's Try again: the name a call site spells it by, and the sentence drawn when it is refused. */
+interface RetrySpec<Retry extends ReadActName> {
   readonly retry: { readonly name: Retry; readonly refusal: string };
 }
 
+/** A follow with no Try again, whose window asks its read again by no act of its own. */
+interface NoRetrySpec {
+  readonly retry?: never;
+}
+
 /** A read held once for the account signed in, by every window that holds it. */
-interface AccountFollowSpec<Slice extends FollowedSlice, Retry extends ReadActName>
-  extends LiveFollowSpecBase<Slice, Retry> {
+interface AccountFollowSpec<Slice extends FollowedSlice> extends LiveFollowSpecBase<Slice> {
   readonly hold: typeof HOLD.ACCOUNT;
   readonly key?: never;
 }
 
 /** A read each window holds by a key it names, read whole. */
-interface WindowFollowSpec<Slice extends FollowedSlice, Retry extends ReadActName, Key, KeyEncoded>
-  extends LiveFollowSpecBase<Slice, Retry> {
+interface WindowFollowSpec<Slice extends FollowedSlice, Key, KeyEncoded>
+  extends LiveFollowSpecBase<Slice> {
   readonly hold: typeof HOLD.WINDOW;
   readonly key: EffectSchema.Codec<Key, KeyEncoded>;
 }
@@ -98,9 +105,10 @@ export interface LiveFollowDeclaration<
   readonly hold: Held;
   readonly key: EffectSchema.Codec<Key, KeyEncoded>;
   readonly panelOnly: boolean;
-  readonly retryName: Retry;
+  /** Its Try again's name, where it has one. */
+  readonly retryName?: Retry;
   readonly procedure: ReturnType<typeof followProcedureOf<Key, KeyEncoded>>;
-  readonly retryProcedure: ReturnType<typeof retryProcedureOf<Key, KeyEncoded>>;
+  readonly retryProcedure?: ReturnType<typeof retryProcedureOf<Key, KeyEncoded>>;
 }
 
 /** Any live follow's declaration, whatever it is keyed by: the bound every table and relay is written over. */
@@ -109,9 +117,9 @@ export interface AnyLiveFollowDeclaration {
   readonly hold: Hold;
   readonly key: EffectSchema.Top;
   readonly panelOnly: boolean;
-  readonly retryName: ReadActName;
+  readonly retryName?: ReadActName;
   readonly procedure: AnyContractProcedure;
-  readonly retryProcedure: AnyContractProcedure;
+  readonly retryProcedure?: AnyContractProcedure;
 }
 
 /** A live follow as named by `liveFollows`: its declaration, its name, and the kinds `kinds.ts` holds for it and its Try again. */
@@ -121,7 +129,7 @@ type LiveFollow<
 > = Declaration & {
   readonly name: Name;
   readonly kind: (typeof PORT_ACT_KIND)[Name];
-  readonly retryKind: (typeof PORT_ACT_KIND)[Declaration["retryName"]];
+  readonly retryKind?: (typeof PORT_ACT_KIND)[NonNullable<Declaration["retryName"]>];
 };
 
 /** Any named live follow. */
@@ -140,11 +148,13 @@ type NamedFollows<
   >;
 };
 
-/** The contract procedures of `Follows`: each hold's and each Try again's, keyed by its kind. */
+/** The contract procedures of `Follows`: each hold's and each Try again's, keyed by its kind; a follow with no Try again has none. */
 type FollowsContract<Follows extends Readonly<Record<string, AnyLiveFollow>>> = {
   readonly [Name in keyof Follows as Follows[Name]["kind"]]: Follows[Name]["procedure"];
 } & {
-  readonly [Name in keyof Follows as Follows[Name]["retryKind"]]: Follows[Name]["retryProcedure"];
+  readonly [Name in keyof Follows as NonNullable<Follows[Name]["retryKind"]>]: NonNullable<
+    Follows[Name]["retryProcedure"]
+  >;
 };
 
 /** One live follow, declared: `spec`, with its hold's and its Try again's procedures derived. Name it in a domain's `liveFollows` under its hold's name. */
@@ -154,26 +164,39 @@ export function liveFollow<
   Key,
   KeyEncoded,
 >(
-  spec: WindowFollowSpec<Slice, Retry, Key, KeyEncoded>,
+  spec: WindowFollowSpec<Slice, Key, KeyEncoded> & RetrySpec<Retry>,
 ): LiveFollowDeclaration<Slice, typeof HOLD.WINDOW, Key, KeyEncoded, Retry>;
+export function liveFollow<const Slice extends FollowedSlice, Key, KeyEncoded>(
+  spec: WindowFollowSpec<Slice, Key, KeyEncoded> & NoRetrySpec,
+): LiveFollowDeclaration<Slice, typeof HOLD.WINDOW, Key, KeyEncoded, never>;
 export function liveFollow<const Slice extends FollowedSlice, const Retry extends ReadActName>(
-  spec: AccountFollowSpec<Slice, Retry>,
+  spec: AccountFollowSpec<Slice> & RetrySpec<Retry>,
 ): LiveFollowDeclaration<Slice, typeof HOLD.ACCOUNT, undefined, undefined, Retry>;
+export function liveFollow<const Slice extends FollowedSlice>(
+  spec: AccountFollowSpec<Slice> & NoRetrySpec,
+): LiveFollowDeclaration<Slice, typeof HOLD.ACCOUNT, undefined, undefined, never>;
 export function liveFollow<Slice extends FollowedSlice, Retry extends ReadActName, Key, KeyEncoded>(
-  spec: WindowFollowSpec<Slice, Retry, Key, KeyEncoded> | AccountFollowSpec<Slice, Retry>,
+  spec: (WindowFollowSpec<Slice, Key, KeyEncoded> | AccountFollowSpec<Slice>) &
+    (RetrySpec<Retry> | NoRetrySpec),
 ): LiveFollowDeclaration<Slice, Hold, Key | undefined, KeyEncoded | undefined, Retry> {
   // Note that a read the account holds is held by no key of a window's, so its hold takes none.
   const key: EffectSchema.Codec<Key | undefined, KeyEncoded | undefined> =
     spec.hold === HOLD.WINDOW ? spec.key : EffectSchema.Undefined;
-  return {
+  const declared = {
     slice: spec.slice,
     hold: spec.hold,
     key,
     panelOnly: spec.panelOnly,
-    retryName: spec.retry.name,
     procedure: followProcedureOf(spec.refusal, spec.panelOnly, key),
-    retryProcedure: retryProcedureOf(spec.retry.refusal, spec.panelOnly, key),
   };
+  // Note that a follow with no Try again declares no procedure for one, so the port answers none.
+  return spec.retry === undefined
+    ? declared
+    : {
+        ...declared,
+        retryName: spec.retry.name,
+        retryProcedure: retryProcedureOf(spec.retry.refusal, spec.panelOnly, key),
+      };
 }
 
 /** A domain's live follows, each named by its hold's name, its kind and its Try again's read from `kinds.ts`. */
@@ -185,11 +208,12 @@ export function liveFollows<
     if (declaration === undefined) continue;
     // SAFETY: the declarations' keys are read act names, by their type.
     const key = name as ReadActName;
+    const { retryName } = declaration;
     named[name] = {
       ...declaration,
       name: key,
       kind: PORT_ACT_KIND[key],
-      retryKind: PORT_ACT_KIND[declaration.retryName],
+      ...(retryName === undefined ? undefined : { retryKind: PORT_ACT_KIND[retryName] }),
     };
   }
   // SAFETY: the loop above named every declaration under its own key.
@@ -198,7 +222,7 @@ export function liveFollows<
 
 /** Whether a declared act is a live follow rather than a plain act. */
 export function isLiveFollow(act: object): act is AnyLiveFollow {
-  return "retryProcedure" in act;
+  return "slice" in act;
 }
 
 /** The act port's contract for `follows`: each hold's and each Try again's derived procedure, keyed by its kind. */
@@ -206,10 +230,14 @@ export function followsContractOf<const Follows extends Readonly<Record<string, 
   follows: Follows,
 ): FollowsContract<Follows> {
   const procedures = Object.fromEntries(
-    Object.values(follows).flatMap((follow) => [
-      [follow.kind, follow.procedure],
-      [follow.retryKind, follow.retryProcedure],
-    ]),
+    Object.values(follows).flatMap((follow) =>
+      follow.retryKind === undefined
+        ? [[follow.kind, follow.procedure]]
+        : [
+            [follow.kind, follow.procedure],
+            [follow.retryKind, follow.retryProcedure],
+          ],
+    ),
   );
   // SAFETY: each procedure is keyed by its own follow's kind, or its Try again's, as the type maps them.
   return procedures as FollowsContract<Follows>;

@@ -79,8 +79,9 @@ export interface DescriptionDocumentReadsDependencies {
 }
 
 export interface DescriptionDocumentReads {
-  /** Holds `taskId`'s description for the windows until `unfollow`, following it unless it stands. */
-  readonly follow: (taskId: string) => Effect.Effect<void>;
+  /** Holds `taskId`'s description for the caller's scope, following it unless it stands; the hold a start took (`started`) is handed to it. */
+  readonly hold: (taskId: string) => Effect.Effect<void, never, Scope.Scope>;
+  /** Lets go the hold a start took of `taskId`'s description, where no window took it over. */
   readonly unfollow: (taskId: string) => Effect.Effect<void>;
   /** Reads `taskId`'s description again at once, as Try again asks. */
   readonly retry: (taskId: string) => Effect.Effect<void>;
@@ -281,7 +282,7 @@ export const descriptionDocumentReads = /* @__PURE__ */ Effect.fn("host/descript
       follow: followDescription,
       tell: dependencies.tell,
     });
-    /** The windows' hold on each task's description, one fiber standing until let go. */
+    /** The hold a start took on each task's description, one fiber standing until a window takes it over or the start is taken back. */
     const holds = yield* FiberMap.make<string>();
 
     const follow = (taskId: string) =>
@@ -303,7 +304,8 @@ export const descriptionDocumentReads = /* @__PURE__ */ Effect.fn("host/descript
     };
 
     return {
-      follow,
+      // Note that the window's hold is taken before the start's is let go, so the description is never let go between them.
+      hold: (taskId) => Effect.andThen(held.hold(taskId), FiberMap.remove(holds, taskId)),
       unfollow: (taskId) => FiberMap.remove(holds, taskId),
       retry: held.retry,
       open: held.open,
