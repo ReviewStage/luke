@@ -1,5 +1,5 @@
 /**
- * session-sandboxes.ts -- a session's Vercel Sandboxes kept alive while it is used, stopped, or deleted once it retired, and the sweep that works the queue of the retired.
+ * session-sandboxes.ts -- a session's Vercel Sandboxes kept alive while it is used, or stopped.
  *
  * Whatever shows a session's sandbox in use asks `keepAliveFor` on the
  * rule `sandbox-keep-alive.ts` sets: the list names when the running session
@@ -9,14 +9,11 @@
  *
  * An agent's session has one persistent Vercel Sandbox (`agent-sandbox-open.ts`),
  * tagged with the session's id; a stopped sandbox keeps its checkout in
- * snapshots until Vercel lets them expire. Once we
- * let go of a session for good, its retire's reset, the purge of a deleted
- * task's conversations, or an account's deletion queues it
- * (`session-sandbox-cleanup.ts`), and the scheduled sweep takes the queue a
- * bounded batch at a time: every sandbox carrying the session's tag is
- * deleted with the snapshots only it kept, and the session leaves the queue.
- * A delete Vercel did not confirm leaves the session queued, stamped, behind
- * the rest. An agent's archive stops its sandbox rather than deleting it, in
+ * snapshots until Vercel lets them expire (`CODER.SANDBOX_SNAPSHOTS`), seven
+ * days after last use, which is all that removes the sandbox of a session we
+ * let go of for good, a deleted task's or a deleted account's. A retire's
+ * reset deletes the sandboxes it finds as it discards them. An agent's
+ * archive stops its sandbox rather than deleting it, in
  * the background (`stoppedInBackground`), so an unarchive still resumes from
  * the snapshot; a local agent's archive queues its device a discard line
  * there too (`device-discard.ts`). Nothing here reads a sandbox's files or a word of any account:
@@ -26,18 +23,12 @@
  * Credentials are the deployment's own: the function's Vercel OIDC token,
  * which names this project and its team, as the agents' own sandboxes are
  * made with (`vercel-sandbox-api.ts`). A deployment without one answers every
- * delete as unavailable, and the queue waits for a deployment that has one.
+ * call as unavailable.
  */
 
-import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import { type Agent, readAgent } from "@repo/database/models/agent-store";
 import { recordedRuntimeSession } from "@repo/database/models/recorded-session";
-import {
-  nextSessionSandboxes,
-  sessionSandboxDeferred,
-  sessionSandboxDeleted,
-} from "@repo/database/models/session-sandbox-cleanup";
-import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
+import { Clock, Context, Duration, Effect, Layer, Option } from "effect";
 import { afterResponse } from "../http/after-response.js";
 import { discardedOrLogged } from "./device-discard.js";
 import { keepAliveExtension } from "./sandbox-keep-alive.js";
@@ -49,12 +40,6 @@ import {
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "./vercel-sandbox-api.js";
-
-const SESSION_SANDBOX_SWEEP = {
-  /** The most sessions one sweep takes, so a backlog is worked through a sweep at a time. */
-  MAX_SESSIONS: 20,
-  CONCURRENCY: 5,
-} as const;
 
 const ARCHIVE_STOP = {
   /**
@@ -74,8 +59,6 @@ export interface SessionSandboxesService {
    * is left as it is.
    */
   readonly keepAliveFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
-  /** Deletes every sandbox tagged with the session, with the snapshots no other sandbox uses; answers how many went. */
-  readonly deleteFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
   /**
    * Stops every running sandbox tagged with the session, keeping its
    * filesystem for a later resume; answers how many were stopped.
@@ -87,7 +70,7 @@ export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionS
   "SessionSandboxes",
 ) {}
 
-/** A session's sandboxes, deleted or stopped, over the calls `vercel-sandbox-api.ts` makes. */
+/** A session's sandboxes, kept alive or stopped, over the calls `vercel-sandbox-api.ts` makes. */
 function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
   return {
     keepAliveFor: (sessionId) =>
@@ -106,12 +89,6 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           extended += 1;
         }
         return extended;
-      }),
-    deleteFor: (sessionId) =>
-      Effect.gen(function* () {
-        const sandboxes = yield* api.listTagged(sessionId);
-        for (const { name } of sandboxes) yield* api.deleteSandbox(name);
-        return sandboxes.length;
       }),
     stopFor: (sessionId) =>
       Effect.gen(function* () {
@@ -253,53 +230,3 @@ export const stoppedInBackground = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
   );
 });
-
-/** What one sweep of the queue came to: sessions whose sandboxes went, and sessions left for a later sweep. */
-export interface SessionSandboxSweepOutcome {
-  deleted: number;
-  pending: number;
-}
-
-const SESSION_ENDING = { DELETED: "deleted", PENDING: "pending" } as const;
-
-type SessionEnding = (typeof SESSION_ENDING)[keyof typeof SESSION_ENDING];
-
-/** One queued session's sandboxes deleted and the session dequeued, or the session stamped for a later sweep. */
-const endSession = /* @__PURE__ */ Effect.fnUntraced(function* (
-  sessionId: string,
-  now: Date,
-): Effect.fn.Return<
-  SessionEnding,
-  QueryError | Schema.SchemaError,
-  SessionSandboxes | DatabaseServices
-> {
-  const sandboxes = yield* SessionSandboxes;
-  const deleted = yield* Effect.result(sandboxes.deleteFor(sessionId));
-  if (Result.isSuccess(deleted)) {
-    yield* sessionSandboxDeleted(sessionId);
-    return SESSION_ENDING.DELETED;
-  }
-  yield* Effect.logWarning(`a session's sandbox was not deleted: ${deleted.failure.message}`);
-  yield* sessionSandboxDeferred(sessionId, now);
-  return SESSION_ENDING.PENDING;
-});
-
-/** Works the next batch of the queue, `CONCURRENCY` at a time, and counts how each session ended. */
-export const sweepSessionSandboxes = /* @__PURE__ */ Effect.fn("web/sweepSessionSandboxes")(
-  function* (
-    now: Date,
-  ): Effect.fn.Return<
-    SessionSandboxSweepOutcome,
-    QueryError | Schema.SchemaError,
-    SessionSandboxes | DatabaseServices
-  > {
-    const queued = yield* nextSessionSandboxes(SESSION_SANDBOX_SWEEP.MAX_SESSIONS);
-    const endings = yield* Effect.forEach(queued, (sessionId) => endSession(sessionId, now), {
-      concurrency: SESSION_SANDBOX_SWEEP.CONCURRENCY,
-    });
-    return {
-      deleted: endings.filter((ending) => ending === SESSION_ENDING.DELETED).length,
-      pending: endings.filter((ending) => ending === SESSION_ENDING.PENDING).length,
-    };
-  },
-);
