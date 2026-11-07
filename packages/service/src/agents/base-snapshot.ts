@@ -13,12 +13,15 @@
  * the firewall for the clone alone, so the snapshot holds no credential.
  *
  * The sandbox carries a key once its fill ended well (`BASE_TAG.KEY`): a
- * digest of the image it was made on and the default branch it holds, so a
- * new image, whose runner and tools the snapshot would otherwise freeze, or a
- * moved default branch reads as a base to fill again, and none is ever
- * created from on an image or branch it was not made of. The key goes up
- * before the snapshot is taken, so a snapshot of a half-made checkout is
- * never one a launch reads.
+ * digest of the image it was made on, without its runner, and the default
+ * branch it holds, so a new image, whose tools the snapshot would otherwise
+ * freeze, or a moved default branch reads as a base to fill again, and none
+ * is ever created from on an image or branch it was not made of. Note that
+ * the runner is left out of the key, because it changes with nearly every
+ * deploy and each launch writes the deploy's own over the one the snapshot
+ * holds (`machine/vercel-machine.ts`), so a runner's change alone leaves
+ * every base standing. The key goes up before the snapshot is taken, so a
+ * snapshot of a half-made checkout is never one a launch reads.
  *
  * Nothing refreshes it on a timer. A launch fills it past its answer where
  * it is missing or out of date, and fills it again where the snapshot it
@@ -104,6 +107,12 @@ interface BaseSnapshotCredential {
   readonly access: GitHubTokenAccess;
 }
 
+/** The image a base is made on: its reference, and a digest of it without the runner (`AgentImage`'s `base`). */
+export interface BaseImage {
+  readonly reference: string;
+  readonly base: string;
+}
+
 /** What a base snapshot is of: the workspace, and the repository and branch it holds. */
 export interface BaseSnapshotOf {
   readonly workspaceId: string;
@@ -157,9 +166,9 @@ export function baseSnapshotName(of: BaseSnapshotOf): string {
   return `${BASE_SNAPSHOT.NAME_PREFIX}${digestOf([of.workspaceId, snapshotRecordOf(of.fullName)])}`;
 }
 
-/** The key a base made on the image given, of the default branch the base names, carries. */
-function baseKey(of: BaseSnapshotOf, image: string): string {
-  return digestOf([image, of.defaultBranch]);
+/** The key a base made on the image given, without its runner, of the default branch the base names, carries. */
+function baseKey(of: BaseSnapshotOf, imageBase: string): string {
+  return digestOf([imageBase, of.defaultBranch]);
 }
 
 /** Whether a sandbox is a fill still within its grace: up, and created less than `FILL_GRACE` ago. */
@@ -193,10 +202,10 @@ function baseSpanAttributes(state: BaseSnapshotRead["state"], reason: BaseWanted
   return { "base.state": state, ...(reason === undefined ? undefined : { "base.reason": reason }) };
 }
 
-/** The base snapshot as it stands for a launch on the image given, which its span records. */
-export const readBaseSnapshot = (api: VercelSandboxApi, of: BaseSnapshotOf, image: string) =>
+/** The base snapshot as it stands for a launch on the image given, by its digest without the runner, which its span records. */
+export const readBaseSnapshot = (api: VercelSandboxApi, of: BaseSnapshotOf, imageBase: string) =>
   Effect.all([api.getNamed(baseSnapshotName(of)), Clock.currentTimeMillis]).pipe(
-    Effect.map(([found, now]) => readOf(found, baseKey(of, image), now)),
+    Effect.map(([found, now]) => readOf(found, baseKey(of, imageBase), now)),
     Effect.tap((read) =>
       Effect.annotateCurrentSpan(
         baseSpanAttributes(read.state, read.state === BASE_STATE.WANTED ? read.reason : undefined),
@@ -293,13 +302,13 @@ export const lockfileMoved = (sandbox: RepositorySandbox, since: string) =>
 export const fillBaseSnapshot = Effect.fn("web/fillBaseSnapshot")(function* (
   api: VercelSandboxApi,
   of: BaseSnapshotOf,
-  image: string,
+  image: BaseImage,
   credential: BaseSnapshotCredential,
   open: (sandbox: { readonly name: string; readonly running: string }) => RepositorySandbox,
   replacing?: BaseReplacing,
 ) {
   const name = baseSnapshotName(of);
-  const key = baseKey(of, image);
+  const key = baseKey(of, image.base);
   const found = yield* api.getNamed(name);
   const read = readOf(found, key, yield* Clock.currentTimeMillis);
   const replaced = read.state === BASE_STATE.READY && read.snapshotId === replacing?.snapshotId;
@@ -315,7 +324,7 @@ export const fillBaseSnapshot = Effect.fn("web/fillBaseSnapshot")(function* (
   const created = yield* api
     .create({
       name,
-      from: { image },
+      from: { image: image.reference },
       tags: {},
       timeoutMs: Duration.toMillis(BASE_SNAPSHOT.FILL_TIMEOUT),
       vcpus: CODER.SANDBOX_VCPUS,

@@ -180,7 +180,11 @@ function services(
     machineOver(http),
     GITHUB_APP_WITH_TOKENS,
     Layer.succeed(HostedEnvironment, NO_KEYS),
-    Layer.succeed(AgentImage, { reference: Effect.succeed(IMAGE) }),
+    Layer.succeed(AgentImage, {
+      reference: Effect.succeed(IMAGE),
+      base: Effect.succeed(IMAGE),
+      runner: Effect.succeed(new Uint8Array()),
+    }),
   );
 }
 

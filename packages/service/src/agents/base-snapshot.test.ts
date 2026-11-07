@@ -74,7 +74,7 @@ const filled = (api: VercelSandboxApi, image = IMAGE, replacing?: string) =>
   fillBaseSnapshot(
     api,
     RELAY,
-    image,
+    { reference: image, base: image },
     CREDENTIAL,
     opener(api),
     replacing === undefined ? undefined : { snapshotId: replacing, reason: BASE_WANTED.LAPSED },

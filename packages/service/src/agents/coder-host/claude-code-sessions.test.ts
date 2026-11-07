@@ -143,6 +143,8 @@ import { recordNativeTurnHanded } from "./turn-message.js";
  */
 
 const IMAGE = "agent-image:fixture";
+/** The runner's bundle the deploy ships, which each launch writes into its sandbox. */
+const RUNNER_BUNDLE = new TextEncoder().encode("// the deploy's runner");
 const EVENTS_URL = "https://app.test/api/agents/runner/events";
 const LINES_URL = "https://app.test/api/agents/runner-lines";
 const TRANSCRIPTS_URL = "https://app.test/api/agents/runner-transcripts";
@@ -192,7 +194,11 @@ function readyingScript(api: ReturnType<typeof runnerSandboxApi>): string {
 }
 
 /** The agents' image as a deploy names it, the fixture's. */
-const FIXTURE_IMAGE = Layer.succeed(AgentImage, { reference: Effect.succeed(IMAGE) });
+const FIXTURE_IMAGE = Layer.succeed(AgentImage, {
+  reference: Effect.succeed(IMAGE),
+  base: Effect.succeed(IMAGE),
+  runner: Effect.succeed(RUNNER_BUNDLE),
+});
 
 /** Everything but the store, around the fake Vercel given. */
 function services(
@@ -2836,7 +2842,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(
             Layer.merge(
               services(dying),
-              Layer.succeed(AgentImage, { reference: Effect.die(new TypeError("unreadable")) }),
+              Layer.succeed(AgentImage, {
+                reference: Effect.die(new TypeError("unreadable")),
+                base: Effect.die(new TypeError("unreadable")),
+                runner: Effect.die(new TypeError("unreadable")),
+              }),
             ),
           ),
         );
