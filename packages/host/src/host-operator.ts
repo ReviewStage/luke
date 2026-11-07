@@ -22,15 +22,8 @@ import type { LiveRead } from "@repo/features/live-wire";
 import { type PortForwarding, portForwardingSchema } from "@repo/features/port-forward-acts";
 import {
   TASK_CALL_FAILURE,
-  type TaskBrowserTabsFollow,
-  type TaskDocumentFollow,
-  type TaskHistoryFollow,
-  type TaskPagesFollow,
-  type TasksCommentsFollow,
-  type TasksLinkStandingParams,
   type TasksPageAnswer,
   type TasksPageParams,
-  type TasksRepositoriesParams,
   type TasksView,
   type TasksWorkspaceParams,
   type TasksWorkspaceTokenRepositoriesParams,
@@ -73,25 +66,18 @@ import type {
   AppAccessSlice,
   AppAccountPreferences,
   AppAutomationReads,
-  AppBrowserTabs,
-  AppDescriptionComments,
-  AppDescriptionDocuments,
   AppDevicePresences,
   AppGitHubTokens,
-  AppHistories,
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
   AppInstalledSkills,
   AppIntegrations,
   AppIntegrationTools,
-  AppLinkStandings,
   AppMcpClients,
   AppModels,
-  AppPages,
   AppProviderKeys,
   AppPullRequestParts,
-  AppRepositoryLists,
   AppSlackChannels,
   AppThisMacHosts,
   AppTokenRepositories,
@@ -155,58 +141,8 @@ export interface HostOperator {
   tasksRegained(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
-  /** The repositories the account reaches in one workspace, or in every one, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onRepositoryListsChanged`. */
-  tasksRepositoriesFollow(params: TasksRepositoriesParams): Effect.Effect<void>;
-  /** One workspace's repositories let go by the windows. */
-  tasksRepositoriesUnfollow(params: TasksRepositoriesParams): Effect.Effect<void>;
-  /** One workspace's held repositories asked again at once, as Try again asks; done once the ask has landed. */
-  tasksRepositoriesRetry(params: TasksRepositoriesParams): Effect.Effect<void>;
-  /** Every workspace's repositories the host holds for the windows, whole, each time any of them moves. */
-  onRepositoryListsChanged(listener: (held: AppRepositoryLists) => void): () => void;
-  /** What GitHub holds of the page a link names, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onLinkStandingsChanged`. */
-  tasksLinkStandingFollow(params: TasksLinkStandingParams): Effect.Effect<void>;
-  /** One link's standing let go by the windows. */
-  tasksLinkStandingUnfollow(params: TasksLinkStandingParams): Effect.Effect<void>;
-  /** Every link's standing the host holds for the windows, whole, each time any of them moves. */
-  onLinkStandingsChanged(listener: (held: AppLinkStandings) => void): () => void;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
-  /** One plan's or agent's pages held followed for the windows from now until let go, and a while after among those let go lately, the open task's among them; what they hold is heard through `onPagesChanged`. */
-  tasksPagesFollow(scope: TaskPagesFollow): Effect.Effect<void>;
-  /** One plan's or agent's pages let go by the windows: they stay followed among those let go lately until later ones push them out. */
-  tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
-  /** Every plan's or agent's pages the host holds for the windows, whole, each time any of them moves. */
-  onPagesChanged(listener: (held: AppPages) => void): () => void;
-  /** One task's description held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onDescriptionDocumentsChanged`. */
-  tasksDocumentFollow(scope: TaskDocumentFollow): Effect.Effect<void>;
-  /** One task's description let go by the windows: it stays followed among those let go lately until later ones push it out. */
-  tasksDocumentUnfollow(scope: TaskDocumentFollow): Effect.Effect<void>;
-  /** One task's held description read again at once, as Try again asks. */
-  tasksDocumentRetry(scope: TaskDocumentFollow): Effect.Effect<void>;
-  /** Every task's description the host holds for the windows, whole, each time any of them moves. */
-  onDescriptionDocumentsChanged(listener: (held: AppDescriptionDocuments) => void): () => void;
-  /** One task's or agent's cloud Browser tabs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onBrowserTabsChanged`. */
-  tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
-  /** One task's or agent's Browser tabs let go by the windows: they stay followed among those let go lately until later ones push them out. */
-  tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
-  /** Every task's or agent's Browser tabs the host holds for the windows, whole, each time one moves or a takeover lapses. */
-  onBrowserTabsChanged(listener: (held: AppBrowserTabs) => void): () => void;
-  /** One task's description history held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHistoriesChanged`. */
-  tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
-  /** One task's history let go by the windows: it stays followed among those let go lately until later ones push it out. */
-  tasksHistoryUnfollow(scope: TaskHistoryFollow): Effect.Effect<void>;
-  /** One task's held history read again at once, as Try again asks. */
-  tasksHistoryRetry(scope: TaskHistoryFollow): Effect.Effect<void>;
-  /** Every task's description history the host holds for the windows, whole, each time any of them moves. */
-  onHistoriesChanged(listener: (held: AppHistories) => void): () => void;
-  /** One task's description's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onDescriptionCommentsChanged`. */
-  tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
-  /** One description's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
-  tasksCommentsUnfollow(scope: TasksCommentsFollow): Effect.Effect<void>;
-  /** One held description's or page's comments read again at once, as Try again asks. */
-  tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
-  /** Every description's or page's comments the host holds for the windows, whole, each time any of them moves. */
-  onDescriptionCommentsChanged(listener: (held: AppDescriptionComments) => void): () => void;
   /** Where every one of the account's integrations stands, held followed for the windows from now until let go, and a while after; what it holds is heard through `onIntegrationsChanged`. */
   integrationsFollow(): Effect.Effect<void>;
   /** The account's integrations let go by the windows. */
@@ -496,13 +432,6 @@ export interface LiveReadChanged {
   readonly held: unknown;
 }
 
-/** The comments a window holds, as the gateway names them: the task, and the page where it holds one's. */
-function commentsFollowParams(scope: TasksCommentsFollow): WireRecord {
-  return scope.pageId === undefined
-    ? { taskId: scope.taskId }
-    : { taskId: scope.taskId, pageId: scope.pageId };
-}
-
 /** A followed transcript as the gateway's params carry it. */
 function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
   const { kind, agentId, callId } = transcript;
@@ -519,10 +448,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     Effect.asVoid(result);
 
   const on = gatewayEventReader(client);
-
-  /** A repository list's scope as the gateway carries it: its workspace, or nothing for every one. */
-  const repositoryScope = (params: TasksRepositoriesParams) =>
-    params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId };
 
   /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
   const integrationTarget = (params: IntegrationProviderParams) => ({
@@ -596,53 +521,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     tasksResync: () => fire(client.call(GATEWAY_METHOD.TASKS_RESYNC)),
     tasksRegained: () => fire(client.call(GATEWAY_METHOD.TASKS_REGAINED)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
-    tasksRepositoriesFollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW, repositoryScope(params))),
-    tasksRepositoriesUnfollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_UNFOLLOW, repositoryScope(params))),
-    tasksRepositoriesRetry: (params) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_RETRY, repositoryScope(params))),
-    onRepositoryListsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.REPOSITORY_LISTS_CHANGED,
-        // Note that the held lists are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppRepositoryLists>(payload) : undefined),
-        listener,
-      ),
-    tasksLinkStandingFollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.TASKS_LINK_STANDING_FOLLOW, {
-          workspaceId: params.workspaceId,
-          address: params.address,
-        }),
-      ),
-    tasksLinkStandingUnfollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.TASKS_LINK_STANDING_UNFOLLOW, {
-          workspaceId: params.workspaceId,
-          address: params.address,
-        }),
-      ),
-    onLinkStandingsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.LINK_STANDINGS_CHANGED,
-        // Note that the held standings are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppLinkStandings>(payload) : undefined),
-        listener,
-      ),
-    tasksCommentsFollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, commentsFollowParams(scope))),
-    tasksCommentsUnfollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_UNFOLLOW, commentsFollowParams(scope))),
-    tasksCommentsRetry: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_RETRY, commentsFollowParams(scope))),
-    onDescriptionCommentsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED,
-        // Note that the held comments are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) => (isRecord(payload) ? answered<AppDescriptionComments>(payload) : undefined),
-        listener,
-      ),
     tasksPage: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_PAGE, {
@@ -651,52 +529,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           version: params.version,
         }),
         answerOf(tasksPageAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksPagesFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, scope)),
-    tasksPagesUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, scope)),
-    onPagesChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.PAGES_CHANGED,
-        // Note that the held pages are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppPages>(payload) : undefined),
-        listener,
-      ),
-    tasksDocumentFollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId: scope.taskId })),
-    tasksDocumentUnfollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: scope.taskId })),
-    tasksDocumentRetry: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_RETRY, { taskId: scope.taskId })),
-    onDescriptionDocumentsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED,
-        // Note that the held descriptions are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) => (isRecord(payload) ? answered<AppDescriptionDocuments>(payload) : undefined),
-        listener,
-      ),
-    tasksBrowserTabsFollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW, scope)),
-    tasksBrowserTabsUnfollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, scope)),
-    onBrowserTabsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.BROWSER_TABS_CHANGED,
-        // Note that the held tabs are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) => (isRecord(payload) ? answered<AppBrowserTabs>(payload) : undefined),
-        listener,
-      ),
-    tasksHistoryFollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: scope.taskId })),
-    tasksHistoryUnfollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: scope.taskId })),
-    tasksHistoryRetry: (scope) =>
-      fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_RETRY, { taskId: scope.taskId })),
-    onHistoriesChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.HISTORIES_CHANGED,
-        // Note that the held histories are the host's own, handed over in this process, so they are passed on as built, as the held descriptions are.
-        (payload) => (isRecord(payload) ? answered<AppHistories>(payload) : undefined),
-        listener,
       ),
     workspaceIntegrationsFollow: (params) =>
       fire(

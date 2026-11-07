@@ -19,7 +19,7 @@ import {
 } from "@repo/features/description-comment-wire";
 import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
 import { WRITE_UNTAKEN } from "@repo/features/keyed-write";
-import { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
+import { LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
 import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import { TASK_PAGES_READ } from "@repo/features/task-pages-live";
@@ -45,7 +45,7 @@ import {
   type TasksView,
   type TasksWriteSectionParams,
 } from "@repo/features/tasks-view";
-import { GATEWAY_EVENT, GATEWAY_METHOD } from "@repo/gateway";
+import { GATEWAY_METHOD } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { type EntityPool, entityPool } from "@repo/sync";
 import { isRecord, TURN_STATUS, type WireValue } from "@repo/wire";
@@ -806,7 +806,7 @@ it.effect("a task opened again draws its held description before any read of it 
     const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
     const billing = task(BILLING, "Billing export", "# Billing export", 20);
     const service = fakeService([billing, invites]);
-    const { call, last, openTask, held, settled } = yield* subject(service);
+    const { follow, unfollow, call, last, openTask, held, settled } = yield* subject(service);
     yield* openTask(INVITES);
     yield* openTask(BILLING);
     // Every read of the service is held from here, as a service that has not answered yet.
@@ -815,9 +815,9 @@ it.effect("a task opened again draws its held description before any read of it 
     service.open = (taskId) => Effect.andThen(Deferred.await(answered), open(taskId));
 
     // The window lets the billing task's description go as it opens the invites task again, whose it holds anew.
-    yield* call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: BILLING });
+    yield* unfollow("TASKS_DOCUMENT_FOLLOW", { taskId: BILLING });
     const opening = yield* Effect.forkChild(call("TASKS_SELECT", { taskId: INVITES }));
-    yield* call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId: INVITES });
+    yield* follow("TASKS_DOCUMENT_FOLLOW", { taskId: INVITES });
     yield* settled;
 
     assert.deepEqual(opening.pollUnsafe(), Exit.succeed(true), "the open answered");
@@ -1739,8 +1739,7 @@ const relayPull = (title: string): GitHubRepositoryPullRequestAnswer => ({
 
 /** The links' standings the host holds for the windows, as it last told them. */
 function standingsOf(events: readonly { readonly kind: string; readonly payload: WireValue }[]) {
-  return events.filter((event) => event.kind === GATEWAY_EVENT.LINK_STANDINGS_CHANGED).at(-1)
-    ?.payload;
+  return events.filter((event) => event.kind === LIVE_READ.LINK_STANDINGS).at(-1)?.payload;
 }
 
 /** One link's standing as the host last told it, by the workspace it is read through and its address. */
@@ -1774,7 +1773,7 @@ it.effect(
         ]),
       };
       service.issues[ACME.id] = { "acme/relay": new Map([[7, notPlanned]]) };
-      const { call, events, settled } = yield* subject(service);
+      const { follow, events, settled } = yield* subject(service);
 
       for (const address of [
         RELAY_PULL,
@@ -1783,7 +1782,7 @@ it.effect(
         RELAY_ISSUE,
         RELAY_HOME,
       ]) {
-        yield* call(GATEWAY_METHOD.TASKS_LINK_STANDING_FOLLOW, { workspaceId: ACME.id, address });
+        yield* follow("TASKS_LINK_STANDING_FOLLOW", { workspaceId: ACME.id, address });
       }
       yield* settled;
 
@@ -1806,9 +1805,9 @@ it.effect(
       const service = fakeService([]);
       service.pullRequests[ACME.id] = { "acme/relay": new Map([[42, relayPull("Batch invites")]]) };
       service.pullRequestQuota = 1;
-      const { call, events, settled, focus } = yield* subject(service);
+      const { follow, events, settled, focus } = yield* subject(service);
       const hold = (address: string) =>
-        call(GATEWAY_METHOD.TASKS_LINK_STANDING_FOLLOW, { workspaceId: ACME.id, address });
+        follow("TASKS_LINK_STANDING_FOLLOW", { workspaceId: ACME.id, address });
       /** A window coming forward after `seconds`, and every ask it caused landed. */
       const forwardAfter = (seconds: number) =>
         Effect.gen(function* () {
@@ -1855,9 +1854,9 @@ it.effect("behind a closed account gate a link's standing reaches no service", (
   Effect.gen(function* () {
     const service = fakeService([]);
     service.pullRequests[ACME.id] = { "acme/relay": new Map([[42, relayPull("Batch invites")]]) };
-    const { call, events, settled } = yield* subject(service, { signedIn: false });
+    const { follow, events, settled } = yield* subject(service, { signedIn: false });
 
-    yield* call(GATEWAY_METHOD.TASKS_LINK_STANDING_FOLLOW, {
+    yield* follow("TASKS_LINK_STANDING_FOLLOW", {
       workspaceId: ACME.id,
       address: RELAY_PULL,
     });
@@ -1882,13 +1881,13 @@ it.effect(
         },
       };
       service.tokenRepositorySet = { ok: true, answer: [] };
-      const { act, call, settled } = yield* subject(service);
+      const { follow, act, call, settled } = yield* subject(service);
       const asked = () => service.reads.filter((read) => read.startsWith("repositories"));
       yield* call("TASKS_REFRESH", undefined);
       yield* settled;
 
-      yield* call(GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW, { workspaceId: ACME.id });
-      yield* call(GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW, {});
+      yield* follow("TASKS_REPOSITORIES_FOLLOW", { workspaceId: ACME.id });
+      yield* follow("TASKS_REPOSITORIES_FOLLOW", {});
       yield* settled;
       assert.deepEqual(asked(), [`repositories:${ACME.id}`, "repositories"]);
 
@@ -2031,7 +2030,7 @@ it.effect(
       ]);
       const record = polledRecord(service, INVITES);
       service.recordLives[INVITES] = record;
-      const { call, last, openTask, description } = yield* subject(service);
+      const { unfollow, call, last, openTask, description } = yield* subject(service);
       yield* openTask(INVITES);
       yield* TestClock.adjust(Duration.seconds(1));
       yield* followSettled;
@@ -2044,7 +2043,7 @@ it.effect(
 
       // The window goes on to another task and lets this one's description go, which stays held among those let go lately.
       yield* openTask(BILLING);
-      yield* call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: INVITES });
+      yield* unfollow("TASKS_DOCUMENT_FOLLOW", { taskId: INVITES });
       assert.equal(last()?.activeTaskId, BILLING);
 
       // A teammate saves the description, which the next poll carries.
@@ -2213,13 +2212,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const { call, told, pushed, reset } = yield* subject(service);
+      const { unfollow, follow, told, pushed, reset } = yield* subject(service);
       const held = (read: WireValue) => [
-        GATEWAY_EVENT.PAGES_CHANGED,
+        LIVE_READ.PAGES,
         { [PAGE_OWNER.TASK]: { [INVITES]: read }, [PAGE_OWNER.AGENT]: {} },
       ];
 
-      yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
+      yield* follow("TASKS_PAGES_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       assert.deepEqual(pushed, [held({ failed: true })]);
 
@@ -2234,10 +2233,10 @@ it.effect(
       assert.equal(told.length, 0, "a plan's pages held for the Inbox are never told in the view");
 
       // Let go, the pages stay followed among those let go lately, so choosing the plan again reads nothing anew.
-      yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
+      yield* unfollow("TASKS_PAGES_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       assert.equal(pages.held(), 1);
-      yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
+      yield* follow("TASKS_PAGES_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       assert.equal(pushed.length, 3, "a plan held again is drawn from where its pages stand");
 
@@ -2245,8 +2244,8 @@ it.effect(
       yield* followSettled;
       assert.equal(pages.held(), 0);
       assert.deepEqual(
-        pushed.findLast(([kind]) => kind === GATEWAY_EVENT.PAGES_CHANGED),
-        [GATEWAY_EVENT.PAGES_CHANGED, { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} }],
+        pushed.findLast(([kind]) => kind === LIVE_READ.PAGES),
+        [LIVE_READ.PAGES, { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} }],
       );
     }),
 );
@@ -2266,22 +2265,22 @@ it.effect(
           if (asked[0].name === TASK_PAGES_READ.name) seals += 1;
           return liveRead(...asked);
         })) as TasksClient["liveRead"];
-      const { call, pushed } = yield* subject(service);
+      const { unfollow, follow, pushed } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
+      yield* follow("TASKS_PAGES_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       yield* TestClock.adjust(Duration.minutes(1));
       yield* followSettled;
       assert.equal(seals, 1, "a plan the reader cannot reach is not asked again while held");
       assert.deepEqual(pushed, [
         [
-          GATEWAY_EVENT.PAGES_CHANGED,
+          LIVE_READ.PAGES,
           { [PAGE_OWNER.TASK]: { [INVITES]: { failed: true } }, [PAGE_OWNER.AGENT]: {} },
         ],
       ]);
 
-      yield* call(GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW, { taskId: INVITES });
-      yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
+      yield* unfollow("TASKS_PAGES_FOLLOW", { taskId: INVITES });
+      yield* follow("TASKS_PAGES_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       assert.equal(seals, 2);
     }),
@@ -2362,7 +2361,7 @@ it.effect(
       const page = polledLive<CommentPart, typeof NOT_FOUND_LIVE>(["threads", "entries", "files"]);
       service.commentLives[INVITES] = description;
       service.commentLives[FUNNEL.id] = page;
-      const { call, told, pushed, reset } = yield* subject(service);
+      const { follow, told, pushed, reset } = yield* subject(service);
       const onPage = {
         ...SEVEN_DAYS,
         id: "3d9e4f5a-6b7c-4d8e-8f9a-1b2c3d4e5f6a",
@@ -2373,14 +2372,14 @@ it.effect(
       };
       const { anchor: _anchor, ...withoutAnchor } = onPage;
 
-      yield* call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, { taskId: INVITES });
-      yield* call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, { taskId: INVITES, pageId: FUNNEL.id });
+      yield* follow("TASKS_COMMENTS_FOLLOW", { taskId: INVITES });
+      yield* follow("TASKS_COMMENTS_FOLLOW", { taskId: INVITES, pageId: FUNNEL.id });
       yield* followSettled;
       yield* answered(() => description.set(commentRows([SEVEN_DAYS])));
       yield* answered(() => page.set(commentRows([withoutAnchor])));
 
       assert.deepEqual(pushed.at(-1), [
-        GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED,
+        LIVE_READ.DESCRIPTION_COMMENTS,
         {
           [COMMENT_SUBJECT.DESCRIPTION]: { [INVITES]: { rows: [SEVEN_DAYS] } },
           [COMMENT_SUBJECT.PAGE]: { [FUNNEL.id]: { rows: [withoutAnchor] } },
@@ -2392,9 +2391,9 @@ it.effect(
       yield* followSettled;
       assert.equal(description.held() + page.held(), 0);
       assert.deepEqual(
-        pushed.findLast(([kind]) => kind === GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED),
+        pushed.findLast(([kind]) => kind === LIVE_READ.DESCRIPTION_COMMENTS),
         [
-          GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED,
+          LIVE_READ.DESCRIPTION_COMMENTS,
           { [COMMENT_SUBJECT.DESCRIPTION]: {}, [COMMENT_SUBJECT.PAGE]: {} },
         ],
       );
@@ -2412,10 +2411,9 @@ it.effect(
         "files",
       ]);
       service.commentLives[INVITES] = description;
-      const { call, pushed } = yield* subject(service);
+      const { follow, call, pushed } = yield* subject(service);
       const status = () => {
-        const [, held] =
-          pushed.findLast(([kind]) => kind === GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED) ?? [];
+        const [, held] = pushed.findLast(([kind]) => kind === LIVE_READ.DESCRIPTION_COMMENTS) ?? [];
         const rows = (held as AppDescriptionComments | undefined)?.[COMMENT_SUBJECT.DESCRIPTION][
           INVITES
         ]?.rows;
@@ -2427,7 +2425,7 @@ it.effect(
         action: { action: DESCRIPTION_COMMENT_ACTION.RESOLVE },
       });
       const resolved = { ...SEVEN_DAYS, status: DESCRIPTION_COMMENT_STATUS.RESOLVED, revision: 2 };
-      yield* call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, { taskId: INVITES });
+      yield* follow("TASKS_COMMENTS_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       // An answer Sync woke hands the follow its wait for a write's transaction.
       yield* answered(() => description.set(commentRows([SEVEN_DAYS]), ["tx-earlier"]));
@@ -2484,9 +2482,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const { call, told, pushed, reset } = yield* subject(service);
+      const { unfollow, follow, told, pushed, reset } = yield* subject(service);
       const held = (read: WireValue) => [
-        GATEWAY_EVENT.BROWSER_TABS_CHANGED,
+        LIVE_READ.BROWSER_TABS,
         { [BROWSER_TABS_PLACE.TASK]: { [INVITES]: read }, [BROWSER_TABS_PLACE.AGENT]: {} },
       ];
       const tab = {
@@ -2506,7 +2504,7 @@ it.effect(
         },
       };
 
-      yield* call(GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW, { taskId: INVITES });
+      yield* follow("TASKS_BROWSER_TABS_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       assert.deepEqual(pushed, [held({ failed: true })]);
 
@@ -2523,7 +2521,7 @@ it.effect(
       ]);
 
       // Let go, the tabs stay followed among those let go lately; her window goes away, so the takeover lapses with no row moving.
-      yield* call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, { taskId: INVITES });
+      yield* unfollow("TASKS_BROWSER_TABS_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       assert.equal(tabs.held(), 1);
       yield* TestClock.adjust(Duration.seconds(8));
@@ -2535,11 +2533,8 @@ it.effect(
       yield* followSettled;
       assert.equal(tabs.held(), 0);
       assert.deepEqual(
-        pushed.findLast(([kind]) => kind === GATEWAY_EVENT.BROWSER_TABS_CHANGED),
-        [
-          GATEWAY_EVENT.BROWSER_TABS_CHANGED,
-          { [BROWSER_TABS_PLACE.TASK]: {}, [BROWSER_TABS_PLACE.AGENT]: {} },
-        ],
+        pushed.findLast(([kind]) => kind === LIVE_READ.BROWSER_TABS),
+        [LIVE_READ.BROWSER_TABS, { [BROWSER_TABS_PLACE.TASK]: {}, [BROWSER_TABS_PLACE.AGENT]: {} }],
       );
     }),
 );
@@ -2591,10 +2586,10 @@ it.effect(
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       const history = polledLive<"revisions">(["revisions"]);
       service.historyLives[INVITES] = history;
-      const { call, told, pushed, reset } = yield* subject(service);
-      const held = (read: WireValue) => [GATEWAY_EVENT.HISTORIES_CHANGED, { [INVITES]: read }];
+      const { unfollow, follow, told, pushed, reset } = yield* subject(service);
+      const held = (read: WireValue) => [LIVE_READ.HISTORY, { [INVITES]: read }];
 
-      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      yield* follow("TASKS_HISTORY_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       yield* answered(() => history.set({ revisions: [historyRow(1, 1_000)] }));
       yield* answered(() =>
@@ -2607,10 +2602,10 @@ it.effect(
       assert.equal(told.length, 0, "a description's history is never told in the view");
 
       // Let go, the history stays followed among those let go lately, so its version history opened again reads nothing anew.
-      yield* call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: INVITES });
+      yield* unfollow("TASKS_HISTORY_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       assert.equal(history.held(), 1);
-      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      yield* follow("TASKS_HISTORY_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       assert.equal(pushed.length, 2, "a history held again is drawn from where it stands");
 
@@ -2618,8 +2613,8 @@ it.effect(
       yield* followSettled;
       assert.equal(history.held(), 0);
       assert.deepEqual(
-        pushed.findLast(([kind]) => kind === GATEWAY_EVENT.HISTORIES_CHANGED),
-        [GATEWAY_EVENT.HISTORIES_CHANGED, {}],
+        pushed.findLast(([kind]) => kind === LIVE_READ.HISTORY),
+        [LIVE_READ.HISTORY, {}],
       );
     }),
 );
@@ -2635,14 +2630,14 @@ it.effect("an older page laid into a held history stays when a save lands a new 
     const lines = (newest: number, oldest: number) =>
       revisionsFrom(newest, oldest).map((seq) => historyLine(seq, seq * 1_000));
     service.olderHistory[3] = { revisions: lines(2, 1) };
-    const { call, pushed } = yield* subject(service);
-    const heldNow = () => pushed.findLast(([kind]) => kind === GATEWAY_EVENT.HISTORIES_CHANGED);
+    const { follow, call, pushed } = yield* subject(service);
+    const heldNow = () => pushed.findLast(([kind]) => kind === LIVE_READ.HISTORY);
 
-    yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+    yield* follow("TASKS_HISTORY_FOLLOW", { taskId: INVITES });
     yield* followSettled;
     yield* answered(() => history.set({ revisions: rows(52, 2) }));
     assert.deepEqual(heldNow(), [
-      GATEWAY_EVENT.HISTORIES_CHANGED,
+      LIVE_READ.HISTORY,
       { [INVITES]: { rows: { revisions: lines(52, 3), earlier: 3 } } },
     ]);
 
@@ -2651,14 +2646,14 @@ it.effect("an older page laid into a held history stays when a save lands a new 
       revisions: lines(2, 1),
     });
     assert.deepEqual(heldNow(), [
-      GATEWAY_EVENT.HISTORIES_CHANGED,
+      LIVE_READ.HISTORY,
       { [INVITES]: { rows: { revisions: lines(52, 1) } } },
     ]);
 
     // A save lands a newest page that reaches back only to 4, and the versions read past it stay.
     yield* answered(() => history.set({ revisions: rows(53, 3) }));
     assert.deepEqual(heldNow(), [
-      GATEWAY_EVENT.HISTORIES_CHANGED,
+      LIVE_READ.HISTORY,
       { [INVITES]: { rows: { revisions: lines(53, 1) } } },
     ]);
   }),
@@ -2676,8 +2671,8 @@ it.effect(
       };
       const history = polledLive<"revisions">(["revisions"]);
       service.historyLives[INVITES] = history;
-      const { call } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      const { follow, call } = yield* subject(service);
+      yield* follow("TASKS_HISTORY_FOLLOW", { taskId: INVITES });
       yield* followSettled;
       // An answer Sync woke hands the held history its wait for a write's transaction.
       yield* answered(() => history.set({ revisions: [historyRow(1, 1_000)] }, ["tx-earlier"]));

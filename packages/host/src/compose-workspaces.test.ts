@@ -12,7 +12,7 @@ import {
   WORKSPACE_SLUG_PROBLEM,
   type WorkspaceMember,
 } from "@repo/features/workspace-wire";
-import { GATEWAY_EVENT, GATEWAY_METHOD, type GatewayEventKind } from "@repo/gateway";
+import { GATEWAY_EVENT, GATEWAY_METHOD } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { isRecord, type WireValue } from "@repo/wire";
 import { Deferred, Duration, Effect, Exit, Fiber, Layer, Scope } from "effect";
@@ -576,7 +576,7 @@ const ALAN: WorkspaceMember = {
 const LEE = { userId: "user-lee", name: "Lee Park" };
 
 /** Each workspace's people the host told the windows, the latest last. */
-function heldMembers(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
+function heldMembers(pushed: readonly (readonly [string, WireValue])[]): WireValue[] {
   return pushed.flatMap(([kind, payload]) =>
     kind === GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED ? [payload] : [],
   );
@@ -761,7 +761,7 @@ const ENG_CHANNEL = { id: "C0001", name: "eng", private: false, member: false };
 
 /** What the host last told the windows of `workspaceId`'s integrations; none where it told none. */
 function integrationsShown(
-  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
+  pushed: readonly (readonly [string, WireValue])[],
   workspaceId: string,
 ): WorkspaceIntegrations | undefined {
   const told = pushed.findLast(([kind]) => kind === GATEWAY_EVENT.WORKSPACE_INTEGRATIONS_CHANGED);
@@ -772,7 +772,7 @@ function integrationsShown(
 
 /** What the host last told the windows of `workspaceId`'s Slack channels; none where it told none. */
 function channelsShown(
-  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
+  pushed: readonly (readonly [string, WireValue])[],
   workspaceId: string,
 ): readonly SlackListedChannel[] | undefined {
   const told = pushed.findLast(([kind]) => kind === GATEWAY_EVENT.SLACK_CHANNELS_CHANGED);
@@ -914,7 +914,7 @@ it.effect(
 );
 
 /** Every telling of the workspaces' photos the host holds for the windows, whole, in order. */
-function heldPhotos(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
+function heldPhotos(pushed: readonly (readonly [string, WireValue])[]): WireValue[] {
   return pushed.flatMap(([kind, payload]) =>
     kind === GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED ? [payload] : [],
   );
@@ -951,7 +951,7 @@ it.effect(
 );
 
 /** Each workspace's pending invitations the host told the windows, the latest last. */
-function heldInvitations(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
+function heldInvitations(pushed: readonly (readonly [string, WireValue])[]): WireValue[] {
   return pushed.flatMap(([kind, payload]) =>
     kind === GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED ? [payload] : [],
   );
@@ -1442,9 +1442,7 @@ it.effect(
 );
 
 /** Every telling of the token repositories the host holds for the windows, whole, in order. */
-function heldTokenRepositories(
-  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
-): WireValue[] {
+function heldTokenRepositories(pushed: readonly (readonly [string, WireValue])[]): WireValue[] {
   return pushed.flatMap(([kind, payload]) =>
     kind === GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED ? [payload] : [],
   );

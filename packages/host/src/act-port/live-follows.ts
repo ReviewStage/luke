@@ -30,8 +30,10 @@ type FollowProcedures<
       : never]: Acts[Name] extends AnyLiveFollow ? Acts[Name]["procedure"] : never;
   } & {
     readonly [Name in Names as Acts[Name] extends AnyLiveFollow
-      ? Acts[Name]["retryKind"]
-      : never]: Acts[Name] extends AnyLiveFollow ? Acts[Name]["retryProcedure"] : never;
+      ? NonNullable<Acts[Name]["retryKind"]>
+      : never]: Acts[Name] extends AnyLiveFollow
+      ? NonNullable<Acts[Name]["retryProcedure"]>
+      : never;
   },
   ActPortContext
 >;
@@ -72,9 +74,13 @@ export function liveFollowProcedures<
         yield* Stream.toAsyncIterableEffect(Stream.callback<never>(() => read.hold(key))),
       );
     });
-    procedures[follow.retryKind] = builderOf(follow.retryKind).effect(function* ({ input }) {
+    const { retryKind } = follow;
+    const { retry } = read;
+    // Note that a follow with no Try again declares no procedure for one.
+    if (retryKind === undefined || retry === undefined) continue;
+    procedures[retryKind] = builderOf(retryKind).effect(function* ({ input }) {
       // SAFETY: as the hold's, the key was read with the follow's own schema.
-      yield* read.retry(input as FollowKey<typeof follow>);
+      yield* retry(input as FollowKey<typeof follow>);
     });
   }
   // SAFETY: the loop above built each handed follow's two procedures under their own kinds.

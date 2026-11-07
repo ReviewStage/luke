@@ -122,26 +122,14 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onIntegrationToolsChanged((held) => {
         state.update({ [LIVE_READ.INTEGRATION_TOOLS]: held });
       }),
-      gateway.host.onLinkStandingsChanged((held) => {
-        state.update({ [LIVE_READ.LINK_STANDINGS]: held });
-      }),
       gateway.host.onModelsChanged((held) => {
         state.update({ [LIVE_READ.MODELS]: held });
-      }),
-      gateway.host.onPagesChanged((held) => {
-        state.update({ [LIVE_READ.PAGES]: held });
       }),
       gateway.host.onProviderKeysChanged((held) => {
         state.update({ [LIVE_READ.PROVIDER_KEYS]: held });
       }),
-      gateway.host.onRepositoryListsChanged((held) => {
-        state.update({ [LIVE_READ.REPOSITORY_LISTS]: held });
-      }),
       gateway.host.onGitHubTokenChanged((held) => {
         state.update({ [LIVE_READ.GITHUB_TOKEN]: held });
-      }),
-      gateway.host.onBrowserTabsChanged((held) => {
-        state.update({ [LIVE_READ.BROWSER_TABS]: held });
       }),
       gateway.host.onPullRequestPartsChanged((held) => {
         state.update(held);
@@ -181,15 +169,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       }),
       gateway.host.onAutomationsChanged((held) => {
         state.update(held);
-      }),
-      gateway.host.onDescriptionCommentsChanged((held) => {
-        state.update({ [LIVE_READ.DESCRIPTION_COMMENTS]: held });
-      }),
-      gateway.host.onHistoriesChanged((held) => {
-        state.update({ [LIVE_READ.HISTORY]: held });
-      }),
-      gateway.host.onDescriptionDocumentsChanged((held) => {
-        state.update({ [LIVE_READ.DESCRIPTION_DOCUMENT]: held });
       }),
       gateway.host.onPortForwardingChanged((portForwarding) => {
         state.update({ portForwarding });
