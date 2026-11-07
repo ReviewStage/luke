@@ -43,12 +43,12 @@ const BACK: readonly HistoryStep[] = [
   {
     at: 2,
     title: { label: "Auth refactor", detail: "Fix token refresh · Code" },
-    page: { kind: "plan", of: "a" },
+    page: { kind: "task", of: "a" },
   },
   {
     at: 1,
     title: { label: "Auth refactor", detail: "Fix token refresh · Plan" },
-    page: { kind: "plan", of: "a" },
+    page: { kind: "task", of: "a" },
   },
   {
     at: 0,

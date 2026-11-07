@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { EXPERIMENT, NO_EXPERIMENTS } from "@repo/settings";
+import { agentTab } from "@repo/ui/tab-strip-model";
 import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { test } from "vitest";
@@ -30,7 +31,9 @@ const ACCESS: RouteAccess = {
 /** A window where everything a step names is still there, under Acme listed. */
 const THERE: PlaceThere = {
   historyTask: undefined,
+  taskStep: undefined,
   taskStands: () => true,
+  columnStands: () => true,
   automationStands: () => true,
   listed: (workspace) => workspace === "acme",
 };
@@ -63,7 +66,8 @@ test.each([
   ["/left", ROUTED_PLACE.UNKNOWN_WORKSPACE],
   ["/acme", ROUTED_PLACE.HOME],
   ["/acme/agent/agent-1/changes", undefined],
-  ["/acme/task/7", undefined],
+  ["/acme/task/7", ROUTED_PLACE.TASK],
+  ["/acme/task/7/agent/agent-1", ROUTED_PLACE.TASK],
   ["/app", ROUTED_PLACE.HOME],
 ] as const)("%s stands on its routed place, where it is one", (address, place) => {
   assert.equal(routedPlaceOf(matchesOf(address), ACCESS), place);
@@ -102,6 +106,16 @@ test.each<readonly [string, string, Partial<PlaceThere>]>([
     "a version history of a deleted task",
     "/acme/task/7/version/3",
     { historyTask: TASK_ID, taskStands: () => false },
+  ],
+  [
+    "a task's step on a task since deleted",
+    "/acme/task/7",
+    { taskStep: { taskId: TASK_ID }, taskStands: () => false },
+  ],
+  [
+    "a task's step on a column tab since closed",
+    "/acme/task/7/agent/agent-1",
+    { taskStep: { taskId: TASK_ID, column: agentTab("agent-1") }, columnStands: () => false },
   ],
 ])("Back passes over %s", (_skipped, address, gone) => {
   // Task descriptions is the workspace's choice, which its version history stands on.

@@ -22,10 +22,10 @@
  * on them, their routes draw them, as lazy routes but for Home and an agent's page, drawn at once, and the Inbox, kept drawn beside them all, and each gate is a
  * `beforeLoad` over a predicate the window's Back and Forward ask too
  * (`route-gates.ts`), but for an agent's page, which stands at any address
- * as it always has. A task's place
- * is still the window's state's, which its routes draw through one
- * component (`StatePlace`), so moving a place onto the router swaps its
- * route's component and deletes its place kind from `navigation-history.ts`.
+ * as it always has. A task's own place is declared beside them
+ * (`ROUTED_PLACE.TASK`), its step holding what its panes show in typed
+ * history state, though its routes still draw the window's state through
+ * one component (`StatePlace`), as a pairing's link does.
  */
 
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
