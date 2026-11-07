@@ -38,6 +38,7 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState 
 import { actMutation } from "./act-mutations.js";
 import { useAdminRoute } from "./admin/admin-route.js";
 import { adminViewOfLink } from "./admin/routing.js";
+import { useAgentRoute } from "./agent-route.js";
 import { appBridge } from "./app-bridge.js";
 import {
   runAppCommand,
@@ -421,6 +422,10 @@ function AppWindow(): React.JSX.Element {
     onClose: () => leaveRouted.current(),
     onStay: () => stayRouted.current(),
   });
+  const agentView = useAgentRoute({
+    onClose: () => leaveRouted.current(),
+    onStay: () => stayRouted.current(),
+  });
   const automationsView = useAutomationsRoute({
     narrow: room === SHELL_ROOM.NARROW,
     onClose: () => leaveRouted.current(),
@@ -456,6 +461,7 @@ function AppWindow(): React.JSX.Element {
     adminView,
     boardView,
     personView,
+    agentView,
     automationsView,
     versionHistoryView,
     inboxView,
@@ -558,8 +564,12 @@ function AppWindow(): React.JSX.Element {
       // Admin is the router's place, which its link opens as a navigation from wherever the window stands.
       guardLeave(() => adminView.onOpen(adminViewOfLink(place)))();
     } else {
+      // Note that the Inbox and an agent's page are left by the door the link opens, as it stands what the link names, rather than up front,
+      // because an agent's link reads where its agent stands first, and a leave before that read lands would write a step of the place under it.
+      const leftByDoor =
+        routedHere?.place === ROUTED_PLACE.INBOX || routedHere?.place === ROUTED_PLACE.AGENT;
       guardLeave(() => {
-        changeTab(PANEL_TAB.TASKS);
+        if (!leftByDoor) changeTab(PANEL_TAB.TASKS);
         tasks.onOpenLink(link);
       })();
     }

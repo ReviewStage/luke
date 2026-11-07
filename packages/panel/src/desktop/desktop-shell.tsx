@@ -32,7 +32,7 @@ import {
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useQuery } from "@tanstack/react-query";
-import { Outlet } from "@tanstack/react-router";
+import { Outlet, useMatch } from "@tanstack/react-router";
 import {
   Activity,
   createContext,
@@ -76,7 +76,7 @@ import {
 } from "./automation-list-frame.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { backPlaceOf } from "./back-place.js";
-import { DesktopAgentPage } from "./desktop-agent-page.js";
+import { AgentRoutePage } from "./desktop-agent-page.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -1149,25 +1149,29 @@ export function InboxPlace(): null {
 }
 
 /**
+ * What an agent's addresses draw in the places' content slot: the page of
+ * the agent its address names, at the page's own address, and the place the
+ * window's state says under any address beneath it, a worker's, its
+ * Changes', or a message's, which a step on a task's tab is written at.
+ */
+export function AgentPlace(): React.JSX.Element {
+  const { tasks, room, away } = useShellPlaces();
+  const ownPage = useMatch({ from: "/places/$workspace/agent/$agentId/", shouldThrow: false });
+  if (ownPage === undefined) return <StatePlace />;
+  return <AgentRoutePage tasks={tasks} away={room === SHELL_ROOM.NARROW ? away : undefined} />;
+}
+
+/**
  * What a place the window's state says draws in the places' content slot:
- * a task, an agent's page, or a workspace not there for the reader. Every
- * route not yet moved onto the router draws this one component, so moving
- * between them keeps it drawn.
+ * a task, or a workspace not there for the reader. Every route not yet
+ * moved onto the router draws this one component, so moving between them
+ * keeps it drawn.
  */
 export function StatePlace(): React.JSX.Element {
   const { tasks, room, sidebar, settings, looks, away } = useShellPlaces();
   const { account } = settings;
-  const pageAgent = tasks.agentView.agentId;
   const unknownWorkspace = tasks.unknownWorkspace.open;
-  return pageAgent !== undefined ? (
-    // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
-    <DesktopAgentPage
-      key={pageAgent}
-      tasks={tasks}
-      agentId={pageAgent}
-      away={room === SHELL_ROOM.NARROW ? away : undefined}
-    />
-  ) : unknownWorkspace ? (
+  return unknownWorkspace ? (
     // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
     <ReplayUnmask>
       <NotFound

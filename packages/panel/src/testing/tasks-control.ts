@@ -22,6 +22,7 @@ import { NO_TASK_SECTIONS } from "@repo/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
+import type { AgentRoute } from "../agent-route.js";
 import type { AutomationsRoute } from "../automations-route.js";
 import type { InboxRoute } from "../inbox-route.js";
 import { descriptionEditMutation } from "../tasks/description-edit-mutation.js";
@@ -445,6 +446,14 @@ export const PERSON_AWAY: PersonRoute = {
   onOpen: ignore,
   onClose: ignore,
   onPreload: ignore,
+};
+
+/** An agent's page's route standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const AGENT_AWAY: AgentRoute = {
+  agentId: undefined,
+  workspace: undefined,
+  onOpen: ignore,
+  onClose: ignore,
 };
 
 /**
