@@ -746,7 +746,7 @@ export interface TasksControl {
   /** The window's Automations page: whether it stands in the task's place, and its presses (`automations-page.tsx`). */
   automationsView: AutomationsViewControl;
   /** The window's Board of the listed workspace's tasks by status: whether it stands in the plan's place, and its presses (`tasks-board.tsx`). */
-  /** Whether Home stands, the page of no task bound, which only its own route draws (`ROUTED_PLACE.HOME`). */
+  /** Whether Home stands, the page of no task bound, which only its own route draws (`ROUTED_PLACE.HOME`), with no task still bound there. */
   atHome: boolean;
   /** Whether the task's own place stands, with neither Home nor any routed place, the not-found page among them, standing in its place. */
   taskPlaceStands: boolean;
@@ -3278,8 +3278,8 @@ export function useTasksTab(input: {
   // that the tab need not be shown, because every New task press brings it
   // forward first.
   const newTask = () => {
-    // Note that only Home's own route draws its composer (`ROUTED_PLACE.HOME`).
-    const atHome = input.homeView.open;
+    // Note that only Home's own route draws its composer (`ROUTED_PLACE.HOME`), once no task is bound there.
+    const atHome = input.homeView.open && boundFor === undefined;
     if (atHome && signedIn && newTaskAsk === undefined) setHomeNewTasks((n) => n + 1);
     else newTaskWith(undefined);
   };
@@ -4413,7 +4413,7 @@ export function useTasksTab(input: {
     onLeaveTask: guard(() => leaveTask()),
     onGoHome: guard(goHome),
     onUnbindTask: unbindTask,
-    atHome: homeOpen,
+    atHome: homeOpen && boundFor === undefined,
     taskPlaceStands: !homeOpen && !routedNow.current,
     renameTask,
     onDraftName: draftName,

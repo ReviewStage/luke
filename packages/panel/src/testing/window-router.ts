@@ -7,7 +7,6 @@
  * tells its subscribers, as a reader outside the panel would.
  */
 
-import { QueryClient } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   RouterContextProvider,
@@ -15,6 +14,7 @@ import {
 } from "@tanstack/react-router";
 import { createElement, type ReactElement } from "react";
 import { createPanelRouter, PanelRouterProvider } from "../panel-router.js";
+import { testQueryClientNow } from "./copy-feedback.js";
 
 /** The router a test's window stands under. */
 export interface TestWindowRouter {
@@ -33,7 +33,8 @@ export interface TestWindowRouter {
 export function windowRouter(
   history: RouterHistory = createMemoryHistory({ initialEntries: ["/app"] }),
 ): TestWindowRouter {
-  const router = createPanelRouter(history, new QueryClient());
+  // Note that its routes read the test's own client, the one the window draws with, as a root hands its window's.
+  const router = createPanelRouter(history, testQueryClientNow());
   let entries: readonly string[] = [history.location.href];
   let at = 0;
   const clamp = (to: number) => Math.min(Math.max(to, 0), entries.length - 1);

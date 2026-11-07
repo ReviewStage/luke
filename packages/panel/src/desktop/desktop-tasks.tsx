@@ -1520,18 +1520,24 @@ function StartingTaskPage({
 }
 
 /**
- * The page of a task bound for that the host has not yet opened, as a link
- * waiting on its task stands or a task pressed waits on the host: the
- * task's page in the shape it lands in, as its document's read draws it.
+ * The page of a task the host has not yet opened, as a link's route waiting
+ * on the account's workspaces stands it or a task pressed waits on the host:
+ * the task's page in the shape it lands in, as its document's read draws it.
  */
-function TaskOpeningPage({
+export function TaskOpening({
   tasks,
-  phoneAway,
+  room = SHELL_ROOM.WIDE,
+  away,
 }: {
   tasks: TasksControl;
-  phoneAway: TaskHeadBack | undefined;
+  room?: ShellRoom;
+  away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
   const drawing = useSidePanelDrawing(tasks.sidePanel);
+  const phoneAway =
+    room === SHELL_ROOM.NARROW
+      ? (away ?? { label: HOME_BACK, onPress: tasks.onGoHome })
+      : undefined;
   return (
     <TaskPageSkeleton
       drawing={drawing}
@@ -1591,12 +1597,7 @@ export const DesktopTasks = memo(function DesktopTasks({
 }: WorkColumnProps): React.JSX.Element {
   const starting = startingPage(tasks, room, away);
   if (starting !== undefined) return starting;
-  const phoneAway =
-    room === SHELL_ROOM.NARROW
-      ? (away ?? { label: HOME_BACK, onPress: tasks.onGoHome })
-      : undefined;
-  if (tasks.page === TASKS_PAGE.HOME)
-    return <TaskOpeningPage tasks={tasks} phoneAway={phoneAway} />;
+  if (tasks.page === TASKS_PAGE.HOME) return <TaskOpening tasks={tasks} room={room} away={away} />;
   return (
     <SkillFiles
       source={tasks.agents.readSkills}

@@ -57,6 +57,7 @@ import {
   SettingsRouteLoading,
   ShellPlaces,
   StatePlace,
+  TaskRouteLoading,
   UnknownWorkspacePlace,
   VersionHistoryRouteLoading,
 } from "./desktop/desktop-shell.js";
@@ -207,15 +208,19 @@ const boardRoute = createRoute({
 /**
  * A task's place, which the window's state draws (`StatePlace`). A link to
  * it is read against the account's workspaces, so as the window loads at
- * it the route waits on their read, its page standing in the shape the task
- * lands in, rather than the window resting anywhere else meanwhile.
+ * it the route waits on their read, its own frame standing at once as a
+ * lazy route's does, rather than the window resting anywhere else
+ * meanwhile. Note that the frame is the task's loading page alone, never
+ * the place itself, because a move onto the route shows it for the turn
+ * the wait takes even once the workspaces are read, and the task's page
+ * drawn there would be drawn twice.
  */
 const taskRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "task/$taskId",
   loader: ({ context, abortController }) =>
     workspacesReadFor(context.queryClient, abortController.signal),
-  pendingComponent: StatePlace,
+  pendingComponent: TaskRouteLoading,
   pendingMs: 0,
   pendingMinMs: 0,
   component: StatePlace,
@@ -559,6 +564,18 @@ const appSettingsPageRoute = createRoute({
   },
 });
 
+/**
+ * An address naming no place of the panel's, as a tab opened at the site's
+ * root, opens Home in its place, as a window resting nowhere always has.
+ */
+const nowhereRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "$",
+  beforeLoad: () => {
+    throw redirect({ to: "/app", replace: true });
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   placesRoute.addChildren([
     appRoute,
@@ -618,6 +635,7 @@ const routeTree = rootRoute.addChildren([
   ]),
   settingsRoute.addChildren([settingsIndexRoute, settingsPageRoute]),
   appSettingsRoute.addChildren([appSettingsIndexRoute, appSettingsPageRoute]),
+  nowhereRoute,
 ]);
 
 /**

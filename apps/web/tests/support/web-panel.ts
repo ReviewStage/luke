@@ -14,9 +14,12 @@ import { installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
 import { createPanelRouter, PanelRouterProvider } from "@repo/panel/panel-router";
 import { loadTasksFixture } from "@repo/panel/tasks/tasks-fixture-loader";
-import { readAppState, withQueryClient } from "@repo/panel/testing/copy-feedback";
+import {
+  readAppState,
+  testQueryClientNow,
+  withQueryClient,
+} from "@repo/panel/testing/copy-feedback";
 import { APP_SETTING_DEFAULTS, NO_EXPERIMENTS } from "@repo/settings";
-import { QueryClient } from "@tanstack/react-query";
 import { createBrowserHistory, type RouterHistory } from "@tanstack/react-router";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -132,7 +135,8 @@ export async function drawPanel() {
   const root = createRoot(element);
   roots.push(root);
   assert.ok(tabHistory !== undefined, "the tab's doors are installed");
-  const router = createPanelRouter(tabHistory, new QueryClient());
+  // Note that its routes read the test's own client, the one the panel draws with, as the tab's root hands its own.
+  const router = createPanelRouter(tabHistory, testQueryClientNow());
   await act(async () =>
     root.render(withQueryClient(createElement(PanelRouterProvider, { router }))),
   );
