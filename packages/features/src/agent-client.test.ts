@@ -84,6 +84,32 @@ it.effect("starts an agent with the request as sent", () =>
 );
 
 it.effect(
+  "a Start and a choice the catalog refuses as an invalid request read as a choice the service does not offer now",
+  () =>
+    Effect.gen(function* () {
+      const refusing = fakeCloudApi({
+        [`POST /api/plans/${TASK_ID}/agents`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_REQUEST }),
+          status: HTTP_STATUS.BAD_REQUEST,
+        },
+        [`PATCH /api/agents/${AGENT_ID}`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_REQUEST }),
+          status: HTTP_STATUS.BAD_REQUEST,
+        },
+      });
+
+      const started = yield* Effect.provide(
+        client().start(TASK_ID, { idempotencyKey: "press-1", ...CHOICE }),
+        refusing.layer,
+      );
+      const chosen = yield* Effect.provide(client().choose(AGENT_ID, CHOICE), refusing.layer);
+
+      assert.deepEqual(started, { failure: AGENT_CALL_FAILURE.INVALID_CHOICE });
+      assert.deepEqual(chosen, { failure: AGENT_CALL_FAILURE.INVALID_CHOICE });
+    }),
+);
+
+it.effect(
   "a Start's prompt travels under the key a released service reads, task, trimmed as it is bounded",
   () =>
     Effect.gen(function* () {
