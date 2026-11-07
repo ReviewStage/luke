@@ -234,6 +234,16 @@ const RUNNER_SCRIPT = `${RUNNER_DIRECTORY}/agent-runner.mjs`;
 const LINK_TOOLS_DIRECTORY = `if [ -d ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ] && [ ! -e ${SANDBOX_TOOLS_DIRECTORY} ] && [ ! -L ${SANDBOX_TOOLS_DIRECTORY} ]; then ln -s ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ${SANDBOX_TOOLS_DIRECTORY}; fi`;
 
 /**
+ * The `agent` user put in the `docker` group on each launch, root's, so the
+ * harness and every command it runs reach the daemon the image's `docker`
+ * starts (`apps/web/agent-image/Dockerfile`). Note that it is asked only
+ * where the group stands, because a sandbox resumed from a snapshot of an
+ * image before Docker has none, and only where the user is not already in
+ * it, since the runner started after it takes the user's groups as it starts.
+ */
+const JOIN_DOCKER_GROUP = `if getent group docker > /dev/null && ! id -nG ${AGENT_USER} | grep -qw docker; then usermod -aG docker ${AGENT_USER}; fi`;
+
+/**
  * A checkout marked safe for git in the sandbox and its repository shared
  * with `agent`'s group, as the launch marks each: the agent's own and every
  * repository it works in beside it. Note that nothing of the checkout's
@@ -274,8 +284,8 @@ const CHECKOUT_CONFIG_PATH = `${CHECKOUT_GIT_PATH}/config`;
 const RESTORE_PLAN_UNREAD = "the restored checkout's commit identity could not be read";
 
 /**
- * The launch's readying, run by bash as root through `sudo`, waited on before the runner starts: the
- * member's installed skills, where the sandbox's opening uploaded them,
+ * The launch's readying, run by bash as root through `sudo`, waited on before the runner starts:
+ * `agent` put in the `docker` group, the member's installed skills, where the sandbox's opening uploaded them,
  * moved where only root writes and every user reads (`native-skills.ts`),
  * each checkout marked safe for git and shared with `agent`'s group, the
  * agent's own and those of the repositories it works in beside it at the
@@ -291,6 +301,7 @@ function readyScript(extraCheckouts: readonly string[]): string {
   return [
     "set -euo pipefail",
     LINK_TOOLS_DIRECTORY,
+    JOIN_DOCKER_GROUP,
     `if [ -d ${NATIVE_SKILLS_PATH.UPLOAD} ]; then rm -rf ${NATIVE_SKILLS_PATH.INSTALLED} && mkdir -p $(dirname ${NATIVE_SKILLS_PATH.INSTALLED}) && mv ${NATIVE_SKILLS_PATH.UPLOAD} ${NATIVE_SKILLS_PATH.INSTALLED} && chown -R root:root ${NATIVE_SKILLS_PATH.INSTALLED} && chmod -R u=rwX,go=rX ${NATIVE_SKILLS_PATH.INSTALLED}; fi`,
     ...[CODER.CHECKOUT_PATH, ...extraCheckouts].flatMap(sharedCheckout),
     `install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0755 ${SHARED_FILES_DIRECTORY}`,
