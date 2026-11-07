@@ -12,7 +12,11 @@
  *
  * Only one place stands at a time, because exactly one leaf route matches
  * an address, so the place standing is read from the router's matches
- * (`useWindowPlace`) and never cleared by another place's door.
+ * (`useWindowPlace`) and never cleared by another place's door. A place
+ * sharing its route with a place the window's state says claims only the
+ * addresses its route's gate finds for it, as a workspace not there for
+ * the reader claims Home's route under that workspace's address, so the
+ * place standing is read with the reader's access.
  */
 
 import { PRODUCT_SURFACE } from "@repo/features/analytics";
@@ -48,6 +52,7 @@ import {
   adminRouteStands,
   type RouteAccess,
   settingsPageRouteStands,
+  useRouteAccess,
   versionHistoryRouteStands,
   workspaceRouteStands,
 } from "../route-gates.js";
@@ -91,6 +96,8 @@ interface PlaceLinks {
 export interface PlaceDeclaration {
   /** The routes it stands on, by id, under whichever parent each stands. */
   readonly routes: readonly PanelRouteId[];
+  /** Whether an address its routes match is this place, by its params and the reader's access: every one of them but where it shares a route with a place the window's state says. */
+  readonly claims: (params: PlaceParams, access: RouteAccess) => boolean;
   /** Whether the window may stand on it with these params: the one predicate its routes' `beforeLoad` and Back and Forward's `reachable` both ask. */
   readonly gate: (params: PlaceParams, access: RouteAccess) => boolean;
   /** Whether what a step of it names is still there, so Back and Forward may go to it: a step naming a task or an automation deleted since is passed over. */
@@ -124,6 +131,11 @@ export interface PlaceDeclaration {
 /** A place a workspace's address step names stands only where that workspace is one of the reader's. */
 function workspaceGate(params: PlaceParams, access: RouteAccess): boolean {
   return params.workspace === undefined || workspaceRouteStands(params.workspace, access);
+}
+
+/** A place that is every address its routes match. */
+function everyAddress(): boolean {
+  return true;
 }
 
 /** A link that names the step the window stands on. */
@@ -167,6 +179,7 @@ function versionLinks({ tasks, at }: PlaceLinks): readonly LinkAtHand[] {
 export const ROUTED_PLACE = {
   SETTINGS: {
     routes: ["/$workspace/settings", "/app/settings"],
+    claims: everyAddress,
     gate: (params, access) =>
       params.page === undefined || settingsPageRouteStands(params.page, access, params.workspace),
     stillThere: () => true,
@@ -190,6 +203,7 @@ export const ROUTED_PLACE = {
   },
   ADMIN: {
     routes: ["/places/$workspace/admin"],
+    claims: everyAddress,
     gate: (_params, access) => adminRouteStands(access),
     stillThere: () => true,
     overThePlan: false,
@@ -213,6 +227,7 @@ export const ROUTED_PLACE = {
   },
   BOARD: {
     routes: ["/places/$workspace/tasks"],
+    claims: everyAddress,
     gate: workspaceGate,
     stillThere: () => true,
     overThePlan: true,
@@ -228,6 +243,7 @@ export const ROUTED_PLACE = {
   },
   PERSON: {
     routes: ["/places/$workspace/person/$userId"],
+    claims: everyAddress,
     gate: workspaceGate,
     stillThere: () => true,
     overThePlan: true,
@@ -251,6 +267,7 @@ export const ROUTED_PLACE = {
   },
   AUTOMATIONS: {
     routes: ["/places/$workspace/automation-pages"],
+    claims: everyAddress,
     gate: workspaceGate,
     // An automation's page stands no more once it is deleted.
     stillThere: (params, _search, there) =>
@@ -284,6 +301,7 @@ export const ROUTED_PLACE = {
   },
   VERSION_HISTORY: {
     routes: ["/version-history"],
+    claims: everyAddress,
     gate: (params, access) =>
       params.workspace === undefined || versionHistoryRouteStands(access, params.workspace),
     // Note that a version history is passed over once its task is deleted, as the task's own step is.
@@ -313,6 +331,7 @@ export const ROUTED_PLACE = {
   AGENT: {
     // Note that only the page's own address is its place: a worker's, its Changes', or a message's beneath it is a task's tab's, as the window's state says.
     routes: ["/places/$workspace/agent/$agentId/"],
+    claims: everyAddress,
     // Note that its route draws the page under any address, as it always has, so this gate is Back and Forward's alone.
     gate: workspaceGate,
     stillThere: () => true,
@@ -328,8 +347,27 @@ export const ROUTED_PLACE = {
     narrowList: undefined,
     surfaces: (params) => [{ surface: PRODUCT_SURFACE.AGENT, of: params.agentId }],
   },
+  UNKNOWN_WORKSPACE: {
+    // Note that it shares Home's route, whose `beforeLoad` throws `notFound()` where it claims the address (`panel-router.tsx`).
+    routes: ["/places/$workspace/"],
+    claims: (params, access) =>
+      params.workspace !== undefined && !workspaceRouteStands(params.workspace, access),
+    // A workspace's address naming none of the reader's is no place of theirs to come back to, so Back and Forward pass over it.
+    gate: () => false,
+    stillThere: () => true,
+    overThePlan: true,
+    listedOnly: false,
+    // Note that it is no step, so it has no name of its own.
+    title: () => undefined,
+    named: () => undefined,
+    // It has no link of the reader's to offer, so the tab keeps the address it was opened at.
+    links: () => [],
+    narrowList: undefined,
+    surfaces: () => [],
+  },
   INBOX: {
     routes: ["/places/$workspace/inbox"],
+    claims: everyAddress,
     gate: workspaceGate,
     // Note that an Inbox narrowed to a task is passed over once the task is deleted, as the task's own step is.
     stillThere: (params, search, there) => {
@@ -387,10 +425,16 @@ interface RouteMatchSeen {
   readonly params: PlaceParams;
 }
 
-/** The routed place `matches` stand on; none where they stand on a place the window's state says. */
-export function routedPlaceOf(matches: readonly RouteMatchSeen[]): RoutedPlace | undefined {
+/** The routed place `matches` stand on for a reader with `access`; none where they stand on a place the window's state says. */
+export function routedPlaceOf(
+  matches: readonly RouteMatchSeen[],
+  access: RouteAccess,
+): RoutedPlace | undefined {
+  const params = placeParamsOf(matches);
   for (const match of matches) {
-    const place = PLACES.find((each) => each.routes.some((id) => id === match.routeId));
+    const place = PLACES.find(
+      (each) => each.routes.some((id) => id === match.routeId) && each.claims(params, access),
+    );
     if (place !== undefined) return place;
   }
   return undefined;
@@ -414,7 +458,7 @@ export function routedStepStands(
   access: RouteAccess,
   there: PlaceThere,
 ): boolean {
-  const place = routedPlaceOf(matches);
+  const place = routedPlaceOf(matches, access);
   if (place === undefined) return true;
   const params = placeParamsOf(matches);
   if (!place.gate(params, access) || !place.stillThere(params, search, there)) return false;
@@ -448,16 +492,17 @@ export interface WindowPlace {
  */
 export function useWindowPlace(): WindowPlace {
   const router = useRouter();
+  const access = useRouteAccess();
   const { pathname, href, search } = useHistoryLocation();
   const matches = useMemo(() => router.matchRoutes(pathname), [router, pathname]);
   return useMemo(
     () => ({
-      place: routedPlaceOf(matches),
+      place: routedPlaceOf(matches, access),
       href,
       leaf: matches.at(-1)?.routeId,
       params: matches.at(-1)?.params ?? {},
       search: Object.fromEntries(new URLSearchParams(search)),
     }),
-    [matches, href, search],
+    [matches, access, href, search],
   );
 }

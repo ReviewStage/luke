@@ -18,7 +18,7 @@
  * sidebar, under the pathless `places` layout, which stays drawn as the
  * window moves between them, and a task's version history takes the whole
  * window as Settings does. Settings, Admin, a workspace's Board, a
- * person's page, an agent's own page, the Automations pages, a task's version history, and the Inbox are routed places: the router alone says the window stands
+ * person's page, an agent's own page, the Automations pages, a task's version history, the Inbox, and a workspace's address naming none of the reader's, not found, are routed places: the router alone says the window stands
  * on them, their routes draw them, as lazy routes but for an agent's page, drawn at once, and the Inbox, kept drawn beside them all, and each gate is a
  * `beforeLoad` over a predicate the window's Back and Forward ask too
  * (`route-gates.ts`), but for an agent's page, which stands at any address
@@ -36,6 +36,7 @@ import {
   createRoute,
   createRouter,
   type ErrorComponentProps,
+  notFound,
   type RouterHistory,
   RouterProvider,
   redirect,
@@ -55,6 +56,7 @@ import {
   SettingsRouteLoading,
   ShellPlaces,
   StatePlace,
+  UnknownWorkspacePlace,
   VersionHistoryRouteLoading,
 } from "./desktop/desktop-shell.js";
 import {
@@ -158,16 +160,28 @@ const connectRoute = createRoute({
 
 const workspaceRoute = createRoute({ getParentRoute: () => placesRoute, path: "/$workspace" });
 
+/**
+ * A workspace's Home, the place the window's state says, of one of the
+ * reader's workspaces (`workspaceRouteStands`): an address naming none of
+ * theirs is not found, its page saying the workspace is not there for them
+ * and drawing nothing of it, at its own address
+ * (`ROUTED_PLACE.UNKNOWN_WORKSPACE`).
+ */
 const homeRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "/",
+  beforeLoad: ({ context, params }) => {
+    if (workspaceRouteStands(params.workspace, context.access)) return;
+    throw notFound();
+  },
   component: StatePlace,
+  notFoundComponent: UnknownWorkspacePlace,
 });
 
 /**
  * A workspace's Board, the Tasks page, of one of the reader's workspaces
  * (`workspaceRouteStands`): an address naming none of theirs gives way to
- * that address's Home, which says the workspace is not there for them. Its
+ * that address's Home, which is not found. Its
  * page is a chunk of its own, read ahead as the pointer comes to its row,
  * and once the signed-in window is idle; what stands while it loads is the
  * page's own frame.

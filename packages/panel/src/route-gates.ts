@@ -24,6 +24,7 @@ import { type QueryClient, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useKeptChoice } from "./desktop/chosen-workspace.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
+import { loadedTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import {
   appStateIn,
   appStateQuery,
@@ -64,14 +65,15 @@ export const UNREAD_ROUTE_ACCESS: RouteAccess = {
 export function routeAccessNow(client: QueryClient): RouteAccess {
   const state = appStateIn(client);
   const access = state?.access;
+  const workspaces = state === undefined ? NO_WORKSPACES : selectWorkspaces(state);
   return {
     // A reloaded Admin address waits on an access still being read rather than being refused.
     admin: access === undefined || access.pending === true || access.admin === true,
     experiments: state?.settings?.experiments ?? NO_EXPERIMENTS,
     experimentsRead: state?.settings !== undefined,
-    workspaces: state?.tasks?.workspaces ?? NO_WORKSPACES,
+    workspaces,
     // Note that a reading off the state alone lists the first workspace, as the window does with none kept.
-    listed: stepOf(state?.tasks?.workspaces?.[0]),
+    listed: stepOf(workspaces[0]),
   };
 }
 
@@ -85,9 +87,14 @@ function selectAdminStands(state: AppStateSnapshot): boolean {
   return state.access.pending === true || state.access.admin === true;
 }
 
-/** The reader's workspaces as main's document holds them. */
+/**
+ * The reader's workspaces as the window lists them: main's document's, or a
+ * fixture run's synthetic ones, which main's document holds none of, so a
+ * fixture run's gates read what its window draws.
+ */
 function selectWorkspaces(state: AppStateSnapshot): readonly GateWorkspace[] {
-  return state.tasks?.workspaces ?? NO_WORKSPACES;
+  const fixture = loadedTasksFixture()?.fixtureTasksView(state.run);
+  return fixture?.workspaces ?? state.tasks?.workspaces ?? NO_WORKSPACES;
 }
 
 /**

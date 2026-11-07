@@ -27,6 +27,7 @@ import {
   BOARD_AWAY,
   INBOX_AWAY,
   PERSON_AWAY,
+  UNKNOWN_WORKSPACE_AWAY,
   VERSION_HISTORY_AWAY,
 } from "../testing/tasks-control.js";
 import { TasksPage } from "./tasks-page.js";
@@ -121,6 +122,7 @@ async function mount() {
       automationsView: AUTOMATIONS_AWAY,
       versionHistoryView: VERSION_HISTORY_AWAY,
       inboxView: INBOX_AWAY,
+      unknownWorkspaceView: UNKNOWN_WORKSPACE_AWAY,
     });
     return createElement(TasksPage, {
       tasks: { ...control, onSelect: (taskId: string) => opened.push(taskId) },

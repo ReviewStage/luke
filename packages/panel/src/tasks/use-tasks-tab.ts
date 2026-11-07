@@ -166,7 +166,7 @@ import {
 } from "../use-app-state.js";
 import type { VersionHistoryRoute } from "../version-history-route.js";
 import { workspaceExperimentChoices } from "../workspace-experiments.js";
-import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
+import type { BoardRoute, PersonRoute, UnknownWorkspaceRoute } from "../workspace-routes.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -406,12 +406,6 @@ interface BoardViewControl {
   readonly onClose: () => void;
   /** Reads the Board ahead of a press the pointer says is coming. */
   readonly onPreload: () => void;
-}
-
-/** A workspace's address naming none of the reader's workspaces: whether its not-found state stands in the plan's place, and its way out. */
-interface UnknownWorkspaceControl {
-  readonly open: boolean;
-  readonly onClose: () => void;
 }
 
 /** Which Automations page stands: the list, a new automation's editor, or one automation's. */
@@ -749,7 +743,6 @@ export interface TasksControl {
   /** The window's Board of the listed workspace's tasks by status: whether it stands in the plan's place, and its presses (`tasks-board.tsx`). */
   boardView: BoardViewControl;
   /** A Home or Board link whose first step names none of the reader's workspaces, which stands as not found (`desktop-shell.tsx`). */
-  unknownWorkspace: UnknownWorkspaceControl;
   /** Opens a task's file in its side panel at the commit named, or its default branch's head where none is, the reference's lines lit, opening the task first where it is not the open one: what an inbox item's code opens. */
   onShowFile: (taskId: string, ref: CodeRef, commit: string | undefined) => void;
   /** Opens a tab-shaped pin of the sidebar's: its holder, the task where it is not the open one or the agent's own page, and the tab in its column, an agent's in the task's own and any other in the side panel. */
@@ -1419,6 +1412,8 @@ export function useTasksTab(input: {
   versionHistoryView: VersionHistoryRoute;
   /** The window's Inbox as the router stands it (`inbox-route.ts`). */
   inboxView: InboxRoute;
+  /** A workspace's address naming none of the reader's as the router stands it, not found (`workspace-routes.ts`). */
+  unknownWorkspaceView: UnknownWorkspaceRoute;
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -1474,14 +1469,13 @@ export function useTasksTab(input: {
   /** The save whose revision a version history opened from a section's "Edited by" seeks, on its task, until it is found, given up on, or the history is left. */
   const [historySeek, setHistorySeek] = useState<HistorySeek | undefined>(undefined);
   const historyRoute = input.versionHistoryView;
-  /** Whether a workspace not there for the reader stands in the task's place. */
-  const [unknownStands, setUnknownWorkspace] = useState(false);
-  // The routed places a door into a place of the window's state leaves, the Inbox and an agent's page, which stand in the task's place.
-  const routedOverPlan = input.inboxView.open || input.agentView.agentId !== undefined;
+  // The routed places a door into a place of the window's state leaves, the Inbox, an agent's page, and a workspace not there, which stand in the task's place.
+  const overPlan =
+    input.inboxView.open ||
+    input.agentView.agentId !== undefined ||
+    input.unknownWorkspaceView.workspace !== undefined;
   // The window's Inbox is the router's, which stands it in the task's place as its address says (`inbox-route.ts`).
   const inboxView = input.inboxView.open ? input.inboxView : undefined;
-  // Whether anything stands in the task's place: the Inbox, an agent's page, or a workspace not there.
-  const overPlan = unknownStands || routedOverPlan;
   // Note that the Inbox already open has no opening to time.
   const timeInboxOpen = () => {
     if (inboxView === undefined) beginPanelSpan(PANEL_SPAN.INBOX_OPEN);
@@ -1498,14 +1492,14 @@ export function useTasksTab(input: {
     input.personView.userId !== undefined ||
     input.automationsView.open ||
     input.adminView.open ||
+    input.unknownWorkspaceView.workspace !== undefined ||
     historyRoute.open;
-  // A door into a place of the window's state leaves the Inbox or an agent's page standing in the task's place, as the router stands it when pressed.
+  // A door into a place of the window's state leaves the routed place standing in the task's place, as the router stands it when pressed.
   // Note that every routed place is left by the history's one leave (`onLeaveRouted`), which each route's `onClose` is.
   const overPlanNow = useRef({ over: false, leave: input.agentView.onClose });
-  overPlanNow.current = { over: routedOverPlan, leave: input.agentView.onClose };
-  // Puts away whatever stands in the task's place.
-  const clearStandIn = useCallback(() => {
-    setUnknownWorkspace(false);
+  overPlanNow.current = { over: overPlan, leave: input.agentView.onClose };
+  // Leaves the routed place standing in the task's place, where one does.
+  const leaveOverPlan = useCallback(() => {
     if (overPlanNow.current.over) overPlanNow.current.leave();
   }, []);
   // The synthetic tasks, which only a fixture run draws: the window is drawn once they have landed (`App`).
@@ -2192,7 +2186,7 @@ export function useTasksTab(input: {
   // launch or the next.
   const openTask = useCallback(
     (taskId: string, onOpened: () => void, onRefused: () => void = () => undefined) => {
-      clearStandIn();
+      leaveOverPlan();
       const ask = { taskId, over: openTaskId };
       // Another task asked for is timed to its document drawn ready; the one
       // open already has nothing to wait on.
@@ -2212,17 +2206,17 @@ export function useTasksTab(input: {
         onOpened();
       }, withdraw);
     },
-    [sendSelect, fixture, openTaskId, clearStandIn],
+    [sendSelect, fixture, openTaskId, leaveOverPlan],
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leaveTask = useCallback(() => {
-    clearStandIn();
+    leaveOverPlan();
     opening.current = undefined;
     if (fixture !== undefined) return;
     const ask = { taskId: undefined, over: openTaskId };
     setAsked(ask);
     sendClose().catch(() => setAsked((held) => (held === ask ? undefined : held)));
-  }, [fixture, openTaskId, sendClose, clearStandIn]);
+  }, [fixture, openTaskId, sendClose, leaveOverPlan]);
   // Every navigation a press asked for, counted, so an answer that lands
   // after a newer one was asked for changes nothing the newer one decided.
   const navigations = useRef(0);
@@ -2305,7 +2299,6 @@ export function useTasksTab(input: {
   );
   landHistory.current = (taskId) => {
     if (taskId !== boundFor) select(taskId);
-    setUnknownWorkspace(false);
   };
 
   // A fixture's tasks are deleted nowhere, as they are read from nowhere. A
@@ -3005,7 +2998,8 @@ export function useTasksTab(input: {
     // the agent's first line, rather than holding the card until the
     // service answers; a refusal opens the card again where it was left.
     const { handed, card } = from;
-    const unknownBefore = unknownStands;
+    // Note that a workspace not there standing at the press is where its address stood, which a refusal opens again.
+    const unknownBefore = input.unknownWorkspaceView.workspace;
     // Note that an agent's page standing at the press is where its address stood, which a refusal opens again.
     const agentBefore =
       agentView?.agentId === undefined || agentView.workspace === undefined
@@ -3044,7 +3038,7 @@ export function useTasksTab(input: {
     else if (line !== undefined) {
       setStartingTask({ line, choice: handed?.choice, navigation: pressedAt });
       setNewTaskAsk(undefined);
-      clearStandIn();
+      leaveOverPlan();
       closeHistory();
     }
     // Note that the host opens a start's task at once, so a bare one pressed on Home's own
@@ -3065,8 +3059,10 @@ export function useTasksTab(input: {
         letGoOfPage();
         // Note that what stood before the press comes back only where the developer went nowhere since.
         if (navigations.current === pressedAt) {
-          setUnknownWorkspace((now) => now || unknownBefore);
           // Note that the page comes back only where no routed place stands now, as one opened since stays.
+          if (unknownBefore !== undefined && !routedNow.current) {
+            input.unknownWorkspaceView.onOpen(unknownBefore);
+          }
           if (agentBefore !== undefined && !routedNow.current) {
             input.agentView.onOpen(agentBefore.agentId, agentBefore.workspace);
           }
@@ -3138,7 +3134,7 @@ export function useTasksTab(input: {
         if (handed === undefined) {
           setNewTaskAsk(undefined);
           setStartingTask(undefined);
-          clearStandIn();
+          leaveOverPlan();
           closeHistory();
           return undefined;
         }
@@ -3278,7 +3274,6 @@ export function useTasksTab(input: {
     const address = historyAddressOf(taskId, opening.workspace);
     if (address === undefined) return;
     if (taskId !== boundFor) select(taskId);
-    setUnknownWorkspace(false);
     setHistorySeek(opening.save === undefined ? undefined : { taskId, save: opening.save });
     historyRoute.onOpen(address.workspace, address.task, opening.spot);
   };
@@ -3292,7 +3287,7 @@ export function useTasksTab(input: {
   // window over it.
   const showColumnTab = (taskId: string, tab: MainTab) => {
     if (taskId !== tasks.activeTaskId) select(taskId);
-    clearStandIn();
+    leaveOverPlan();
     closeHistory();
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     mainTabs.onShow(taskId, tab);
@@ -3301,7 +3296,7 @@ export function useTasksTab(input: {
   // A tab of the side panel, on its plan, out from under a version history or whatever stands in the plan's place.
   const showPanelTab = (taskId: string, tab: SidePanelTab) => {
     if (taskId !== tasks.activeTaskId) select(taskId);
-    clearStandIn();
+    leaveOverPlan();
     closeHistory();
     sidePanel.onShow(taskId, tab);
   };
@@ -3321,7 +3316,7 @@ export function useTasksTab(input: {
       return;
     }
     if (place.planId !== tasks.activeTaskId) select(place.planId);
-    clearStandIn();
+    leaveOverPlan();
     closeHistory();
     mainTabs.onShow(place.planId, MAIN_TAB.OVERVIEW);
   };
@@ -3368,7 +3363,7 @@ export function useTasksTab(input: {
   // Only a place in its description opens the details.
   const showTaskAgents = (taskId: string) => {
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-    clearStandIn();
+    leaveOverPlan();
     closeHistory();
     const returnTab = taskId === tasks.activeTaskId ? mainTabs.returnTab : undefined;
     if (returnTab !== undefined && isOverviewTab(mainTabs.tab)) {
@@ -3395,19 +3390,12 @@ export function useTasksTab(input: {
   };
   showMissingTask.current = (taskId) => showMention({ kind: MENTION_KIND.TASK, taskId });
 
-  // A workspace not there for the reader, standing in the plan's place for a link, a version history or a routed place over the plan giving way.
-  const standUnknown = () => {
-    closeHistory();
-    clearStandIn();
-    setUnknownWorkspace(true);
-  };
   // The page of `agentId`, under the workspace it stands under where it stands, else `home`, a link's, else the listed one, whatever stood in the plan's place giving way to it as the router stands one place at a time.
   const openAgentPage = (agentId: string, home?: string) => {
     const standing = input.agentView.agentId === agentId ? input.agentView.workspace : undefined;
     const listed = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
     const workspace = standing ?? home ?? listed;
     if (workspace === undefined) return;
-    setUnknownWorkspace(false);
     input.agentView.onOpen(agentId, workspace);
   };
   // The Inbox of the workspace `workspaceId`, the listed one where it names none of the reader's, narrowed to `narrowed`.
@@ -3421,7 +3409,6 @@ export function useTasksTab(input: {
   // The Inbox opened on `chosen`, or on its list where nothing is chosen, at `at`: a version history or an agent's page there giving way, as the Inbox is the router's.
   const standInbox = (at: InboxAt | undefined, chosen: InboxChoice | undefined) => {
     if (at === undefined) return;
-    setUnknownWorkspace(false);
     timeInboxOpen();
     closeHistory();
     if (chosen === undefined) input.inboxView.onOpen(at);
@@ -3662,7 +3649,6 @@ export function useTasksTab(input: {
   const openBoard = (home: Pick<Workspace, "id" | "slug"> | undefined) => {
     const shown = home ?? listedWorkspace;
     if (shown === undefined) return;
-    setUnknownWorkspace(false);
     input.boardView.onOpen(stepOf(shown));
   };
 
@@ -3679,7 +3665,6 @@ export function useTasksTab(input: {
   ) => {
     const shown = home ?? listedWorkspace;
     if (shown === undefined) return;
-    setUnknownWorkspace(false);
     // Note that the page is a navigation of its own, so a plan's open or a workspace's reopen
     // asked before it, answering late, lists nothing and leaves nothing over it.
     navigations.current += 1;
@@ -3697,14 +3682,13 @@ export function useTasksTab(input: {
     const listedId = workspace === undefined ? listedWorkspace?.id : listLinked(workspace);
     const shown = viewed.workspaces.find((each) => each.id === listedId) ?? listedWorkspace;
     if (shown === undefined) return;
-    setUnknownWorkspace(false);
     input.automationsView.onOpen(to, stepOf(shown));
   };
 
   // Home is the page with no task open, so where none is, only the page standing in its place is put away, and the host is asked nothing.
   const goHome = () => {
     closeHistory();
-    if (boundFor === undefined) clearStandIn();
+    if (boundFor === undefined) leaveOverPlan();
     else leaveTask();
   };
 
@@ -3728,7 +3712,8 @@ export function useTasksTab(input: {
           viewed.workspaces.length > 0 &&
           workspaceOfSlug(viewed.workspaces, workspace) === undefined
         ) {
-          standUnknown();
+          // Note that it takes the step's place, as the router finds the workspace not found (`panel-router.tsx`).
+          input.unknownWorkspaceView.onOpen(workspace);
           return;
         }
         listLinked(workspace);
@@ -3821,7 +3806,7 @@ export function useTasksTab(input: {
   // An inbox item's code opens in its task's File tab; on a task not yet
   // open, once the host has it open, since the panel draws the open task's.
   const showFile = (taskId: string, ref: CodeRef, commit: string | undefined) => {
-    clearStandIn();
+    leaveOverPlan();
     closeHistory();
     if (taskId === tasks.activeTaskId) {
       sidePanel.onOpenFile(ref, commit);
@@ -4006,7 +3991,7 @@ export function useTasksTab(input: {
   // One the task no longer draws, read only once a reopen opened its task, opens nothing.
   const reopenHere = (closed: ClosedTab) => {
     if (!drawsAgain(closed)) return;
-    clearStandIn();
+    leaveOverPlan();
     closeHistory();
     if (closed.strip === CLOSED_TAB_STRIP.SIDE_PANEL) {
       sidePanel.onReopen(closed.tab, closed.at, closed.file);
@@ -4147,7 +4132,7 @@ export function useTasksTab(input: {
       const next = others.find((each) => each.personal === true) ?? others[0];
       navigations.current += 1;
       if (next !== undefined) chooseListed(next.id);
-      if (boundFor === undefined) clearStandIn();
+      if (boundFor === undefined) leaveOverPlan();
       else leaveTask();
     },
     github: viewed.github,
@@ -4272,10 +4257,6 @@ export function useTasksTab(input: {
         if (listedWorkspace !== undefined) input.boardView.onPreload(stepOf(listedWorkspace));
       },
     },
-    unknownWorkspace: {
-      open: unknownStands,
-      onClose: guard(() => setUnknownWorkspace(false)),
-    },
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab.
     onShowSource: guard(showSource),
@@ -4318,7 +4299,7 @@ export function useTasksTab(input: {
         return;
       }
       if (pin.task !== tasks.activeTaskId) select(pin.task);
-      clearStandIn();
+      leaveOverPlan();
       if (typeof tab === "string" || tab.kind !== STRIP_TAB_KIND.AGENT) {
         sidePanel.onShow(pin.task, tab);
         return;

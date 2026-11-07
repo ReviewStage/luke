@@ -17,6 +17,7 @@ import {
   routedPlaceOf,
   useWindowPlace,
 } from "./places/routed-places.js";
+import { useRouteAccess } from "./route-gates.js";
 
 /** An agent's page as the router stands it. */
 export interface AgentRoute {
@@ -41,13 +42,14 @@ export function useAgentRoute(input: { onClose: () => void; onStay: () => void }
   const router = useRouter();
   const navigate = useNavigate();
   const here = useWindowPlace();
+  const access = useRouteAccess();
   const open = here.place === ROUTED_PLACE.AGENT;
   const agentId = open ? here.params.agentId : undefined;
   const workspace = open ? here.params.workspace : undefined;
   const onOpen = (to: string, toWorkspace: string) => {
     const matches = router.matchRoutes(router.history.location.pathname);
     const params = placeParamsOf(matches);
-    const standing = routedPlaceOf(matches) === ROUTED_PLACE.AGENT;
+    const standing = routedPlaceOf(matches, access) === ROUTED_PLACE.AGENT;
     // Opening the page standing moves nothing, and keeps it standing where the door that asked for it left the routed place first, as a link's and ⌘K's do.
     if (standing && params.agentId === to && params.workspace === toWorkspace) {
       input.onStay();
