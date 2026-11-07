@@ -55,6 +55,8 @@ interface Stood {
   bare?: boolean;
   /** The account signed in, none for no account. */
   account?: string;
+  /** The agent the task's column shows, whose tabs alone the strip draws. */
+  agent?: string;
 }
 
 /** Mounts the panel alone, as a launch does, over the task and agents given, answering the control as it stands. */
@@ -63,7 +65,9 @@ function launch(stood: Stood) {
   function Probe({ held }: { held: Stood }) {
     control = useSidePanel(
       undefined,
-      held.bare === true ? { id: held.task, holds: {} } : usedTask(held.task),
+      held.bare === true
+        ? { id: held.task, holds: {} }
+        : { ...usedTask(held.task), agent: held.agent },
       held.taskAgents,
       [],
       [],
@@ -115,6 +119,23 @@ function launch(stood: Stood) {
     },
   };
 }
+
+test("each agent's strip draws its own tabs and the files opened under it, and comes back to the tab it was left on", () => {
+  const first = { task: TASK, taskAgents: [AGENT, OTHER_AGENT], agent: AGENT };
+  const panel = launch(first);
+  panel.open(CLOUD);
+  act(() => panel.control().onOpenFile({ path: "src/a.ts" }));
+  panel.open(CLOUD);
+
+  panel.render({ ...first, agent: OTHER_AGENT });
+  assert.deepEqual(panel.control().strip, [], "none of the first agent's tabs");
+  panel.open(OTHER_CLOUD);
+  assert.deepEqual(panel.control().strip, [OTHER_CLOUD]);
+
+  panel.render(first);
+  assert.deepEqual(panel.control().strip, [CLOUD, fileTab("src/a.ts")]);
+  assert.deepEqual(panel.control().tab, CLOUD, "the tab it was left on");
+});
 
 test("an agent's Changes tab opens on its plan, stands chosen across a launch, and stands on no other plan", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });

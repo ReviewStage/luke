@@ -680,7 +680,7 @@ afterEach(() => {
 interface Asked {
   readonly shownTasks: string[];
   readonly shownAgents: [string, string][];
-  /** The agents whose transcripts it was asked to show beside the item, as the panel's preview. */
+  /** The agents whose transcripts it was asked to show beside the item, in the panel. */
   readonly previewedAgents: string[];
   /** The automations whose pages it was asked to open. */
   readonly shownAutomations: string[];

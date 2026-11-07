@@ -1295,7 +1295,7 @@ async function pressNoteSkill(page: HTMLElement, name: string): Promise<void> {
   act(() => chip.click());
 }
 
-test("in the window's Inbox a skill an answer's words name is the chip a sent message draws, which opens its SKILL.md in the panel beside it as its preview, as a file the item names does", async () => {
+test("in the window's Inbox a skill an answer's words name is the chip a sent message draws, which opens its SKILL.md in the panel beside it, as a file the item names does", async () => {
   const answered = answeredBy(
     item(RETRY.id, RETRY.title, 5_000),
     READER,

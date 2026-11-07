@@ -4065,6 +4065,15 @@ it.effect(
       assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, agentTab(AGENT_ID), agentTab(UNSEEN_ID)]);
     }),
 );
+test("a pinned tab of one agent's opened while the column shows another shows its agent's column, whose strip alone draws it", async () => {
+  const tab = mount({ shown: true, tasks: withAgents(IDLE_AGENTS) });
+  await settle();
+  act(() => tab.control().mainTabs.onChoose(agentTab(FINISHED_ID)));
+  act(() => tab.control().onOpenPinnedTab({ task: TASK.id, tab: PULLS, label: "#1", at: 1 }));
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, agentTab(AGENT_ID));
+  assert.deepEqual(tab.control().sidePanel.tab, PULLS);
+});
 
 test("Admin opened while a page holds unsaved work waits on the leave question, and opens once it is answered", () => {
   const tab = mount({ shown: true });

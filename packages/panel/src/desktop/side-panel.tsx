@@ -952,8 +952,11 @@ export function panelOffers(input: {
   cards: PanelCards;
 }): AddEntry[] {
   const { holder, account, taskId, panel, agents, onNewTerminal, cards } = input;
-  const changes = panel.changes.filter((each) =>
-    drawsChanges(each, { taskAgents: agents.heldIds }),
+  // Note that a task's strip under one agent offers that agent's things alone, as it draws them.
+  const only = holder === SIDE_PANEL_HOLDER.TASK ? panel.agent : undefined;
+  const mine = (agentId: string) => only === undefined || agentId === only;
+  const changes = panel.changes.filter(
+    (each) => drawsChanges(each, { taskAgents: agents.heldIds }) && mine(each.changes),
   );
   const ownerOf = (agentId: string): CloudBrowserOwner => {
     const subject = agentSubject(agents, agentId, cards.held, false);
@@ -967,6 +970,7 @@ export function panelOffers(input: {
       : (agents.agents ?? [])
           .filter((agent) => agent.machine !== AGENT_MACHINE.DEVICE)
           .filter((agent) => holder !== SIDE_PANEL_HOLDER.AGENT || agent.id === taskId)
+          .filter((agent) => mine(agent.id))
           .sort((a, b) => Number(b.id === input.viewedAgent) - Number(a.id === input.viewedAgent))
           .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
   return panelEntries({
@@ -977,14 +981,19 @@ export function panelOffers(input: {
     // Note that a panel that draws no Terminal, the Inbox's among them, offers none.
     ...(onNewTerminal === undefined || holder === SIDE_PANEL_HOLDER.INBOX
       ? undefined
-      : { terminals: { offers: terminalOffers(agents, panel), onNew: onNewTerminal } }),
+      : {
+          terminals: {
+            offers: terminalOffers(agents, panel).filter(({ agent }) => mine(agent.id)),
+            onNew: onNewTerminal,
+          },
+        }),
     // Note that only a cloud agent has a mirror, so an agent on a Mac is offered no Local tab.
     ...(input.onNewLocal === undefined || holder === SIDE_PANEL_HOLDER.INBOX
       ? undefined
       : {
           locals: {
             offers: terminalOffers(agents, panel).filter(
-              ({ agent }) => agent.machine !== AGENT_MACHINE.DEVICE,
+              ({ agent }) => agent.machine !== AGENT_MACHINE.DEVICE && mine(agent.id),
             ),
             onNew: input.onNewLocal,
           },
@@ -2679,10 +2688,14 @@ export function SidePanel({
     return drawn.length === 0 ? NO_CLOUD_BROWSERS : drawn;
   }, [cloudListed, cloudDraftsHeld, agents, drawnTranscripts]);
   // The "+" offers each tab the agents' browsers hold, which stands in the strip only once opened from there.
+  // Note that a task's strip under one agent offers that agent's browser tabs alone.
   const listedBrowsers = useMemo(
     () =>
       cloudBrowsers.flatMap((drawn) =>
-        "tab" in drawn
+        "tab" in drawn &&
+        (holder !== SIDE_PANEL_HOLDER.TASK ||
+          panel.agent === undefined ||
+          drawn.tab.agentId === panel.agent)
           ? [
               {
                 id: drawn.id,
@@ -2693,7 +2706,7 @@ export function SidePanel({
             ]
           : [],
       ),
-    [cloudBrowsers],
+    [cloudBrowsers, holder, panel.agent],
   );
   const cloudBrowserLabel = (id: string) => {
     const drawn = cloudBrowsers.find((each) => each.id === id);
