@@ -480,7 +480,7 @@ export function useColumnFocus(): ColumnFocus {
 /** No worker's tab stands but a delegated one's, which its agent's open tab keeps (`drawsSubagent`). */
 const NO_SUBAGENTS: readonly string[] = [];
 
-/** The "+" menu's sections after the fixed kinds, which the task's summary lists under the same headings. */
+/** The "+" menu's sections after the fixed kinds. */
 export const ADD_SECTION = {
   PULL_REQUESTS: "Pull requests",
   PAGES: "Pages",
@@ -665,8 +665,8 @@ export function showPullRequest(
 /**
  * What a "+" menu hangs on its rows beyond their looks, the cards the
  * tabs of the same things hang (`stripTabs`): where the panel's own "+" is
- * drawn, it hands what those cards read; the summary and ⌘K, which hang
- * theirs themselves, hand none.
+ * drawn, it hands what those cards read; ⌘K, which hangs its own, hands
+ * none.
  */
 export interface PanelCards {
   readonly agents: AgentsControl;
@@ -767,9 +767,8 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
 }
 
 /**
- * What the panel may open, as its "+" menu offers it, the task's summary
- * lists it (`task-summary.tsx`), and ⌘K finds it: the fixed kinds given,
- * every one for the "+" and those the task has used for the summary. Each
+ * What the panel may open, as its "+" menu offers it and ⌘K finds it: the
+ * fixed kinds given. Each
  * row wears its tab's own look (`tab-look.tsx`). Picking a row whose tab is
  * open chooses that tab rather than opening another, as a browser's tab
  * search does, so no row says it is open. Then, under Pull requests,

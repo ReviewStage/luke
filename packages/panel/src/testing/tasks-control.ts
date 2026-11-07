@@ -23,7 +23,6 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
 import type { AutomationsRoute } from "../automations-route.js";
-import type { SummaryPin } from "../desktop/task-summary.js";
 import type { InboxRoute } from "../inbox-route.js";
 import { descriptionEditMutation } from "../tasks/description-edit-mutation.js";
 import {
@@ -227,14 +226,6 @@ export function tellingTranscripts(): TranscriptsTelling {
 export function waitingOf(item: InboxItem): AppInboxWaitingItem {
   return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
 }
-
-/** The task's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
-export const UNPINNED_SUMMARY: SummaryPin = {
-  pinned: false,
-  onToggle: ignore,
-  wide: true,
-  onMeasured: ignore,
-};
 
 /** A task whose version history is shut, its history still being read, no version chosen, every press ignored. */
 function versionHistoryControl(

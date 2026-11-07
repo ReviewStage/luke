@@ -47,7 +47,7 @@ import {
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Fragment, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
@@ -116,6 +116,7 @@ import {
 } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
+import { PlanPages } from "./plan-pages.js";
 import { PlanRelations } from "./plan-relations.js";
 import {
   COLUMN,
@@ -144,14 +145,6 @@ import {
   taskPaneOf,
 } from "./task-pane-switcher.js";
 import { useStandingDoor } from "./task-row-parts.js";
-import {
-  type SummaryLayout,
-  type SummaryPin,
-  SummarySkeleton,
-  summaryHolds,
-  TaskSummary,
-  useSummaryLayout,
-} from "./task-summary.js";
 
 /**
  * The work column while Tasks is chosen: the open task's column, its
@@ -174,10 +167,7 @@ import {
  * its Overview, across the page in place of the column's bar and the side
  * panel, the way back to the agents pinned at its card's top left: its path over its title (its
  * repository, the task it is a child of, and its key), its chips, its
- * relations, its agents, and its description. A phone heads the task with its own row instead (`TaskHead`).
- *
- * The column's summary stands at its right, under the column's bar, listing what
- * both "+" menus open, with its button last in that bar (`task-summary.tsx`).
+ * relations, its agents, its pages, and its description. A phone heads the task with its own row instead (`TaskHead`).
  *
  * The column holds tabs as the side panel does (`main-tabs.tsx`): the
  * plan's own first, showing its document, then one per coding agent,
@@ -222,7 +212,7 @@ function TaskPage({
   children,
 }: {
   areaRef?: ((area: HTMLDivElement | null) => void) | undefined;
-  columnRef: (column: HTMLElement | null) => void;
+  columnRef?: ((column: HTMLElement | null) => void) | undefined;
   panelOpen: boolean;
   fullScreen: boolean;
   /** Whether the column stands with no bar of its own, its sheet starting under the topbar: the task's details. */
@@ -245,7 +235,7 @@ function TaskPage({
   );
 }
 
-/** The column's body under its toolbar: what the column shows, and the summary beside it. */
+/** The column's body under its toolbar: what the column shows. */
 function TaskBody({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <div className="desktop-description-body relative flex min-h-0 flex-1">{children}</div>;
 }
@@ -274,7 +264,7 @@ function TaskTabsRow({
  * The task's page while the task is read, in the shape it lands in and
  * through the frames it lands in: the toolbar empty where it stands, the
  * column standing as an agent's tab does before its transcript lands
- * (`AgentTabSkeleton`), the summary's room where it will stand, and the
+ * (`AgentTabSkeleton`), and the
  * side panel at its width where it is open. The column's tab draws the very
  * same placeholder until it lands, so a task opens through one placeholder
  * rather than a chain of them, and nothing moves as the page arrives but
@@ -282,8 +272,6 @@ function TaskTabsRow({
  */
 function TaskPageSkeleton({
   drawing,
-  summary,
-  onColumn,
   starting,
   head,
 }: {
@@ -291,10 +279,6 @@ function TaskPageSkeleton({
   starting?: { readonly line: SentLine; readonly model: ComposerModel | undefined } | undefined;
   /** The side panel as it will be drawn, its panel none where it is shut. */
   drawing: SidePanelDrawing;
-  /** How the summary will stand, whose room is kept. */
-  summary: Pick<SummaryLayout, "mode">;
-  /** Hands over the column, which the summary's room is measured on, as the page's own does. */
-  onColumn: (column: HTMLElement | null) => void;
   /** A phone's head over the page, as the page will be headed once it lands (`TaskWaitHead`); none elsewhere. */
   head?: React.ReactNode;
 }): React.JSX.Element {
@@ -305,7 +289,6 @@ function TaskPageSkeleton({
       {/* Note that the bars stand empty, never in blocks for the words, tabs, and actions they land with, and a phone, whose page hides them, draws none. */}
       {head === undefined ? <Toolbar measure /> : null}
       <TaskPage
-        columnRef={onColumn}
         panelOpen={panel !== undefined}
         fullScreen={panel?.fullScreen === true}
         column={
@@ -326,7 +309,6 @@ function TaskPageSkeleton({
                   )}
                 </AgentColumn>
               </Fill>
-              <SummarySkeleton mode={summary.mode} />
             </TaskBody>
           </>
         }
@@ -425,13 +407,11 @@ function discardDraftItem(onSelect: () => void): MenuEntry {
 function DescriptionDocument({
   tasks,
   looks,
-  summary,
   room,
   away,
 }: {
   tasks: TasksControl;
   looks: TaskLooks;
-  summary: SummaryPin;
   room: ShellRoom;
   away: TaskHeadBack;
 }): React.JSX.Element {
@@ -489,21 +469,6 @@ function DescriptionDocument({
     [documentBox, headingTask],
   );
   const descriptionHeading = useHeadingAway(columnHeld, documentHeld);
-  // The summary lists the task's agents once they are read, so where the
-  // task's row says it has some, the summary's room is kept from the open on
-  // and the list landing moves nothing in the column.
-  const listedRow = tasks.tasks.find((each) => each.id === tasks.activeTaskId);
-  const agentsComing =
-    tasks.agents.agents === undefined &&
-    !tasks.agents.listFailed &&
-    (listedRow?.agents?.total ?? 0) > 0;
-  const summaryLayout = useSummaryLayout(
-    summary,
-    column,
-    tasks.sidePanel.fullScreen,
-    agentsComing || summaryHolds(tasks),
-  );
-  const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
@@ -1008,6 +973,22 @@ function DescriptionDocument({
       tasks.onShowInbox,
     ],
   );
+  // The task's pages stand under its agents, a row opening its page in the side panel and handing
+  // the panel the keys, as the panel's "+" row for it does.
+  const openPageTab = useSteadyDoor((pageId: string) => {
+    // Note that the details take the panel's room too, so a page opened from them goes back to the
+    // agents first, beside which the panel stands, and the panel keeps the keys.
+    if (detailsOver) leaveDetails();
+    openPanelTab(pageTab(pageId));
+  });
+  const { pages } = tasks;
+  const planPages = useMemo(
+    () =>
+      openedId === undefined ? null : (
+        <PlanPages pages={pages} place={{ taskId: openedId }} onOpenPage={openPageTab} />
+      ),
+    [openedId, pages, openPageTab],
+  );
   // The task's sub-tasks and relations stand over its agents, the head keyed once by the task,
   // so another task's groups start folded rather than as this one's were left. Note that the
   // key is the head's alone, because two siblings under one key leave the old task's drawn.
@@ -1024,9 +1005,10 @@ function DescriptionDocument({
           />
         )}
         {planAgents}
+        {planPages}
       </Fragment>
     ),
-    [openedId, opened, tasks, relations, openTask, planAgents],
+    [openedId, opened, tasks, relations, openTask, planAgents, planPages],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
@@ -1071,7 +1053,6 @@ function DescriptionDocument({
     [agents, openPullRequestDoor, openPageBeside, openedRepository, openedId],
   );
   // What every place on the page that picks or draws a mention reads (`task-mentions.tsx`).
-  const { pages } = tasks;
   const mentions = useMemo<TaskMentionsValue | undefined>(() => {
     if (opened === undefined || workspace === undefined) return undefined;
     return heldTaskMentions(
@@ -1101,8 +1082,6 @@ function DescriptionDocument({
     return (
       <TaskPageSkeleton
         drawing={drawing}
-        summary={summaryLayout}
-        onColumn={setColumn}
         head={phone ? <TaskWaitHead away={away} reading /> : undefined}
       />
     );
@@ -1183,21 +1162,6 @@ function DescriptionDocument({
   const terminalHere = agentOfTab(
     sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
   );
-  // The description stands in the column's Overview and the task's Inbox
-  // in the side panel, each drawn here, where what they read is held.
-  // A summary row that opens a tab of the side panel hands the panel the
-  // keys, as a transcript's row does (`openPanelTab`), so ⌘W closes what it opened.
-  const summaryTasks: TasksControl = {
-    ...tasks,
-    sidePanel: {
-      ...sidePanel,
-      onChoose: openPanelTab,
-      onOpenFile: (ref, commit) => {
-        sidePanel.onOpenFile(ref, commit);
-        showSide();
-      },
-    },
-  };
   // Note that the document stays laid out while another tab of the column is
   // shown, so coming back to Overview finds it where it was left.
   const overviewShown = isOverviewTab(tab);
@@ -1429,8 +1393,6 @@ function DescriptionDocument({
                         {/* The plan's banner is the whole plan's, so it stands over every
             tab of the column, and over the panel's while that fills the window. */}
                         {sidePanel.fullScreen ? null : stranded.banner}
-                        {/* The summary stands beside what the column shows, under the
-            toolbar, which spans the column. */}
                         <TaskBody>
                           <FindScope
                             className="desktop-task-column"
@@ -1466,15 +1428,6 @@ function DescriptionDocument({
                             )}
                             {agentThreadsView}
                           </FindScope>
-                          {detailsWide ? null : (
-                            <TaskSummary
-                              tasks={summaryTasks}
-                              layout={summaryLayout}
-                              cardId={summaryCard}
-                              held={views.held}
-                              onOpenAgent={openAgentColumn}
-                            />
-                          )}
                         </TaskBody>
                       </>
                     }
@@ -1529,24 +1482,17 @@ function DescriptionDocument({
 function StartingTaskPage({
   tasks,
   starting,
-  summary,
   phoneAway,
 }: {
   tasks: TasksControl;
   starting: StartingTask;
-  summary: SummaryPin;
   /** A phone's way back, which heads the page as the task's will be (`TaskWaitHead`); none elsewhere. */
   phoneAway: TaskHeadBack | undefined;
 }): React.JSX.Element {
   const drawing = { ...useSidePanelDrawing(tasks.sidePanel), panel: undefined };
-  const [column, setColumn] = useState<HTMLElement | null>(null);
-  // Note that the summary's room is kept, as the task's page keeps it for the agent it lists, so nothing moves as the page lands.
-  const summaryLayout = useSummaryLayout(summary, column, false, true);
   return (
     <TaskPageSkeleton
       drawing={drawing}
-      summary={summaryLayout}
-      onColumn={setColumn}
       starting={{
         line: starting.line,
         model:
@@ -1569,7 +1515,6 @@ function StartingTaskPage({
 export const DesktopTasks = memo(function DesktopTasks({
   tasks,
   looks,
-  summary,
   room = SHELL_ROOM.WIDE,
   away,
   accountName,
@@ -1582,8 +1527,6 @@ export const DesktopTasks = memo(function DesktopTasks({
   staged?: boolean;
   /** The open description's sections changed since the developer last looked, held by the shell across the description's version history. */
   looks: TaskLooks;
-  /** Whether the task's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
-  summary: SummaryPin;
   /** The room the panel's stage gives; narrow, a task is headed by one row of its own (`task-pane-switcher.tsx`). */
   room?: ShellRoom;
   /** A phone's way back out of the task, to the page it was opened from (`WindowHistory`'s `onLeave`); Home where none is handed. */
@@ -1595,7 +1538,6 @@ export const DesktopTasks = memo(function DesktopTasks({
       <StartingTaskPage
         tasks={tasks}
         starting={tasks.starting}
-        summary={summary}
         phoneAway={
           room === SHELL_ROOM.NARROW
             ? (away ?? { label: HOME_BACK, onPress: tasks.onGoHome })
@@ -1616,7 +1558,6 @@ export const DesktopTasks = memo(function DesktopTasks({
           <DescriptionDocument
             tasks={tasks}
             looks={looks}
-            summary={summary}
             room={room}
             away={away ?? { label: HOME_BACK, onPress: tasks.onGoHome }}
           />

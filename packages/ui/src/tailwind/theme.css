@@ -49,24 +49,14 @@
   --spacing-control: var(--ui-control-height);
   --spacing-control-inset: var(--ui-control-inset);
 
-  /* The panel's side panel and the plan's summary beside the document
-     (`@repo/panel`): the summary's width and its rail's, both said once on
-     the task's column (`desktop.css`'s `.desktop-task-main`); the card's
-     inset, the rail's less its 1px border; the panel's widest, which leaves
-     the document its reserve; the empty panel's column, 300px at most; a
-     note's share of the toolbar; and the card's arrival and leaving. */
-  --spacing-summary: var(--summary-width);
-  --spacing-summary-rail: var(--summary-rail-width);
-  --spacing-summary-card-inset: calc(var(--ui-space-12) - 1px);
+  /* The panel's side panel beside the document (`@repo/panel`): the
+     panel's widest, which leaves the document its reserve; the empty
+     panel's column, 300px at most; and a note's share of the toolbar. */
   --spacing-side-panel: max(
     280px,
     calc(100% - var(--document-reserve))
   ); /* off-scale: the panel's least width */
   --spacing-half-container: 50cqi;
-  --animate-card-grow-in:
-    ui-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) both,
-    ui-card-grow var(--ui-duration-fast) var(--ui-spring-fast) both;
-  --animate-card-leave: ui-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
   --spacing-control-icon: var(--ui-control-icon);
   --spacing-icon-gap: var(--ui-icon-gap);
   --spacing-menu-row: var(--ui-menu-row-height);

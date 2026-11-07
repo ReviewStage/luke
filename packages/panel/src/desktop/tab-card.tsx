@@ -23,7 +23,7 @@ import {
 } from "../tasks/use-side-panel.js";
 
 /**
- * tab-card.tsx -- the card each kind of tab hangs wherever the thing it shows is named: its tab in either strip, its row in the task's summary, and a transcript's row that opens it.
+ * tab-card.tsx -- the card each kind of tab hangs wherever the thing it shows is named: its tab in either strip, its row in the task's Overview, and a transcript's row that opens it.
  *
  * `tabLook` gives a kind one glyph and one name wherever it is offered;
  * `tabCard` gives it one card the same way, from what the place knows of

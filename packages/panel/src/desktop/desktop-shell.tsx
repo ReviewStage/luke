@@ -95,7 +95,6 @@ import { SidePanelChord, SidePanelToggle, usePanelToggleRoom } from "./side-pane
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
 import { awayBack } from "./task-pane-switcher.js";
-import { useSummaryPin } from "./task-summary.js";
 import { TasksPagesHeld } from "./tasks-page-held.js";
 import { useWindowTitle } from "./window-title.js";
 
@@ -693,7 +692,6 @@ interface ShellPlacesInput {
   readonly settings: SettingsPanelProps;
   readonly shell: RefObject<HTMLDivElement | null>;
   readonly keepOverlay: ReturnType<typeof useFloatDismiss>;
-  readonly summary: ReturnType<typeof useSummaryPin>;
   readonly looks: ReturnType<typeof useTaskLooks>;
   readonly mentionedAgents: React.ComponentProps<typeof MentionedAgents>["value"];
   readonly chipCards: React.ComponentProps<typeof ChipCards>["value"];
@@ -735,9 +733,8 @@ export function useShellPlaces(): ShellPlacesInput {
  * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the task, so
  * what changed since the developer last looked is held here, across it,
  * rather than by the task's page (`use-task-looks.ts`). Folding the sidebar,
- * opening, shutting, or growing the side panel, or the task's summary pinned
- * or folded to its rail, by a press or by its column's room
- * (task-summary.tsx), glides the work beside them (pane-motion.tsx). A
+ * opening, shutting, or growing the side panel glides the work beside them
+ * (pane-motion.tsx). A
  * window too narrow to pin the sidebar folds it, and a folded sidebar floats
  * over the work rather than beside it (`sidebar-collapse.ts`), put away by a
  * press outside it and its toggle. A stage as narrow as a phone's stands the
@@ -797,8 +794,6 @@ export function DesktopShell({
     onOpen: () => sidebar.onOverlay(SIDEBAR_OVERLAY.OPEN),
     onClose: () => sidebar.onOverlay(SIDEBAR_OVERLAY.CLOSED),
   });
-  // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
-  const summary = useSummaryPin(sidebar.staged);
   // The box the side panel's toggle stands in, which the panel's "+" menu hangs from where the toggle asks for it with nothing to show.
   const setToggleRoom = usePanelToggleRoom();
   // Note that setup standing before the app holds the places' chords too, so none lands behind it, as New workspace's cards do.
@@ -968,7 +963,6 @@ export function DesktopShell({
     settings,
     shell,
     keepOverlay,
-    summary,
     looks,
     mentionedAgents,
     chipCards,
@@ -1008,7 +1002,6 @@ export function ShellPlaces(): React.JSX.Element {
     settings,
     shell,
     keepOverlay,
-    summary,
     mentionedAgents,
     chipCards,
     newTaskDialog,
@@ -1140,7 +1133,6 @@ export function ShellPlaces(): React.JSX.Element {
           sidebarCollapsed: sidebar.collapsed,
           panelOpen: tasks.sidePanel.open,
           panelFullScreen: tasks.sidePanel.fullScreen,
-          summaryPinned: summary.pinned && summary.wide,
         }}
       />
     </div>
@@ -1163,7 +1155,7 @@ export function InboxPlace(): null {
  * between them keeps it drawn.
  */
 export function StatePlace(): React.JSX.Element {
-  const { tasks, room, sidebar, settings, looks, summary, away } = useShellPlaces();
+  const { tasks, room, sidebar, settings, looks, away } = useShellPlaces();
   const { account } = settings;
   const pageAgent = tasks.agentView.agentId;
   const unknownWorkspace = tasks.unknownWorkspace.open;
@@ -1193,7 +1185,6 @@ export function StatePlace(): React.JSX.Element {
     <DesktopTasks
       tasks={tasks}
       looks={looks}
-      summary={summary}
       room={room}
       away={away}
       accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}

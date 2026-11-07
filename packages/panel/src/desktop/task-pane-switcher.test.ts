@@ -24,7 +24,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { openTaskMenu, taskName } from "../testing/task-menu.js";
-import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { TASK_PANE, taskPaneOf } from "./task-pane-switcher.js";
 
@@ -149,7 +149,6 @@ function mount(
             { value: room },
             createElement(RenameOfferProbe),
             createElement(DesktopTasks, {
-              summary: UNPINNED_SUMMARY,
               looks: NO_LOOKS,
               room,
               away: { label: "Inbox", onPress: () => told.push("away") },
@@ -384,7 +383,6 @@ test("on a phone a task still read, or one that cannot be, is headed by its way 
         onRegistry(
           AtomRegistry.make(),
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             room: SHELL_ROOM.NARROW,
             away: { label: "Inbox", onPress: () => told.push("away") },
@@ -466,7 +464,6 @@ function RefusingTask(): React.JSX.Element {
   const [draft, setDraft] = useState<string | undefined>(undefined);
   const task = { ...TASK, name: draft ?? TASK.name };
   return createElement(DesktopTasks, {
-    summary: UNPINNED_SUMMARY,
     looks: NO_LOOKS,
     room: SHELL_ROOM.WIDE,
     tasks: tasksControl({

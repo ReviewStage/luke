@@ -38,7 +38,7 @@ import { onRegistry, startQueriesAfresh, withQueryClient } from "../testing/copy
 import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { openTaskMenu } from "../testing/task-menu.js";
-import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { DesktopTasks } from "./desktop-tasks.js";
@@ -167,7 +167,6 @@ function mountDescriptionTab(
   registry?: AtomRegistry.AtomRegistry,
 ): HTMLElement {
   const page = createElement(DesktopTasks, {
-    summary: UNPINNED_SUMMARY,
     looks: NO_LOOKS,
     tasks,
   });
@@ -301,7 +300,6 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
       root.render(
         withQueryClient(
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             tasks: control,
           }),
@@ -343,7 +341,6 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the des
       root.render(
         withQueryClient(
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             tasks: control,
           }),
@@ -548,7 +545,6 @@ test("the task's toolbar draws no ⋯ of the task's, and ⌘⌫ still asks to de
   const container = mount(
     withQueryClient(
       createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         tasks: sharedTab(DEAN.userId),
       }),
