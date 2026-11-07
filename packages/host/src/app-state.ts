@@ -44,6 +44,7 @@ import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
+import type { MirrorStandings } from "@repo/features/mirror-steps";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PortForwarding } from "@repo/features/port-forward-acts";
@@ -957,6 +958,8 @@ export interface AppState {
   sessionReplay: AppSessionReplaySlice;
   /** The one agent whose cloud ports are forwarded to this Mac and how its forwarding stands, as the host tells it; none while no agent is forwarded, and in a host that forwards nothing. */
   portForwarding: PortForwarding;
+  /** How each cloud agent's mirror on this Mac stands until its worktree does, by the agent, as the host tells it: what a Local tab says while it connects. */
+  mirrors: MirrorStandings;
 }
 
 /**

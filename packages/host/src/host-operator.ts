@@ -19,6 +19,7 @@ import {
 import type { InstalledSkillFollowParams } from "@repo/features/installed-skill-view";
 import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import type { LiveRead } from "@repo/features/live-wire";
+import { type MirrorStandings, mirrorStandingsSchema } from "@repo/features/mirror-steps";
 import { type PortForwarding, portForwardingSchema } from "@repo/features/port-forward-acts";
 import {
   TASK_CALL_FAILURE,
@@ -440,6 +441,8 @@ export interface HostOperator {
   onBrowserLiveClosed(listener: (closed: BrowserLiveClosedEvent) => void): () => void;
   /** The one agent forwarded to this Mac's localhost and how its forwarding stands, or none, each time it moves. */
   onPortForwardingChanged(listener: (forwarding: PortForwarding) => void): () => void;
+  /** How each cloud agent's mirror on this Mac stands until its worktree does, by the agent, each time one moves. */
+  onMirrorsChanged(listener: (mirrors: MirrorStandings) => void): () => void;
 }
 
 /**
@@ -1191,6 +1194,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           return Result.isSuccess(read) ? { forwarding: read.success } : undefined;
         },
         ({ forwarding }) => listener(forwarding),
+      ),
+    onMirrorsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.MIRRORS_CHANGED,
+        (payload) => {
+          const read = readEither(mirrorStandingsSchema)(payload);
+          return Result.isSuccess(read) ? { mirrors: read.success } : undefined;
+        },
+        ({ mirrors }) => listener(mirrors),
       ),
     onSessionReplayChanged: (listener) =>
       on(

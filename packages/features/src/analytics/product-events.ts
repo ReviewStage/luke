@@ -6,6 +6,12 @@ import {
   type AppSettingId,
 } from "@repo/wire/app-settings";
 import { Option, Schema } from "effect";
+import {
+  MIRROR_FAILURE,
+  MIRROR_STEP,
+  type MirrorFailure,
+  type MirrorStep,
+} from "../mirror-steps.js";
 import { parseReleaseVersion } from "./release-version.js";
 
 /**
@@ -38,6 +44,10 @@ export const PRODUCT_EVENT = {
   VOICE_PERMISSION: "voice:permission",
   SETTING_UPDATE: "setting:update",
   EXPERIMENT_TOGGLE: "experiment:toggle",
+  /** A step of a cloud agent's mirror on this Mac failed, counted once each time what failed changes. */
+  MIRROR_FAIL: "mirror:fail",
+  /** A cloud agent's mirror on this Mac heard its first header since the host started keeping it. */
+  MIRROR_READY: "mirror:ready",
 } as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT)[keyof typeof PRODUCT_EVENT];
@@ -89,6 +99,10 @@ export const PRODUCT_EVENT_PROPERTY = {
   SETTING_VALUE: "setting_value",
   EXPERIMENT: "experiment",
   EXPERIMENT_SCOPE: "experiment_scope",
+  MIRROR_STEP: "mirror_step",
+  MIRROR_FAILURE: "mirror_failure",
+  ATTEMPT: "attempt",
+  ELAPSED_SECONDS: "elapsed_seconds",
 } as const;
 
 type ProductEventProperty = (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
@@ -329,6 +343,38 @@ export function productSessionCountBucket(count: number): ProductSessionCountBuc
   );
 }
 
+/**
+ * The rungs a wait travels on, in seconds since what it waited on began,
+ * each the shortest wait that reaches it, for the reason counts travel on
+ * rungs: a raw duration says no more about a crowd and more about a person.
+ */
+const PRODUCT_ELAPSED_SECONDS = {
+  NONE: 0,
+  BLINK: 5,
+  MOMENT: 15,
+  HALF_MINUTE: 30,
+  MINUTE: 60,
+  MINUTES: 120,
+  FIVE_MINUTES: 300,
+  TEN_MINUTES: 600,
+  HALF_HOUR: 1800,
+  HOUR: 3600,
+} as const;
+
+export type ProductElapsedSeconds =
+  (typeof PRODUCT_ELAPSED_SECONDS)[keyof typeof PRODUCT_ELAPSED_SECONDS];
+
+const PRODUCT_ELAPSED_LADDER: readonly ProductElapsedSeconds[] = Object.values(
+  PRODUCT_ELAPSED_SECONDS,
+).sort((left, right) => right - left);
+
+/** The highest rung a wait in milliseconds reaches; anything below the first rung is none. */
+export function productElapsedSeconds(milliseconds: number): ProductElapsedSeconds {
+  const seconds = milliseconds / 1000;
+  if (!Number.isFinite(seconds)) return PRODUCT_ELAPSED_SECONDS.NONE;
+  return PRODUCT_ELAPSED_LADDER.find((rung) => seconds >= rung) ?? PRODUCT_ELAPSED_SECONDS.NONE;
+}
+
 interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: string;
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: ProductSessionCountBucket;
@@ -344,6 +390,10 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
   [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: ProductExperiment;
   [PRODUCT_EVENT_PROPERTY.EXPERIMENT_SCOPE]: ProductExperimentScope;
+  [PRODUCT_EVENT_PROPERTY.MIRROR_STEP]: MirrorStep;
+  [PRODUCT_EVENT_PROPERTY.MIRROR_FAILURE]: MirrorFailure;
+  [PRODUCT_EVENT_PROPERTY.ATTEMPT]: ProductSessionCountBucket;
+  [PRODUCT_EVENT_PROPERTY.ELAPSED_SECONDS]: ProductElapsedSeconds;
 }
 
 /**
@@ -356,6 +406,8 @@ type EnumeratedProductEventProperty = Exclude<
   | typeof PRODUCT_EVENT_PROPERTY.APP_VERSION
   | typeof PRODUCT_EVENT_PROPERTY.IMAGE_COUNT
   | typeof PRODUCT_EVENT_PROPERTY.EXPERIMENT_SCOPE
+  | typeof PRODUCT_EVENT_PROPERTY.ATTEMPT
+  | typeof PRODUCT_EVENT_PROPERTY.ELAPSED_SECONDS
 >;
 
 /** Every value each enumerable property may ever hold. */
@@ -371,6 +423,8 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: Object.values(PRODUCT_SETTING_VALUE),
   [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: Object.values(PRODUCT_EXPERIMENT),
+  [PRODUCT_EVENT_PROPERTY.MIRROR_STEP]: Object.values(MIRROR_STEP),
+  [PRODUCT_EVENT_PROPERTY.MIRROR_FAILURE]: Object.values(MIRROR_FAILURE),
 } as const satisfies Record<EnumeratedProductEventProperty, readonly string[]>;
 
 /**
@@ -400,6 +454,16 @@ const PRODUCT_EVENT_PROPERTIES = {
     PRODUCT_EVENT_PROPERTY.EXPERIMENT,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
     PRODUCT_EVENT_PROPERTY.EXPERIMENT_SCOPE,
+  ],
+  [PRODUCT_EVENT.MIRROR_FAIL]: [
+    PRODUCT_EVENT_PROPERTY.MIRROR_STEP,
+    PRODUCT_EVENT_PROPERTY.MIRROR_FAILURE,
+    PRODUCT_EVENT_PROPERTY.ATTEMPT,
+    PRODUCT_EVENT_PROPERTY.ELAPSED_SECONDS,
+  ],
+  [PRODUCT_EVENT.MIRROR_READY]: [
+    PRODUCT_EVENT_PROPERTY.ATTEMPT,
+    PRODUCT_EVENT_PROPERTY.ELAPSED_SECONDS,
   ],
 } as const satisfies { [Name in ProductEventName]: readonly ProductEventProperty[] };
 
@@ -506,6 +570,14 @@ function experimentScopeReader(value: UnparsedWireValue): ProductExperimentScope
   return readsExperimentScope(value) as ProductExperimentScope | undefined;
 }
 
+const ELAPSED_RUNGS: ReadonlySet<number> = new Set(Object.values(PRODUCT_ELAPSED_SECONDS));
+
+function elapsedReader(value: UnparsedWireValue): ProductElapsedSeconds | undefined {
+  if (!isWireNumber(value) || !ELAPSED_RUNGS.has(value)) return undefined;
+  // SAFETY: the value is a member of the elapsed ladder declared above.
+  return value as ProductElapsedSeconds;
+}
+
 function bucketReader(value: UnparsedWireValue): ProductSessionCountBucket | undefined {
   if (!isWireNumber(value) || !COUNT_BUCKETS.has(value)) return undefined;
   // SAFETY: the value is a member of the bucket ladder declared above.
@@ -535,6 +607,8 @@ const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: (value) =>
     isWireString(value) && parseReleaseVersion(value) ? value.trim() : undefined,
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: bucketReader,
+  [PRODUCT_EVENT_PROPERTY.ATTEMPT]: bucketReader,
+  [PRODUCT_EVENT_PROPERTY.ELAPSED_SECONDS]: elapsedReader,
   [PRODUCT_EVENT_PROPERTY.EXPERIMENT_SCOPE]: experimentScopeReader,
 };
 

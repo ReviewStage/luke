@@ -231,6 +231,7 @@ function idleDocument(experiments: ExperimentChoices): AppStateSnapshot {
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
     portForwarding: null,
+    mirrors: {},
     network: { online: true, reachable: true },
     window: { fullScreen: false },
   };

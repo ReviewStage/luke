@@ -287,6 +287,7 @@ export const selectNetwork = (state: AppStateSnapshot) => state.network;
 export const selectSessionReplay = (state: AppStateSnapshot) => state.sessionReplay;
 export const selectWindow = (state: AppStateSnapshot) => state.window;
 export const selectPortForwarding = (state: AppStateSnapshot) => state.portForwarding;
+export const selectMirrors = (state: AppStateSnapshot) => state.mirrors;
 
 /** The account's workspaces, which tell their readers only as the list moves, not as the tasks beside it do. */
 export const selectWorkspaces = (state: AppStateSnapshot) => state.tasks.workspaces;

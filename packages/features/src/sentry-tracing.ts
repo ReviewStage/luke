@@ -51,6 +51,8 @@ export const SENTRY_SEND_SPAN = {
   AGENT_SEND: "agent.send",
   /** A message laid in an agent's queue, or a change to it. */
   AGENT_QUEUE: "agent.queue",
+  /** A Local terminal tab opening on this Mac, from its ask for the agent's mirror to its shell open. */
+  LOCAL_TERMINAL_OPEN: "terminal.local.open",
 } as const;
 
 export type SentrySendSpan = (typeof SENTRY_SEND_SPAN)[keyof typeof SENTRY_SEND_SPAN];
@@ -64,20 +66,40 @@ export const SENTRY_TRACE_HEADER = {
   BAGGAGE: "baggage",
 } as const;
 
-/** The kinds of send span, for telling a send's span from every other by its name. */
-const SEND_SPAN_NAMES: ReadonlySet<string> = new Set(Object.values(SENTRY_SEND_SPAN));
+/**
+ * The spans of a cloud agent's mirror on this Mac, which main traces
+ * (`@repo/host`'s `compose-mirrors.ts`): each attempt at its tunnel and the
+ * prefetch beside the first are the roots, and each step a span beneath.
+ */
+export const SENTRY_MIRROR_SPAN = {
+  ATTEMPT: "mirror.attempt",
+  PREFETCH: "mirror.prefetch",
+  TUNNEL: "mirror.tunnel",
+  HEADER: "mirror.header",
+  WORKTREE: "mirror.worktree",
+  LIST: "mirror.list",
+  MATCH: "mirror.match",
+} as const;
+
+/** The roots kept every time: a send's, and a mirror's, which is rare and is read when one is slow. */
+const KEPT_SPAN_NAMES: ReadonlySet<string> = new Set([
+  ...Object.values(SENTRY_SEND_SPAN),
+  SENTRY_MIRROR_SPAN.ATTEMPT,
+  SENTRY_MIRROR_SPAN.PREFETCH,
+]);
 
 /**
- * The clients' `tracesSampler`: a send's span is kept every time, and every
- * other trace by `SENTRY_TRACES_SAMPLE_RATE`, or by its parent's decision
- * where it has one. Note that a send is rare and the trace through the
- * service is what it is for, so a sampled-out send would leave nothing to read.
+ * The clients' and main's `tracesSampler`: a send's span and a mirror's
+ * roots are kept every time, and every other trace by
+ * `SENTRY_TRACES_SAMPLE_RATE`, or by its parent's decision where it has one.
+ * Note that a send is rare and the trace through the service is what it is
+ * for, so a sampled-out send would leave nothing to read.
  */
 export function sentryTracesSampler({
   name,
   inheritOrSampleWith,
 }: TracesSamplerSamplingContext): number {
-  return SEND_SPAN_NAMES.has(name) ? 1 : inheritOrSampleWith(SENTRY_TRACES_SAMPLE_RATE);
+  return KEPT_SPAN_NAMES.has(name) ? 1 : inheritOrSampleWith(SENTRY_TRACES_SAMPLE_RATE);
 }
 
 /** A send's trace, as Sentry's `getTraceData` answered it for the send's span. */

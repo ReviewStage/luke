@@ -534,6 +534,8 @@ export const GATEWAY_EVENT = {
   MCP_CLIENTS_CHANGED: "mcpClients.changed",
   /** The one agent whose cloud ports are forwarded to this Mac and how its forwarding stands, or none, each time it moves. */
   PORT_FORWARDS_CHANGED: "portForwards.changed",
+  /** How each cloud agent's mirror on this Mac stands until its worktree does, by the agent, whole, each time one moves. */
+  MIRRORS_CHANGED: "mirrors.changed",
   /** How many changes made offline the service refused as they were sent again, since the windows last cleared the count, each time it moves. */
   OFFLINE_REFUSED_CHANGED: "offlineRefused.changed",
   /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

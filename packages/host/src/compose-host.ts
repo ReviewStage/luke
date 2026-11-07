@@ -429,6 +429,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           platform: yield* MirrorPlatform,
           agentListed,
           listings: tasks.pullRequestListings,
+          recordProductEvent: settings.recordProductEvent,
         })
       : unavailableConcern(HOST_PLATFORM_CONCERN.MIRRORS);
     const portForwards: PortForwardsComposer = platform.has(HOST_PLATFORM_CONCERN.PORT_FORWARDS)
