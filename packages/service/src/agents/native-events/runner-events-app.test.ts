@@ -894,52 +894,50 @@ it.layer(getTestDB())("the runner events route", (it) => {
     }),
   );
 
-  it.effect(
-    "an older runner's end on a wait it let go settles its turn as done, the wakeups it named dropped",
-    () =>
-      Effect.gen(function* () {
-        const post = yield* standing;
-        const agent = yield* agentWithBearer;
-        const top = { parent_tool_use_id: null, session_id: SESSION };
-        const dueAt = "2026-10-21T12:17:00.000Z";
-        const prompt = "Check CI on the pull request again.";
-        const messagesOfTurn = [
-          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
-          { type: "system", subtype: "init", ...top },
-          {
-            type: "assistant",
-            message: {
-              content: [
-                {
-                  type: "tool_use",
-                  id: "toolu_wake",
-                  name: "ScheduleWakeup",
-                  input: { delaySeconds: 600, reason: "CI", prompt },
-                },
-              ],
-            },
-            ...top,
+  it.effect("an older runner's end on a wait it let go settles its turn as done", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentWithBearer;
+      const top = { parent_tool_use_id: null, session_id: SESSION };
+      const dueAt = "2026-10-21T12:17:00.000Z";
+      const prompt = "Check CI on the pull request again.";
+      const messagesOfTurn = [
+        { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+        { type: "system", subtype: "init", ...top },
+        {
+          type: "assistant",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "toolu_wake",
+                name: "ScheduleWakeup",
+                input: { delaySeconds: 600, reason: "CI", prompt },
+              },
+            ],
           },
-          { type: "result", subtype: "success", is_error: false, ...top },
-          {
-            type: RUNNER_EVENT.WAITING,
-            background_tasks: [],
-            session_crons: [{ id: "cron_1", schedule: "17 12 21 10 *", recurring: false, prompt }],
-          },
-          // As a runner bundled with a host release before 0.25.0 still posts it.
-          { type: RUNNER_EVENT.END, reason: "released", wakeups: [{ at: dueAt, prompt }] },
-        ];
-        // SAFETY: each message above is one the pinned SDK or a runner emits, written in its JSON shape.
-        yield* post(
-          agent.bearer,
-          messagesOfTurn.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
-        );
-        const { turns: ended } = yield* transcriptOf(agent.target.conversationId);
-        assert.deepEqual(
-          ended.map((turn) => turn.status),
-          [TURN_STATUS.SETTLED],
-        );
-      }),
+          ...top,
+        },
+        { type: "result", subtype: "success", is_error: false, ...top },
+        {
+          type: RUNNER_EVENT.WAITING,
+          background_tasks: [],
+          session_crons: [{ id: "cron_1", schedule: "17 12 21 10 *", recurring: false, prompt }],
+        },
+        // As a runner bundled with a host release before 0.25.0 still posts it.
+        { type: RUNNER_EVENT.END, reason: "released", wakeups: [{ at: dueAt, prompt }] },
+      ];
+      // SAFETY: each message above is one the pinned SDK or a runner emits, written in its JSON shape.
+      yield* post(
+        agent.bearer,
+        messagesOfTurn.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
+      );
+      const { turns: ended } = yield* transcriptOf(agent.target.conversationId);
+      assert.deepEqual(
+        ended.map((turn) => turn.status),
+        [TURN_STATUS.SETTLED],
+      );
+    }),
   );
 
   it.effect(
