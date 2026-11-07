@@ -1061,6 +1061,9 @@ importers:
       '@sentry/effect':
         specifier: 11.7.0
         version: 11.7.0(effect@4.0.4)
+      '@sentry/profiling-node':
+        specifier: 11.7.0
+        version: 11.7.0
       '@vercel/connect':
         specifier: 2.4.1
         version: 2.4.1(@modelcontextprotocol/sdk@1.32.1)(ai@7.0.135)(better-auth@1.7.7)(eve@0.74.0)
@@ -3957,6 +3960,10 @@ packages:
     resolution: {integrity: sha512-t8MSpbPoOcPOkywcv0Hwh97A82jWFZju5NU/a6pHmn2pKFktgCgnHKNHvlYp8QUaDNYijYpLv58NIM5Dg7by7A==}
     engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
 
+  '@sentry/node-cpu-profiler@2.4.4':
+    resolution: {integrity: sha512-FaYbFWxEyTTVqXLJccokJCkwx2cTuvTiRaM9kA+O4HbZVT49xYXqSV9cNLI5UqJhgdHiZDhelBd5LB4wj7IIRA==}
+    engines: {node: '>=18'}
+
   '@sentry/node@11.7.0':
     resolution: {integrity: sha512-QDqFfZSfEHt07HI8oJcOTTio9yjkKv6UXLEwl+T2NxSU0Tc+b5uEDIsT8/kMgBSuEZxij9Sl6Gnz5sSjkOTdmA==}
     engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
@@ -3976,6 +3983,10 @@ packages:
     engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
+
+  '@sentry/profiling-node@11.7.0':
+    resolution: {integrity: sha512-O0kaxqQL2DIOnKD02BfaalGR0l0shmGs7/D3u1k0v6Fg5uO6aSmZqtXG/WDoqivVoP1fyPcFlIx+KTE9T/A+pw==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0 <23.0.0 || >=23.2.0'}
 
   '@sentry/replay-canvas@11.7.0':
     resolution: {integrity: sha512-GmnN9BonpXhBZKFlwYjNKyABzoTh10jj7TpKQ//YGa+mLkbQvbOJ9jwXdkuE3Ntnx0pyGOU1YzQGl6FXntEjdg==}
@@ -6938,6 +6949,10 @@ packages:
     resolution: {integrity: sha512-54gANPi62O8rfMvepiJUVuIzEIinYfpeHbebywlLxvVTgIYXDwSvpaU9Id+0sJOBjBx0wC1/CVYXJkH7SY+l0g==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
+
+  node-abi@3.101.0:
+    resolution: {integrity: sha512-bkb/RkuWCE64eWu1PCh3Fu2pGc9mKRs+kOE+FU2bGHRYlQa86/D321DSATV54AsCQMKz3/xSt9sRgraZTpqdhQ==}
+    engines: {node: '>=10'}
 
   node-abi@4.33.0:
     resolution: {integrity: sha512-vLBWCKb+7LWsX+TbfzWOkw0W81m377tyx3hOweBTjO43CXZnRGS1/JPWs20fr0PgZyDXk6ROYrylsEycK8raDA==}
@@ -10225,6 +10240,11 @@ snapshots:
     dependencies:
       '@sentry/core': 11.8.0
 
+  '@sentry/node-cpu-profiler@2.4.4':
+    dependencies:
+      detect-libc: 2.1.2
+      node-abi: 3.101.0
+
   '@sentry/node@11.7.0(@babel/core@7.29.7)(rollup@4.62.4)':
     dependencies:
       '@opentelemetry/api': 1.9.1
@@ -10264,6 +10284,16 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@sentry/conventions': 0.27.0
       '@sentry/core': 11.8.0
+
+  '@sentry/profiling-node@11.7.0':
+    dependencies:
+      '@sentry/core': 11.7.0
+      '@sentry/node': 11.7.0(@babel/core@7.29.7)(rollup@4.62.4)
+      '@sentry/node-cpu-profiler': 2.4.4
+    transitivePeerDependencies:
+      - '@babel/core'
+      - rollup
+      - webpack
 
   '@sentry/replay-canvas@11.7.0':
     dependencies:
@@ -13534,6 +13564,10 @@ snapshots:
       unenv: 2.0.0-rc.24
       unstorage: 2.0.0-alpha.10
     optional: true
+
+  node-abi@3.101.0:
+    dependencies:
+      semver: 7.8.5
 
   node-abi@4.33.0:
     dependencies:

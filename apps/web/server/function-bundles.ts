@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { join, posix, relative, sep } from "node:path";
+import { basename, dirname, join, posix, relative, sep } from "node:path";
 import { Schema } from "effect";
 import type { BuildOptions, Metafile, Plugin } from "esbuild";
 import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
@@ -48,6 +48,18 @@ export const INLINE_EXCEPTION = {
   BUFFERUTIL: "bufferutil",
   UTF8_VALIDATE: "utf-8-validate",
 } as const;
+
+/**
+ * Sentry's CPU profiler binary for the functions' runtime, Node 24 (ABI 137)
+ * on x64 glibc Linux, left outside every bundle and shipped beside it in each
+ * function that loads it, since esbuild cannot inline a native module. The
+ * profiler requires one binary per platform by name, and an Electron build of
+ * its own, and runs only the one for the platform it is on, so every other is
+ * stubbed rather than shipped.
+ */
+export const PROFILER_BINARY = "./sentry_cpu_profiler-linux-x64-glibc-137.node";
+const PROFILER_BINARY_SPECIFIER = /\/sentry_cpu_profiler[^/]*\.node$/;
+const PROFILER_STUB_NAMESPACE = "profiler-binary-stub";
 
 /** Where the expected external set of every bundle is committed, compared as data. */
 export const FUNCTION_EXTERNALS_FILE = join("server", "function-externals.json");
@@ -143,6 +155,24 @@ function dispatcherPlugin(web: string, functions: readonly FunctionDefinition[])
   };
 }
 
+/** The profiler's binary for the functions' runtime left external, and every other platform's an empty module. */
+function profilerBinaryPlugin(): Plugin {
+  return {
+    name: PROFILER_STUB_NAMESPACE,
+    setup(build) {
+      build.onResolve({ filter: PROFILER_BINARY_SPECIFIER }, (args) =>
+        args.path === PROFILER_BINARY
+          ? { path: args.path, external: true }
+          : { path: args.path, namespace: PROFILER_STUB_NAMESPACE },
+      );
+      build.onLoad({ filter: /.*/, namespace: PROFILER_STUB_NAMESPACE }, () => ({
+        contents: "",
+        loader: "js",
+      }));
+    },
+  };
+}
+
 /** zod's pure re-export entry modules, as a resolved path ends: the package root, `zod/v4`, and the classic index `zod/v4` re-exports. */
 const ZOD_ENTRY_MODULES = [
   "/node_modules/zod/index.js",
@@ -201,6 +231,7 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
     functions,
     externalPackages: new Set([
       ...exceptions,
+      PROFILER_BINARY,
       ...builtinModules,
       ...builtinModules.map((name) => `node:${name}`),
     ]),
@@ -216,7 +247,7 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
       sourcemap: false,
       metafile: true,
       logLevel: "warning",
-      plugins: [dispatcherPlugin(web, functions), zodEntryPlugin()],
+      plugins: [dispatcherPlugin(web, functions), zodEntryPlugin(), profilerBinaryPlugin()],
       // A shell script a route imports `?raw` is inlined as its text, as Vite answers it to a test: the host's install script (`server/routes/hosts/install-script.ts`).
       loader: { ".sh": "text" },
       external: exceptions,
@@ -251,10 +282,35 @@ export function undeclaredImports(
     for (const imported of input.imports) {
       if (!imported.external || imported.path === ESBUILD_RUNTIME) continue;
       if (relative(web, imported.path) in metafile.inputs) continue;
-      if (!declared.has(packageNameOf(imported.path))) undeclared.add(imported.path);
+      if (declared.has(imported.path) || declared.has(packageNameOf(imported.path))) continue;
+      undeclared.add(imported.path);
     }
   }
   return [...undeclared].sort();
+}
+
+/**
+ * The profiler's binary as each bundle that requires it ships it beside
+ * itself, keyed by the bundle's absolute path; a bundle that does not require
+ * it is absent.
+ */
+export async function profilerBinaryFiles(
+  metafile: Metafile,
+  web: string,
+): Promise<ReadonlyMap<string, { readonly name: string; readonly contents: Uint8Array }>> {
+  const importer = Object.entries(metafile.inputs).find(([, input]) =>
+    input.imports.some((imported) => imported.external && imported.path === PROFILER_BINARY),
+  );
+  if (importer === undefined) return new Map();
+  const file = {
+    name: basename(PROFILER_BINARY),
+    contents: await readFile(join(web, dirname(importer[0]), PROFILER_BINARY)),
+  };
+  return new Map(
+    Object.entries(metafile.outputs)
+      .filter(([, output]) => output.imports.some((imported) => imported.path === PROFILER_BINARY))
+      .map(([output]) => [join(web, output), file]),
+  );
 }
 
 /** Every bundle's external imports as the metafile records them, sorted and unique, keyed by bundle. */

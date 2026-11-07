@@ -12,6 +12,7 @@ import {
   FUNCTION_METAFILE,
   functionBundlePlan,
   localOnlyReach,
+  profilerBinaryFiles,
   undeclaredImports,
 } from "../server/function-bundles.js";
 import {
@@ -91,6 +92,9 @@ const shipsImage = new Set(
   [...bundlesReaching(result.metafile, WEB, AGENT_IMAGE_READER)].map((path) => join(WEB, path)),
 );
 
+// The profiler's native binary ships beside every bundle that requires it, since no bundle can carry it.
+const profilerBinary = await profilerBinaryFiles(result.metafile, WEB);
+
 const durationOf = new Map(
   task.functions.map((definition) => [join(WEB, bundlePath(definition)), definition.maxDuration]),
 );
@@ -112,9 +116,14 @@ const emitted = await emitBuildOutput({
         contents: await readFile(join(WEB, bundlePath(definition))),
         maxDuration: definition.maxDuration,
         queueTopic: definition.queueTopic,
-        files: shipsImage.has(join(WEB, bundlePath(definition)))
-          ? [{ name: AGENT_IMAGE_FILE, contents: agentImage }]
-          : [],
+        files: [
+          ...(shipsImage.has(join(WEB, bundlePath(definition)))
+            ? [{ name: AGENT_IMAGE_FILE, contents: agentImage }]
+            : []),
+          ...[profilerBinary.get(join(WEB, bundlePath(definition)))].filter(
+            (file) => file !== undefined,
+          ),
+        ],
       })),
     )),
     ...(await Promise.all(

@@ -54,11 +54,13 @@ catalogs:
 # its platform package, @sentry/cli is only reached with an auth token no check
 # carries, node-pty's Mac prebuilds are copied out of its package by the
 # desktop's native build (`apps/desktop/scripts/build-native.mjs`) rather than
-# compiled, and the other two are transitive Windows and polyfill packages.
+# compiled, Sentry's CPU profiler ships a prebuilt binary for every Node the
+# service runs on, and the other two are transitive Windows and polyfill packages.
 # Listed so an install says so once instead of printing the approval box every
 # time.
 ignoredBuiltDependencies:
   - "@sentry/cli"
+  - "@sentry/node-cpu-profiler"
   - core-js
   - electron-winstaller
   - esbuild

@@ -1,5 +1,6 @@
 {
   "automations/runs.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -34,6 +35,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
@@ -63,6 +65,7 @@
     "zlib"
   ],
   "browser/live.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -98,6 +101,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
@@ -127,6 +131,7 @@
     "zlib"
   ],
   "default.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -162,6 +167,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
@@ -191,6 +197,7 @@
     "zlib"
   ],
   "live/socket.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -226,6 +233,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
@@ -255,6 +263,7 @@
     "zlib"
   ],
   "maintenance-sweep.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -289,6 +298,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
@@ -318,6 +328,7 @@
     "zlib"
   ],
   "member-mcp.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -353,6 +364,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
@@ -382,6 +394,7 @@
     "zlib"
   ],
   "page-sandbox.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -416,6 +429,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
@@ -445,6 +459,7 @@
     "zlib"
   ],
   "pull-request-chapters.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -480,6 +495,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
@@ -509,6 +525,7 @@
     "zlib"
   ],
   "terminal/sessions.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -544,6 +561,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
@@ -573,6 +591,7 @@
     "zlib"
   ],
   "terminal/tunnels.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -608,6 +627,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
@@ -637,6 +657,7 @@
     "zlib"
   ],
   "workspace-mcp.js": [
+    "./sentry_cpu_profiler-linux-x64-glibc-137.node",
     "assert",
     "assert/strict",
     "buffer",
@@ -671,6 +692,7 @@
     "node:os",
     "node:path",
     "node:perf_hooks",
+    "node:process",
     "node:querystring",
     "node:readline",
     "node:sqlite",
