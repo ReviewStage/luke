@@ -1,5 +1,5 @@
 import { type WireValue, WireValueSchema } from "@repo/wire";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
@@ -53,7 +53,6 @@ const lockProjectionRow = SqlSchema.findOneOption({
             eq(conversations.id, conversationId),
             eq(conversations.userId, userId),
             eq(agentTable.runnerTokenHash, runnerTokenHash),
-            isNull(conversations.deletedAt),
           ),
         )
         // Both rows: the conversation's for the projection, and the agent's, which a retire writes.
@@ -69,13 +68,7 @@ const findProjectionSequence = SqlSchema.findOneOption({
       db
         .select({ sequence: conversations.nativeSequence })
         .from(conversations)
-        .where(
-          and(
-            eq(conversations.id, conversationId),
-            eq(conversations.userId, userId),
-            isNull(conversations.deletedAt),
-          ),
-        ),
+        .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId))),
     ),
 });
 
@@ -87,13 +80,7 @@ const findProjection = SqlSchema.findOneOption({
       db
         .select({ projection: conversations.nativeProjection })
         .from(conversations)
-        .where(
-          and(
-            eq(conversations.id, conversationId),
-            eq(conversations.userId, userId),
-            isNull(conversations.deletedAt),
-          ),
-        ),
+        .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId))),
     ),
 });
 

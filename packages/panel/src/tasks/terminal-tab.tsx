@@ -14,6 +14,7 @@ import {
   TextButton,
 } from "@repo/ui";
 import { STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
+import { useQuery } from "@tanstack/react-query";
 import { useContext, useMemo, useState } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
@@ -22,6 +23,7 @@ import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
+import { appStateQuery, selectMirrors } from "../use-app-state.js";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AgentGlyph } from "./tab-look.js";
 import { useHeldShells } from "./terminal-held.js";
@@ -148,7 +150,10 @@ export function TerminalTab({
   const subject = agentSubject(agents, agentId, NOTHING_HELD, false);
   const session = useTerminalTabSession(tab, shown, onClose);
   useFindSource(useScrollbackFind(session.find));
-  const look = terminalLook(session.state);
+  // Note that a Local tab says which step of the agent's mirror it waits on while it connects, where the host said.
+  const mirrors = useQuery({ ...appStateQuery, select: selectMirrors }).data;
+  const mirror = tab.kind === STRIP_TAB_KIND.LOCAL ? mirrors?.[agentId] : undefined;
+  const look = terminalLook(session.state, mirror);
   // A phone draws no bar over the screen: its header's ⋯ opens the agent.
   const phone = usePhoneRoom();
   // Note that a phone has no title bar to carry "connecting…", so a state only that bar says is said in a bar over the screen.

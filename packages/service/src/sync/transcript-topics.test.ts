@@ -28,14 +28,14 @@ import {
   TURN_ORIGIN,
   TURN_TRIGGER,
 } from "../core.js";
-import { liveCursorParts } from "../live/live-procedures.js";
+import { liveQueryParts } from "../live/live-procedures.js";
+import { agentTranscriptRead } from "../live/reads/agent-transcript.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { wokenOnHub } from "../testing/sync-woken.js";
-import { agentTranscriptLive } from "./live-queries.js";
 import type { LiveParams } from "./live-query.js";
 
 /**
- * A coding agent's transcript (`agentTranscriptLive`) on the migrated
+ * A coding agent's transcript (`agentTranscriptRead`) on the migrated
  * capture: each write a transcript reads, through its real writer, notifies
  * a topic the transcript's read is woken on, so a window following it hears
  * the write within a coalesce window rather than at the hold's end. That
@@ -75,7 +75,9 @@ const openAgent = Effect.gen(function* () {
     conversationId,
     parentConversationId: conversationId,
     agentId,
-    readerId: userId,
+    userId,
+    id: agentId,
+    call: "",
   };
   const agentTopics: readonly SyncTopic[] = [
     [TOPIC.CONVERSATION, conversationId],
@@ -90,11 +92,11 @@ const openAgent = Effect.gen(function* () {
 const wakesTheTranscript = <A, E, R>(
   write: Effect.Effect<A, E, R>,
   topics: readonly SyncTopic[],
-  params: LiveParams<(typeof agentTranscriptLive.params)[number]>,
+  params: LiveParams<(typeof agentTranscriptRead.params)[number]>,
 ) =>
   Effect.gen(function* () {
     const fired = yield* expectTopicsFire(write, topics);
-    const woken = agentTranscriptLive.topics(params);
+    const woken = agentTranscriptRead.topics(params);
     assert.ok(
       topics.some(([kind, id]) => woken.some((topic) => topic[0] === kind && topic[1] === id)),
       "the transcript's read is woken by a topic the write notifies",
@@ -117,7 +119,7 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
         const { agentId } = params;
         /** What the read answers of the queue now. */
         const queuePart = Effect.map(
-          liveCursorParts(agentTranscriptLive, params, {}),
+          liveQueryParts(agentTranscriptRead, params, {}),
           ({ queries }) => JSON.stringify(queries.queueRevision?.rows ?? []),
         );
         yield* queueAgentMessage(userId, agentId, { id: randomUUID(), text: "First" });

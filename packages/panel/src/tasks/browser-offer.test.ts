@@ -7,14 +7,13 @@ import { BROWSER_TAB_OPEN_FAILURE } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import { agentTab, cloudBrowserTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DesktopTasks } from "../desktop/desktop-tasks.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, handState, holdBrowserTabs } from "../testing/app-state.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
@@ -124,11 +123,7 @@ async function mount(
     },
     agents: agentsControl({ agents, agentIds: agents.map((agent) => agent.id) }),
   });
-  act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopTasks, { looks: NO_LOOKS, tasks })),
-    ),
-  );
+  act(() => root.render(withQueryClient(createElement(DesktopTasks, { looks: NO_LOOKS, tasks }))));
   await settle();
   return { chosen };
 }

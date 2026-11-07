@@ -13,7 +13,6 @@ import {
   type IntegrationToolsProblemReason,
 } from "@repo/features/integration-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -21,7 +20,7 @@ import type { IntegrationStatuses } from "../integration-statuses.js";
 import type { IntegrationServer } from "../live-reads.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, holdIntegrations, holdIntegrationTools } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { playListMotions } from "../testing/pane-motion.js";
@@ -89,13 +88,10 @@ async function opened(standing: IntegrationStatuses = statuses) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // Note that each draw stands on a registry of its own, so the document the test hands is read afresh.
-  const registry = AtomRegistry.make();
   const render = (statuses: IntegrationStatuses) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(AgentServersButton, {
             servers: {
               disabled: [],

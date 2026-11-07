@@ -21,12 +21,13 @@ import { listRevisions } from "@repo/database/models/description-revisions";
 import { turnsBefore } from "@repo/database/models/message-reads";
 import { readTask } from "@repo/database/models/task-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
+import { EXPERIMENT } from "@repo/settings";
 import { Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import type { SessionTurn } from "../sessions/agent-sessions.js";
+import { experimentOnSinceIn } from "../workspace-experiment-on.js";
 import {
   handedAfterCompaction,
   savedByAnotherSince,
@@ -81,7 +82,7 @@ const previousTurnStart = (target: ConversationTarget, turnId: string | undefine
  * so a save made while that turn ran, which none of its steps may have
  * read, is handed too; or where the rest of it is not what the session
  * last handed; never on a first turn, whose first message the description, or the
- * prompt beside it, already is. Where the agent's starter has Descriptions off, no
+ * prompt beside it, already is. Where the agent's workspace has Task descriptions off, no
  * save of the description hands it, and it is handed without the description
  * (`standingContext`). A read that fails is logged and
  * hands nothing.
@@ -96,11 +97,15 @@ const taskOf = (
   Effect.gen(function* () {
     const { taskId } = agent;
     if (taskId === null) return undefined;
-    const descriptionsOn = yield* descriptionsOnFor(agent.userId, agent.kind);
+    const descriptionsSince = yield* experimentOnSinceIn(
+      agent.organizationId,
+      EXPERIMENT.DESCRIPTIONS,
+    );
+    const descriptionsOn = Option.isSome(descriptionsSince);
     const [stored, comments, since] = yield* Effect.all(
       [
         readTask(admitted.caller, taskId),
-        // Note that the description's threads are neither read nor handed where its starter has Descriptions off.
+        // Note that the description's threads are neither read nor handed where its workspace has Task descriptions off.
         descriptionsOn
           ? readDescriptionCommentThreads(admitted.caller, taskId)
           : Effect.succeedNone,
@@ -127,7 +132,15 @@ const taskOf = (
       return { key: opening ? handed.task : key, text: undefined };
     }
     const clock = { now, timeZone: admitted.timeZone };
-    const text = taskWithLead(standingContext(stored.value, clock, threads, descriptionsOn));
+    const text = taskWithLead(
+      standingContext(
+        stored.value,
+        clock,
+        threads,
+        descriptionsOn,
+        Option.getOrUndefined(descriptionsSince),
+      ),
+    );
     return { key, text };
   }).pipe(
     Effect.tapError(logStoreFailure),

@@ -18,7 +18,9 @@
  * as `node_modules` included, which costs seconds and hundreds of megabytes.
  * A missed watch event costs nothing, since the next listing catches it,
  * and whatever the bridge cannot do, such as a listing git refuses or a
- * base it cannot find, ends it, which the Mac answers by connecting again.
+ * base it cannot find, ends it, which the Mac answers by connecting again;
+ * it says first which step failed (`MIRROR_BRIDGE_STEP`), and never why in
+ * git's words or a path, so the relay can log it.
  * A request is answered only for a path the last listing holds, so the Mac
  * can never read outside it. The bridge writes nothing but
  * frames, and git's own words go nowhere.
@@ -30,6 +32,11 @@ import {
   MIRROR_FRAME,
   MIRROR_HASH,
 } from "@repo/features/sandbox-mirror-wire";
+
+/** The steps whose failure ends the bridge, as its failed word names them. */
+export const MIRROR_BRIDGE_STEP = { LIST: "list", BASE: "base", WATCH: "watch" } as const;
+
+export type MirrorBridgeStep = (typeof MIRROR_BRIDGE_STEP)[keyof typeof MIRROR_BRIDGE_STEP];
 
 /** How long the checkout must be quiet before it is listed again, and the longest a stir waits for that. */
 const SETTLE = { QUIET_MS: 200, LONGEST_MS: 1000 } as const;
@@ -47,6 +54,13 @@ let quiet;
 let longest;
 const watched = new Map();
 const say = (frame) => process.stdout.write(JSON.stringify(frame) + "\\n");
+const fail = (step) => {
+  say({ bridge: "failed", step });
+  process.exit(1);
+};
+const attempt = (step, act) => {
+  try { return act(); } catch { return fail(step); }
+};
 const tell = (message) => {
   if (channel === undefined) return;
   say({ type: "data", channel, data: Buffer.from(JSON.stringify(message)).toString("base64") });
@@ -99,14 +113,16 @@ const watchFolders = () => {
   }
   for (const folder of folders) {
     if (watched.has(folder)) continue;
-    watched.set(folder, fs.watch(path.join(root, folder), stir));
+    const watcher = fs.watch(path.join(root, folder), stir);
+    watcher.on("error", () => fail("${MIRROR_BRIDGE_STEP.WATCH}"));
+    watched.set(folder, watcher);
   }
 };
 const open = (opened) => {
   channel = opened;
-  listing = list();
-  watchFolders();
-  tell({ type: "${MIRROR_FRAME.HEADER}", base: base() });
+  listing = attempt("${MIRROR_BRIDGE_STEP.LIST}", list);
+  attempt("${MIRROR_BRIDGE_STEP.WATCH}", watchFolders);
+  tell({ type: "${MIRROR_FRAME.HEADER}", base: attempt("${MIRROR_BRIDGE_STEP.BASE}", base) });
   tell(manifest());
 };
 const settle = () => {
@@ -116,9 +132,9 @@ const settle = () => {
   longest = undefined;
   if (channel === undefined) return;
   const was = listing;
-  listing = list();
+  listing = attempt("${MIRROR_BRIDGE_STEP.LIST}", list);
   // Note that we watch the new listing's folders before telling any change, because the Mac may answer one with the next at once, in a folder new since.
-  watchFolders();
+  attempt("${MIRROR_BRIDGE_STEP.WATCH}", watchFolders);
   for (const [name, stat] of listing) {
     const before = was.get(name);
     const moved = before === undefined || before.size !== stat.size || before.mtimeMs !== stat.mtimeMs;

@@ -3,12 +3,11 @@
 import assert from "node:assert/strict";
 import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -45,9 +44,7 @@ test("a block after a reply's first words is colored once its closing fence arri
   roots.push(root);
   const draw = (text: string) =>
     act(() =>
-      root.render(
-        onRegistry(AtomRegistry.make(), createElement(TranscriptWords, { text, streaming: true })),
-      ),
+      root.render(withQueryClient(createElement(TranscriptWords, { text, streaming: true }))),
     );
   draw(`${LEAD}const reader = open(`);
   draw(`${LEAD}const reader = open(path);\nreader.`);

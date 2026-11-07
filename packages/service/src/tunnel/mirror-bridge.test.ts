@@ -15,7 +15,8 @@ import { MIRROR_BRIDGE_SOURCE } from "./mirror-bridge.js";
  * checkout of the test's own: the open sends the files git lists, ignored
  * files and symlinks left out, and answers a request in order; then each
  * change to the checkout, in a folder new since the open as in an old one,
- * crosses as a file, a delete, or a skip.
+ * crosses as a file, a delete, or a skip; a checkout git cannot list ends
+ * the bridge with the step that failed.
  */
 
 const CHANNEL = 3;
@@ -145,4 +146,13 @@ it("a change after the open crosses as a file, a delete, or a skip, in a new fol
     mode: "100755",
     bytes: "again",
   });
+});
+
+it("a checkout git cannot list ends the bridge, saying the step and no path", async (t) => {
+  const root = await temporaryDirectory(t, "mirror-uncloned-");
+  const { frame, send } = bridge(t, root);
+  assert.deepEqual(await frame(), { bridge: "ready" });
+  send({ type: "open", channel: CHANNEL });
+
+  assert.deepEqual(await frame(), { bridge: "failed", step: "list" });
 });

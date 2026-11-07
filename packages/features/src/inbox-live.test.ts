@@ -4,7 +4,7 @@ import {
   type AccountInboxLiveRows,
   accountInboxOfLiveRows,
   FAILED_RUN_WINDOW_MILLIS,
-} from "./live-wire.js";
+} from "./inbox-live.js";
 
 const NOW = 1_800_000_100_000;
 

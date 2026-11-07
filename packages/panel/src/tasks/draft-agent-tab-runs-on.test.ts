@@ -12,14 +12,13 @@ import { type MacOffer, MODEL_PROVIDER } from "@repo/features/models-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { handBeats, handState } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
-import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeHandedAppState } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { DraftAgentTab } from "./draft-agent-tab.js";
@@ -138,7 +137,7 @@ async function mount(draft: AgentDraft, agents: readonly AgentSummary[] = AGENTS
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Tab))));
+  act(() => root.render(withQueryClient(createElement(Tab))));
   await settle();
   const chip = () => container.querySelector<HTMLButtonElement>('button[aria-label^="Runs on"]');
   return {

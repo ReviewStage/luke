@@ -44,7 +44,7 @@ import {
   automationsRead,
   automationWorkspaceRunsRead,
 } from "../live/reads/automations.js";
-import type { LiveParams, LiveQuery } from "./live-query.js";
+import type { LiveParams } from "./live-query.js";
 
 /**
  * A workspace's automations and runs (`automationsRead`,
@@ -112,7 +112,10 @@ const makeAutomation = (world: AutomationWorld) =>
   );
 
 /** A read as one reader follows it: its definition, and the params its procedure binds. */
-type Followed = readonly [LiveQuery<string, string, readonly SyncTopic[]>, LiveParams<string>];
+type Followed = readonly [
+  { readonly name: string; topics(params: LiveParams<string>): readonly SyncTopic[] },
+  LiveParams<string>,
+];
 
 /** The three reads as the teammate follows them: the workspace's automations and runs, and the world's automation's runs. */
 const teammateReads = (world: AutomationWorld): readonly Followed[] => {

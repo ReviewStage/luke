@@ -2,14 +2,13 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { AppPlatform } from "./app-platform.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
 import { handState, signedInAs } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { ViewingAs } from "./viewing-as.js";
 
 /**
@@ -53,7 +52,7 @@ async function mount(
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(ViewingAs))));
+  act(() => root.render(withQueryClient(createElement(ViewingAs))));
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });

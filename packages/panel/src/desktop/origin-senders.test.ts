@@ -10,7 +10,6 @@ import type { Task } from "@repo/features/task-wire";
 import { agentTab, subagentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { MESSAGE_ROLE } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -18,7 +17,7 @@ import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts, tasksControl } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
@@ -121,8 +120,7 @@ async function mount(input: {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(DesktopTasks, {
           looks: NO_LOOKS,
           tasks: control,

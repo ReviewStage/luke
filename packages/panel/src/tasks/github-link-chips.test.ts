@@ -10,13 +10,12 @@ import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppHostRead, AppLinkStanding, AppStateSnapshot } from "@repo/host/app-state";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { PublishedRow } from "./agent-published.js";
@@ -246,14 +245,13 @@ async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAG
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
     },
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  // Note that the test's Query client is handed the document at once, so the first frame draws on it.
   writeAppState(state);
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(TaskMentions, {
           value: page,
           children,

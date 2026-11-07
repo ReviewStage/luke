@@ -14,12 +14,16 @@
  * The agent is at work while it starts, while a turn runs, and while a
  * message sent to it awaits its turn, as its status reads
  * (`agentStatusOf`), and then nothing is handed on: the turn's end
- * hands on the next (`runner-events-app.ts`'s `turnEnded`), and so does a
+ * hands on the next, whichever path settled the turn (`queueAfterSettle`,
+ * which the store writer's settled-turn listener runs), and so does a
  * change a member makes while the agent stands idle, so a queue never waits
  * on a turn end that came and went. A member's change claims in the request
  * itself (`claimNext`), before its answer reads the queue, so the answer
  * never lists a message about to go, and sends after the response
- * (`sendClaimed`), which no answer waits on.
+ * (`sendClaimed`), which no answer waits on. A hand-off cut off between its
+ * claim and its send leaves a claim that lapses, and the next touch of the
+ * agent, an open of it, hands the message on once it has (`queueAtTouch`),
+ * as a queue's next receive takes back a message whose visibility ran out.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
@@ -32,11 +36,10 @@ import {
   pauseAgentQueue,
   type QueuedMessageRow,
   refuseQueuedMessage,
-  unpausedQueues,
 } from "@repo/database/models/agent-queue-store";
-import { type Agent, readAgent } from "@repo/database/models/agent-store";
+import { type Agent, readAgentOfConversation } from "@repo/database/models/agent-store";
 import { awaitingLinesOfReached, latestTurnsOfReached } from "@repo/database/models/message-reads";
-import { storeWriter } from "@repo/database/models/writer";
+import { type SettledAgentTurn, storeWriter } from "@repo/database/models/writer";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import type { HostedApiError } from "@repo/features";
 import { type AgentQueue, QUEUE_PAUSE, type QueuePause } from "@repo/features/agent-queue-wire";
@@ -220,12 +223,39 @@ export const sendClaimed = Effect.fn("web/sendClaimedQueued")(function* (
 });
 
 /** The agent's queue handed on where the agent stands idle and the queue unpaused: its next message claimed, then sent. */
-export const handOnQueue = Effect.fn("web/handOnQueue")(function* (
+const handOnQueue = Effect.fn("web/handOnQueue")(function* (
   sessionsFor: QueueSessions,
   agent: Agent,
 ) {
   const claimed = yield* claimNext(agent);
   if (Option.isSome(claimed)) yield* sendClaimed(sessionsFor, agent, claimed.value);
+});
+
+/**
+ * The agent's queue at a touch of the agent, once its lapsed runner is
+ * settled: handed on where the queue stands unpaused, its head not being
+ * edited, and no send stands claimed on it at the instant read, its head
+ * never claimed or claimed by a hand-off cut off a line's grace ago. Note
+ * that the queue is read first without its lock, so a touch with nothing to
+ * hand on, as nearly every one is, takes none, and that the hand-on claims
+ * the head again under the lock, so a touch racing a turn's end sends the
+ * message once.
+ */
+export const queueAtTouch = Effect.fn("web/queueAtTouch")(function* (
+  sessionsFor: QueueSessions,
+  agent: Agent,
+) {
+  const queue = yield* agentQueueNow(agent.id).pipe(
+    Effect.catchCause((cause) =>
+      Effect.as(Effect.logWarning("agent-queue: a queue read failed", cause), undefined),
+    ),
+  );
+  if (queue === undefined || queue.paused !== undefined) return;
+  const [head] = queue.messages;
+  if (head === undefined || head.editing) return;
+  const now = yield* DateTime.nowAsDate;
+  if (queue.messages.some((message) => claimedAt(message, now))) return;
+  yield* handOnQueue(sessionsFor, agent);
 });
 
 /**
@@ -261,35 +291,23 @@ const PAUSE_OF_TURN: ReadonlyMap<string, QueuePause> = new Map([
 ]);
 
 /**
- * The queue at a native agent's turn's end, as the runner's events route
- * tells it (`../native-events/runner-events-app.ts`'s `turnEnded`): the agent's
- * sessions reached as the deployment acting for each queued message's member, since
- * no request of theirs stands behind it.
+ * The queue at the end of a coding agent's turn, wherever the store writer
+ * settled it: a runner's own end, a Stop's force, a lapsed runner's settle,
+ * a session that ended, or a Mac's launch settled
+ * (`settled-turns.ts`'s listener). The agent's sessions are reached as the
+ * deployment acting for each queued message's member, since no request of
+ * theirs stands behind it. Note that two settles at once hand on one
+ * message, because the claim takes the head only where no send stands
+ * claimed (`claimQueueHead`). A turn of no coding agent hands on nothing,
+ * and a read that fails is logged.
  */
-export const queueAtNativeTurnEnd = (agent: Agent) =>
-  Effect.gen(function* () {
-    yield* queueAtTurnEnd(routedSessions, agent);
-  });
-
-/** How many queues a sweep hands on at most, as each of the sweep's passes is bounded. */
-const QUEUE_SWEEP_LIMIT = 50;
-
-/**
- * The maintenance sweep's pass over the queues standing unpaused: each
- * handed on where its agent idles, as a turn's end would, so a queue whose
- * turn's end found nothing to hand on (a send cut off whose claim lapsed,
- * or a turn ended outside the runner's events) still goes. Note that an
- * edit's mark cleared hands on in its own request, as every member's change
- * does. Answers how many queues it
- * looked at.
- */
-export const sweepAgentQueues = Effect.fn("web/sweepAgentQueues")(function* (
-  sessionsFor: QueueSessions,
+export const queueAfterSettle = Effect.fn("web/queueAfterSettle")(function* (
+  turn: Pick<SettledAgentTurn, "userId" | "conversationId">,
 ) {
-  const queues = yield* unpausedQueues(QUEUE_SWEEP_LIMIT);
-  for (const { agentId, userId } of queues) {
-    const agent = yield* readAgent(userId, agentId);
-    if (Option.isSome(agent)) yield* handOnQueue(sessionsFor, agent.value);
-  }
-  return queues.length;
+  const agent = yield* readAgentOfConversation(turn.userId, turn.conversationId).pipe(
+    Effect.catchCause((cause) =>
+      Effect.as(Effect.logWarning("agent-queue: an agent read failed", cause), Option.none()),
+    ),
+  );
+  if (Option.isSome(agent)) yield* queueAtTurnEnd(routedSessions, agent.value);
 });

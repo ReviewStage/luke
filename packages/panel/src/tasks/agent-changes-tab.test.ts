@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ORPCError } from "@orpc/client";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import {
@@ -38,7 +37,6 @@ import {
 } from "@repo/settings/shortcuts";
 import { DisclosureFind } from "@repo/ui";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -52,7 +50,6 @@ import {
 } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
-import { rendererRegistry } from "../renderer-runtime.js";
 import {
   type AnyAct,
   answeringChanges,
@@ -67,7 +64,7 @@ import {
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, handSettings, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
@@ -301,9 +298,6 @@ function InboxBeside({ onNext }: { onNext: () => void }): null {
   return null;
 }
 
-/** One registry for the tests' draws, so a draw again keeps the view's state as the panel would. */
-let registry = AtomRegistry.make();
-
 /** How a test draws the view: its threads, its tree, what stands beside it, the task's repository, and the agents as the panel holds them. */
 interface DrawOptions {
   readonly threads?: ChangesThreads;
@@ -367,8 +361,7 @@ async function render(options: DrawOptions = {}): Promise<void> {
       : createElement(OpenFileTabProvider, { value: options.openTab }, tab);
   act(() =>
     root?.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         onSideBundles(
           bundles,
           createElement(DisclosureFind, {
@@ -386,7 +379,6 @@ async function render(options: DrawOptions = {}): Promise<void> {
 async function drawTab(options: DrawOptions = {}): Promise<DiffListProps> {
   act(() => root?.unmount());
   document.body.innerHTML = "";
-  registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   // Note that the reads waited on are this tab's own, never the last test's.
@@ -1187,13 +1179,9 @@ test("a write answered while a later one to the same setting is out leaves the l
 });
 
 test("a refused write flips the switch back and is said in a toast, and the switch can be pressed again", async () => {
-  // Note that the toasts read the window's own registry, beside the tab's, on the one Query client the tab stands on.
+  // Note that the toasts stand beside the tab, on the one Query client the tab stands on.
   await drawTab({
-    beside: createElement(
-      RegistryContext.Provider,
-      { value: rendererRegistry },
-      createElement(ToastHost),
-    ),
+    beside: createElement(ToastHost),
   });
   const held = holdSettingWrites();
   const popover = openSettings();

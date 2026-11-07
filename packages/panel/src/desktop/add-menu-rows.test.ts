@@ -2,12 +2,11 @@
 
 import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { NOTHING_HELD } from "../tasks/agent-ref.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { agentEntries } from "./main-tabs.js";
@@ -55,8 +54,7 @@ async function opened(entries: readonly AddEntry[]): Promise<Map<string, HTMLEle
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(AddTabButton, {
           label: "Open a tab",
           placeholder: "Search tabs",

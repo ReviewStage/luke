@@ -30,7 +30,9 @@
  * router's history stands, and is reachable as its route's gate lets it be
  * (`route-gates.ts`); the Board and a person's page are theirs in the
  * workspace their address names, so Back passes over them once another is
- * listed. Settings is one step
+ * listed. A workspace's address naming none of the reader's is the router's
+ * too, not found, but no step: a link to it takes the step's place, and Back
+ * and Forward pass over it. Settings is one step
  * however many of its pages are turned, since each turn replaces its entry
  * (`settings-link.ts`), so Back from any page of it returns to wherever it
  * was opened from; leaving one for a place the window's state says is a
@@ -1475,7 +1477,6 @@ export function useWindowHistory(input: {
     | "workspace"
     | "automationsView"
     | "boardView"
-    | "unknownWorkspace"
     | "leaveGuard"
     | "sidePanel"
     | "mainTabs"
@@ -1513,7 +1514,6 @@ export function useWindowHistory(input: {
   }
   const pageAgent = tasks.agentView.agentId;
   const listedWorkspace = tasks.workspace?.id;
-  const unknownWorkspace = tasks.unknownWorkspace.open;
   // A routed step is reachable as its route's gate would let the window stand there (`route-gates.ts`).
   const access = useRouteAccess();
   const router = useRouter();
@@ -1539,6 +1539,9 @@ export function useWindowHistory(input: {
   const titleDetail = input.title?.detail;
   const titleColumn = input.title?.panes?.column;
   const titleSide = input.title?.panes?.side;
+  // Whether the window stands on a workspace's address naming none of the reader's, as the router says, until a door leaves it.
+  const unknownWorkspace =
+    routed?.place === ROUTED_PLACE.UNKNOWN_WORKSPACE && routedAddress !== undefined;
   const untitled = useMemo((): Place | undefined => {
     // A workspace's address naming none of the reader's is no place of theirs to come back to, so it is no step, and the tab keeps its address.
     if (!known || unknownWorkspace) return undefined;
@@ -1575,7 +1578,7 @@ export function useWindowHistory(input: {
   ]);
   // The task a version history's address names, by the step its links name it by under the workspace named, or by its id.
   const historyTaskOf = (matches: ReturnType<typeof router.matchRoutes>) => {
-    if (routedPlaceOf(matches) !== ROUTED_PLACE.VERSION_HISTORY) return undefined;
+    if (routedPlaceOf(matches, access) !== ROUTED_PLACE.VERSION_HISTORY) return undefined;
     const params: Readonly<Record<string, string | undefined>> = matches.at(-1)?.params ?? {};
     const { workspace, taskId } = params;
     if (workspace === undefined || taskId === undefined) return undefined;
@@ -1648,8 +1651,7 @@ export function useWindowHistory(input: {
     // as opening any of them has it.
     if (to.kind === PLACE_KIND.ROUTED) {
       const matches = router.matchRoutes(pathOf(to.address));
-      if (routedPlaceOf(matches)?.overThePlan !== true) return;
-      if (unknownWorkspace) tasks.unknownWorkspace.onClose();
+      if (routedPlaceOf(matches, access)?.overThePlan !== true) return;
       // An Inbox item's step and an agent page's stand the side panel beside them as it stood, on the item's own task or agent, or the page's agent.
       const { itemId, agentId } = placeParamsOf(matches);
       const chosen = itemId === undefined ? undefined : inbox.choiceOf(itemId);
@@ -1692,7 +1694,7 @@ export function useWindowHistory(input: {
       held.trail.entries.some(
         (entry) =>
           entry.state.kind === PLACE_KIND.ROUTED &&
-          routedPlaceOf(router.matchRoutes(pathOf(entry.address))) === ROUTED_PLACE.PERSON,
+          routedPlaceOf(router.matchRoutes(pathOf(entry.address)), access) === ROUTED_PLACE.PERSON,
       ),
   );
   const members = useQuery(workspaceMembersQuery(personListed ? tasks.workspace?.id : undefined))
@@ -1706,7 +1708,7 @@ export function useWindowHistory(input: {
   const routedNamed = (address: string): NamedStep | undefined => {
     const matches = router.matchRoutes(pathOf(address));
     const naming = { historyTask: historyTaskOf(matches), itemTask };
-    return routedPlaceOf(matches)?.named(placeParamsOf(matches), searchOf(address), naming);
+    return routedPlaceOf(matches, access)?.named(placeParamsOf(matches), searchOf(address), naming);
   };
   const named = (to: Place) => {
     const step = to.kind === PLACE_KIND.ROUTED ? routedNamed(to.address) : namedStepOf(to);

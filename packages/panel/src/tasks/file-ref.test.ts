@@ -4,12 +4,11 @@ import assert from "node:assert/strict";
 import type { InboxCodeBlock } from "@repo/features/inbox-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { InboxCodeCard } from "./inbox-code-card.js";
 
@@ -53,7 +52,7 @@ function mount(opened: unknown[][]): HTMLElement {
       onOpenFile: (...asked) => opened.push(asked),
     },
   });
-  act(() => root.render(onRegistry(AtomRegistry.make(), card)));
+  act(() => root.render(withQueryClient(card)));
   return container;
 }
 

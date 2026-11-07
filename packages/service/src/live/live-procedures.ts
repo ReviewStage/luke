@@ -14,12 +14,12 @@
  * second for a read someone watches move, or, for a read Sync wakes
  * (`../sync/live-queries.ts`), whenever a write to its topics lands, and
  * then answers with that write's txid (`liveQueryParts`). The account's
- * inbox is one such read (`inboxLive`).
+ * inbox is one such read (`accountInboxRead`).
  *
  * `GET /api/live/tasks` answers the task list the same way: the tasks the
  * account reaches and every agent of them and with no task, as statements
  * built with the account's id (`task-list-live.ts`), woken by a write to
- * the account's topic or to one of its workspaces' (`tasksLive`). Asked
+ * the account's topic or to one of its workspaces' (`tasksRead`). Asked
  * with `&sync=`, it is answered in delta mode (`liveDeltaParts`): the rows
  * that moved past the reader's sync id alone, with the ids of those that
  * stand no longer for it and the sync id to ask past next, held until
@@ -95,12 +95,12 @@
  *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
- * delegation call (`transcript-live.ts`), after the agent is read as the
+ * delegation call (`reads/agent-transcript.ts`), after the agent is read as the
  * account, each statement joined through the caller's membership of the
  * agent's workspace. A worker's delegation may not be recorded yet, as a
  * tab opened on its call is read before it is, so its statements name the
  * conversation the call will open rather than wait for it. It is woken by
- * Sync (`agentTranscriptLive`), and a reader that names where it holds
+ * Sync (`agentTranscriptRead`), and a reader that names where it holds
  * the newest messages (`cursor`) is answered only those written or amended
  * past it (`liveCursorParts`). Its answers are measured
  * (`transcript-metrics.ts`).
@@ -114,7 +114,7 @@
  * latest settled ones as one statement, their threads and files as two
  * more, after the plan or the agent is read as the account, so one it does
  * not reach is not found, as its held read answers; each woken by Sync
- * (`taskInboxLive`, `agentInboxLive`).
+ * (`taskInboxRead`, `agentInboxRead`).
  *
  * `GET /api/live/inbox-items?since=` answers every inbox item the account
  * reaches as four statements: where each item stands, every open one and
@@ -124,7 +124,7 @@
  * is held on where the items stand alone (`ACCOUNT_INBOX_ITEMS.HELD_ON`),
  * so a reader whose `since` moved to the items it was just answered is
  * held rather than answered again; woken by Sync on the account's
- * topic (`inboxItemsLive`).
+ * topic (`inboxItemsRead`).
  *
  * `GET /api/live/pull-request-chapters?id=&number=` answers one coding
  * agent's pull request's newest chapters as one statement, after the agent
@@ -156,15 +156,10 @@
 
 import type { LiveStatement } from "@repo/database/core/live-statement";
 import type { DatabaseServices } from "@repo/database/core/query";
-import { readVisibleAgent } from "@repo/database/models/agent-store";
-import { childConversationId } from "@repo/database/models/ids";
 import { readSyncWindow, SYNC_LOG, syncStanding } from "@repo/database/models/sync-log";
-import { readTaskHeader } from "@repo/database/models/task-store";
 import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
-import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
-import { agentCallIdSchema, agentCursorSchema } from "@repo/features/agent-wire";
 import {
   type AnyLiveRead,
   LIVE_PARAM,
@@ -173,19 +168,15 @@ import {
   type LiveReadParams,
 } from "@repo/features/live-read";
 import {
-  ACCOUNT_INBOX_ITEMS,
   LIVE_POLL,
   LIVE_USER_QUERY,
   liveDigestOf,
   liveDigestOn,
   type SealedLiveQueryWire,
 } from "@repo/features/live-wire";
-import { readEither } from "@repo/wire/effect";
-import { Clock, Duration, Effect, Option, Result } from "effect";
+import { Duration, Effect, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { pluginWriteOrUnavailable } from "../accounts/workspaces-procedures.js";
-import { reachedAgentById } from "../agents/agent-reach.js";
-import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
 import {
   HOSTED_REFUSAL,
@@ -195,26 +186,14 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import {
-  agentInboxLive,
-  agentTranscriptLive,
-  inboxItemsLive,
-  inboxLive,
-  taskInboxLive,
-  tasksLive,
-} from "../sync/live-queries.js";
-import {
-  type LiveParams,
-  type LiveQuery,
-  type LiveTopics,
-  ownMovedKeys,
-  syncMovedOf,
-} from "../sync/live-query.js";
+import { type LiveTopics, ownMovedKeys, syncMovedOf } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
-import { type BoundLiveRead, WATCHED_LOOK } from "./live-read-binding.js";
+import { type BoundLiveRead, type PartOf, WATCHED_LOOK } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
+import { accountInboxRead } from "./reads/account-inbox.js";
 import { accountPreferencesRead } from "./reads/account-preferences.js";
 import { agentOriginRead } from "./reads/agent-origin.js";
+import { agentTranscriptRead } from "./reads/agent-transcript.js";
 import {
   automationRunsRead,
   automationsRead,
@@ -222,21 +201,23 @@ import {
 } from "./reads/automations.js";
 import { agentBrowserTabsRead, taskBrowserTabsRead } from "./reads/browser-tabs.js";
 import { hostsRead } from "./reads/hosts.js";
+import { inboxItemsRead } from "./reads/inbox-items.js";
 import { installedSkillsRead } from "./reads/installed-skills.js";
 import { integrationStatusesRead } from "./reads/integration-statuses.js";
 import { macCommandsRead } from "./reads/mac-commands.js";
 import { agentPagesRead, taskPagesRead } from "./reads/pages.js";
 import { pullRequestChaptersRead } from "./reads/pull-request-chapters.js";
+import { agentInboxRead, taskInboxRead } from "./reads/scope-inbox.js";
 import { sidebarRead } from "./reads/sidebar.js";
 import { taskCommentsRead } from "./reads/task-comments.js";
 import { taskHistoryRead } from "./reads/task-history.js";
 import { taskRecordRead } from "./reads/task-record.js";
+import { tasksRead } from "./reads/tasks.js";
 import { workspaceIntegrationsRead } from "./reads/workspace-integrations.js";
 import { workspaceInvitationsRead } from "./reads/workspace-invitations.js";
 import { workspaceMembersRead } from "./reads/workspace-members.js";
 import { workspaceMemoriesRead } from "./reads/workspace-memories.js";
 import { workspacesRead } from "./reads/workspaces.js";
-import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
 export interface LiveProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -246,8 +227,8 @@ export interface LiveProcedureSeams {
 
 /**
  * How a poll past the reader's digest is held: looked at again each time a
- * write to its rows wakes it where it has a definition (`LIVE_QUERIES`),
- * and on a clock where it has none or nothing wakes it, and answered
+ * write to its topics wakes it (`LIVE_QUERIES`), and on a clock where
+ * nothing wakes it, and answered
  * unchanged after 25, well inside a function's limit and the client's held
  * deadline.
  *
@@ -265,36 +246,6 @@ const LIVE_POLL_HOLD = {
   WATCHED_LOOK,
   HOLD: Duration.seconds(25),
 } as const;
-
-/**
- * The account inbox's parts a released desktop (v0.22.0) keeps of its
- * answer, whose decode strips `agents`, so the `after` it sends is the
- * digest over these alone, which never equals the digest over every part.
- * Its poll is held on these too, or it is answered at once and asks again
- * every 0.6 s; a reader that keeps every part sends a digest over six,
- * which never equals the one over these, so it is still held on all.
- */
-const INBOX_RELEASED_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
-
-/**
- * The transcript's parts a desktop that follows the window's own rows keeps
- * of its answer, whose read drops the count of its messages
- * (`transcript-follow.ts`'s `followedRead`), so the `after` it sends is the
- * digest over these alone, which never equals the digest over every part.
- * Its poll is held on these too, or it is answered at once and asks again
- * every 0.6 s for as long as a window holds the transcript, idle or not; a
- * reader that keeps every part sends the digest over all of them, which is
- * still held on all. Note that leaving the count out wakes nothing later,
- * because a message written or amended is a row past the reader's cursor.
- */
-const TRANSCRIPT_FOLLOWED_PARTS = [
-  "turns",
-  "conversation",
-  "agent",
-  "workers",
-  "queueRevision",
-  "launch",
-] as const;
 
 /** How many of a read's parts are read at once: under the web pool's five connections, so one poll leaves room for the rest of its instance. */
 const LIVE_PART_CONCURRENCY = 3;
@@ -426,16 +377,16 @@ function topicsNamed(named: LiveTopics) {
   return Effect.isEffect(named) ? hostedStoreOrUnavailable(named) : Effect.succeed(named);
 }
 
-/** The topics a defined live read's params name, or that it looks up from them; unavailable where the lookup fails. */
-function topicsOf<Param extends string, Part extends string>(
-  query: LiveQuery<Param, Part>,
-  params: LiveParams<Param>,
+/** The topics a bound live read's params name, or that it looks up from them; unavailable where the lookup fails. */
+function topicsOf<Read extends AnyLiveRead>(
+  query: BoundLiveRead<Read>,
+  params: LiveReadParams<Read>,
 ) {
   return topicsNamed(query.topics(params));
 }
 
 /**
- * A defined live read's parts (`defineLiveQuery`), built from the params
+ * A bound live read's parts (`bindLiveRead`), built from the params
  * its procedure bound once it admitted the caller, and held on a watch of
  * the topics those params name, or that the read looks up from them, which
  * looks again every `look` where nothing wakes it, on every part or on
@@ -444,16 +395,13 @@ function topicsOf<Param extends string, Part extends string>(
  * procedure answers a read Sync wakes; unavailable where its
  * statements can't be built or its topics looked up.
  */
-const queryParts = /* @__PURE__ */ Effect.fnUntraced(function* <
-  Param extends string,
-  Part extends string,
->(
-  query: LiveQuery<Param, Part>,
-  params: LiveParams<Param>,
+const queryParts = /* @__PURE__ */ Effect.fnUntraced(function* <Read extends AnyLiveRead>(
+  query: BoundLiveRead<Read>,
+  params: LiveReadParams<Read>,
   asked: { readonly [LIVE_POLL.AFTER]?: string },
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
-  heldOn?: readonly NoInfer<Part>[],
-  olderParts?: readonly NoInfer<Part>[],
+  heldOn?: readonly PartOf<Read>[],
+  olderParts?: readonly PartOf<Read>[],
 ) {
   const statements = query.statements(params);
   if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
@@ -488,7 +436,7 @@ function cursorMoved<Part extends string>(
 }
 
 /**
- * A defined live read's parts in cursor mode (`LIVE_MODE.CURSOR`) for a
+ * A bound live read's parts in cursor mode (`LIVE_MODE.CURSOR`) for a
  * reader that names where it holds them (`cursor`): where the read stands
  * is read first (`standing`), then its cursor parts past the reader's
  * cursor, or whole where a rewind left it behind, each carrying where it
@@ -499,16 +447,13 @@ function cursorMoved<Part extends string>(
  * Unavailable where its statements can't be built or read. `onWoken` is
  * handed to the hold (`heldParts`), which a snapshot's answer does not take.
  */
-const cursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
-  Param extends string,
-  Part extends string,
->(
-  query: LiveQuery<Param, Part>,
-  params: LiveParams<Param>,
+const cursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <Read extends AnyLiveRead>(
+  query: BoundLiveRead<Read>,
+  params: LiveReadParams<Read>,
   asked: { readonly [LIVE_POLL.AFTER]?: string; readonly [LIVE_POLL.CURSOR]?: string },
   look: Duration.Duration = LIVE_POLL_HOLD.LOOK,
   onWoken?: (heardAt: number) => Effect.Effect<void>,
-  followedParts?: readonly NoInfer<Part>[],
+  followedParts?: readonly PartOf<Read>[],
 ) {
   const following = query.cursor;
   const cursor = asked[LIVE_POLL.CURSOR];
@@ -535,7 +480,7 @@ const cursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
             part,
             followed.has(part) ? { ...sealed, cursor: at } : sealed,
           ]),
-        ) as Record<Part, SealedLiveQueryWire>,
+        ) as Record<PartOf<Read>, SealedLiveQueryWire>,
       };
     });
   const read = polled((sealer) => sealer.seal);
@@ -553,33 +498,33 @@ const cursorParts = /* @__PURE__ */ Effect.fnUntraced(function* <
 });
 
 /**
- * A defined live read's parts, as `queryParts` and `cursorParts` read them,
+ * A bound live read's parts, as `queryParts` and `cursorParts` read them,
  * under a span named for the read (`web/live/<name>`). Note that every
  * statement of the read, each look of its hold among them, runs under it,
  * because a look resumes after a wait on no request's span, and each
  * statement Sentry saw then was a trace of its own named for the database.
  */
-export function liveQueryParts<Param extends string, Part extends string>(
-  query: LiveQuery<Param, Part>,
-  params: LiveParams<Param>,
+export function liveQueryParts<Read extends AnyLiveRead>(
+  query: BoundLiveRead<Read>,
+  params: LiveReadParams<Read>,
   asked: { readonly [LIVE_POLL.AFTER]?: string },
   look?: Duration.Duration,
-  heldOn?: readonly NoInfer<Part>[],
-  olderParts?: readonly NoInfer<Part>[],
+  heldOn?: readonly PartOf<Read>[],
+  olderParts?: readonly PartOf<Read>[],
 ) {
   return queryParts(query, params, asked, look, heldOn, olderParts).pipe(
     Effect.withSpan(`web/live/${query.name}`),
   );
 }
 
-/** A defined live read's parts in cursor mode, under the read's span as `liveQueryParts` runs one. */
-export function liveCursorParts<Param extends string, Part extends string>(
-  query: LiveQuery<Param, Part>,
-  params: LiveParams<Param>,
+/** A bound live read's parts in cursor mode, under the read's span as `liveQueryParts` runs one. */
+function liveCursorParts<Read extends AnyLiveRead>(
+  query: BoundLiveRead<Read>,
+  params: LiveReadParams<Read>,
   asked: { readonly [LIVE_POLL.AFTER]?: string; readonly [LIVE_POLL.CURSOR]?: string },
   look?: Duration.Duration,
   onWoken?: (heardAt: number) => Effect.Effect<void>,
-  followedParts?: readonly NoInfer<Part>[],
+  followedParts?: readonly PartOf<Read>[],
 ) {
   return cursorParts(query, params, asked, look, onWoken, followedParts).pipe(
     Effect.withSpan(`web/live/${query.name}`),
@@ -623,11 +568,14 @@ function syncedParts<Part extends string>(
   ) as Record<Part, SealedLiveQueryWire>;
 }
 
-/** The ids of a part's rows as read, which every delta part answers its key under. */
-function rowIds(sealed: SealedLiveQueryWire): ReadonlySet<string> {
+/** The keys of a part's rows as read, each under the key its part declares. */
+function rowIds(sealed: SealedLiveQueryWire, key: string): ReadonlySet<string> {
   return new Set(
     (sealed.rows ?? []).flatMap((row) => {
-      const id = typeof row === "object" && row !== null ? (row as { id?: unknown }).id : undefined;
+      const id =
+        typeof row === "object" && row !== null
+          ? (row as Readonly<Record<string, unknown>>)[key]
+          : undefined;
       return id === undefined ? [] : [String(id)];
     }),
   );
@@ -654,27 +602,24 @@ function carriesAny<Part extends string>({ read, gone }: DeltaNarrowed<Part>): b
 }
 
 /** A delta read's parts narrowed to what the window's rows moved, with the ids gone from each; unavailable where its statements can't be built or read. */
-const narrowedParts = /* @__PURE__ */ Effect.fnUntraced(function* <
-  Param extends string,
-  Part extends string,
->(
-  delta: NonNullable<LiveQuery<Param, Part>["delta"]>,
-  params: LiveParams<Param>,
+const narrowedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Read extends AnyLiveRead>(
+  delta: NonNullable<BoundLiveRead<Read>["delta"]>,
+  params: LiveReadParams<Read>,
   rows: DeltaStanding["window"]["rows"],
-): Effect.fn.Return<DeltaNarrowed<Part>, HostedRefusal, SqlClient.SqlClient> {
+): Effect.fn.Return<DeltaNarrowed<PartOf<Read>>, HostedRefusal, SqlClient.SqlClient> {
   const statements = delta.statements(params, syncMovedOf(rows));
   if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   const read = yield* readParts(statements.value, (sealer) => sealer.seal);
-  const gone = new Map<Part, readonly string[]>();
+  const gone = new Map<PartOf<Read>, readonly string[]>();
   for (const [part, keys] of ownMovedKeys(delta.own, rows)) {
-    const found = rowIds(read.queries[part]);
+    const found = rowIds(read.queries[part], delta.own.get(part)?.key ?? "");
     gone.set(part, [...keys].filter((key) => !found.has(key)).toSorted());
   }
   return { read, gone };
 });
 
 /**
- * A defined live read's parts in delta mode (`delta`), for a reader that
+ * A bound live read's parts in delta mode (`delta`), for a reader that
  * names the sync id it holds every row at. Each look reads the settled id
  * (`syncStanding`) and then the log's window from the reader's id up to it
  * (`readSyncWindow`), the rows the read's topics reach or that it takes
@@ -706,10 +651,11 @@ const narrowedParts = /* @__PURE__ */ Effect.fnUntraced(function* <
  * where nothing of the reader's moved. Unavailable where its statements
  * can't be built or the log read.
  */
-const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
-  Param extends string,
-  Part extends string,
->(query: LiveQuery<Param, Part>, params: LiveParams<Param>, sync: string) {
+const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <Read extends AnyLiveRead>(
+  query: BoundLiveRead<Read>,
+  params: LiveReadParams<Read>,
+  sync: string,
+) {
   const delta = query.delta;
   if (delta === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const past = yield* syncIdOf(sync);
@@ -746,14 +692,14 @@ const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
         return { settled, window, whole: behind || admissionMoved };
       }),
     );
-  const look: Effect.Effect<DeltaLook<Part>, HostedRefusal, DatabaseServices> = Effect.gen(
+  const look: Effect.Effect<DeltaLook<PartOf<Read>>, HostedRefusal, DatabaseServices> = Effect.gen(
     function* () {
       const standing = yield* looked;
       if (standing.whole) return { standing, narrowed: Option.none() };
       const narrowed =
         standing.window.rows.length === 0
           ? Option.none()
-          : Option.some(yield* narrowedParts<Param, Part>(delta, params, standing.window.rows));
+          : Option.some(yield* narrowedParts<Read>(delta, params, standing.window.rows));
       if (!Option.exists(narrowed, carriesAny)) {
         from = standing.settled;
         for (const txid of standing.window.txids) passed.add(txid);
@@ -761,7 +707,7 @@ const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
       return { standing, narrowed };
     },
   );
-  const moved = ({ standing, narrowed }: DeltaLook<Part>) =>
+  const moved = ({ standing, narrowed }: DeltaLook<PartOf<Read>>) =>
     standing.whole || Option.exists(narrowed, carriesAny);
   const held =
     past === undefined
@@ -777,7 +723,7 @@ const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   }
   const { read, gone } = Option.isSome(narrowed)
     ? narrowed.value
-    : yield* narrowedParts<Param, Part>(delta, params, standing.window.rows);
+    : yield* narrowedParts<Read>(delta, params, standing.window.rows);
   const queries = syncedParts(read.queries, { past: String(past), next }, gone);
   return {
     ...read,
@@ -785,32 +731,14 @@ const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   };
 });
 
-/** A defined live read's parts in delta mode, under the read's span as `liveQueryParts` runs one. */
-export function liveDeltaParts<Param extends string, Part extends string>(
-  query: LiveQuery<Param, Part>,
-  params: LiveParams<Param>,
+/** A bound live read's parts in delta mode, under the read's span as `liveQueryParts` runs one. */
+function liveDeltaParts<Read extends AnyLiveRead>(
+  query: BoundLiveRead<Read>,
+  params: LiveReadParams<Read>,
   sync: string,
 ) {
   return deltaParts(query, params, sync).pipe(Effect.withSpan(`web/live/${query.name}`));
 }
-
-/** The instant a reader holds every item changed since, as its query spells it in epoch milliseconds; none for every item, and one of any other shape refused. */
-const sinceOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  since: string | undefined,
-): Effect.fn.Return<string, HostedRefusal> {
-  if (since === undefined) return "0";
-  if (!/^\d{1,15}$/.test(since)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return since;
-});
-
-/** The delegation call a query named, where one is a call id; one of any other shape names no worker, and is not found. */
-const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  call: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(agentCallIdSchema)(unparsedWire(call));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
 
 /**
  * The caller, where they are the account the read names; refused as signed
@@ -822,20 +750,47 @@ const sameUser = (input: { readonly [LIVE_USER_QUERY]?: string | undefined }, us
   input[LIVE_USER_QUERY] === userId ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
 
 /**
+ * The parts of a bound read as its mode answers them (`LIVE_MODE`): a
+ * snapshot's sealed (`liveQueryParts`), held on the parts it names
+ * (`heldOn`) and for a reader that keeps fewer (`olderParts`); a cursor
+ * read's past the reader's cursor where it names one (`liveCursorParts`);
+ * and a delta read's past the reader's sync id where it names one
+ * (`liveDeltaParts`), each answered as a snapshot's otherwise.
+ */
+function boundParts<Read extends AnyLiveRead>(
+  read: BoundLiveRead<Read>,
+  bound: LiveReadParams<Read>,
+  asked: Readonly<Record<string, string | undefined>>,
+) {
+  const { heldOn, olderParts } = read.declaration;
+  // SAFETY: a declaration names its held and older parts among its own (`LiveReadDeclaration`).
+  const held = heldOn as readonly PartOf<Read>[] | undefined;
+  const older = olderParts as readonly PartOf<Read>[] | undefined;
+  const sync = asked[LIVE_POLL.SYNC];
+  if (read.delta !== undefined && sync !== undefined) return liveDeltaParts(read, bound, sync);
+  if (read.cursor !== undefined) {
+    return liveCursorParts(read, bound, asked, read.look, read.woken, older);
+  }
+  return liveQueryParts(read, bound, asked, read.look, held, older);
+}
+
+/**
  * Every bound read's handler (`live-read-binding.ts`): each param the
  * reader's account (`LIVE_PARAM.USER`) refused as signed out unless it is
  * the caller's, then bound to the caller; each text the query names bound
  * as it is; each id it names read as one (`pathUuid`), not found where it
  * spells none, and an optional one bound empty where it names none; the
- * caller admitted as the binding asks; the parts sealed
- * (`liveQueryParts`); and the fields beside them read.
+ * params the binding serves bound, handed the query as asked too; the
+ * caller admitted as the binding asks; the parts sealed as its mode answers
+ * them (`boundParts`), and measured where the binding measures them; and
+ * the fields beside them read.
  */
 function answerBoundRead<Read extends AnyLiveRead>(read: BoundLiveRead<Read>) {
   const answered = Effect.fnUntraced(function* (
     input: LiveReadInput<Read>,
     context: { readonly userId: string; readonly request: Request },
   ) {
-    // SAFETY: a read's query names each of its params under its own key, as text.
+    // SAFETY: a read's query names each of its params and its mode's fields under their own keys, as text.
     const asked = input as Readonly<Record<string, string | undefined>>;
     const params: Record<string, string> = {};
     for (const [key, param] of Object.entries(read.declaration.params)) {
@@ -852,11 +807,12 @@ function answerBoundRead<Read extends AnyLiveRead>(read: BoundLiveRead<Read>) {
       }
     }
     // SAFETY: every param the query names is bound above, and the binding serves the rest (`bindLiveRead` holds it to).
-    const served = read.serve === undefined ? undefined : yield* read.serve(params as never);
+    const served = read.serve === undefined ? undefined : yield* read.serve(params as never, asked);
     // SAFETY: every param the declaration names is bound above or served, and no other.
     const bound = { ...params, ...served } as LiveReadParams<Read>;
-    if (read.admit !== undefined) yield* read.admit(bound);
-    const sealed = yield* liveQueryParts(read, bound, asked, read.look);
+    if (read.admit !== undefined) yield* read.admit(bound, asked);
+    const sealed = yield* boundParts(read, bound, asked);
+    if (read.answered !== undefined) yield* read.answered(sealed.queries);
     const beside =
       read.beside === undefined
         ? undefined
@@ -881,41 +837,9 @@ export function liveProcedures(seams: LiveProcedureSeams) {
   const signedIn = hosted.live.use(accountMiddleware(seams.resolveUserId));
   const answerWorkspaces = answerBoundRead(workspacesRead);
   return {
-    inbox: signedIn.inbox.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(
-        inboxLive,
-        { userId: context.userId, repositoryless: input[ACCOUNT_INBOX_REPOSITORYLESS.QUERY] ?? "" },
-        input,
-        LIVE_POLL_HOLD.LOOK,
-        undefined,
-        INBOX_RELEASED_PARTS,
-      );
-    }),
-    inboxItems: signedIn.inboxItems.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const since = yield* sinceOf(input[ACCOUNT_INBOX_ITEMS.SINCE]);
-      const now = yield* Clock.currentTimeMillis;
-      const settledSince = String(now - ACCOUNT_INBOX_ITEMS.SETTLED_WINDOW_MILLIS);
-      const params = { userId: context.userId, since, settledSince };
-      const sync = input[LIVE_POLL.SYNC];
-      return yield* sync === undefined
-        ? liveQueryParts(
-            inboxItemsLive,
-            params,
-            input,
-            LIVE_POLL_HOLD.LOOK,
-            ACCOUNT_INBOX_ITEMS.HELD_ON,
-          )
-        : liveDeltaParts(inboxItemsLive, params, sync);
-    }),
-    tasks: signedIn.tasks.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const sync = input[LIVE_POLL.SYNC];
-      return yield* sync === undefined
-        ? liveQueryParts(tasksLive, { userId: context.userId }, input)
-        : liveDeltaParts(tasksLive, { userId: context.userId }, sync);
-    }),
+    inbox: signedIn.inbox.effect(answerBoundRead(accountInboxRead)),
+    inboxItems: signedIn.inboxItems.effect(answerBoundRead(inboxItemsRead)),
+    tasks: signedIn.tasks.effect(answerBoundRead(tasksRead)),
     automations: signedIn.automations.effect(answerBoundRead(automationsRead)),
     automationWorkspaceRuns: signedIn.automationWorkspaceRuns.effect(
       answerBoundRead(automationWorkspaceRunsRead),
@@ -930,56 +854,9 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     taskBrowserTabs: signedIn.taskBrowserTabs.effect(answerBoundRead(taskBrowserTabsRead)),
     agentBrowserTabs: signedIn.agentBrowserTabs.effect(answerBoundRead(agentBrowserTabsRead)),
     macCommands: signedIn.macCommands.effect(answerBoundRead(macCommandsRead)),
-    agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const callId = input.call === undefined ? undefined : yield* callIdOf(input.call);
-      const cursor = input[LIVE_POLL.CURSOR];
-      if (
-        cursor !== undefined &&
-        Result.isFailure(readEither(agentCursorSchema)(unparsedWire(cursor)))
-      ) {
-        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      }
-      const { agent, target } = yield* reachedAgentById(context.userId, input.id);
-      const params = {
-        ownerId: target.userId,
-        conversationId:
-          callId === undefined
-            ? target.conversationId
-            : childConversationId(target.conversationId, callId),
-        parentConversationId: target.conversationId,
-        agentId: agent.id,
-        readerId: context.userId,
-      };
-      const answer = yield* liveCursorParts(
-        agentTranscriptLive,
-        params,
-        input,
-        LIVE_POLL_HOLD.WATCHED_LOOK,
-        countAnswerWait,
-        TRANSCRIPT_FOLLOWED_PARTS,
-      );
-      yield* countAnswerBytes(answer.queries);
-      return answer;
-    }),
-    taskInbox: signedIn.taskInbox.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(taskInboxLive, { userId: context.userId, taskId }, input);
-    }),
-    agentInbox: signedIn.agentInbox.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
-      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        agentInboxLive,
-        { userId: context.userId, agentId: agent.value.id },
-        input,
-      );
-    }),
+    agentTranscript: signedIn.agentTranscript.effect(answerBoundRead(agentTranscriptRead)),
+    taskInbox: signedIn.taskInbox.effect(answerBoundRead(taskInboxRead)),
+    agentInbox: signedIn.agentInbox.effect(answerBoundRead(agentInboxRead)),
     sidebar: signedIn.sidebar.effect(answerBoundRead(sidebarRead)),
 
     workspaces: signedIn.workspaces.effect(function* (asked) {

@@ -46,7 +46,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -99,7 +99,7 @@ import {
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
 import { useWindowAccount } from "../tasks/window-account.js";
-import { appStateQuery, selectExperiment } from "../use-app-state.js";
+import { useWorkspaceExperiment } from "../workspace-experiments.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
@@ -366,13 +366,18 @@ function AgentColumn({ children }: { children: React.ReactNode }): React.JSX.Ele
  * A focused agent's pane or tab offers its transcript's copy over it
  * (`main-tabs.tsx`, `side-panel.tsx`).
  */
-function CopyChord({ copy }: { copy: TasksControl["copy"] }): null {
-  // While Descriptions is off there is no description to copy, so the chord is an agent's alone.
+function CopyChord({
+  copy,
+  workspaceId,
+}: {
+  copy: TasksControl["copy"];
+  /** The workspace of the task drawn. */
+  workspaceId: string;
+}): null {
+  // While the task's workspace has Descriptions off there is no description to copy, so the chord is an agent's alone.
   useAppCommand(
     APP_COMMAND.COPY_CONTENT,
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true
-      ? copy.onPress
-      : undefined,
+    useWorkspaceExperiment(workspaceId, EXPERIMENT.DESCRIPTIONS) ? copy.onPress : undefined,
   );
   return null;
 }
@@ -438,9 +443,14 @@ function DescriptionDocument({
     readerId: tasks.me,
     agents: tasks.agents,
   });
-  // The task's comments are held from its open while it is shown, for its description's margin and list, so its first ready frame marks them; none are read while Descriptions is off.
-  const descriptionsOn =
-    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
+  // The task's comments are held from its open while it is shown, for its description's margin and list, so its first ready frame marks them; none are read while its workspace, the listed one while it is read, has Descriptions off.
+  const descriptionsOn = useWorkspaceExperiment(
+    region.kind === DOCUMENT_REGION.READY
+      ? region.task.workspaceId
+      : (tasks.tasks.find((each) => each.id === tasks.activeTaskId)?.workspaceId ??
+          tasks.workspace?.id),
+    EXPERIMENT.DESCRIPTIONS,
+  );
   const commentsTaskId = tasks.shown && descriptionsOn ? tasks.activeTaskId : undefined;
   const comments = useDescriptionComments(
     useMemo(
@@ -1335,7 +1345,7 @@ function DescriptionDocument({
                               {RENAME_FAILED_NOTE}
                             </FailureNote>
                           ) : null}
-                          <CopyChord copy={tasks.copy} />
+                          <CopyChord copy={tasks.copy} workspaceId={task.workspaceId} />
                           {terminalDoors.terminals ? (
                             <TerminalCommands
                               here={terminalHere}

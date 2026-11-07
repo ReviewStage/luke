@@ -3,14 +3,13 @@
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { listedAgent } from "../testing/tasks-control.js";
 import { ItemMark } from "./inbox-item-parts.js";
 import { taskHolder } from "./inbox-model.js";
@@ -75,8 +74,7 @@ test("an item an archived agent posted wears the harness that agent ran on, as t
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(ItemMark, {
           holder: taskHolder(TASK),
           agentId: ARCHIVED,

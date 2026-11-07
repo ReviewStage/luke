@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
+import type { WorkspaceExperiment } from "@repo/settings";
 import { and, eq } from "drizzle-orm";
 import { Cause, DateTime, Effect } from "effect";
 import { Database } from "../core/query.js";
@@ -8,6 +9,7 @@ import {
   GITHUB_INSTALLATION_STATUS,
 } from "../github-installation-vocabulary.js";
 import { createTask, type NewTask } from "../models/task-store.js";
+import { setWorkspaceExperiment } from "../models/workspace-experiment-store.js";
 import type { WorkspaceSeams } from "../models/workspace-seams.js";
 import { member, organization } from "../schemas/auth.js";
 import { githubInstallation } from "../schemas/github-installation.js";
@@ -160,4 +162,14 @@ const workspaceOf = (userId: string) =>
 export const startTask = (userId: string, started: TestTask) =>
   Effect.flatMap(workspaceOf(userId), (organizationId) =>
     createTask(userId, { ...started, organizationId }),
+  );
+
+/** The experiment turned on or off for everyone in the account's test workspace, the one `startTask` starts its tasks in, as its owner would turn it in Settings › Experimental. */
+export const experimentInTestWorkspace = (
+  userId: string,
+  experiment: WorkspaceExperiment,
+  on = true,
+) =>
+  Effect.flatMap(workspaceOf(userId), (organizationId) =>
+    setWorkspaceExperiment({ organizationId, experiment, on, by: userId }),
   );

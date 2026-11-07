@@ -17,91 +17,8 @@ export const GATEWAY_METHOD = {
   TASKS_RESYNC: "tasks.resync",
   /** The app reaches the service again (`networkConnected` turned true): every read a window holds is asked again now, and a task list already followed is sealed and followed again, whatever resync came lately. */
   TASKS_REGAINED: "tasks.regained",
-  /**
-   * The repositories the account reaches in one workspace, or in every one
-   * where the params name none, held for a window from now until it is let
-   * go, asked of the service at once and again as a window comes forward, as
-   * the workspace's installations move, and as a token or a token repository
-   * changes, and a while after among the reads let go lately. What it holds is
-   * heard as `REPOSITORY_LISTS_CHANGED` events, on the app state every window
-   * draws, never answered.
-   */
-  TASKS_REPOSITORIES_FOLLOW: "tasks.repositoriesFollow",
-  /** One workspace's repositories let go by the window that held them. */
-  TASKS_REPOSITORIES_UNFOLLOW: "tasks.repositoriesUnfollow",
-  /** One workspace's held repositories asked again at once, as Try again asks; answered once the ask has landed. */
-  TASKS_REPOSITORIES_RETRY: "tasks.repositoriesRetry",
-  /**
-   * What GitHub holds of the pull request or issue a link names, through a
-   * workspace's installation, held for a window from now until it is let go
-   * and asked again as a window comes forward, no oftener than the host keeps
-   * a link's read, and a while after among the reads let go lately. What it
-   * holds is heard as `LINK_STANDINGS_CHANGED` events, on the app state every
-   * window draws, never answered.
-   */
-  TASKS_LINK_STANDING_FOLLOW: "tasks.linkStandingFollow",
-  /** One link's standing let go by the window that held it. */
-  TASKS_LINK_STANDING_UNFOLLOW: "tasks.linkStandingUnfollow",
   /** One version of one page of one plan with its HTML, read from the service for the frame that draws it; answered to the caller, never held in the view. */
   TASKS_PAGE: "tasks.page",
-  /**
-   * One plan's pages, or one agent's on no task, held followed for a window
-   * from now until it is let go, over Neon Realtime, and a while after among
-   * those let go lately: the open task's, an Inbox item's plan's, an agent's
-   * page's, or a page's card's. What they hold is heard as `PAGES_CHANGED`
-   * events, on the app state every window draws, never answered.
-   */
-  TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
-  /** One plan's or agent's pages let go by the window that held them: they stay among those let go lately until later ones push them out. */
-  TASKS_PAGES_UNFOLLOW: "tasks.pagesUnfollow",
-  /**
-   * One task's description held for a window from now until it is let go, and a
-   * while after among those let go lately: the task's record followed over
-   * the service's held poll, and its description read again whenever its mark moves
-   * past the copy held. What it holds is heard as `DESCRIPTION_DOCUMENTS_CHANGED`
-   * events, on the app state every window draws, never answered.
-   */
-  TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
-  /** One task's description let go by the window that held it: it stays among those let go lately until later ones push it out. */
-  TASKS_DOCUMENT_UNFOLLOW: "tasks.documentUnfollow",
-  /** One task's held description read again at once, as Try again asks; never answered. */
-  TASKS_DOCUMENT_RETRY: "tasks.documentRetry",
-  /**
-   * One task's description history held for a window's version history from now
-   * until it is let go, and a while after among those let go lately: its
-   * newest page followed over the service's held poll, and the older pages
-   * read past it laid after it. What it holds is heard as
-   * `HISTORIES_CHANGED` events, on the app state every window draws, never
-   * answered.
-   */
-  TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
-  /** One task's history let go by the window that held it: it stays among those let go lately until later ones push it out. */
-  TASKS_HISTORY_UNFOLLOW: "tasks.historyUnfollow",
-  /** One task's held history read again at once, as Try again asks; never answered. */
-  TASKS_HISTORY_RETRY: "tasks.historyRetry",
-  /**
-   * One task's cloud Browser tabs, every one of its agents', or one agent's,
-   * the agent's pointer on each among them, held followed for a window's
-   * side panel from now until it is let go, over Neon Realtime, and a while
-   * after among those let go lately. What they hold is heard as
-   * `BROWSER_TABS_CHANGED` events, on the app state every window draws,
-   * never answered.
-   */
-  TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
-  /** One task's or agent's Browser tabs let go by the window that held them: they stay among those let go lately until later ones push them out. */
-  TASKS_BROWSER_TABS_UNFOLLOW: "tasks.browserTabsUnfollow",
-  /**
-   * One task's comments, its description's own threads or one page's, held followed
-   * for a window from now until it is let go, over Neon Realtime, and a
-   * while after among those let go lately: the open task's description's, or a page
-   * tab's. What they hold is heard as `DESCRIPTION_COMMENTS_CHANGED` events, on the
-   * app state every window draws, never answered.
-   */
-  TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
-  /** One task's description's or page's comments let go by the window that held them: they stay among those let go lately until later ones push them out. */
-  TASKS_COMMENTS_UNFOLLOW: "tasks.commentsUnfollow",
-  /** One held description's or page's comments read again at once, as Try again asks, where a window holds them or let them go lately. */
-  TASKS_COMMENTS_RETRY: "tasks.commentsRetry",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
   /**
@@ -478,14 +395,6 @@ export const GATEWAY_EVENT = {
   BROWSER_LIVE_MESSAGE: "browserLive.message",
   /** A cloud Browser tab's live view closed, with its close code, named by its connection. */
   BROWSER_LIVE_CLOSED: "browserLive.closed",
-  /** Every plan's or agent's pages the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  PAGES_CHANGED: "pages.changed",
-  /** Every description's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
-  DESCRIPTION_COMMENTS_CHANGED: "descriptionComments.changed",
-  /** Every task's description the host holds for the windows, whole, as its reads of them and the writes since stand, each time any of them moves. */
-  DESCRIPTION_DOCUMENTS_CHANGED: "descriptionDocuments.changed",
-  /** Every task's description history the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  HISTORIES_CHANGED: "histories.changed",
   /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   AUTOMATIONS_CHANGED: "automations.changed",
   /** Every workspace's people the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
@@ -508,8 +417,6 @@ export const GATEWAY_EVENT = {
   TRANSCRIPTS_CHANGED: "transcripts.changed",
   /** Every plan's or agent's inbox the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
-  /** Every link's standing the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  LINK_STANDINGS_CHANGED: "linkStandings.changed",
   /** One of the Pull request tabs' held parts, every agent's pull request's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   PULL_REQUEST_PARTS_CHANGED: "pullRequestParts.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
@@ -518,8 +425,6 @@ export const GATEWAY_EVENT = {
   INBOX_ITEMS_CHANGED: "inboxItems.changed",
   /** The account's preferences row, whole, as the host's read of it for the session stands with every write drawn over it, each time it moves. */
   ACCOUNT_PREFERENCES_CHANGED: "accountPreferences.changed",
-  /** Every task's or agent's cloud Browser tabs the host holds for the windows, whole, as its reads of them stand, each time one moves or a takeover lapses. */
-  BROWSER_TABS_CHANGED: "browserTabs.changed",
   /** The skills of every workspace the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   INSTALLED_SKILLS_CHANGED: "installedSkills.changed",
   /** The account's integrations the host holds for the windows, whole, as its read of them stands, each time it moves. */
@@ -534,6 +439,8 @@ export const GATEWAY_EVENT = {
   MCP_CLIENTS_CHANGED: "mcpClients.changed",
   /** The one agent whose cloud ports are forwarded to this Mac and how its forwarding stands, or none, each time it moves. */
   PORT_FORWARDS_CHANGED: "portForwards.changed",
+  /** How each cloud agent's mirror on this Mac stands until its worktree does, by the agent, whole, each time one moves. */
+  MIRRORS_CHANGED: "mirrors.changed",
   /** How many changes made offline the service refused as they were sent again, since the windows last cleared the count, each time it moves. */
   OFFLINE_REFUSED_CHANGED: "offlineRefused.changed",
   /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
@@ -548,8 +455,6 @@ export const GATEWAY_EVENT = {
   TOKEN_REPOSITORIES_CHANGED: "tokenRepositories.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
-  /** Every workspace's repositories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  REPOSITORY_LISTS_CHANGED: "repositoryLists.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

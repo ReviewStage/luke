@@ -4,12 +4,11 @@ import assert from "node:assert/strict";
 import { FAILURE_CONDITION } from "@repo/features/shown-failure";
 import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { KEPT, notKept } from "../act.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { ToastHost, type ToastNotice, useToast } from "../toast.js";
 import { HISTORY_READ } from "./use-description-history.js";
 import { sayRestored, useVersionRestore, VersionView } from "./version-view.js";
@@ -19,13 +18,11 @@ import { sayRestored, useVersionRestore, VersionView } from "./version-view.js";
  */
 
 let root: Root | undefined;
-let registry: AtomRegistry.AtomRegistry | undefined;
 let show: ((notice: ToastNotice) => void) | undefined;
 
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
-  registry?.dispose();
   document.body.innerHTML = "";
 });
 
@@ -39,12 +36,9 @@ function Shower(): null {
 function mount(): void {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  registry = AtomRegistry.make();
-  const held = registry;
   act(() =>
     root?.render(
-      onRegistry(
-        held,
+      withQueryClient(
         createElement(Fragment, null, createElement(Shower), createElement(ToastHost)),
       ),
     ),
@@ -84,12 +78,9 @@ function mountVersion(answer: ActionResult, asked: (number | undefined)[], lande
   }
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  registry = AtomRegistry.make();
-  const held = registry;
   act(() =>
     root?.render(
-      onRegistry(
-        held,
+      withQueryClient(
         createElement(Fragment, null, createElement(Version), createElement(ToastHost)),
       ),
     ),

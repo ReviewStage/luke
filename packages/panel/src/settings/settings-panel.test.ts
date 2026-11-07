@@ -8,14 +8,13 @@ import { SETTINGS_PAGE_LIST, SETTINGS_VIEW } from "@repo/settings/settings-views
 import { settingsView } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ellipsized } from "../testing/action-label.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { settingsPageOf } from "./pages.js";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 
@@ -83,7 +82,7 @@ test("the Account page lists none of the other pages, which the Settings sidebar
   const root = createRoot(container);
   roots.push(root);
 
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(SettingsPanel, SETTINGS))));
+  act(() => root.render(withQueryClient(createElement(SettingsPanel, SETTINGS))));
 
   const pressed = [...container.querySelectorAll("button")].map((button) => button.textContent);
   for (const page of SETTINGS_PAGE_LIST.filter((each) => each !== SETTINGS_VIEW.ACCOUNT)) {
@@ -103,8 +102,7 @@ test("a signed-out Workspace page says to sign in rather than drawing nothing", 
 
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(SettingsPanel, {
           ...SETTINGS,
           account: { status: ACCOUNT_STATUS.SIGNED_OUT },
@@ -126,8 +124,7 @@ test("This Mac says under Ask every time where macOS refused Vespin's last notif
   const drawn = (status: (typeof NOTIFICATIONS_STATUS)[keyof typeof NOTIFICATIONS_STATUS]) => {
     act(() =>
       root.render(
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           createElement(SettingsPanel, {
             ...SETTINGS,
             view: SETTINGS_VIEW.THIS_MAC,
@@ -157,11 +154,7 @@ test("no Settings page draws a button whose words end with an ellipsis", () => {
     const root = createRoot(container);
     roots.push(root);
 
-    act(() =>
-      root.render(
-        onRegistry(AtomRegistry.make(), createElement(SettingsPanel, { ...SETTINGS, view })),
-      ),
-    );
+    act(() => root.render(withQueryClient(createElement(SettingsPanel, { ...SETTINGS, view }))));
 
     const pressed = [...container.querySelectorAll("button")].map((button) => button.textContent);
     assert.deepEqual(ellipsized(pressed), [], `the ${settingsPageOf(view).title} page`);

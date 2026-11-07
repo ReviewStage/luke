@@ -11,7 +11,6 @@ import { AGENT_STATUS, LOCAL_AGENT_REFUSAL } from "./agent-wire.js";
 import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
 import { INBOX_REPLY } from "./inbox-wire.js";
 import { WRITE_UNTAKEN, writeUntakenOf } from "./keyed-write.js";
-import { LIVE_SIGNED_OUT } from "./live-wire.js";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -765,56 +764,6 @@ it.effect(
         api.requests().map((each) => [each.url, JSON.parse(each.body ?? "{}")]),
         [[`https://vespin.dev/api/agents/${AGENT_ID}/agents`, request]],
       );
-    }),
-);
-
-it.effect(
-  "the account inbox sealed for following is read as the service answers it for the account named, polled past a digest where asked, a session of another account is signed out, and a refusal or a body that is no answer is unanswered",
-  () =>
-    Effect.gen(function* () {
-      const sealed = {
-        capability: "capability-1",
-        queryFingerprint: "fingerprint-1",
-        expiresAt: 1_800_000_060_000,
-      };
-      const live = {
-        url: "wss://realtime.example/v1",
-        queries: {
-          items: sealed,
-          planless: sealed,
-          plans: sealed,
-          automations: sealed,
-          failedRuns: sealed,
-        },
-      };
-      const answering = (answer: JsonValue, status: number = HTTP_STATUS.OK) =>
-        fakeCloudApi({ "GET /api/live/inbox": { answer: () => answer, status } });
-
-      const api = answering(live);
-      const read = yield* Effect.provide(client().accountInboxLive("user-dana"), api.layer);
-      yield* Effect.provide(client().accountInboxLive("user-dana", true, "d-1"), api.layer);
-      const signedOut = yield* Effect.provide(
-        client().accountInboxLive("user-dana"),
-        answering({ error: HOSTED_API_ERROR.INVALID_TOKEN }, 401).layer,
-      );
-      const refused = yield* Effect.provide(
-        client().accountInboxLive("user-dana"),
-        answering({ error: HOSTED_API_ERROR.UNAVAILABLE }, 503).layer,
-      );
-      const unread = yield* Effect.provide(
-        client().accountInboxLive("user-dana"),
-        answering({ url: live.url }).layer,
-      );
-
-      assert.deepEqual(read, live);
-      const [sealing, polling] = api.requests().map((each) => each.searchParams);
-      assert.equal(sealing?.get("userId"), "user-dana");
-      assert.equal(sealing?.get("poll"), null);
-      assert.equal(polling?.get("poll"), "true");
-      assert.equal(polling?.get("after"), "d-1");
-      assert.deepEqual(signedOut, LIVE_SIGNED_OUT);
-      assert.deepEqual(uncaused(refused), { failure: AGENT_CALL_FAILURE.UNANSWERED });
-      assert.deepEqual(uncaused(unread), { failure: AGENT_CALL_FAILURE.UNANSWERED });
     }),
 );
 

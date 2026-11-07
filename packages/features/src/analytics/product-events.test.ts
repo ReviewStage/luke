@@ -4,6 +4,7 @@ import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_PROPERTY,
   PRODUCT_EXPERIMENT,
+  PRODUCT_EXPERIMENT_SCOPE,
   PRODUCT_SETTING_VALUE,
   productEventBuildFromWire,
   productEventFromWire,
@@ -53,20 +54,56 @@ test("nothing on the envelope survives except what the allowlist names", () => {
   });
 });
 
-test("an experiment's switch is counted by its key and on or off, and by nothing it does not list", () => {
+test("an experiment's switch is counted by its key, on or off, and whose choice it was, an older build's as the account's, and by nothing it does not list", () => {
   const toggled = {
     [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: PRODUCT_EXPERIMENT.BROWSER,
     [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: PRODUCT_SETTING_VALUE.ON,
   };
+  const workspace = {
+    ...toggled,
+    [PRODUCT_EVENT_PROPERTY.EXPERIMENT_SCOPE]: PRODUCT_EXPERIMENT_SCOPE.WORKSPACE,
+  };
+  assert.deepEqual(
+    productEventFromWire({ name: PRODUCT_EVENT.EXPERIMENT_TOGGLE, at: AT, properties: workspace }),
+    { name: PRODUCT_EVENT.EXPERIMENT_TOGGLE, at: AT, properties: workspace },
+  );
   assert.deepEqual(
     productEventFromWire({ name: PRODUCT_EVENT.EXPERIMENT_TOGGLE, at: AT, properties: toggled }),
-    { name: PRODUCT_EVENT.EXPERIMENT_TOGGLE, at: AT, properties: toggled },
+    {
+      name: PRODUCT_EVENT.EXPERIMENT_TOGGLE,
+      at: AT,
+      properties: {
+        ...toggled,
+        [PRODUCT_EVENT_PROPERTY.EXPERIMENT_SCOPE]: PRODUCT_EXPERIMENT_SCOPE.ACCOUNT,
+      },
+    },
   );
   assert.equal(
     productEventFromWire({
       name: PRODUCT_EVENT.EXPERIMENT_TOGGLE,
       at: AT,
       properties: { ...toggled, [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: "a feature nobody listed" },
+    }),
+    undefined,
+  );
+});
+
+test("a mirror's failure travels its wait on a rung, never as the raw time", () => {
+  const failed = {
+    [PRODUCT_EVENT_PROPERTY.MIRROR_STEP]: "worktree",
+    [PRODUCT_EVENT_PROPERTY.MIRROR_FAILURE]: "exited",
+    [PRODUCT_EVENT_PROPERTY.ATTEMPT]: 2,
+    [PRODUCT_EVENT_PROPERTY.ELAPSED_SECONDS]: 120,
+  };
+  assert.deepEqual(
+    productEventFromWire({ name: PRODUCT_EVENT.MIRROR_FAIL, at: AT, properties: failed }),
+    { name: PRODUCT_EVENT.MIRROR_FAIL, at: AT, properties: failed },
+  );
+  assert.equal(
+    productEventFromWire({
+      name: PRODUCT_EVENT.MIRROR_FAIL,
+      at: AT,
+      properties: { ...failed, [PRODUCT_EVENT_PROPERTY.ELAPSED_SECONDS]: 137 },
     }),
     undefined,
   );

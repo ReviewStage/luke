@@ -279,5 +279,6 @@ export function initialAppState(
     network: { online: true, reachable: true },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
     portForwarding: null,
+    mirrors: {},
   };
 }

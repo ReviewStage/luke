@@ -12,7 +12,7 @@ import { type PlaceThere, ROUTED_PLACE, routedPlaceOf, routedStepStands } from "
 
 /**
  * routed-places.test.ts -- each routed place as the window reads it from an
- * address: the place it stands on, what its gate refuses, what Back passes
+ * address and the reader's access: the place it stands on, what its gate refuses, what Back passes
  * over, and what its step is called. Synthetic ids.
  */
 
@@ -60,11 +60,13 @@ test.each([
   ["/acme/task/7/version/3", ROUTED_PLACE.VERSION_HISTORY],
   ["/acme/inbox/item-1", ROUTED_PLACE.INBOX],
   ["/acme/agent/agent-1", ROUTED_PLACE.AGENT],
+  ["/left", ROUTED_PLACE.UNKNOWN_WORKSPACE],
+  ["/acme", undefined],
   ["/acme/agent/agent-1/changes", undefined],
   ["/acme/task/7", undefined],
   ["/app", undefined],
 ] as const)("%s stands on its routed place, where it is one", (address, place) => {
-  assert.equal(routedPlaceOf(matchesOf(address)), place);
+  assert.equal(routedPlaceOf(matchesOf(address), ACCESS), place);
 });
 
 test.each([
@@ -73,6 +75,7 @@ test.each([
   ["a version history with Descriptions off", "/acme/task/7/versions", ACCESS],
   ["the Inbox under a workspace the reader is not in", "/left/inbox", ACCESS],
   ["an agent's page under a workspace the reader is not in", "/left/agent/agent-1", ACCESS],
+  ["a workspace's address the reader is not in, not found", "/left", ACCESS],
 ] as const)("the gate refuses %s, which Back passes over", (_refused, address, access) => {
   assert.equal(stepStands(address, access), false);
 });
@@ -101,7 +104,16 @@ test.each<readonly [string, string, Partial<PlaceThere>]>([
     { historyTask: TASK_ID, taskStands: () => false },
   ],
 ])("Back passes over %s", (_skipped, address, gone) => {
-  const descriptionsOn = { ...ACCESS, experiments: { [EXPERIMENT.DESCRIPTIONS]: true } };
+  // Task descriptions is the workspace's choice, which its version history stands on.
+  const descriptionsOn = {
+    ...ACCESS,
+    workspaces: ACCESS.workspaces.map((workspace) => ({
+      ...workspace,
+      experiments: [
+        { experiment: EXPERIMENT.DESCRIPTIONS, on: true, changedBy: null, changedAt: 1 },
+      ],
+    })),
+  };
   assert.equal(stepStands(address, descriptionsOn, THERE), true, "it stands while there");
   assert.equal(stepStands(address, descriptionsOn, { ...THERE, ...gone }), false);
 });

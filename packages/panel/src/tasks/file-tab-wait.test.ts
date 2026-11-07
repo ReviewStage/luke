@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import type { TaskFileRequest } from "@repo/features/task-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import { fileTab } from "@repo/ui/tab-strip-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -12,7 +11,7 @@ import { FindScope } from "../find-in-tab.js";
 import { fakeActPort, readingFiles } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { installScrollTo, wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
 import { FileTab } from "./file-tab.js";
@@ -97,8 +96,7 @@ test("a File tab says it is reading the file until its lines are drawn, never st
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           FindScope,
           { active: true, subject: { task: "task-1", tab: fileTab(PATH) } },

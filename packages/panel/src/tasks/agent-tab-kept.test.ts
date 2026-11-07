@@ -13,13 +13,12 @@ import {
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { focusRestOn } from "../testing/hint-rest.js";
 import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
@@ -181,7 +180,6 @@ function runningTab() {
     TRANSCRIPT,
     page([DESCRIPTION, EARLIER, newest("Reading.")], AGENT_STATUS.RUNNING, "1:1"),
   );
-  const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const controlOf = (otherTitle: string) =>
@@ -198,8 +196,7 @@ function runningTab() {
     }).agent(AGENT_ID);
   const draw = (control: ReturnType<typeof controlOf>, cards: TranscriptCards) => {
     root?.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(AgentTab, {
           agent: AGENT,
           control,
@@ -339,8 +336,7 @@ test("a page that adds a call to a running turn draws that call alone, the calls
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(AgentTab, {
           agent: AGENT,
           control: agentsControl({ agents: [AGENT] }),

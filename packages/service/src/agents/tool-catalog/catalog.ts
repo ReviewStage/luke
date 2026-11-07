@@ -58,6 +58,7 @@ import type { IntegrationConnect } from "../../integrations/integration-connect.
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import {
   type CommentToolName,
+  commentToolOf,
   READ_COMMENTS_TOOL,
   REPLY_TO_COMMENT_TOOL,
   UPDATE_COMMENT_TOOL,
@@ -66,7 +67,6 @@ import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import {
   LOOK_AT_PICTURE_TOOL,
   lookNamedOnly,
-  PICTURE_LOOK_REFUSAL,
   PICTURE_LOOK_STATUS,
   pictureNotLooked,
 } from "../../tasks/picture-look.js";
@@ -91,8 +91,10 @@ import {
   runUpdateTask,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
+  startAgentToolOf,
   UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
+  updateTaskToolOf,
 } from "../agent-tools.js";
 import {
   CREATE_AUTOMATION_TOOL,
@@ -152,7 +154,15 @@ import {
   runCreateSection,
   runDeleteSection,
 } from "../task-section-tools.js";
-import { CREATE_TASK_TOOL, READ_TASK_TOOL, runCreateTask, runReadTask } from "../task-tools.js";
+import {
+  CREATE_TASK_TOOL,
+  createTaskToolOf,
+  READ_TASK_TOOL,
+  readTaskToolOf,
+  runCreateTask,
+  runReadTask,
+} from "../task-tools.js";
+import type { ExperimentsOn } from "../workspace-experiment-on.js";
 import { type AgentStanding, GATES, standingOf, TOOL_GATE, type ToolGate } from "./gates.js";
 
 /** What a door answers: the tool's own result, the value the model is handed. */
@@ -216,6 +226,8 @@ export interface CatalogTool<Name extends string = string> {
   readonly content?: (result: WorkspaceMcpToolResult) => readonly McpContent[];
   /** How a call its gate shuts is answered, given the gate's words, where its door's refusal is no `rejected` with them (`gateRefusal`). */
   readonly refused?: (words: string) => WorkspaceMcpToolResult;
+  /** The tool's words and input in the words of the agent's workspace's experiments, where they name one (`listedTool`); none for a tool whose words name none. */
+  readonly variant?: (experiments: ExperimentsOn) => ToolSpec<string>;
 }
 
 /** A tool as its tool file declares it: its name, its words, and its input schema. */
@@ -226,7 +238,7 @@ interface ToolSpec<Name extends string> {
 }
 
 /** What of a tool the catalog declares beside its spec and its door. */
-type Served = Pick<CatalogTool, "gate" | "alwaysLoad" | "content" | "refused">;
+type Served = Pick<CatalogTool, "gate" | "alwaysLoad" | "content" | "refused" | "variant">;
 
 function served<const Name extends string>(
   spec: ToolSpec<Name>,
@@ -284,10 +296,13 @@ function agentTool<const Name extends string>(
   return served(spec, door, options);
 }
 
-/** A tool of the description's comment threads, run through the comment door. */
+/** A tool of the comment threads, run through the comment door, its words the page threads' alone where the agent's workspace has Task descriptions off (`commentToolOf`). */
 function commentTool<const Name extends CommentToolName>(spec: ToolSpec<Name>) {
-  return served(spec, (admitted, input, { standing }) =>
-    runAgentComment(admitted, spec.name, input, standing.open.has(TOOL_GATE.DESCRIPTIONS)),
+  return served(
+    spec,
+    (admitted, input, { standing }) =>
+      runAgentComment(admitted, spec.name, input, standing.open.has(TOOL_GATE.DESCRIPTIONS)),
+    { variant: (experiments) => commentToolOf(spec.name, experiments) },
   );
 }
 
@@ -448,8 +463,8 @@ const CATALOG = [
   served(LOOK_AT_PICTURE_TOOL, (admitted, input) => runAgentLookAtPicture(admitted, input), {
     gate: TOOL_GATE.DESCRIPTIONS,
     content: lookedPictureContent,
-    // Note that a look keeps its own words, because the gate's are a note's that was not saved.
-    refused: () => pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF),
+    // Note that a look answers in its own shape, with the gate's words.
+    refused: pictureNotLooked,
   }),
   served(
     SHOW_IMAGE_TOOL,
@@ -463,7 +478,7 @@ const CATALOG = [
   ),
   agentTool(READ_PAGE_TOOL, runReadPage),
   // The workspace's agents.
-  agentTool(START_AGENT_TOOL, runStartAgent, LOADED),
+  agentTool(START_AGENT_TOOL, runStartAgent, { ...LOADED, variant: startAgentToolOf }),
   agentTool(STOP_AGENT_TOOL, runStopAgent),
   agentTool(LIST_AGENTS_TOOL, runListAgents, LOADED),
   agentTool(CODER_READ_AGENT_TOOL, runReadAgent),
@@ -472,9 +487,9 @@ const CATALOG = [
   agentTool(LIST_MODELS_TOOL, runListModels),
   // Tasks and sections.
   agentTool(LIST_TASKS_TOOL, runListTasks),
-  agentTool(READ_TASK_TOOL, runReadTask, LOADED),
-  agentTool(CREATE_TASK_TOOL, runCreateTask),
-  agentTool(UPDATE_TASK_TOOL, runUpdateTask, LOADED),
+  agentTool(READ_TASK_TOOL, runReadTask, { ...LOADED, variant: readTaskToolOf }),
+  agentTool(CREATE_TASK_TOOL, runCreateTask, { variant: createTaskToolOf }),
+  agentTool(UPDATE_TASK_TOOL, runUpdateTask, { ...LOADED, variant: updateTaskToolOf }),
   agentTool(CREATE_SECTION_TOOL, runCreateSection),
   agentTool(DELETE_SECTION_TOOL, runDeleteSection),
   // Automations.
@@ -522,6 +537,21 @@ export function isServedTool(name: string): name is ServedTool {
 export function offers(standing: AgentStanding, tool: ServedTool): boolean {
   const gate = TOOL_CATALOG.get(tool)?.gate;
   return gate === undefined || standing.open.has(gate);
+}
+
+/**
+ * The words and input schema a tool is listed with to an agent: its
+ * variant's, in the words of the agent's workspace's experiments, where it
+ * has one, so an agent is told nothing of an experiment that is off; its
+ * own otherwise.
+ */
+export function listedTool(
+  tool: CatalogTool,
+  standing: AgentStanding,
+): Pick<CatalogTool, "description" | "inputSchema"> {
+  if (tool.variant === undefined) return tool;
+  const spec = tool.variant(standing.experiments);
+  return { description: spec.description, inputSchema: emitJsonSchema(spec.inputSchema) };
 }
 
 /**

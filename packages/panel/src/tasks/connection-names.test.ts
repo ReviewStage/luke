@@ -9,13 +9,12 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { holdIntegrations } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { toolCallView } from "./tool-call-model.js";
 
@@ -85,12 +84,7 @@ async function serversSay(
   }
   const rows = calls.map(({ connection }) => createElement(Row, { key: connection, connection }));
   await act(async () => {
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(ConnectionNames, { needed: true, children: rows }),
-      ),
-    );
+    root.render(withQueryClient(createElement(ConnectionNames, { needed: true, children: rows })));
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   const said = () => [...container.querySelectorAll("span")].map((row) => row.textContent);

@@ -19,7 +19,6 @@ import type { HostCapability } from "@repo/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@repo/settings/settings-views";
 import { SETTINGS_ROW_STATE } from "@repo/ui";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -31,7 +30,7 @@ import {
   QUIET_PANEL,
 } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handHostReads, handState, stateWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { AgentConnectSection } from "./agent-auth-section.js";
 import { AgentsPage } from "./agents-page.js";
 
@@ -201,9 +200,7 @@ async function mount(
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true }))),
-  );
+  act(() => root.render(withQueryClient(createElement(AgentsPage, { signedIn: true }))));
   await settle();
   await vi.waitFor(() => assert.equal(harnessRowsStand(container), true));
   return container;
@@ -223,8 +220,7 @@ async function mountSetup(): Promise<{ page: HTMLElement; connected: boolean[] }
   const connected: boolean[] = [];
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(AgentConnectSection, { onConnected: (now) => connected.push(now) }),
       ),
     ),

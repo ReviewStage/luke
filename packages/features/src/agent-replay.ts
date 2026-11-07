@@ -367,8 +367,8 @@ function summaryText(summary: ReplaySummary | undefined): string {
   return `<!-- ${MARKER_SPACE}:summary by=${SUMMARY_BY} steps=${summary.steps} chars=${summary.text.length}${MARKER_END}${summary.text}\n`;
 }
 
-/** The replay as it follows the brief: the heading, the opening marker with the preamble, the summary where there is one, every step, and the closing marker. */
-function replayText(replay: Replay): string {
+/** The replay as it follows the brief, or as it stands alone: the heading, the opening marker with the preamble, the summary where there is one, every step, and the closing marker. */
+export function replayText(replay: Replay): string {
   const message = replay.messageId === undefined ? "" : ` message=${replay.messageId}`;
   const carried = replay.carried === true ? " carried=1" : "";
   const open =

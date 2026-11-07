@@ -8,14 +8,13 @@ import assert from "node:assert/strict";
 import type { TaskFileRequest } from "@repo/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge, readingFiles } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { installScrollTo, wholeFileDrawn, wholeFileRoot } from "../testing/whole-file.js";
@@ -92,10 +91,7 @@ function mount(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement("div", null, createElement(Bar), createElement(DrawnLines)),
-      ),
+      withQueryClient(createElement("div", null, createElement(Bar), createElement(DrawnLines))),
     ),
   );
   return container;
@@ -209,8 +205,7 @@ test("Copy file contents copies the text the tab draws, read at its commit, rath
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(FileView, {
           place: { taskId: "task-1" },
           repository: null,
@@ -272,7 +267,7 @@ test("on a phone a File tab draws no bar, and the task's header's ⋯ offers eve
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root.render(withQueryClient(element)));
   await wholeFileDrawn(container);
 
   assert.equal(container.querySelector(".file-view-bar"), null);

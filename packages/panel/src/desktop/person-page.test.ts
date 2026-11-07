@@ -32,7 +32,6 @@ import {
 } from "@repo/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
@@ -47,7 +46,7 @@ import {
   holdAutomations,
   holdMembers,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { playListMotions } from "../testing/pane-motion.js";
@@ -398,12 +397,10 @@ function mountWith(
       ...overrides,
       ...more,
     });
-  const registry = AtomRegistry.make();
   const draw = (tasks: TasksControl) =>
     act(() =>
       root?.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(
             OpenSettingsProvider,
             { value: (link: SettingsLink) => opened.settings.push(link) },

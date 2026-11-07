@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { writeAccountPreferences } from "@repo/database/models/account-store";
-import { type Agent, type AgentBriefText, createAgent } from "@repo/database/models/agent-store";
+import {
+  type Agent,
+  type AgentBriefText,
+  createAgent,
+  type NewAgent,
+} from "@repo/database/models/agent-store";
 import {
   DESCRIPTION_ATTACHMENT_KEEP,
   keepDescriptionAttachment,
@@ -17,6 +21,7 @@ import {
   saveDescriptionText,
   updateTask,
 } from "@repo/database/models/task-store";
+import { setWorkspaceExperiment } from "@repo/database/models/workspace-experiment-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
@@ -80,47 +85,48 @@ const ON_CLAUDE_CODE = {
   payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
 } as const;
 
-/** The member's Descriptions turned on or off, which their agents' description tools stand on. */
-const descriptionsFor = (userId: string, on: boolean) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
+/** Task descriptions turned on or off for everyone in the agent's workspace, which its description tools stand on. */
+const descriptionsIn = (agent: Pick<Agent, "userId" | "organizationId">, on: boolean) =>
+  setWorkspaceExperiment({
+    organizationId: agent.organizationId,
+    experiment: EXPERIMENT.DESCRIPTIONS,
+    on,
+    by: agent.userId,
+  });
 
-/** An agent of the member's on the task named, with the brief given, its member's Descriptions on. */
+/** An agent started as the member, its workspace's Task descriptions on. */
+const describingAgent = (userId: string, started: NewAgent) =>
+  Effect.gen(function* () {
+    const { agent } = Option.getOrThrow(yield* createAgent(userId, started));
+    yield* descriptionsIn(agent, true);
+    return agent;
+  });
+
+/** An agent of the member's on the task named, with the brief given, its workspace's Task descriptions on. */
 const agentOn = (
   userId: string,
   taskId: string,
   brief: AgentBriefText = { descriptionSnapshot: DESCRIPTION_TEXT, prompt: null },
 ) =>
-  Effect.map(
-    Effect.andThen(
-      descriptionsFor(userId, true),
-      createAgent(userId, {
-        ...ON_CLAUDE_CODE,
-        ...brief,
-        taskId,
-        repository: "acme/relay",
-        idempotencyKey: randomUUID(),
-      }),
-    ),
-    (started) => Option.getOrThrow(started).agent,
-  );
+  describingAgent(userId, {
+    ...ON_CLAUDE_CODE,
+    ...brief,
+    taskId,
+    repository: "acme/relay",
+    idempotencyKey: randomUUID(),
+  });
 
-/** An agent of the member's in the workspace on no task and no repository, handed the prompt given, its member's Descriptions on. */
+/** An agent of the member's in the workspace on no task and no repository, handed the prompt given, its workspace's Task descriptions on. */
 const tasklessAgentOn = (userId: string, workspaceId: string) =>
-  Effect.map(
-    Effect.andThen(
-      descriptionsFor(userId, true),
-      createAgent(userId, {
-        ...ON_CLAUDE_CODE,
-        taskId: null,
-        organizationId: workspaceId,
-        descriptionSnapshot: null,
-        prompt: "Answer the open comments.",
-        repository: null,
-        idempotencyKey: randomUUID(),
-      }),
-    ),
-    (started) => Option.getOrThrow(started).agent,
-  );
+  describingAgent(userId, {
+    ...ON_CLAUDE_CODE,
+    taskId: null,
+    organizationId: workspaceId,
+    descriptionSnapshot: null,
+    prompt: "Answer the open comments.",
+    repository: null,
+    idempotencyKey: randomUUID(),
+  });
 
 /** An account with one agent on a task of its workspace, with the brief given. */
 const openAgent = (brief?: AgentBriefText) =>

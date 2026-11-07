@@ -8,7 +8,6 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { agentTab, fileTab, pageTab, STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { createMemoryHistory } from "@tanstack/react-router";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -44,7 +43,7 @@ import {
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { handHostReads } from "./testing/app-state.js";
-import { onRegistry, settleQueries } from "./testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { agentsControl, listedAgent, tasksControl } from "./testing/tasks-control.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
@@ -235,10 +234,9 @@ function mount(
   }
   const container = document.createElement("div");
   document.body.append(container);
-  // Each window reads its state under a registry of its own, as the window's root provides one.
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(held.provide(onRegistry(AtomRegistry.make(), createElement(Probe)))));
+  act(() => root.render(held.provide(withQueryClient(createElement(Probe)))));
   act(() => standInbox(initial));
   return {
     history: () => {

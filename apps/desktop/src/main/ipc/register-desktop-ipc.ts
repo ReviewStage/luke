@@ -236,7 +236,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
           sideEffects: clientSettingSideEffects({ applyLoginItem: windows.applyLoginItem }),
         },
         tasks: {
-          host: operator.host,
           acts: operator.acts,
           colorCode,
           openExternal: config.openExternal,

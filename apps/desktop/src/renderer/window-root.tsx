@@ -5,10 +5,9 @@
  * module is the window's startup, and a runtime edge
  * (`tools/anti-slop/effect-edges.json`) where it reads the window's document
  * into its Query client: it is evaluated once per window, so no two windows
- * share a browser registry.
+ * share a Query client.
  */
 
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACT_PORT, type PreloadBridge } from "@repo/host/bridge";
 import { actPort, installActPort, installAppBridge, openPushStream } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
@@ -22,7 +21,6 @@ import {
   PANEL_SPAN,
 } from "@repo/panel/panel-spans";
 import { QueryProvider, queryClient } from "@repo/panel/query-client";
-import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { installSendTracer } from "@repo/panel/send-traces";
 import { followAppState } from "@repo/panel/use-app-state";
 import { RELOAD_ROOM, ReloadState } from "@repo/ui/error-boundary";
@@ -133,12 +131,10 @@ export function mountWindow(
     }
     endWindowSpanOnFirstDraw(rootElement, PANEL_SPAN.WINDOW_FIRST_PAINT);
     draw(
-      <RegistryContext.Provider value={rendererRegistry}>
-        <QueryProvider>
-          <LiveReadSubscription />
-          {surface}
-        </QueryProvider>
-      </RegistryContext.Provider>,
+      <QueryProvider>
+        <LiveReadSubscription />
+        {surface}
+      </QueryProvider>,
     );
   })();
 }

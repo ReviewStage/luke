@@ -4,11 +4,10 @@ import assert from "node:assert/strict";
 import { MOTION_DELAY_MS } from "@repo/brand";
 import { AGENT_ARCHIVER, AGENT_STATUS, type AgentArchivedBy } from "@repo/features/agent-wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
@@ -29,7 +28,7 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** A summary's Archived fold, its one archived agent drawn over a registry of its own, `onOpen` hearing a row opened. */
+/** A summary's Archived fold, its one archived agent drawn, `onOpen` hearing a row opened. */
 function drawArchived(onOpen: (agentId: string) => void = () => undefined): HTMLElement {
   const agents = agentsControl({
     archived: [
@@ -51,12 +50,7 @@ function drawArchived(onOpen: (agentId: string) => void = () => undefined): HTML
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(ArchivedAgents, { agents, shown: true, onOpen }),
-      ),
-    ),
+    root.render(withQueryClient(createElement(ArchivedAgents, { agents, shown: true, onOpen }))),
   );
   return container;
 }
@@ -135,8 +129,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: AgentArchivedBy):
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(ArchivedAgents, { agents, shown: true, onOpen: () => undefined }),
       ),
     ),
@@ -214,8 +207,7 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
     roots.push(root);
     act(() =>
       root.render(
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           createElement(ArchivedAgents, { agents, shown: true, onOpen: () => undefined }),
         ),
       ),

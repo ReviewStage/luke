@@ -4,12 +4,11 @@ import assert from "node:assert/strict";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import { pageFrameUrl } from "@repo/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { PageCard } from "./page-card.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
@@ -46,9 +45,7 @@ test("a version written while the card stands is hidden until it loads, never th
   roots.push(root);
   const render = (page: PageLine) =>
     act(() =>
-      root.render(
-        onRegistry(AtomRegistry.make(), createElement(PageCard, { place: { taskId: TASK }, page })),
-      ),
+      root.render(withQueryClient(createElement(PageCard, { place: { taskId: TASK }, page }))),
     );
   const preview = () => container.querySelector<HTMLElement>(".ui-page-thumb");
   const load = () =>
@@ -78,9 +75,7 @@ test("a provenance row says who showed the version, wherever the card hangs: Ves
   roots.push(root);
   const subOf = (page: PageLine) => {
     act(() =>
-      root.render(
-        onRegistry(AtomRegistry.make(), createElement(PageCard, { place: { taskId: TASK }, page })),
-      ),
+      root.render(withQueryClient(createElement(PageCard, { place: { taskId: TASK }, page }))),
     );
     return container.querySelector(".ui-hover-card-row")?.textContent;
   };
@@ -107,8 +102,7 @@ test("a press on the agent that showed the version opens its tab, on the page's 
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(OpenLinkProvider, {
           value: (link) => opened.push(link.place),
           children: createElement(PageCard, {
@@ -132,10 +126,7 @@ test("the preview's page is handed the window's theme when it asks, with the roo
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(PageCard, { place: { taskId: TASK }, page: FUNNEL }),
-      ),
+      withQueryClient(createElement(PageCard, { place: { taskId: TASK }, page: FUNNEL })),
     ),
   );
   const framed = container.querySelector("iframe")?.contentWindow;

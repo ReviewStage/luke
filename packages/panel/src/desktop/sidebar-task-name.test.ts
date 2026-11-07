@@ -3,12 +3,11 @@
 import assert from "node:assert/strict";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -76,11 +75,7 @@ async function mountSidebar(): Promise<HTMLElement> {
     workspaces: [WORKSPACE],
     workspace: WORKSPACE,
   });
-  act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
-    ),
-  );
+  act(() => root.render(withQueryClient(createElement(DesktopSidebar, sidebarProps(tasks)))));
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });

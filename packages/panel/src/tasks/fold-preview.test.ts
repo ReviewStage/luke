@@ -5,13 +5,12 @@ import { CALL_KIND, type CallKind } from "@repo/features/turn-rows";
 import { DisclosureFind } from "@repo/ui";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { TOOL_BLOCK, TOOL_STATE, type ToolBlock } from "../ai-elements/tool.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { TranscriptTodosDock, TranscriptTool } from "./transcript-blocks.js";
@@ -42,12 +41,7 @@ function drawn(element: ReactElement, finding = false): HTMLElement {
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DisclosureFind, { finding, children: element }),
-      ),
-    ),
+    root.render(withQueryClient(createElement(DisclosureFind, { finding, children: element }))),
   );
   return container;
 }

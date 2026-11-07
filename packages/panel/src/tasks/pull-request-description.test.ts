@@ -20,7 +20,6 @@ import {
 import { ACT_KIND } from "@repo/host/acts";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -32,7 +31,7 @@ import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, handMembers, holdPullRequestParts } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -205,8 +204,7 @@ async function drawTab(canEditDescription = true): Promise<HTMLElement> {
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         onSideBundles(
           bundles,
           createElement(GitHubConnectProvider, {

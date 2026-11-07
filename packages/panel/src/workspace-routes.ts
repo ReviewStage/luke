@@ -1,5 +1,5 @@
 /**
- * workspace-routes.ts -- a workspace's Board and a person's page as the router stands them: whether each stands, what its address names, and the navigation that opens it.
+ * workspace-routes.ts -- a workspace's Board, a person's page, and a workspace not there for the reader as the router stands them: whether each stands, what its address names, and the navigation that opens it.
  *
  * Both are routed places (`panel-router.tsx`) under the workspace their
  * address names, read from the address alone, as Admin is
@@ -8,7 +8,10 @@
  * person's page is opened with the name the place that opened it knew them
  * by, which names someone who left; the address holds no name, so the
  * window keeps each one it was handed for as long as it lives, and a step
- * back to the page finds it there.
+ * back to the page finds it there. A Home or Board link naming none of the
+ * reader's workspaces opens that workspace's address, which the router
+ * finds not found (`panel-router.tsx`), in the step's place, so it is no
+ * step of its own, as it never was.
  */
 
 import { useNavigate, useRouter } from "@tanstack/react-router";
@@ -103,4 +106,33 @@ export function usePersonRoute(input: { onClose: () => void; onStay: () => void 
     onClose: input.onClose,
     onPreload,
   };
+}
+
+/** A workspace's address naming none of the reader's as the router stands it, not found. */
+export interface UnknownWorkspaceRoute {
+  /** The address step of the workspace not there, while its address stands. */
+  readonly workspace: string | undefined;
+  /** Opens the address of the workspace whose address step is `workspace`, in the step's place. */
+  readonly onOpen: (workspace: string) => void;
+  readonly onClose: () => void;
+}
+
+/** A workspace not there for the reader as the router stands it, left by `onClose`, and kept standing by `onStay` as the Board is. */
+export function useUnknownWorkspaceRoute(input: {
+  onClose: () => void;
+  onStay: () => void;
+}): UnknownWorkspaceRoute {
+  const navigate = useNavigate();
+  const here = useWindowPlace();
+  const open = here.place === ROUTED_PLACE.UNKNOWN_WORKSPACE;
+  const standingIn = open ? here.params.workspace : undefined;
+  const onOpen = (workspace: string) => {
+    if (standingIn === workspace) {
+      input.onStay();
+      return;
+    }
+    // Note that it takes the step's place, because a workspace not there for the reader is no place of theirs to come back to.
+    void navigate({ to: "/$workspace", params: { workspace }, replace: true });
+  };
+  return { workspace: standingIn, onOpen, onClose: input.onClose };
 }

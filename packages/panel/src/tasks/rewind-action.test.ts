@@ -4,11 +4,10 @@ import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
 import { AGENT_STATUS, type AgentTranscriptMessage } from "@repo/features/agent-wire";
 import { MESSAGE_ROLE } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { RevertMessageAction, RewindProvider, rewindPoints } from "./rewind-action.js";
 import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 
@@ -121,7 +120,7 @@ async function box(rewound: AgentAgentAnswer, sent: AgentAgentAnswer = REWOUND) 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Box))));
+  await act(async () => root.render(withQueryClient(createElement(Box))));
   const composer = () => {
     if (held.composer === undefined) throw new Error("the box never drew");
     return held.composer;
@@ -275,8 +274,7 @@ async function revertBody(
   const points = rewindPoints(shared, false, readerId);
   await act(async () =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           RewindProvider,
           {

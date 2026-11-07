@@ -11,13 +11,12 @@ import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import { appSettingsView } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 
 /**
@@ -89,9 +88,7 @@ function draw(account: AccountSnapshot): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(SettingsPanel, settingsOn(account)))),
-  );
+  act(() => root.render(withQueryClient(createElement(SettingsPanel, settingsOn(account)))));
   return container;
 }
 

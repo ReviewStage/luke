@@ -21,13 +21,13 @@ subscribed to twice. Read it with `useQuery({ ...appStateQuery, select })` and t
 draws from (a `select…` of `use-app-state.ts`, or a `memoizedSelect` over several), so a patch to one slice draws only
 its readers; `appStateQuery` with no `select` only where the whole document is handed on; or
 `appStateIn(client)` for a callback that cannot wait a render, on the client its
-caller holds (`useQueryClient`'s, a root's, or a test's) — never the registry
-directly, so a hook and a callback cannot disagree. The channels beside it carry
+caller holds (`useQueryClient`'s, a root's, or a test's) — never a store of
+its own, so a hook and a callback cannot disagree. The channels beside it carry
 events rather than state: a one-shot to a named receiver a late subscriber must
 not receive, or a reading that expires before the next version could carry it.
 
-The runtime beside that registry is **the bundle's one Effect edge**. Work that is
-a fiber of its own runs under the services it was built over, read through
+`renderer-runtime.ts` is **the bundle's one Effect edge**. Work that is
+a fiber of its own runs under the services it builds once, read through
 `rendererServicesNow`, so nothing here builds a second runtime to fork on.
 
 Effects leave on the window's act port alone, one oRPC call per kind from

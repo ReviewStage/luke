@@ -52,6 +52,10 @@ export const SETTINGS_SEARCH_ROW = {
   WORKSPACE_RENAME: "workspace-rename",
   /** The Workspace page's identity row, whose ⋯ holds the owner's Change slug. */
   WORKSPACE_SLUG: "workspace-slug",
+  /** Settings › Experimental's group of the experiments the workspace Settings shows chooses for everyone in it. */
+  EXPERIMENTS_WORKSPACE: "experiments-workspace",
+  /** Settings › Experimental's group of the experiments the account chooses for itself alone. */
+  EXPERIMENTS_ACCOUNT: "experiments-account",
 } as const;
 
 /**

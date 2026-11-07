@@ -16,7 +16,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { sectionOrder, sectionTaskIds, workspaceSections } from "@repo/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@repo/ui/tasks-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
@@ -25,7 +24,7 @@ import { QUERY_ROOT } from "../query-keys.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
-import { onRegistry, settleQueries, testQueryClientNow } from "../testing/copy-feedback.js";
+import { settleQueries, testQueryClientNow, withQueryClient } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -215,12 +214,10 @@ async function mountSidebarRedrawn(
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const draw = async (sections: TaskSections) => {
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(
             Fragment,
             null,
@@ -971,11 +968,7 @@ async function mountDraggable(
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
-    ),
-  );
+  act(() => root.render(withQueryClient(createElement(DesktopSidebar, sidebarProps(tasks)))));
   await settle();
   layOutRows();
   return container;
@@ -1131,7 +1124,6 @@ test("Pinned stands once a pin exists, folding and counting it, and once the las
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const draw = async (summaries: readonly TaskSummary[]) => {
     const tasks = tasksControl({
       tasks: [...summaries],
@@ -1139,9 +1131,7 @@ test("Pinned stands once a pin exists, folding and counting it, and once the las
       workspace: WORKSPACE,
       taskSections: SECTIONS,
     });
-    act(() =>
-      root.render(onRegistry(registry, createElement(DesktopSidebar, sidebarProps(tasks)))),
-    );
+    act(() => root.render(withQueryClient(createElement(DesktopSidebar, sidebarProps(tasks)))));
     await settle();
   };
   await draw([PINNED, INVITES, RETRIES]);
@@ -1555,7 +1545,7 @@ test("⇧⌘↓ moves the pin that has the keyboard below the next and leaves it
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(PinsThatMove))));
+  act(() => root.render(withQueryClient(createElement(PinsThatMove))));
   await settle();
   assert.equal(appCommandOffered(APP_COMMAND.MOVE_ROW_DOWN), false, "no row has the keyboard");
 

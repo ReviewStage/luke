@@ -3,12 +3,11 @@
 import assert from "node:assert/strict";
 import { TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -72,7 +71,7 @@ function mountTasks(): HTMLElement {
       workspace: WORKSPACE,
     }),
   );
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, props))));
+  act(() => root.render(withQueryClient(createElement(DesktopSidebar, props))));
   return (
     container.querySelector<HTMLElement>('nav[aria-label="My tasks"]') ??
     assert.fail("no Tasks section")

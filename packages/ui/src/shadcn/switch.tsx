@@ -22,11 +22,11 @@ import { ignoredByReplay } from "../session-replay-marks.js";
 
 /** The track: a pill in the switch's track ink that takes its "on" ink while checked, taking a finger's press around it on a coarse pointer. */
 export const SWITCH_TRACK =
-  "peer group/switch relative inline-flex h-5 w-[34px] shrink-0 items-center rounded-full border-0 bg-switch-track p-0.5 transition-colors duration-(--ui-duration-hover) ease-motion-exit data-checked:bg-switch-on data-disabled:opacity-disabled cursor-press data-disabled:cursor-default pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:size-[max(100%,var(--ui-touch-target))] pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']";
+  "peer group/switch relative inline-flex h-5 w-[34px] shrink-0 items-center rounded-full border-0 bg-switch-track p-0.5 transition-colors duration-(--ui-duration-hover) ease-motion-exit data-checked:bg-switch-on data-disabled:opacity-disabled data-readonly:opacity-disabled cursor-press data-disabled:cursor-default data-readonly:cursor-default pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:size-[max(100%,var(--ui-touch-target))] pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']";
 
 /** The thumb: a round of the switch's thumb ink, lifted by its shadow, slid by transform alone, and giving a little under a press held on an enabled switch. */
 export const SWITCH_THUMB =
-  "pointer-events-none block size-4 rounded-full bg-switch-thumb shadow-switch-thumb transition-transform duration-(--ui-duration-fast) ease-spring-fast data-checked:translate-x-3.5 group-data-checked/switch:translate-x-3.5 group-[:active:not([data-disabled])]/switch:scale-[0.85]";
+  "pointer-events-none block size-4 rounded-full bg-switch-thumb shadow-switch-thumb transition-transform duration-(--ui-duration-fast) ease-spring-fast data-checked:translate-x-3.5 group-data-checked/switch:translate-x-3.5 group-[:active:not([data-disabled]):not([data-readonly])]/switch:scale-[0.85]";
 
 export function ShadcnSwitch({ className, ...props }: SwitchPrimitive.Root.Props) {
   return (

@@ -9,16 +9,14 @@ import {
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { useExpiredServerToasts } from "./expired-server-toasts.js";
-import { rendererRegistry } from "./renderer-runtime.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { holdIntegrations, type IntegrationsHeld } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
 
 /**
@@ -37,7 +35,6 @@ let refuseConnect = false;
 let connects: IntegrationProvider[] = [];
 let integrations: IntegrationsHeld;
 let root: Root | undefined;
-let registry: AtomRegistry.AtomRegistry | undefined;
 
 // SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
 const UNAVAILABLE = Object.fromEntries(
@@ -67,8 +64,6 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
-  registry?.dispose();
-  rendererRegistry.reset();
   document.body.innerHTML = "";
 });
 
@@ -87,12 +82,9 @@ function Toasts(): null {
 async function mount(): Promise<void> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  registry = AtomRegistry.make();
-  const held = registry;
   act(() =>
     root?.render(
-      onRegistry(
-        held,
+      withQueryClient(
         createElement(Fragment, null, createElement(Toasts), createElement(ToastHost)),
       ),
     ),

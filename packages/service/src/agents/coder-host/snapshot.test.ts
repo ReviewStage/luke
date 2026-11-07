@@ -255,21 +255,30 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
     (t) =>
       Effect.gen(function* () {
         const sandbox = sourceSandbox(yield* checkoutFor(t), "stopped");
-        const askedAgain = Deferred.makeUnsafe<void>();
-        let asked = 0;
-        // Free as the copy ends; held by the time the stop behind it has listed the sandbox.
+        const asked = Deferred.makeUnsafe<boolean>();
+        let ran = false;
+        let held = false;
+        // Free as the copy ends; held once the stop behind it lists the sandbox.
         const keepUp = Effect.sync(() => {
-          asked += 1;
-          if (asked > 1) Deferred.doneUnsafe(askedAgain, Effect.void);
-          return asked > 1;
+          Deferred.doneUnsafe(asked, Effect.succeed(held));
+          return held;
         });
+        const answer = (url: string, init: RequestInit) => {
+          const { pathname } = new URL(url);
+          if (pathname.endsWith("/cmd")) ran = true;
+          if (ran && pathname === "/api/v2/sandboxes") held = true;
+          return answerOf(sandbox, url, init);
+        };
 
-        const outcome = yield* copyOver((url, init) => answerOf(sandbox, url, init), keepUp);
-        yield* Deferred.await(askedAgain);
+        const outcome = yield* copyOver(answer, keepUp);
+        const heldWhenAsked = yield* Deferred.await(asked);
         yield* Effect.yieldNow;
 
         assert.ok(outcome.copied);
-        assert.deepEqual([sandbox.state.status, sandbox.stops], ["running", []]);
+        assert.deepEqual(
+          [heldWhenAsked, sandbox.state.status, sandbox.stops],
+          [true, "running", []],
+        );
       }),
   );
 

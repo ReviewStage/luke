@@ -1,17 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { getTestDB, mutableFunctionsOf } from "@repo/database/testing";
 import { LIVE_PARAM } from "@repo/features/live-read";
 import { Effect, Option } from "effect";
-import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
-import {
-  accountInboxLiveStatements,
-  memberAgentInboxLiveStatements,
-  taskInboxLiveStatements,
-} from "../inbox/inbox-store.js";
 import { BOUND_READS } from "../sync/live-queries.js";
+import type { SyncMoved } from "../sync/live-query.js";
 
 /**
  * Every statement the live endpoints answer calls only functions Postgres
@@ -22,8 +16,11 @@ import { BOUND_READS } from "../sync/live-queries.js";
 
 const USER_ID = "user-live-statements";
 
-/** Every bound read's statements (`../live-read-binding.ts`), by its read and part, each param the reader or a fresh id. */
-function boundStatements() {
+/** What moved for a delta read's statements: one key of every table, column, and topic kind, so every way it narrows is built. */
+const MOVED_EVERYTHING: SyncMoved = { keys: () => [randomUUID()], topics: () => [randomUUID()] };
+
+/** Every bound read's statements (`./live-read-binding.ts`), by its read and part, each param the reader or a fresh id: its whole statements, and a delta read's narrowed ones too. */
+function liveStatements() {
   return Object.fromEntries(
     BOUND_READS.flatMap((query) => {
       const params = Object.fromEntries(
@@ -32,38 +29,19 @@ function boundStatements() {
           param === LIVE_PARAM.USER ? USER_ID : randomUUID(),
         ]),
       );
-      return Object.entries(Option.getOrThrow(query.statements(params))).map(
-        ([part, statement]) => [`${query.name}.${part}`, statement],
-      );
+      const whole = Object.entries(Option.getOrThrow(query.statements(params)));
+      const narrowed =
+        query.delta === undefined
+          ? []
+          : Object.entries(Option.getOrThrow(query.delta.statements(params, MOVED_EVERYTHING))).map(
+              ([part, statement]) => [`delta.${part}`, statement] as const,
+            );
+      return [...whole, ...narrowed].map(([part, statement]) => [
+        `${query.name}.${part}`,
+        statement,
+      ]);
     }),
   );
-}
-
-/** Every live statement the endpoints answer, by the part it answers. */
-function liveStatements() {
-  const parent = randomUUID();
-  const transcript = Option.getOrThrow(
-    transcriptLiveStatements(
-      { userId: USER_ID, conversationId: parent },
-      parent,
-      agentFollowedBy(USER_ID, parent, USER_ID),
-    ),
-  );
-  const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID, true));
-  const task = Option.getOrThrow(taskInboxLiveStatements(USER_ID, randomUUID()));
-  const agent = Option.getOrThrow(memberAgentInboxLiveStatements(USER_ID, randomUUID()));
-  return {
-    ...Object.fromEntries(
-      Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
-    ),
-    "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
-    ...Object.fromEntries(
-      Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
-    ),
-    ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
-    ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
-    ...boundStatements(),
-  };
 }
 
 it.layer(getTestDB())("the live statements", (it) => {

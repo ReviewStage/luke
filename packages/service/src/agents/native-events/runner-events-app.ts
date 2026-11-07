@@ -244,13 +244,6 @@ export interface RunnerEventsOptions<R = never> {
     target: ConversationTarget,
     agent: Agent,
   ) => Effect.Effect<void, never, DatabaseServices | R>;
-  /**
-   * Told once a batch that ended a turn has landed, after its transaction,
-   * and run after the answer: the agent's queue handed on, or paused where
-   * the turn was stopped or failed (`../coder-host/agent-queue.ts`). Nothing
-   * where left out.
-   */
-  readonly turnEnded?: (agent: Agent) => Effect.Effect<void, never, DatabaseServices | R>;
 }
 
 /**
@@ -323,10 +316,10 @@ const waitingHandedOn = (ended: RunnerEnded, sessionId: string) =>
  * A launch's IDLE as the device hears it: the warm runner retired at once
  * where its device waits to switch release
  * (`../coder-host/runner-sessions.ts`'s `runnerIdled`); it otherwise stays
- * warm, and the sweep retires it past the window. A sandbox's runner is
- * launched to end at its turn's end, so it posts no IDLE. A retire that
- * fails is said in the log and passed over, because the sweep retires the
- * runner once its grace passes.
+ * warm, and ends itself past the window. A sandbox's runner is launched to
+ * end at its turn's end, so it posts no IDLE. A retire that fails is said in
+ * the log and passed over, because the host retires its own warm runners
+ * while it waits to update.
  */
 export function sandboxAtRunnerIdle(
   idled: RunnerEnded,
@@ -681,7 +674,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   HostedRefusal,
   HttpServerRequest.HttpServerRequest | DatabaseServices | Scope.Scope | R
 > {
-  const { read, ended, idled, alive, title, turnEnded } = options;
+  const { read, ended, idled, alive, title } = options;
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.POST) {
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
@@ -774,10 +767,6 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   // Note that the title runs after the answer, kept awake past it, because the runner need not wait on a model.
   if (title !== undefined && (applied.value.turns.started || applied.value.turns.ended)) {
     yield* afterResponse("a coding agent's title", title(target, agent.value));
-  }
-  // Note that the queue is handed on after the answer, because the runner's post need not wait on a send that may wake a sandbox.
-  if (turnEnded !== undefined && applied.value.turns.ended) {
-    yield* afterResponse("a coding agent's queue", turnEnded(agent.value));
   }
   if (alive !== undefined && applied.value.keepsAlive) {
     yield* alive({ target, sessionId: admitted.value.runtimeSessionId });

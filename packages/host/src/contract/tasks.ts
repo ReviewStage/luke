@@ -7,19 +7,20 @@
  * whether the service took it answers a boolean, and one the panel reads
  * nothing of answers `void`; a refusal or a defect of the host's is drawn as
  * the answer each drew before it was declared: `false`, nothing, or the
- * task calls' unanswered failure. Each hold, its Try again, and each address
- * opened in the browser stays a procedure of its own
+ * task calls' unanswered failure. Each live read the tab holds is a live
+ * follow (`live-follow.ts`), relayed by `act-port/live-follows.ts`; each
+ * address opened in the browser stays a procedure of its own
  * (`act-port/tasks-procedures.ts`), as does Connect GitHub, whose page the
  * window opens.
  */
 
-import { eventIterator, type } from "@orpc/contract";
 import {
   ADMIN_UNANSWERED,
   adminFavoriteParamsSchema,
   adminReadAnswerSchema,
   adminReadParamsSchema,
 } from "@repo/features/admin-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   codeLinesSchema,
   TASK_CALL_FAILURE,
@@ -87,6 +88,7 @@ import {
 import { actProcedure, exactInput } from "./base.js";
 import { contractOf, declaredActs, hostAct } from "./declared-act.js";
 import { TASKS_ACT_KIND } from "./kinds.js";
+import { followsContractOf, HOLD, liveFollow, liveFollows } from "./live-follow.js";
 
 const takesNothing = exactInput(EffectSchema.Undefined);
 const taskIdParamsSchema = EffectSchema.Struct({ taskId: exactId });
@@ -397,19 +399,83 @@ export const TASKS_ACTS = declaredActs({
   }),
 });
 
+/**
+ * The Tasks tab's live reads the host follows for the windows, each held by
+ * a key a window names: a workspace's repositories, a link's standing,
+ * Browser tabs, pages, a description, its history, and comments. A link's
+ * standing, Browser tabs, and pages have no Try again.
+ */
+export const TASKS_FOLLOWS = liveFollows({
+  TASKS_REPOSITORIES_FOLLOW: liveFollow({
+    slice: LIVE_READ.REPOSITORY_LISTS,
+    hold: HOLD.WINDOW,
+    key: tasksRepositoriesParamsSchema,
+    refusal: "Could not follow your GitHub repositories on this system.",
+    panelOnly: true,
+    retry: {
+      name: "TASKS_REPOSITORIES_RETRY",
+      refusal: "Could not read your GitHub repositories again on this system.",
+    },
+  }),
+  TASKS_LINK_STANDING_FOLLOW: liveFollow({
+    slice: LIVE_READ.LINK_STANDINGS,
+    hold: HOLD.WINDOW,
+    key: tasksLinkStandingParamsSchema,
+    refusal: "Could not follow that link on this system.",
+    panelOnly: true,
+  }),
+  TASKS_BROWSER_TABS_FOLLOW: liveFollow({
+    slice: LIVE_READ.BROWSER_TABS,
+    hold: HOLD.WINDOW,
+    key: taskBrowserTabsFollowSchema,
+    refusal: "Could not follow the task's Browser tabs on this system.",
+    panelOnly: true,
+  }),
+  TASKS_PAGES_FOLLOW: liveFollow({
+    slice: LIVE_READ.PAGES,
+    hold: HOLD.WINDOW,
+    key: taskPagesFollowSchema,
+    refusal: "Could not follow that task's pages on this system.",
+    panelOnly: true,
+  }),
+  TASKS_DOCUMENT_FOLLOW: liveFollow({
+    slice: LIVE_READ.DESCRIPTION_DOCUMENT,
+    hold: HOLD.WINDOW,
+    key: taskDocumentFollowSchema,
+    refusal: "Could not follow that task's description on this system.",
+    panelOnly: true,
+    retry: {
+      name: "TASKS_DOCUMENT_RETRY",
+      refusal: "Could not read that task's description again on this system.",
+    },
+  }),
+  TASKS_HISTORY_FOLLOW: liveFollow({
+    slice: LIVE_READ.HISTORY,
+    hold: HOLD.WINDOW,
+    key: taskHistoryFollowSchema,
+    refusal: "Could not follow that description's history on this system.",
+    panelOnly: true,
+    retry: {
+      name: "TASKS_HISTORY_RETRY",
+      refusal: "Could not read that description's history again on this system.",
+    },
+  }),
+  TASKS_COMMENTS_FOLLOW: liveFollow({
+    slice: LIVE_READ.DESCRIPTION_COMMENTS,
+    hold: HOLD.WINDOW,
+    key: tasksCommentsFollowSchema,
+    refusal: "Could not follow the task's comments on this system.",
+    panelOnly: true,
+    retry: {
+      name: "TASKS_COMMENTS_RETRY",
+      refusal: "Could not read the task's comments again on this system.",
+    },
+  }),
+});
+
 export const tasksActsContract = {
   ...contractOf(TASKS_ACTS),
-  // Note that the hold's stream carries nothing: the held repositories reach the panel on app state, and the stream is the window's hold on them.
-  [TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW]: actProcedure(
-    "Could not follow your GitHub repositories on this system.",
-  )
-    .input(exactInput(tasksRepositoriesParamsSchema))
-    .output(eventIterator(type<never>())),
-  [TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY]: actProcedure(
-    "Could not read your GitHub repositories again on this system.",
-  )
-    .input(exactInput(tasksRepositoriesParamsSchema))
-    .output(EffectSchema.Void),
+  ...followsContractOf(TASKS_FOLLOWS),
   [TASKS_ACT_KIND.GITHUB_OPEN]: actProcedure("Could not open GitHub on this system.")
     .input(exactInput(EffectSchema.Struct({ url: githubAddress })))
     .output(EffectSchema.Void),
@@ -419,57 +485,7 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.ADMIN_OPEN]: actProcedure("Could not open the admin dashboard on this system.")
     .input(takesNothing)
     .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held standing reaches the panel on app state, and the stream is the window's hold on it.
-  [TASKS_ACT_KIND.TASKS_LINK_STANDING_FOLLOW]: actProcedure(
-    "Could not follow that link on this system.",
-  )
-    .input(exactInput(tasksLinkStandingParamsSchema))
-    .output(eventIterator(type<never>())),
-  [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: actProcedure(
-    "Could not follow the task's Browser tabs on this system.",
-  )
-    .input(exactInput(taskBrowserTabsFollowSchema))
-    .output(eventIterator(type<never>())),
   [TASKS_ACT_KIND.TASKS_COLOR_CODE]: actProcedure("Could not color that code on this system.")
     .input(exactInput(colorCodeParamsSchema))
     .output(EffectSchema.flip(codeLinesSchema)),
-  // Note that the hold's stream carries nothing: the held pages reach the panel on app state, and the stream is the window's hold on them.
-  [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: actProcedure(
-    "Could not follow that task's pages on this system.",
-  )
-    .input(exactInput(taskPagesFollowSchema))
-    .output(eventIterator(type<never>())),
-  // Note that the hold's stream carries nothing: the held description reaches the panel on app state, and the stream is the window's hold on it.
-  [TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW]: actProcedure(
-    "Could not follow that task's description on this system.",
-  )
-    .input(exactInput(taskDocumentFollowSchema))
-    .output(eventIterator(type<never>())),
-  [TASKS_ACT_KIND.TASKS_DOCUMENT_RETRY]: actProcedure(
-    "Could not read that task's description again on this system.",
-  )
-    .input(exactInput(taskDocumentFollowSchema))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held history reaches the panel on app state, and the stream is the window's hold on it.
-  [TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW]: actProcedure(
-    "Could not follow that description's history on this system.",
-  )
-    .input(exactInput(taskHistoryFollowSchema))
-    .output(eventIterator(type<never>())),
-  [TASKS_ACT_KIND.TASKS_HISTORY_RETRY]: actProcedure(
-    "Could not read that description's history again on this system.",
-  )
-    .input(exactInput(taskHistoryFollowSchema))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held comments reach the panel on app state, and the stream is the window's hold on them.
-  [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: actProcedure(
-    "Could not follow the task's comments on this system.",
-  )
-    .input(exactInput(tasksCommentsFollowSchema))
-    .output(eventIterator(type<never>())),
-  [TASKS_ACT_KIND.TASKS_COMMENTS_RETRY]: actProcedure(
-    "Could not read the task's comments again on this system.",
-  )
-    .input(exactInput(tasksCommentsFollowSchema))
-    .output(EffectSchema.Void),
 };

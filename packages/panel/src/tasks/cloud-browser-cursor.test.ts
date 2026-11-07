@@ -3,12 +3,11 @@
 import assert from "node:assert/strict";
 import type { AgentBrowserTab } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_LIVE_SERVER } from "@repo/features/browser-live-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserPane } from "./cloud-browser-pane.js";
 
@@ -87,10 +86,8 @@ async function paneOf(tab: AgentBrowserTab): Promise<{
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const pane = (shown: AgentBrowserTab) =>
-    onRegistry(
-      registry,
+    withQueryClient(
       createElement(CloudBrowserPane, {
         tab: shown,
         owner: { name: "Vespin", icon: createElement("span") },

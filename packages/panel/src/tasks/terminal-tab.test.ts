@@ -25,7 +25,6 @@ import { terminalTab } from "@repo/ui/tab-strip-model";
 import { STILL_CLOCK, serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { UnparsedWireValue } from "@repo/wire";
 import { Clock, Context, Effect, Schema } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -33,7 +32,7 @@ import type { SideBundles } from "../bundle-loader.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads } from "../testing/app-state.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { onTerminals, windowTerminals } from "../testing/terminals.js";
@@ -143,7 +142,6 @@ interface Main {
 }
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 // The terminal bundle landed before any tab is drawn, as it is once a terminal has been shown in this window.
 let FITTED: SideBundles;
@@ -258,7 +256,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
   window.sessionStorage.clear();
@@ -283,8 +280,6 @@ async function mount(shown = true, still = true, account?: string) {
   // (`still` off), because it steps on a beat forever, and a test that runs every fake timer out would
   // never finish.
   serveEffectsOn(still ? Context.make(Clock.Clock, STILL_CLOCK) : Context.empty());
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const terminals = windowTerminals();
   let closed = 0;
   let end: ((tab: TerminalStripTab) => void) | undefined;
@@ -310,8 +305,7 @@ async function mount(shown = true, still = true, account?: string) {
     });
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           onTerminals(
             terminals,
             createElement(
@@ -565,6 +559,31 @@ test("the first account signing in again finds its terminal, which attaches to t
   assert.deepEqual(tab.terminals.held.of("ada", TERMINAL_KIND.CLOUD, AGENT.id), [
     { shell: TAB.shell, title: "Cloud 1", terminal: MADE },
   ]);
+});
+
+test("a switch away and back before the first attach's port arrives keeps the screen on the latest port, the earlier one closed and no shell ended", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+  await tab.signIn("grace", false);
+  await tab.signIn("ada", true);
+
+  const first = main.post(MADE);
+  const second = main.post(MADE);
+  second.say({ type: "state", state: "attached" });
+  await tab.type("a", 65);
+
+  assert.deepEqual(
+    tab.kinds().filter((kind) => kind === ACT_KIND.TERMINAL_ATTACH),
+    ["terminal.attach", "terminal.attach"],
+  );
+  assert.equal(first.closed(), true);
+  assert.equal(second.closed(), false);
+  assert.equal(tab.standing(), "· connected");
+  assert.deepEqual(
+    second.posted.filter((message) => message.type === "input"),
+    [{ type: "input", data: "a" }],
+  );
+  assert.ok(!tab.kinds().includes(ACT_KIND.TERMINAL_KILL), "no shell was ended");
 });
 
 test("a tab shown over a stopped sandbox resumes it, saying it is connecting, and one that stops while the tab is hidden waits until it is shown", async () => {

@@ -6,7 +6,6 @@ packages:
 catalog:
   typescript: 7.0.2
   effect: 4.0.4
-  "@effect/atom-react": 4.0.4
   "@effect/platform-node": 4.0.4
   "@effect/sql-pg": 4.0.4
   "@effect/sql-pglite": 4.0.4

@@ -5,7 +5,6 @@ import type { AgentAgentAnswer } from "@repo/features/agent-view";
 import { AGENT_BOUNDS } from "@repo/features/agent-wire";
 import { FAILURE_SURFACE, type ShownFailureReport } from "@repo/features/shown-failure";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
@@ -20,7 +19,7 @@ import {
   installEditorLayout,
   QUIET_COMPOSER,
 } from "./testing/composer.js";
-import { onRegistry, testQueryClientNow } from "./testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "./testing/copy-feedback.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 
 /**
@@ -117,7 +116,7 @@ async function mounted(box: keyof typeof BOXES): Promise<HTMLElement> {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(onRegistry(AtomRegistry.make(), BOXES[box]())));
+  await act(async () => root.render(withQueryClient(BOXES[box]())));
   await settle();
   return container;
 }
@@ -217,7 +216,7 @@ test("a note of files left out goes once the box's message is queued, as it goes
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(QueueingBox))));
+  await act(async () => root.render(withQueryClient(createElement(QueueingBox))));
   await settle();
   await drop(container, [png("one.png", size), png("two.png", size), png("three.png", size)]);
   assert.equal(held(container).note, "These files are too large to send together.");

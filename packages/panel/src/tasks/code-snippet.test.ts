@@ -6,7 +6,6 @@ import type { InboxCodeBlock } from "@repo/features/inbox-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -16,7 +15,7 @@ import { diffView } from "../diff-view/index.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { InboxCodeCard } from "./inbox-code-card.js";
 
@@ -104,7 +103,7 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), onSideBundles(bundles, element))));
+  act(() => root.render(withQueryClient(onSideBundles(bundles, element))));
   await settle();
   return container;
 }

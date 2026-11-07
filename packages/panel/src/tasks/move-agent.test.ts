@@ -13,14 +13,13 @@ import type { MacOffer } from "@repo/features/models-wire";
 import { TASK_MODE } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import type { MenuEntry } from "../desktop/action-menu.js";
 import { agentMenuGroups, useAgentActions } from "../desktop/agent-actions.js";
 import { handState, stateWith } from "../testing/app-state.js";
-import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import type { AgentsControl } from "./use-agents.js";
 
@@ -104,7 +103,7 @@ async function menuOf(
     return null;
   }
   const root = createRoot(document.createElement("div"));
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  act(() => root.render(withQueryClient(createElement(Probe))));
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });

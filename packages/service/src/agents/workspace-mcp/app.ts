@@ -75,6 +75,7 @@ import type { AdmittedConversation } from "../sessions/admitted-conversation.js"
 import {
   callTool,
   isServedTool,
+  listedTool,
   type McpContent,
   offeredTools,
   type WorkspaceMcpServices,
@@ -333,7 +334,8 @@ function callWorkspaceTool(
 /**
  * The tools listed to the admitted agent: those the catalog offers it by
  * where it stands against the gates (`../tool-catalog/gates.ts`), every
- * gate shut where its row is gone.
+ * gate shut where its row is gone, each in the words of its workspace's
+ * experiments (`listedTool`).
  */
 function listWorkspaceTools(
   admitted: AdmittedConversation,
@@ -342,8 +344,7 @@ function listWorkspaceTools(
     Effect.map((standing) => {
       const tools = offeredTools(standing).map((tool) => ({
         name: tool.name,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
+        ...listedTool(tool, standing),
         _meta: tool.alwaysLoad ? ALWAYS_LOADED_META : TOOL_META,
       }));
       return Result.succeed({ tools });

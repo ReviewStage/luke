@@ -24,6 +24,41 @@ export const EXPERIMENT = {
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
 
+/** Whose choice an experiment is: a workspace's, made by its admins for every member and agent in it, or each account's own. */
+export const EXPERIMENT_SCOPE = {
+  WORKSPACE: "workspace",
+  ACCOUNT: "account",
+} as const;
+
+export type ExperimentScope = (typeof EXPERIMENT_SCOPE)[keyof typeof EXPERIMENT_SCOPE];
+
+/**
+ * The experiments a workspace turns on for everyone in it: each changes what
+ * its members share and what every agent in it reads and writes, so one
+ * member's choice cannot stand apart from another's. Every experiment not
+ * listed here is each account's own.
+ */
+export const WORKSPACE_EXPERIMENT_LIST = [
+  EXPERIMENT.DESCRIPTIONS,
+  EXPERIMENT.PILOT,
+  EXPERIMENT.MEMORY,
+] as const;
+
+export type WorkspaceExperiment = (typeof WORKSPACE_EXPERIMENT_LIST)[number];
+export type AccountExperiment = Exclude<Experiment, WorkspaceExperiment>;
+
+const isWorkspaceExperimentKey = Schema.is(Schema.Literals(WORKSPACE_EXPERIMENT_LIST));
+
+/** Whether an experiment is a workspace's choice rather than an account's. */
+export function isWorkspaceExperiment(experiment: Experiment): experiment is WorkspaceExperiment {
+  return isWorkspaceExperimentKey(experiment);
+}
+
+/** Whose choice an experiment is. */
+export function experimentScope(experiment: Experiment): ExperimentScope {
+  return isWorkspaceExperiment(experiment) ? EXPERIMENT_SCOPE.WORKSPACE : EXPERIMENT_SCOPE.ACCOUNT;
+}
+
 /** One experiment as the Experimental page lists it. */
 export interface ExperimentEntry {
   readonly key: Experiment;
@@ -121,7 +156,60 @@ export function experimentChoicesFrom(value: UnparsedWireValue): ExperimentChoic
   return choices;
 }
 
-/** Whether the account has turned an experiment on. */
-export function experimentOn(choices: ExperimentChoices, experiment: Experiment): boolean {
+/** What an account has chosen of its own experiments, with every workspace experiment its store still keeps for an older build left out. */
+export type AccountExperimentChoices = { readonly [Key in AccountExperiment]?: boolean };
+
+/** What a workspace's owners and admins have chosen for everyone in it; an experiment never chosen is absent, which reads as off. */
+export type WorkspaceExperimentChoices = { readonly [Key in WorkspaceExperiment]?: boolean };
+
+/** No workspace experiment chosen: every one off. */
+export const NO_WORKSPACE_EXPERIMENTS: WorkspaceExperimentChoices = {};
+
+/**
+ * An account's choices of its own experiments alone. Note that its store
+ * keeps its old choice of a workspace experiment for an older build, which
+ * must never be read as the workspace's.
+ */
+export function accountExperimentChoices(choices: ExperimentChoices): AccountExperimentChoices {
+  return Object.fromEntries(
+    Object.entries(choices).filter(([key]) => isExperiment(key) && !isWorkspaceExperiment(key)),
+  );
+}
+
+/**
+ * A workspace's choices as its entry on the list carries them, keeping each
+ * workspace experiment's on or off and ignoring a key this build does not
+ * list as one, a newer build's or a graduated one's.
+ */
+export function workspaceExperimentChoicesFrom(
+  entries: readonly { readonly experiment: string; readonly on: boolean }[] | undefined,
+): WorkspaceExperimentChoices {
+  const choices: Partial<Record<WorkspaceExperiment, boolean>> = {};
+  for (const { experiment, on } of entries ?? []) {
+    if (isWorkspaceExperimentKey(experiment)) choices[experiment] = on;
+  }
+  return choices;
+}
+
+/**
+ * The experiments on where a member works in one workspace: the account's
+ * choice of its own experiments, and the workspace's of the workspace's.
+ */
+export function experimentsIn(
+  account: ExperimentChoices,
+  workspace: WorkspaceExperimentChoices,
+): ExperimentChoices {
+  return { ...accountExperimentChoices(account), ...workspace };
+}
+
+/**
+ * Whether a choice has an experiment on. Note that the experiment is one the
+ * choice can hold, so an account's choices refuse a workspace experiment at
+ * compile time rather than reading it as off.
+ */
+export function experimentOn<Key extends Experiment>(
+  choices: { readonly [Each in Key]?: boolean },
+  experiment: NoInfer<Key>,
+): boolean {
   return choices[experiment] === true;
 }

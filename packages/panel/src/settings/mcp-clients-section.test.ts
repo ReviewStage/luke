@@ -5,14 +5,13 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { MCP_CLIENTS_CALL_FAILURE, type McpClientsView } from "@repo/features/mcp-client-view";
 import type { McpClient } from "@repo/features/mcp-client-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, signedInAs } from "../testing/app-state.js";
-import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeHandedAppState } from "../testing/copy-feedback.js";
 import { McpClientsSections } from "./mcp-clients-section.js";
 
 /**
@@ -33,11 +32,9 @@ beforeAll(() => {
 });
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.replaceChildren();
 });
 
@@ -131,13 +128,11 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
   // Note that Codex's mark is served under the platform's asset base, which a row may draw.
   fakeAppPlatform(QUIET_PANEL);
   await writeHandedAppState();
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(registry, createElement(McpClientsSections))));
+  act(() => root.render(withQueryClient(createElement(McpClientsSections))));
   await settle();
   assert.ok(pageText().includes("Goes to an app on this computer"), pageText());
   assert.ok(!pageText().includes("Vespin CLI"), "the command's sign-in is Settings › CLI's");

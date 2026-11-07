@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import type { AgentAttachment, AgentTranscriptMessage } from "@repo/features/agent-wire";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -15,7 +14,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures.js";
 import { EditComposer } from "./edit-composer.js";
@@ -66,12 +65,11 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The line's box mounted in the window `registry` stands for, every way it ended written down, its pictures read through `door` where one is handed. */
+/** The line's box mounted, every way it ended written down, its pictures read through `door` where one is handed. */
 async function opened(
   line: AgentTranscriptMessage = LINE,
   door?: AgentPictureDoor,
   words = "Also email the inviter.",
-  registry = AtomRegistry.make(),
   cut: { cuts: boolean; takes?: string | undefined } = { cuts: false },
 ) {
   const ended: { words: string; files: readonly AgentAttachment[] }[] = [];
@@ -82,8 +80,7 @@ async function opened(
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(
           AgentPicturesProvider,
           { value: door },
@@ -142,14 +139,13 @@ test("Cancel and Escape close it and send nothing", async () => {
 });
 
 test("what was written is there again when Edit opens the line after an Escape, and a send lets it go", async () => {
-  const registry = AtomRegistry.make();
-  const first = await opened(LINE, undefined, "Also email the inviter.", registry);
+  const first = await opened(LINE, undefined, "Also email the inviter.");
   typeInComposer(first.container, " Use their address.");
   pressInComposer(first.container, "Escape");
   assert.equal(first.canceled(), 1);
   first.close();
 
-  const again = await opened(LINE, undefined, "Also email the inviter.", registry);
+  const again = await opened(LINE, undefined, "Also email the inviter.");
   assert.equal(
     composerEditor(again.container).textContent,
     "Also email the inviter. Use their address.",
@@ -164,7 +160,7 @@ test("what was written is there again when Edit opens the line after an Escape, 
   ]);
   again.close();
 
-  const sent = await opened(LINE, undefined, "Also email the inviter.", registry);
+  const sent = await opened(LINE, undefined, "Also email the inviter.");
   assert.equal(composerEditor(sent.container).textContent, "Also email the inviter.");
 });
 
@@ -177,7 +173,10 @@ test("a file taken off before an Escape stays off when Edit opens the line again
   first.close();
 
   // A window of its own, as a relaunch opens, which finds the draft's words and none of its files.
-  const again = await opened(LINE, undefined, "Also email the inviter.", AtomRegistry.make());
+  act(() => {
+    window.dispatchEvent(new Event("pagehide"));
+  });
+  const again = await opened(LINE, undefined, "Also email the inviter.");
   pressInComposer(again.container, "Enter");
   await settle();
   assert.deepEqual(again.ended, [{ words: "Also email the inviter.", files: [] }]);
@@ -201,7 +200,10 @@ test("one of two like files taken off stays off after a relaunch, and the other 
   pressInComposer(first.container, "Escape");
   first.close();
 
-  const again = await opened(twice, undefined, "Also email the inviter.", AtomRegistry.make());
+  act(() => {
+    window.dispatchEvent(new Event("pagehide"));
+  });
+  const again = await opened(twice, undefined, "Also email the inviter.");
   pressInComposer(again.container, "Enter");
   await settle();
   assert.deepEqual(again.ended, [
@@ -237,15 +239,14 @@ test("a picture that lands after words were written goes with them when Edit ope
         land = () => resolve({ contentType: "image/png", base64: PIXEL });
       }),
   };
-  const registry = AtomRegistry.make();
-  const first = await opened(KEPT, door, "And this one.", registry);
+  const first = await opened(KEPT, door, "And this one.");
   typeInComposer(first.container, " Look closely.");
   await act(async () => land?.());
   await settle();
   pressInComposer(first.container, "Escape");
   first.close();
 
-  const again = await opened(KEPT, door, "And this one.", registry);
+  const again = await opened(KEPT, door, "And this one.");
   pressInComposer(again.container, "Enter");
   await settle();
   assert.deepEqual(again.ended, [
@@ -291,7 +292,7 @@ test("a picture still being read holds Send, and joins the box once it lands", a
 
 test("Send asks what it drops where messages follow, naming a teammate's among them", async () => {
   const body = async (takes: string | undefined) => {
-    const box = await opened(LINE, undefined, "Also email the inviter.", AtomRegistry.make(), {
+    const box = await opened(LINE, undefined, "Also email the inviter.", {
       cuts: true,
       takes,
     });

@@ -13,6 +13,7 @@ import {
 import {
   AGENT_CALL_FAILURE,
   type AgentTranscriptKey,
+  INBOX_SCOPE_KIND,
   PULL_REQUEST_PART,
   type PullRequestPart,
   type PullRequestPartParams,
@@ -26,6 +27,7 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW, type TASK_CALL_FAILURE, type TasksView } from "@repo/features/tasks-view";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import {
   type AppAutomationReads,
   type AppBrowserTabs,
@@ -77,15 +79,19 @@ import {
   TASKS_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "@repo/host/contract";
-import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import {
+  type ExperimentChoices,
+  HOST_CAPABILITY,
+  type HostCapability,
+  WORKSPACE_EXPERIMENT_LIST,
+} from "@repo/settings";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
 import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import type { AppSettingsView } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import type * as Atom from "effect/reactivity/Atom";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import type { ReactElement, ReactNode } from "react";
 import type { IntegrationServer } from "../live-reads.js";
 import {
   fakeActPort,
@@ -95,13 +101,61 @@ import {
   heldUntilClosed,
   quietHold,
 } from "./app-bridge.js";
-import { holdAppStateForFile, writeAppState } from "./copy-feedback.js";
+import { holdAppStateForFile, withQueryClient, writeAppState } from "./copy-feedback.js";
 
 /** What the desktop offers: every capability there is. */
 export const DESKTOP_CAPABILITIES: readonly HostCapability[] = Object.values(HOST_CAPABILITY);
 
-/** Main's document for a signed-in account in a panel on the desktop, idle, its experiments as given. */
-function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
+/**
+ * The workspaces the panel's test builders file their tasks under, by the ids
+ * and slugs they write: listed in main's document wherever a case turns a
+ * workspace experiment on, so a surface about a task of any of them draws as
+ * one in a workspace that chose it.
+ */
+const CASE_WORKSPACES: readonly { readonly id: string; readonly slug?: string }[] = [
+  { id: "workspace-personal", slug: "personal" },
+  // Note that the mention cases name the workspace of their place `acme` and read its repositories through `workspace-1`.
+  { id: "workspace-1", slug: "acme" },
+  { id: "workspace-acme" },
+  { id: "workspace-listed", slug: "listed" },
+  { id: "workspace-stage", slug: "stage" },
+];
+
+/**
+ * A tasks' view with the workspace experiments among `experiments` on in
+ * every workspace it lists that chose none of its own, and in each of
+ * `CASE_WORKSPACES` it does not list: as it stands where none of them is on.
+ */
+function withWorkspaceExperiments(view: TasksView, experiments: ExperimentChoices): TasksView {
+  const chosen = WORKSPACE_EXPERIMENT_LIST.filter((experiment) => experiments[experiment] === true);
+  if (chosen.length === 0) return view;
+  const on = chosen.map((experiment) => ({
+    experiment,
+    on: true,
+    changedBy: null,
+    changedAt: 0,
+  }));
+  const unlisted = CASE_WORKSPACES.filter(
+    ({ id }) => !view.workspaces.some((listed) => listed.id === id),
+  );
+  return {
+    ...view,
+    workspaces: [
+      ...view.workspaces.map((listed) => ({ ...listed, experiments: listed.experiments ?? on })),
+      ...unlisted.map(({ id, slug }) => ({
+        id,
+        ...(slug === undefined ? undefined : { slug }),
+        name: slug ?? id,
+        role: WORKSPACE_ROLE.OWNER,
+        github: null,
+        experiments: on,
+      })),
+    ],
+  };
+}
+
+/** Main's document for a signed-in account in a panel on the desktop, idle, the account's experiments as given on its settings. */
+function idleDocument(experiments: ExperimentChoices): AppStateSnapshot {
   return {
     version: 1,
     run: {
@@ -176,9 +230,46 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
     portForwarding: null,
+    mirrors: {},
     network: { online: true, reachable: true },
     window: { fullScreen: false },
   };
+}
+
+/**
+ * Main's document as a case that turns a workspace experiment on stands in
+ * it: the workspaces it files tasks under listed with that experiment on,
+ * and what a surface about a task of theirs reads of them, the account's
+ * feed and each one's automations, read and holding nothing where the case
+ * lays none of its own.
+ */
+function inCaseWorkspaces(
+  snapshot: AppStateSnapshot,
+  experiments: ExperimentChoices,
+  patch: Partial<AppStateSnapshot>,
+): AppStateSnapshot {
+  const tasks = withWorkspaceExperiments(snapshot.tasks, experiments);
+  if (tasks === snapshot.tasks) return snapshot;
+  const automations = Object.fromEntries(tasks.workspaces.map(({ id }) => [id, { rows: [] }]));
+  return {
+    ...snapshot,
+    tasks,
+    ...(patch[LIVE_READ.INBOX_ITEMS] === undefined
+      ? {
+          [LIVE_READ.INBOX_ITEMS]: {
+            rows: { [INBOX_SCOPE_KIND.PLAN]: {}, [INBOX_SCOPE_KIND.AGENT]: {} },
+          },
+        }
+      : undefined),
+    ...(patch[LIVE_READ.AUTOMATIONS] === undefined
+      ? { [LIVE_READ.AUTOMATIONS]: automations }
+      : undefined),
+  };
+}
+
+/** Main's document for a signed-in account in a panel on the desktop, idle, its experiments as given: the account's own on its settings, a workspace's on the workspaces cases file tasks under. */
+function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
+  return inCaseWorkspaces(idleDocument(experiments), experiments, {});
 }
 
 /** A document as main's push delivers it to a window that holds none of it yet: every entry. */
@@ -192,7 +283,7 @@ export function stateWith(
   experiments: ExperimentChoices,
   patch: Partial<AppStateSnapshot>,
 ): AppStateSnapshot {
-  return { ...snapshotWith(experiments), ...patch };
+  return inCaseWorkspaces({ ...idleDocument(experiments), ...patch }, experiments, patch);
 }
 
 /** Main's document for the account signed in as given, no experiment on. */
@@ -230,19 +321,23 @@ export function readExperiments(experiments: ExperimentChoices): void {
 }
 
 /**
- * A registry for a case that draws under a registry of its own
- * synchronously, the test's Query client holding a document whose settings
- * hold these experiments from its first draw. Note that the document is read
- * again once main's lands, so the bridge must hand the same experiments
- * (`handState`, `readExperiments`) for them to stand. `initialValues` are
- * laid in the registry, as a case's own clock is.
+ * Writes a document whose settings hold these experiments into the test's
+ * Query client, `patch` over its slices as `stateWith` lays it, for a case
+ * that draws synchronously and must find them in its first frame. Note that
+ * the document is read again once main's lands, so the bridge must hand the
+ * same experiments (`handState`, `readExperiments`) for them to stand.
  */
-export function registryWith(
+export function writeExperiments(
   experiments: ExperimentChoices,
-  initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]> = [],
-): AtomRegistry.AtomRegistry {
-  writeAppState(snapshotWith(experiments));
-  return AtomRegistry.make({ initialValues });
+  patch: Partial<AppStateSnapshot> = {},
+): void {
+  writeAppState(stateWith(experiments, patch));
+}
+
+/** `element` on the test's Query client (`withQueryClient`), its document holding these experiments from the first frame (`writeExperiments`). */
+export function withExperiments(experiments: ExperimentChoices, element: ReactNode): ReactElement {
+  writeExperiments(experiments);
+  return withQueryClient(element);
 }
 
 /** Hands the window main's document on a platform offering `capabilities`, the experiments given on and no other, beside whatever else the bridge already holds. */

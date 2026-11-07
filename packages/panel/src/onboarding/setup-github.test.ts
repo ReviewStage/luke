@@ -9,13 +9,12 @@ import {
 } from "@repo/features/github-repositories-wire";
 import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, holdGitHubToken, holdRepositoryLists } from "../testing/app-state.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { GitHubSetup } from "./setup-github.js";
 
 /**
@@ -67,8 +66,7 @@ test("a workspace reached through the App draws the App's card checked, its done
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(GitHubSetup, { workspaceId: WORKSPACE, onReached: () => undefined }),
       ),
     ),
@@ -137,8 +135,7 @@ test("the token's picker adds several repositories in one open menu and keeps st
     roots.push(root);
     act(() =>
       root.render(
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           createElement(GitHubSetup, { workspaceId: WORKSPACE, onReached: () => undefined }),
         ),
       ),

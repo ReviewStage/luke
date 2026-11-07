@@ -1,14 +1,14 @@
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
-import { INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
 import {
-  ACCOUNT_INBOX_ITEMS,
   type AccountInboxItemsLiveAnswer,
   type AccountInboxItemsLiveRows,
-  accountInboxItemsLiveRowsSchema,
+  INBOX_ITEMS_READ,
   type InboxItemStamp,
   inboxInOrder,
   inboxOfLiveRows,
-} from "@repo/features/live-wire";
+} from "@repo/features/inbox-live";
+import { INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
+import { ACCOUNT_INBOX_ITEMS } from "@repo/features/live-wire";
 import type { EntityPool, HeldRows } from "@repo/sync";
 import { Clock, Effect } from "effect";
 import type { AppHostRead, AppInboxItems } from "./app-state.js";
@@ -253,7 +253,7 @@ export function followAccountItems(
           },
         },
         first,
-        accountInboxItemsLiveRowsSchema,
+        INBOX_ITEMS_READ.rows,
         landed,
       ).pipe(Effect.catch(() => Effect.void));
       return true;

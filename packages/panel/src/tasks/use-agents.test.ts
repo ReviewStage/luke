@@ -25,7 +25,6 @@ import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@repo/wire";
 import { MutationObserver } from "@tanstack/react-query";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -33,7 +32,7 @@ import type { ActedResult } from "../act.js";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { type FakeActPort, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handHostReads, handState } from "../testing/app-state.js";
-import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
 import { ToastHost } from "../toast.js";
 import { type AgentsControl, MODELS_READ, useAgents } from "./use-agents.js";
@@ -115,18 +114,21 @@ function NoOneSignedIn(): null {
   return null;
 }
 
+/** Closes the window, its document ending (`pagehide`), so the next mount opens as a relaunch does. */
+function relaunch(): void {
+  act(() => {
+    window.dispatchEvent(new Event("pagehide"));
+  });
+  for (const root of roots.splice(0)) act(() => root.unmount());
+}
+
 /**
  * Mounts the hook over a service the test scripts act by act: each kind
  * answers from its own queue of answers, and every ask is written down. The
- * window's toast and its drafts owner stand beside it, its atoms on
- * `registry`, one of its own, as a window's, where none is given, so an
- * unmount closes the window, files and all.
+ * window's toast and its drafts owner stand beside it, so an unmount closes
+ * the window, files and all.
  */
-function mount(
-  initial: Standing,
-  registry: AtomRegistry.AtomRegistry = AtomRegistry.make(),
-  keyPrefix = "key",
-) {
+function mount(initial: Standing, keyPrefix = "key") {
   const asked: Asked[] = [];
   const started: string[] = [];
   /** An answer as a test queues it: at once, or a promise it settles when it chooses. */
@@ -189,7 +191,7 @@ function mount(
         createElement(Probe),
         createElement(ToastHost),
       );
-      act(() => root.render(onRegistry(registry, surface)));
+      act(() => root.render(withQueryClient(surface)));
       await settle();
     },
     control: () => {
@@ -410,7 +412,7 @@ test("a draft's words outlast a relaunch, the plan opening on its draft again un
     before.control().onDraftChange({ choice: { model: "openai/gpt-6.1-sol", effort: "xhigh" } }),
   );
   act(() => before.control().onDraftAttachments((held) => [...held, notes]));
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  relaunch();
 
   const after = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   await after.mount();
@@ -423,7 +425,7 @@ test("a draft's words outlast a relaunch, the plan opening on its draft again un
   });
   act(() => after.control().onDiscardDraft(draft));
   assert.equal(after.control().draft, undefined);
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  relaunch();
 
   const again = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   await again.mount();
@@ -431,8 +433,8 @@ test("a draft's words outlast a relaunch, the plan opening on its draft again un
 });
 
 test("two windows' draft agents on one plan each keep their own words under their own key", async () => {
-  const first = mount({ taskId: TASK, repository: "acme/relay" }, AtomRegistry.make(), "first");
-  const second = mount({ taskId: TASK, repository: "acme/relay" }, AtomRegistry.make(), "second");
+  const first = mount({ taskId: TASK, repository: "acme/relay" }, "first");
+  const second = mount({ taskId: TASK, repository: "acme/relay" }, "second");
   await first.mount();
   await second.mount();
   act(() => {
@@ -447,7 +449,7 @@ test("two windows' draft agents on one plan each keep their own words under thei
   assert.equal(first.control().draft?.prompt, "Wait for review");
   assert.equal(first.control().draft?.id, "first-1");
   act(() => first.control().onDiscardDraft("first-1"));
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  relaunch();
 
   // The other window's draft, kept apart and outliving the first's, is the one a relaunch opens on.
   const relaunched = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
@@ -470,7 +472,7 @@ test("a draft of files alone waits while another plan is open, but no relaunch b
   await before.stand({ taskId: OTHER_TASK });
   await before.stand({ taskId: TASK });
   assert.deepEqual(before.control().draft?.attachments, [notes]);
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  relaunch();
 
   const after = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   await after.mount();
@@ -764,7 +766,7 @@ test("a fork's draft with words outlasts a relaunch still a fork, under the same
     draft = before.control().onForkDraft(fork);
   });
   act(() => before.control().onDraftChange({ prompt: "Try the queue" }));
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  relaunch();
 
   const after = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [STARTED] });
   await after.mount();
@@ -785,7 +787,7 @@ test("a fork's draft with words outlasts a relaunch still a fork, under the same
     choice: undefined,
     disabledServers: [],
   });
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  relaunch();
 
   const again = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [STARTED] });
   await again.mount();
@@ -834,7 +836,7 @@ test("a continue opens the task's draft with the closed box's words and files af
   await before.stand({ taskId: TASK });
   assert.equal(before.control().draft?.id, draft, "the draft holds while another task is open");
   assert.deepEqual(before.control().draft?.fork, fork);
-  for (const root of roots.splice(0)) act(() => root.unmount());
+  relaunch();
 
   const after = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [source] });
   after.answer(

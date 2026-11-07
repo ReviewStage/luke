@@ -195,6 +195,25 @@ export type WorkspaceGithubInstallation = typeof workspaceGithubInstallationSche
  * here, because a name the service already holds must not make the whole
  * list unreadable; a new name is bounded where it is asked for.
  */
+/**
+ * One experiment a workspace's owner or admin turned on or off for everyone
+ * in it, as the list carries it: its key, whether it is on, who changed it
+ * last, by id and by the name the service holds now, or null where that
+ * account is gone, and when, in epoch milliseconds. The key is read as text
+ * here, below `@repo/settings`, which names the experiments and reads a key
+ * it does not know as no choice at all.
+ */
+export const workspaceExperimentSchema = EffectSchema.Struct({
+  experiment: EffectSchema.String,
+  on: EffectSchema.Boolean,
+  changedBy: EffectSchema.NullOr(
+    EffectSchema.Struct({ id: EffectSchema.String, name: EffectSchema.String }),
+  ),
+  changedAt: countedNumber,
+});
+
+export type WorkspaceExperimentChoice = typeof workspaceExperimentSchema.Type;
+
 export const workspaceSchema = EffectSchema.Struct({
   id: workspaceIdSchema,
   name: EffectSchema.String,
@@ -242,6 +261,8 @@ export const workspaceSchema = EffectSchema.Struct({
    * which the desktop reads as one it may offer to rename.
    */
   personal: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /** Each experiment its owners or admins chose for everyone in it, by key; one never chosen is absent, and off, and the key is absent where it chose none, and from a service before workspace experiments. */
+  experiments: EffectSchema.optionalKey(EffectSchema.Array(workspaceExperimentSchema)),
 });
 
 export type Workspace = typeof workspaceSchema.Type;
@@ -303,6 +324,18 @@ export const workspaceRenameRequestSchema = EffectSchema.Struct({
 export const workspaceSlugSetRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   slug: EffectSchema.String,
+});
+
+/**
+ * One experiment turned on or off (POST) for everyone in a workspace by an
+ * owner or admin of it: the experiment's key, which the service reads
+ * against the workspace experiments it lists, and whether it is on;
+ * answered with the workspace.
+ */
+export const workspaceExperimentSetRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  experiment: EffectSchema.String,
+  on: EffectSchema.Boolean,
 });
 
 /** A workspace's photo set or removed (POST) by an owner or admin of it: the photo as a `data:` URL, or null to remove it; answered with the workspace. */

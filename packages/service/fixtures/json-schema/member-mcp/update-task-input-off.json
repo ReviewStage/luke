@@ -1,0 +1,154 @@
+{
+  "type": "object",
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The task's id, as list_tasks or list_agents answered it."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Its new name, as the sidebar shows it."
+    },
+    "repository": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 140
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The GitHub repository its agents work in, as owner/name, which the workspace's GitHub installation must reach; null for none."
+    },
+    "pinned": {
+      "type": "boolean",
+      "description": "true to pin it in the member's sidebar, false to unpin it; their pin alone, no other member's."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "backlog",
+        "todo",
+        "in-progress",
+        "done",
+        "canceled"
+      ],
+      "description": "Where the task now stands."
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "none",
+        "urgent",
+        "high",
+        "medium",
+        "low"
+      ],
+      "description": "How much the task matters; none for a task no one has weighed yet."
+    },
+    "assignee": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The member the task is assigned to, who is on it now, by their mention link as list_tasks or another read names them, `[@Name](https://vespin.dev/<workspace>/person/<id>)`, or its address alone; a member of the task's workspace. null for no one."
+    },
+    "sectionId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The sidebar section the member keeps it in, by the id list_tasks or create_section answered; it leaves the section it stood in and lands at the top of this one. null takes it out of its section, back under Tasks."
+    },
+    "parentTaskId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The task to make it a child of, by the id list_tasks answered: a task of your workspace working in the same repository, and neither this task nor one of its sub-tasks; where its agents run stays its own. null takes it out from under its parent, to stand at the top."
+    },
+    "blockedBy": {
+      "type": "object",
+      "properties": {
+        "add": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "maxItems": 50,
+          "description": "Tasks to add to its blocked-by (the tasks it waits on), by the id list_tasks answered."
+        },
+        "remove": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "maxItems": 50,
+          "description": "Tasks to take away from its blocked-by (the tasks it waits on); one that is not there is left as it is."
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Its blocked-by (the tasks it waits on), changed: tasks to add and tasks to take away, each a task of your workspace."
+    },
+    "blocks": {
+      "type": "object",
+      "properties": {
+        "add": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "maxItems": 50,
+          "description": "Tasks to add to its blocks (the tasks that wait on it), by the id list_tasks answered."
+        },
+        "remove": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "maxItems": 50,
+          "description": "Tasks to take away from its blocks (the tasks that wait on it); one that is not there is left as it is."
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Its blocks (the tasks that wait on it), changed: tasks to add and tasks to take away, each a task of your workspace."
+    }
+  },
+  "required": [
+    "taskId"
+  ],
+  "additionalProperties": false
+}

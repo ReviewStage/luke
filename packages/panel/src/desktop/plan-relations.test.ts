@@ -9,14 +9,13 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import type { Workspace } from "@repo/features/workspace-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { PlanRelations } from "./plan-relations.js";
@@ -95,8 +94,7 @@ function draw(
   const task = { ...DOCUMENT_TASK, ...blocks };
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(PlanRelations, {
           task,
           tasks,

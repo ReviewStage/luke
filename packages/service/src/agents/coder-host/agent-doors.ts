@@ -183,7 +183,7 @@ export function runAgentOpenPullRequest(
  * Runs one call of a comment tool (`tasks/comment-tools.ts`) on the description of
  * the task it names, or one of its pages, in the agent's workspace, as the
  * member whose turn it is, written under the agent; the description's threads only
- * where the agent's standing has Descriptions open (`../tool-catalog/gates.ts`).
+ * where the agent's standing has Task descriptions open, as its workspace has them (`../tool-catalog/gates.ts`).
  */
 export function runAgentComment(
   admitted: AdmittedConversation,
@@ -205,7 +205,7 @@ export function runAgentComment(
       userId: admitted.caller,
       agentId,
     } as const;
-    // A page's threads stand whatever the starter's Descriptions setting; the description's are left out while it is off.
+    // A page's threads stand whatever the workspace's Task descriptions; the description's are left out while it is off.
     return yield* runCommentTool(name, { taskId, writer, descriptionsOn }, input);
   }).pipe(
     Effect.tapError(logStoreFailure),

@@ -19,7 +19,7 @@
  * A table a delta read reads is logged too (`log`), its every write, or,
  * for one rewritten in place more often than any delta read reads it, its
  * rows' arrival and removal alone (`LOG.ROWS`): the task list's tables and
- * the inbox items' (`@repo/service`'s `tasksLive`, `inboxItemsLive`), each
+ * the inbox items' (`@repo/service`'s `tasksRead`, `inboxItemsRead`), each
  * declared logged once for every read that follows it by deltas.
  */
 
@@ -59,6 +59,7 @@ import { taskPageVersion } from "../schemas/task-page.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { taskRead } from "../schemas/task-read.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
+import { workspaceExperiment } from "../schemas/workspace-experiment.js";
 import { workspaceFormerSlug } from "../schemas/workspace-former-slug.js";
 import { TOPIC } from "./notification.js";
 import { defineSyncTable, LOG, type SyncTable } from "./sync-table.js";
@@ -211,6 +212,11 @@ export const personalWorkspaceSync = defineSyncTable(personalWorkspace, {
 /** A slug a workspace stood under before, on the workspace's topic, so its members' list names it. */
 export const workspaceFormerSlugSync = defineSyncTable(workspaceFormerSlug, {
   topics: [{ kind: TOPIC.WORKSPACE, column: workspaceFormerSlug.organizationId }],
+});
+
+/** An experiment a workspace's admin turned on or off, on the workspace's topic, so every member's panel follows the switch. */
+export const workspaceExperimentSync = defineSyncTable(workspaceExperiment, {
+  topics: [{ kind: TOPIC.WORKSPACE, column: workspaceExperiment.organizationId }],
 });
 
 /** A GitHub App installation connected to a workspace, on the workspace's topic. */
@@ -705,6 +711,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   organizationSync,
   personalWorkspaceSync,
   workspaceFormerSlugSync,
+  workspaceExperimentSync,
   githubInstallationSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,

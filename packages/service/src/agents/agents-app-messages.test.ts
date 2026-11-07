@@ -570,11 +570,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(agentSessions.reset, [sessionId]);
         assert.ok(Option.isNone(yield* readAgent(owner, agent.id)));
         const db = yield* Database;
-        const [conversation] = yield* db
-          .select({ deletedAt: conversations.deletedAt })
-          .from(conversations)
-          .where(eq(conversations.id, target.conversationId));
-        assert.ok(conversation !== undefined && conversation.deletedAt !== null);
+        assert.deepEqual(
+          yield* db
+            .select({ id: conversations.id })
+            .from(conversations)
+            .where(eq(conversations.id, target.conversationId)),
+          [],
+        );
         assert.deepEqual(
           [
             yield* db

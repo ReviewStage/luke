@@ -15,14 +15,13 @@ import {
 } from "@repo/features/agent-wire";
 import { type ShownFailureSentry, sendShownFailure } from "@repo/features/shown-failure";
 import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { installShownFailureReporter } from "../failure-report.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry, settleQueries, testQueryClientNow } from "../testing/copy-feedback.js";
+import { settleQueries, testQueryClientNow, withQueryClient } from "../testing/copy-feedback.js";
 import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab, AgentTab } from "./agent-tab.js";
 
@@ -115,14 +114,12 @@ async function runningTab(first: AgentMessagesAnswerView, worker = false, opened
   const control = agentsControl({ agents: [AGENT] });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  const registry = AtomRegistry.make();
   const settle = async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   };
   const draw = (agent: AgentSummary) =>
     root?.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         worker
           ? createElement(AgentSubagentTab, {
               agentId: AGENT.id,
