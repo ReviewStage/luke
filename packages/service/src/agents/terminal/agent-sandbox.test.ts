@@ -40,7 +40,12 @@ import { TMUX_EXIT } from "./tmux.js";
  */
 
 const SESSION = "wrun_fixture";
-const FIXTURE_IMAGE = "agent-image:fixture";
+/** The agents' image as a deploy names it, the fixture's. */
+const FIXTURE_IMAGE = {
+  reference: Effect.succeed("agent-image:fixture"),
+  base: Effect.succeed("agent-image-base:fixture"),
+  runner: Effect.succeed(new Uint8Array()),
+};
 const SANDBOX = "eve-sbx-vercel-fixture";
 const RUNNING_SESSION = "sbs_running";
 const SHELL = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
@@ -90,7 +95,7 @@ function vercel(
     agentSandboxLayer,
     Layer.mergeAll(
       LOCAL_AGENT_ENVIRONMENT,
-      Layer.succeed(AgentImage, { reference: Effect.succeed(FIXTURE_IMAGE) }),
+      Layer.succeed(AgentImage, FIXTURE_IMAGE),
       sandboxFetchOver(async (url, init) => {
         const parsed = new URL(url);
         const method = init.method ?? "GET";
@@ -303,7 +308,7 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const fake = runnerSandboxApi();
-        const image = Layer.succeed(AgentImage, { reference: Effect.succeed(FIXTURE_IMAGE) });
+        const image = Layer.succeed(AgentImage, FIXTURE_IMAGE);
         const tags = { sessionId: SESSION, agentId: "agent-fixture" };
         const opened = yield* Effect.gen(function* () {
           const api = yield* vercelSandboxApi(async () => fixtureToken());

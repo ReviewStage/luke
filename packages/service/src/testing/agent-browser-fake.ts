@@ -291,7 +291,11 @@ export const FAKE_SANDBOX = {
 } as const;
 
 /** The agents' image the fake's browser makes a sandbox again from. */
-export const FAKE_IMAGE: AgentImageService = { reference: Effect.succeed("agent-image:fixture") };
+export const FAKE_IMAGE: AgentImageService = {
+  reference: Effect.succeed("agent-image:fixture"),
+  base: Effect.succeed("agent-image-base:fixture"),
+  runner: Effect.succeed(new Uint8Array()),
+};
 
 /** Vercel's REST API over one sandbox as the scenario has it, and the commands it ran, by the session each ran in. */
 /** Where the fake sandbox's recorder leaves its video, under the sandbox user's home, as a read prints it. */
