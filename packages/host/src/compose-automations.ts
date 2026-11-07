@@ -17,10 +17,8 @@ import {
   type AutomationFollow,
   type AutomationIdParams,
   type AutomationView,
-  automationFollowSchema,
 } from "@repo/features/automation-view";
 import { LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import {
   declaredWrite,
   type EntityPool,
@@ -28,10 +26,10 @@ import {
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
-import { Data, Effect, FiberMap, Result, type Scope } from "effect";
+import { Data, Effect, Result, type Scope } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
-import { type AppAutomationReads, type AppHostReads, NO_KEYS_HELD } from "./app-state.js";
+import { type AppHostReads, NO_KEYS_HELD } from "./app-state.js";
 import {
   AUTOMATION,
   type AutomationListCollections,
@@ -45,10 +43,9 @@ import {
 import { followAutomationRead, historyAtEdges } from "./automation-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import type { AUTOMATION_ACTS } from "./contract/index.js";
+import { type AUTOMATION_ACTS, AUTOMATION_FOLLOWS } from "./contract/index.js";
 import { type EntityStore, KEPT_READ } from "./entity-store.js";
-import type { HostMethodTable } from "./gateway-door.js";
-import type { HostActTable } from "./host-acts.js";
+import { type HostActTable, liveTold } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
@@ -63,7 +60,7 @@ import type { RunMode } from "./run-mode.js";
  * read (`automation-follow.ts`) for the account signed in as it started,
  * from the first window's hold, and keeps it among the few let go latest
  * after the last lets go, each laid on its app-state slice, which every
- * window draws, and told as `AUTOMATIONS_CHANGED`. A sign-out lets every
+ * window draws, and told on it (`liveTold`). A sign-out lets every
  * follow go and lays none, and the account gate opening follows the holds
  * anew (`open`). A held workspace's automations stand in the sync engine's
  * pool (`automation-collections.ts`). A new one, a change, or a deletion of
@@ -98,8 +95,8 @@ export interface AutomationsDependencies {
 }
 
 export interface AutomationsComposer extends Composer {
-  /** The automations' plain asks, answered directly as the panel's port asks them. */
-  readonly acts: HostActTable<typeof AUTOMATION_ACTS>;
+  /** The automations' plain asks and live follow, answered directly as the panel's port asks them. */
+  readonly acts: HostActTable<typeof AUTOMATION_ACTS> & HostActTable<typeof AUTOMATION_FOLLOWS>;
   /** Every held read followed anew, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
   /** Every follow let go and no read laid, as a sign-out lets them go; the windows' holds stand. */
@@ -112,11 +109,9 @@ type ByKind<Value> = Readonly<Record<AutomationFollow["kind"], Value>>;
 /** Each held read's standing wait for a write's transaction, by what it holds and then its id. */
 type Waits = ByKind<Map<string, TxWait>>;
 
-/** What the composer holds for the windows: each held read, the windows' hold on each key, the follows' waits, and the list collections standing. */
+/** What the composer holds for the windows: each held read, the follows' waits, and the list collections standing. */
 interface Held {
   readonly slices: ByKind<HeldSlice<string>>;
-  /** The windows' hold on each key, one fiber standing until let go. */
-  readonly holds: ByKind<FiberMap.FiberMap<string>>;
   readonly waits: Waits;
   /** Each followed workspace's automations standing in the pool, by the workspace's id, for as long as its follow stands. */
   readonly lists: Map<string, AutomationListCollections>;
@@ -324,8 +319,7 @@ export function composeAutomations(
     };
     const lists: Held["lists"] = new Map();
     const follows = automationFollows(dependencies, asked, waits, lists);
-    const told = (held: Partial<AppAutomationReads>) =>
-      kernel.emit(GATEWAY_EVENT.AUTOMATIONS_CHANGED, carried(held));
+    const follow = AUTOMATION_FOLLOWS.AUTOMATIONS_FOLLOW;
     // Note that each held read is keyed by one id, its slice laid whole as it moves.
     const slices: Held["slices"] = yield* Effect.all({
       [AUTOMATION_FOLLOW.WORKSPACE]: heldSlice<typeof LIVE_READ.AUTOMATIONS, string>({
@@ -333,14 +327,14 @@ export function composeAutomations(
         path: (workspaceId) => [workspaceId],
         gate,
         follow: follows[AUTOMATION_FOLLOW.WORKSPACE],
-        tell: (held) => told({ [LIVE_READ.AUTOMATIONS]: held }),
+        tell: liveTold(kernel.emit, follow, LIVE_READ.AUTOMATIONS),
       }),
       [AUTOMATION_FOLLOW.RUNS]: heldSlice<typeof LIVE_READ.AUTOMATION_RUNS, string>({
         empty: NO_KEYS_HELD,
         path: (automationId) => [automationId],
         gate,
         follow: follows[AUTOMATION_FOLLOW.RUNS],
-        tell: (held) => told({ [LIVE_READ.AUTOMATION_RUNS]: held }),
+        tell: liveTold(kernel.emit, follow, LIVE_READ.AUTOMATION_RUNS),
       }),
       [AUTOMATION_FOLLOW.WORKSPACE_RUNS]: heldSlice<
         typeof LIVE_READ.AUTOMATION_WORKSPACE_RUNS,
@@ -350,15 +344,10 @@ export function composeAutomations(
         path: (workspaceId) => [workspaceId],
         gate,
         follow: follows[AUTOMATION_FOLLOW.WORKSPACE_RUNS],
-        tell: (held) => told({ [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: held }),
+        tell: liveTold(kernel.emit, follow, LIVE_READ.AUTOMATION_WORKSPACE_RUNS),
       }),
     });
-    const holds: Held["holds"] = yield* Effect.all({
-      [AUTOMATION_FOLLOW.WORKSPACE]: FiberMap.make<string>(),
-      [AUTOMATION_FOLLOW.RUNS]: FiberMap.make<string>(),
-      [AUTOMATION_FOLLOW.WORKSPACE_RUNS]: FiberMap.make<string>(),
-    });
-    return composed(dependencies, gate, asked, { slices, holds, waits, lists });
+    return composed(dependencies, gate, asked, { slices, waits, lists });
   });
 }
 
@@ -367,7 +356,7 @@ function composed(
   dependencies: AutomationsDependencies,
   gate: () => boolean,
   asked: Asked,
-  { slices, holds, waits, lists }: Held,
+  { slices, waits, lists }: Held,
 ): AutomationsComposer {
   const { kernel, client } = dependencies;
 
@@ -488,7 +477,7 @@ function composed(
   };
 
   /** The automations' plain asks, answered as the panel's port asks them (`AUTOMATION_ACTS`). */
-  const acts: HostActTable<typeof AUTOMATION_ACTS> = {
+  const acts: AutomationsComposer["acts"] = {
     AUTOMATIONS_CREATE: declaredWrite(dependencies.pool, made, {
       read: (asked: AutomationCreateParams) =>
         Effect.sync(() => {
@@ -538,45 +527,11 @@ function composed(
         );
         return { automation: replaced.automation, webhookSecret: secret };
       }),
-  };
-
-  const methods: HostMethodTable = {
-    // Note that the windows' hold on a key is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.AUTOMATIONS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const held = yield* readParams(
-          automationFollowSchema,
-          params,
-          "a hold names what it holds",
-        );
-        yield* FiberMap.run(
-          holds[held.kind],
-          held.id,
-          Effect.scoped(Effect.andThen(slices[held.kind].hold(held.id), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const held = yield* readParams(
-          automationFollowSchema,
-          params,
-          "a hold names what it holds",
-        );
-        yield* FiberMap.remove(holds[held.kind], held.id);
-        return {};
-      }),
-    [GATEWAY_METHOD.AUTOMATIONS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const held = yield* readParams(
-          automationFollowSchema,
-          params,
-          "reading again names what it reads",
-        );
-        yield* slices[held.kind].retry(held.id);
-        return {};
-      }),
+    // What a key names is held for the windows while an Automations page draws it, its slice by its kind.
+    AUTOMATIONS_FOLLOW: {
+      hold: ({ kind, id }) => slices[kind].hold(id),
+      retry: ({ kind, id }) => slices[kind].retry(id),
+    },
   };
 
   const kinds = Object.values(AUTOMATION_FOLLOW);
@@ -584,5 +539,5 @@ function composed(
   const reset = Effect.forEach(kinds, (kind) => slices[kind].end, { discard: true });
   const open = Effect.forEach(kinds, (kind) => slices[kind].open, { discard: true });
 
-  return { methods, acts, lifetime: Effect.void, open, reset };
+  return { methods: {}, acts, lifetime: Effect.void, open, reset };
 }

@@ -12,18 +12,14 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { MCP_CLIENTS_CALL_FAILURE } from "@repo/features/mcp-client-view";
 import type { McpClient } from "@repo/features/mcp-client-wire";
-import {
-  GATEWAY_CLIENT_ROLE,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethod,
-} from "@repo/gateway";
+import type { GatewayEventKind } from "@repo/gateway";
 import { entityPool } from "@repo/sync";
-import type { WireRecord, WireValue } from "@repo/wire";
+import type { WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Deferred, Duration, Effect, Fiber } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import type { AppIntegrations } from "./app-state.js";
 import {
@@ -32,6 +28,7 @@ import {
   type McpClientsClient,
 } from "./compose-integrations.js";
 import { polledLive } from "./testing/polled-live.js";
+import { toldLive } from "./testing/told-live.js";
 import { windowFocus } from "./window-focus.js";
 
 /**
@@ -63,8 +60,6 @@ const USER_ID = "user-dana";
 function row(connection: string, provider: IntegrationProvider, status: IntegrationStatus) {
   return { id: `id-${connection}`, connection, provider, label: connection, status };
 }
-
-const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 /** The tools Linear's server lists, as the service answers them unless a test scripts otherwise. */
 const LINEAR_TOOLS = { tools: [{ name: "list_issues", description: "List issues." }] };
@@ -173,21 +168,12 @@ function subject(
   return Effect.gen(function* () {
     const service = fakeService(script);
     const focus = yield* windowFocus;
-    // Every telling of the servers' tools, and of where the integrations stand, the host holds for the windows, whole, in order.
-    const told: WireValue[] = [];
-    const integrations: AppIntegrations[] = [];
-    // Every telling of the outside MCP clients the host holds for the windows, whole, in order.
-    const clients: WireValue[] = [];
+    // Every event the host emitted, in order: the servers' tools, where the integrations stand, and the outside MCP clients each told on its slice.
+    const emitted: { kind: GatewayEventKind; payload: WireValue }[] = [];
     const composer = yield* composeIntegrations({
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
-        emit: (kind, payload) => {
-          if (kind === GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED) told.push(payload);
-          // SAFETY: the host tells its own slice as built, in this process.
-          if (kind === GATEWAY_EVENT.INTEGRATIONS_CHANGED)
-            integrations.push(payload as AppIntegrations);
-          if (kind === GATEWAY_EVENT.MCP_CLIENTS_CHANGED) clients.push(payload);
-        },
+        emit: (kind, payload) => emitted.push({ kind, payload }),
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       accountId: () => USER_ID,
@@ -201,12 +187,24 @@ function subject(
           return options.opens ?? true;
         }),
     }).pipe(Effect.provide(noNetwork));
-    const call = (method: GatewayMethod, params: WireRecord = {}) => {
-      const handler = composer.methods[method];
-      assert.ok(handler, `no handler for ${method}`);
-      return handler(params, context);
+    /** One window's hold on where the integrations stand, until `letIntegrationsGo`. */
+    let held = yield* Scope.make();
+    const holdIntegrations = Effect.gen(function* () {
+      held = yield* Scope.make();
+      yield* composer.acts.INTEGRATIONS_FOLLOW.hold(undefined).pipe(Scope.provide(held));
+    });
+    const letIntegrationsGo = Effect.suspend(() => Scope.close(held, Exit.void));
+    return {
+      ...service,
+      acts: composer.acts,
+      holdIntegrations,
+      letIntegrationsGo,
+      told: () => toldLive(emitted, LIVE_READ.INTEGRATION_TOOLS),
+      // SAFETY: the host tells its own slice as built, in this process.
+      integrations: () => toldLive(emitted, LIVE_READ.INTEGRATIONS) as AppIntegrations[],
+      clients: () => toldLive(emitted, LIVE_READ.MCP_CLIENTS),
+      focus,
     };
-    return { ...service, call, acts: composer.acts, told, integrations, clients, focus };
   });
 }
 
@@ -225,7 +223,7 @@ it.effect(
     Effect.gen(function* () {
       for (const options of [{ signedIn: false }, { sendsNetwork: false }]) {
         const script = { status: INTEGRATION_STATUS.CONNECTED };
-        const { call, acts, opened, asked } = yield* subject(script, options);
+        const { holdIntegrations, acts, opened, asked } = yield* subject(script, options);
         for (const act of [
           acts.INTEGRATIONS_CONNECT,
           acts.INTEGRATIONS_CANCEL,
@@ -235,8 +233,8 @@ it.effect(
             failure: INTEGRATION_CALL_FAILURE.UNANSWERED,
           });
         }
-        yield* call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, LINEAR);
-        yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+        yield* acts.INTEGRATIONS_TOOLS_FOLLOW.hold(LINEAR);
+        yield* holdIntegrations;
         yield* after(A_WHILE);
         assert.deepEqual(opened, []);
         assert.deepEqual(asked, []);
@@ -250,17 +248,17 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const script: ServiceScript = { status: INTEGRATION_STATUS.CONNECTED };
-      const { call, asked, told, focus } = yield* subject(script);
+      const { acts, asked, told, focus } = yield* subject(script);
 
-      yield* call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, LINEAR);
+      yield* acts.INTEGRATIONS_TOOLS_FOLLOW.hold(LINEAR);
       yield* settled;
-      assert.deepEqual(told.at(-1), { linear: { rows: LINEAR_TOOLS } });
+      assert.deepEqual(told().at(-1), { linear: { rows: LINEAR_TOOLS } });
 
       script.tools = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
       yield* focus.raise;
       yield* settled;
       assert.deepEqual(asked, [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.LINEAR]);
-      assert.deepEqual(told.at(-1), { linear: { rows: LINEAR_TOOLS } });
+      assert.deepEqual(told().at(-1), { linear: { rows: LINEAR_TOOLS } });
 
       const mended = {
         tools: [...LINEAR_TOOLS.tools, { name: "save_issue", description: "Save." }],
@@ -268,7 +266,7 @@ it.effect(
       script.tools = mended;
       yield* focus.raise;
       yield* settled;
-      assert.deepEqual(told.at(-1), { linear: { rows: mended } });
+      assert.deepEqual(told().at(-1), { linear: { rows: mended } });
     }),
 );
 
@@ -276,13 +274,14 @@ it.effect(
   "a pending sign-in is settled as it is first drawn and as a window comes forward, never on time alone",
   () =>
     Effect.gen(function* () {
-      const { call, integrations, settles, live, focus } = yield* subject({
-        status: INTEGRATION_STATUS.CONNECTED,
-      });
+      const { letIntegrationsGo, holdIntegrations, integrations, settles, live, focus } =
+        yield* subject({
+          status: INTEGRATION_STATUS.CONNECTED,
+        });
       const drawn = () =>
-        integrations.at(-1)?.[USER_ID]?.rows?.integrations[INTEGRATION_PROVIDER.LINEAR];
+        integrations().at(-1)?.[USER_ID]?.rows?.integrations[INTEGRATION_PROVIDER.LINEAR];
       live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
-      yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+      yield* holdIntegrations;
       yield* after(A_WHILE);
       yield* focus.raise;
       yield* settled;
@@ -310,7 +309,7 @@ it.effect(
       live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "pending")] });
       yield* after(Duration.millis(500));
       assert.equal(settles(), 3, "a sign-in begun again on the same row is settled as drawn");
-      yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
+      yield* letIntegrationsGo;
     }),
 );
 
@@ -318,13 +317,13 @@ it.effect(
   "an account still to be named is settled once, under the service's rule, and again as a window comes forward",
   () =>
     Effect.gen(function* () {
-      const { call, settles, live, focus } = yield* subject({
+      const { letIntegrationsGo, holdIntegrations, settles, live, focus } = yield* subject({
         status: INTEGRATION_STATUS.CONNECTED,
       });
       // Linear answers no account's name, so an empty label there is a grant that named nothing, called by its place.
       const placed = { ...row("linear", INTEGRATION_PROVIDER.LINEAR, "connected"), label: "" };
       live.set({ connections: [placed] });
-      yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+      yield* holdIntegrations;
       yield* after(Duration.millis(500));
       assert.equal(settles(), 0, "an empty label where the provider names no account is final");
 
@@ -338,7 +337,7 @@ it.effect(
       yield* focus.raise;
       yield* settled;
       assert.equal(settles(), 2, "a name the settle did not read is asked for again");
-      yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
+      yield* letIntegrationsGo;
     }),
 );
 
@@ -346,13 +345,15 @@ it.effect(
   "a disconnect answers only once the held read carries its transaction, gone from it",
   () =>
     Effect.gen(function* () {
-      const { call, acts, integrations, live } = yield* subject({
+      const { letIntegrationsGo, holdIntegrations, acts, integrations, live } = yield* subject({
         status: INTEGRATION_STATUS.CONNECTED,
       });
       const listed = () =>
-        integrations.at(-1)?.[USER_ID]?.rows?.accounts?.map((account) => account.connection) ?? [];
+        integrations()
+          .at(-1)
+          ?.[USER_ID]?.rows?.accounts?.map((account) => account.connection) ?? [];
       live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] }, ["1"]);
-      yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+      yield* holdIntegrations;
       yield* after(Duration.millis(500));
       assert.deepEqual(listed(), ["linear"]);
 
@@ -374,7 +375,7 @@ it.effect(
         txid: DISCONNECT_TXID,
       });
       assert.deepEqual(listed(), [], "the answer lands with the account gone from the read");
-      yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
+      yield* letIntegrationsGo;
     }),
 );
 
@@ -383,10 +384,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const script: ServiceScript = { status: INTEGRATION_STATUS.CONNECTED };
-      const { call, acts, integrations, live } = yield* subject(script);
-      const label = () => integrations.at(-1)?.[USER_ID]?.rows?.accounts?.[0]?.label;
+      const { letIntegrationsGo, holdIntegrations, acts, integrations, live } =
+        yield* subject(script);
+      const label = () => integrations().at(-1)?.[USER_ID]?.rows?.accounts?.[0]?.label;
       live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] }, ["1"]);
-      yield* call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW);
+      yield* holdIntegrations;
       yield* after(Duration.millis(500));
       assert.equal(label(), "linear");
 
@@ -415,7 +417,7 @@ it.effect(
         failure: INTEGRATION_CALL_FAILURE.UNANSWERED,
       });
       assert.equal(label(), "Work", "a refused rename leaves the label the read carries");
-      yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
+      yield* letIntegrationsGo;
     }),
 );
 
@@ -424,25 +426,25 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const script: ServiceScript = { status: INTEGRATION_STATUS.CONNECTED, clients: [CLAUDE] };
-      const { call, acts, clients } = yield* subject(script);
-      yield* call(GATEWAY_METHOD.MCP_CLIENTS_FOLLOW);
+      const { acts, clients } = yield* subject(script);
+      yield* acts.MCP_CLIENTS_FOLLOW.hold(undefined);
       yield* settled;
       const held = (listed: readonly McpClient[]) => ({
         "user-dana": { rows: { serverUrl: SERVER_URL, clients: listed } },
       });
-      assert.deepEqual(clients.at(-1), held([CLAUDE]));
+      assert.deepEqual(clients().at(-1), held([CLAUDE]));
 
       script.revokeFails = true;
       assert.deepEqual(yield* acts.MCP_CLIENTS_REVOKE({ clientId: CLAUDE.clientId }), {
         failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED,
       });
-      assert.deepEqual(clients.at(-1), held([CLAUDE]));
+      assert.deepEqual(clients().at(-1), held([CLAUDE]));
 
       script.revokeFails = false;
       assert.deepEqual(yield* acts.MCP_CLIENTS_REVOKE({ clientId: CLAUDE.clientId }), {
         serverUrl: SERVER_URL,
         clients: [],
       });
-      assert.deepEqual(clients.at(-1), held([]));
+      assert.deepEqual(clients().at(-1), held([]));
     }),
 );

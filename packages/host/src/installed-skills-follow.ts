@@ -15,20 +15,13 @@ import {
   type EntityPool,
   type FieldChange,
   fieldKind,
-  type HeldRows,
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
 import { Effect, type Scope } from "effect";
-import { type AppHostReads, type AppInstalledSkills, NO_KEYS_HELD } from "./app-state.js";
-import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
-import {
-  confirmWrite,
-  followTakingRows,
-  LIVE_GONE,
-  restarting,
-  type TxWait,
-} from "./live-follow.js";
+import { type AppInstalledSkills, NO_KEYS_HELD } from "./app-state.js";
+import { type HeldSlice, heldSlice } from "./live-collection.js";
+import { followLiveRead } from "./live-read-follow.js";
 
 /**
  * installed-skills-follow.ts -- the skills the account sees in each workspace the windows hold, followed over the service's held poll into the sync engine's pool by their ids, told whole on their app-state slice, and every write to one drawn over them the moment it is asked.
@@ -42,7 +35,7 @@ import {
  * workspace's read, so one write to it draws in each. Each workspace draws
  * the rows it holds as the held read answers them
  * (`@repo/features/installed-skill-live`), but those another workspace's
- * scope names.
+ * scope names, followed as every pool read is (`followLiveRead`).
  *
  * A removal is a write the pool draws over its skill at once, standing
  * until every read holding it carries the transaction, and taken back where
@@ -96,92 +89,6 @@ function shownIn(workspaceId: string, row: InstalledSkillLiveRow): boolean {
   return row.workspaceId === null || row.workspaceId === workspaceId;
 }
 
-/** A refusal after which the read is followed no longer: a workspace the account is no member of, or another account's session. */
-function endsFollow(failure: string): boolean {
-  return failure === INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND || failure === LIVE_SIGNED_OUT.failure;
-}
-
-/**
- * Follows one workspace's skills until let go, each change told through
- * `answers`: the rows as the read last answered them, every write standing
- * drawn over them, and the skills an install made in its scope beside them.
- * Nothing is told before the read first answers, since a write drawn on no
- * skills shows nothing of the workspace.
- */
-function followSkills(
-  dependencies: InstalledSkillsFollowDependencies,
-  workspaceId: string,
-  answers: HeldAnswers<AppHostReads[typeof LIVE_READ.INSTALLED_SKILLS]>,
-): Effect.Effect<void> {
-  // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
-  const userId = dependencies.accountId();
-  const seal = (poll: boolean, after?: string) =>
-    userId === undefined
-      ? Effect.succeed(LIVE_SIGNED_OUT)
-      : dependencies.seal(workspaceId, userId, poll, after);
-  const attempt = Effect.scoped(
-    Effect.gen(function* () {
-      const first = yield* seal(false);
-      if ("failure" in first) {
-        if (first.failure === LIVE_SIGNED_OUT.failure) return false;
-        answers.unanswered();
-        return first.failure !== INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND;
-      }
-      let wait: TxWait | undefined;
-      let answered = false;
-      /** Why a poll ended the follow for good, the first such failure kept, so one the account no longer reaches is told unanswered. */
-      let endedBy: string | undefined;
-      const drawn: Effect.Effect<void> = Effect.sync(() => {
-        if (!answered) return;
-        const shown = skills.rows().filter((row) => shownIn(workspaceId, row));
-        answers.answered(installedSkillsOfLiveRows(shown));
-      });
-      const skills: HeldRows<InstalledSkillLiveRow> = yield* dependencies.pool.stand(
-        INSTALLED_SKILL,
-        {
-          redraw: () => drawn,
-          confirmation: () => {
-            const handed = wait;
-            return handed === undefined ? undefined : (txid) => confirmWrite(handed, txid);
-          },
-          adopts: (row) => shownIn(workspaceId, row),
-        },
-      );
-      const gone = yield* followTakingRows(
-        {
-          poll: (after) =>
-            Effect.map(seal(true, after), (read) => {
-              if (!("failure" in read)) return read;
-              const ends = endsFollow(read.failure);
-              if (ends && endedBy === undefined) endedBy = read.failure;
-              return { failure: read.failure, gone: ends };
-            }),
-          onTxWait: (handed) => {
-            wait = handed;
-          },
-        },
-        first,
-        INSTALLED_SKILLS_READ.rows,
-        (rows) =>
-          Effect.andThen(
-            skills.answer(rows.skills),
-            Effect.suspend(() => {
-              answered = true;
-              return drawn;
-            }),
-          ),
-      ).pipe(
-        Effect.as(false),
-        Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
-      );
-      if (!gone) return true;
-      if (endedBy === INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND) answers.unanswered();
-      return false;
-    }),
-  );
-  return restarting(attempt);
-}
-
 /**
  * The held lifetime over every workspace's skills the windows hold
  * (`heldSlice`), keyed by the workspace, told whole on their slice: each
@@ -195,7 +102,29 @@ export function heldInstalledSkills(
     empty: NO_KEYS_HELD,
     path: (workspaceId) => [workspaceId],
     gate: dependencies.gate,
-    follow: (workspaceId, answers) => followSkills(dependencies, workspaceId, answers),
+    follow: (workspaceId, answers) => {
+      // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+      const userId = dependencies.accountId();
+      return followLiveRead(
+        {
+          seal: (poll, after) =>
+            userId === undefined
+              ? Effect.succeed(LIVE_SIGNED_OUT)
+              : dependencies.seal(workspaceId, userId, poll, after),
+          rows: INSTALLED_SKILLS_READ.rows,
+          part: "skills",
+          pool: dependencies.pool,
+          kind: INSTALLED_SKILL,
+          // Note that a workspace the account is no member of ends the follow, told unanswered.
+          endsFollow: (failure) => failure === INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND,
+          // Note that each workspace draws the rows it shows, though another workspace's read holds them too, and adopts a skill an install made in its scope.
+          draw: (rows) =>
+            installedSkillsOfLiveRows(rows.filter((row) => shownIn(workspaceId, row))),
+          adopts: (row) => shownIn(workspaceId, row),
+        },
+        answers,
+      );
+    },
     tell: dependencies.tell,
   });
 }

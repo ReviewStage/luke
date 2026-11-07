@@ -34,9 +34,9 @@ it.effect(
   "a provider key passes through to the service once and is answered back, and held for the windows, as its hint alone, each write's answer laid where the keys are held",
   () =>
     Effect.gen(function* () {
-      const { call, acts, asked, providerKeys } = yield* subject();
+      const { acts, asked, providerKeys } = yield* subject();
 
-      yield* call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW);
+      yield* acts.PROVIDER_KEYS_FOLLOW.hold(undefined);
       yield* settled;
       const read = providerKeys().at(-1);
       const saved = yield* acts.PROVIDER_KEYS_SAVE({
@@ -64,7 +64,7 @@ it.effect(
   "an account that stored no default reads the fallback its keys pay for, and once its keys move the models are asked again and the fallback moves with them",
   () =>
     Effect.gen(function* () {
-      const { call, open, answerKeys, models, preferences } = yield* subject();
+      const { call, acts, open, answerKeys, models, preferences } = yield* subject();
       const openai = AGENT_FALLBACK_CHOICE[MODEL_PROVIDER.OPENAI];
       const claude: CatalogModel = {
         id: AGENT_DEFAULT_CHOICE.model,
@@ -90,13 +90,13 @@ it.effect(
       };
 
       yield* open;
-      yield* call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW);
+      yield* acts.PROVIDER_KEYS_FOLLOW.hold(undefined);
       yield* call(GATEWAY_METHOD.AGENTS_MODELS_FOLLOW);
       yield* settled;
       assert.deepEqual(drawnDefault(), openai, "only an OpenAI key pays, so OpenAI's fallback");
 
       answerKeys([openaiKey, KEPT], [claude, gpt]);
-      yield* call(GATEWAY_METHOD.PROVIDER_KEYS_RETRY);
+      yield* acts.PROVIDER_KEYS_FOLLOW.retry(undefined);
       yield* settled;
       assert.deepEqual(
         drawnDefault(),
@@ -113,7 +113,7 @@ it.effect(
       // The token the windows held as each write's read of the repository lists landed, a turn after it was asked.
       const movedUnder: unknown[] = [];
       let held: () => unknown[] = () => [];
-      const { call, acts, asked, githubToken } = yield* subject({
+      const { acts, asked, githubToken } = yield* subject({
         repositoriesMoved: Effect.andThen(
           Effect.yieldNow,
           Effect.sync(() => void movedUnder.push(held().at(-1))),
@@ -121,7 +121,7 @@ it.effect(
       });
       held = githubToken;
 
-      yield* call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW);
+      yield* acts.GITHUB_TOKEN_FOLLOW.hold(undefined);
       yield* settled;
       const read = githubToken().at(-1);
       const saved = yield* acts.GITHUB_TOKEN_SAVE({ token: GITHUB_TOKEN });

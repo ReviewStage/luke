@@ -35,7 +35,6 @@ export interface AgentProceduresDependencies {
     agentModelsFollow(): Effect.Effect<void>;
     agentModelsUnfollow(): Effect.Effect<void>;
     agentModelsRetry(): Effect.Effect<void>;
-    agentPreferencesRetry(): Effect.Effect<void>;
     /** The account's devices' beats held at the host while any stream of them stands; what it holds reaches the panel on app state. */
     hostsPresenceFollow(): Effect.Effect<void>;
     hostsPresenceUnfollow(): Effect.Effect<void>;
@@ -158,12 +157,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         yield* host.agentModelsRetry();
       },
     ),
-    [AGENT_ACT_KIND.AGENTS_PREFERENCES_RETRY]: actPort[
-      AGENT_ACT_KIND.AGENTS_PREFERENCES_RETRY
-    ].effect(function* ({ context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.agentPreferencesRetry();
-    }),
     [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: actPort[AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

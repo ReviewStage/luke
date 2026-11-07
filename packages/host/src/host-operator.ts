@@ -9,15 +9,12 @@ import {
   type PullRequestPartParams,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
-import type { AutomationFollow } from "@repo/features/automation-view";
 import {
   type BrowserLiveClosedEvent,
   type BrowserLiveMessageEvent,
   browserLiveClosedEventSchema,
   browserLiveMessageEventSchema,
 } from "@repo/features/browser-live-acts";
-import type { InstalledSkillFollowParams } from "@repo/features/installed-skill-view";
-import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import type { LiveRead } from "@repo/features/live-wire";
 import { type MirrorStandings, mirrorStandingsSchema } from "@repo/features/mirror-steps";
 import { type PortForwarding, portForwardingSchema } from "@repo/features/port-forward-acts";
@@ -26,10 +23,7 @@ import {
   type TasksPageAnswer,
   type TasksPageParams,
   type TasksView,
-  type TasksWorkspaceParams,
-  type TasksWorkspaceTokenRepositoriesParams,
   tasksPageAnswerSchema,
-  type WorkspacePeopleFollow,
 } from "@repo/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -66,26 +60,14 @@ import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
   AppAccountPreferences,
-  AppAutomationReads,
   AppDevicePresences,
-  AppGitHubTokens,
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
-  AppInstalledSkills,
-  AppIntegrations,
-  AppIntegrationTools,
-  AppMcpClients,
   AppModels,
-  AppProviderKeys,
   AppPullRequestParts,
-  AppSlackChannels,
   AppThisMacHosts,
-  AppTokenRepositories,
   AppTranscripts,
-  AppWorkspaceIntegrations,
-  AppWorkspaceInvitations,
-  AppWorkspaceMembers,
   AppWorkspacePhotos,
   AppWorkspaceTools,
   SessionReplayState,
@@ -144,78 +126,8 @@ export interface HostOperator {
   workspacesRefresh(): Effect.Effect<void>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
-  /** Where every one of the account's integrations stands, held followed for the windows from now until let go, and a while after; what it holds is heard through `onIntegrationsChanged`. */
-  integrationsFollow(): Effect.Effect<void>;
-  /** The account's integrations let go by the windows. */
-  integrationsUnfollow(): Effect.Effect<void>;
-  /** The account's held integrations read again at once, as Try again asks. */
-  integrationsRetry(): Effect.Effect<void>;
-  /** The account's integrations the host holds for the windows, whole, each time they move. */
-  onIntegrationsChanged(listener: (held: AppIntegrations) => void): () => void;
-  /** The tools one server offers the account's agents, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onIntegrationToolsChanged`. */
-  integrationsToolsFollow(params: IntegrationProviderParams): Effect.Effect<void>;
-  /** One server's tools let go by the windows. */
-  integrationsToolsUnfollow(params: IntegrationProviderParams): Effect.Effect<void>;
-  /** One server's held tools asked again at once, as Try again asks; done once the ask has landed. */
-  integrationsToolsRetry(params: IntegrationProviderParams): Effect.Effect<void>;
-  /** Every server's tools the host holds for the windows, whole, each time any of them moves. */
-  onIntegrationToolsChanged(listener: (held: AppIntegrationTools) => void): () => void;
-  /** The outside MCP clients the account allowed, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onMcpClientsChanged`. */
-  mcpClientsFollow(): Effect.Effect<void>;
-  /** The outside MCP clients let go by the windows. */
-  mcpClientsUnfollow(): Effect.Effect<void>;
-  /** The held outside MCP clients asked again at once, as Try again asks; done once the ask has landed. */
-  mcpClientsRetry(): Effect.Effect<void>;
-  /** The outside MCP clients the host holds for the windows, whole, each time they move. */
-  onMcpClientsChanged(listener: (held: AppMcpClients) => void): () => void;
-  /** One workspace's own integrations held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceIntegrationsChanged`. */
-  workspaceIntegrationsFollow(params: TasksWorkspaceParams): Effect.Effect<void>;
-  /** One workspace's integrations let go by the windows. */
-  workspaceIntegrationsUnfollow(params: TasksWorkspaceParams): Effect.Effect<void>;
-  /** One workspace's held integrations read again at once, as Try again asks. */
-  workspaceIntegrationsRetry(params: TasksWorkspaceParams): Effect.Effect<void>;
-  /** Every workspace's own integrations the host holds for the windows, whole, each time any of them moves. */
-  onWorkspaceIntegrationsChanged(listener: (held: AppWorkspaceIntegrations) => void): () => void;
-  /** One workspace's Slack channels held for an owner's or an admin's windows from now until let go; what Slack lists is heard through `onSlackChannelsChanged`. */
-  workspaceSlackChannelsFollow(params: TasksWorkspaceParams): Effect.Effect<void>;
-  /** One workspace's Slack channels let go by the windows. */
-  workspaceSlackChannelsUnfollow(params: TasksWorkspaceParams): Effect.Effect<void>;
-  /** One workspace's held Slack channels asked again at once, as Try again asks; done once the ask has landed. */
-  workspaceSlackChannelsRetry(params: TasksWorkspaceParams): Effect.Effect<void>;
-  /** Every workspace's Slack channels the host holds for the windows, whole, each time any of them moves. */
-  onSlackChannelsChanged(listener: (held: AppSlackChannels) => void): () => void;
-  /** One workspace's people held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceMembersChanged`. */
-  workspaceMembersFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** One workspace's people let go by the windows: they stay followed among those let go lately until later ones push them out. */
-  workspaceMembersUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** One workspace's held people read again at once, as Try again asks. */
-  workspaceMembersRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** Every workspace's people the host holds for the windows, whole, each time any of them moves. */
-  onWorkspaceMembersChanged(listener: (held: AppWorkspaceMembers) => void): () => void;
-  /** One workspace's pending invitations held followed for an owner's or an admin's windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceInvitationsChanged`. */
-  workspaceInvitationsFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** One workspace's invitations let go by the windows: they stay followed among those let go lately until later ones push them out. */
-  workspaceInvitationsUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** One workspace's held invitations read again at once, as Try again asks. */
-  workspaceInvitationsRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** Every workspace's pending invitations the host holds for the windows, whole, each time any of them moves or expires. */
-  onWorkspaceInvitationsChanged(listener: (held: AppWorkspaceInvitations) => void): () => void;
   /** Every listed workspace's photo the host holds, whole, each time one is fetched or let go. */
   onWorkspacePhotosChanged(listener: (held: AppWorkspacePhotos) => void): () => void;
-  /** The repositories members added to a workspace on their own GitHub tokens, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onTokenRepositoriesChanged`. */
-  workspaceTokenRepositoriesFollow(
-    params: TasksWorkspaceTokenRepositoriesParams,
-  ): Effect.Effect<void>;
-  /** One workspace's token repositories let go by the windows. */
-  workspaceTokenRepositoriesUnfollow(
-    params: TasksWorkspaceTokenRepositoriesParams,
-  ): Effect.Effect<void>;
-  /** One workspace's held token repositories asked again at once, as Try again asks; done once the ask has landed. */
-  workspaceTokenRepositoriesRetry(
-    params: TasksWorkspaceTokenRepositoriesParams,
-  ): Effect.Effect<void>;
-  /** Every workspace's token repositories the host holds for the windows, whole, each time any of them moves. */
-  onTokenRepositoriesChanged(listener: (held: AppTokenRepositories) => void): () => void;
   /** The models a coding agent may run on as the account is offered them, and its devices, held for the windows from now until let go, asked again as a window comes forward, and as the provider keys move; what they hold is heard through `onModelsChanged`. */
   agentModelsFollow(): Effect.Effect<void>;
   /** The models let go by the windows. */
@@ -234,14 +146,6 @@ export interface HostOperator {
   hostsPresenceRefresh(): Effect.Effect<void>;
   /** The account's devices' beats the host holds for the windows, whole, each time any of them moves. */
   onDevicePresenceChanged(listener: (held: AppDevicePresences) => void): () => void;
-  /** A workspace's automations, a workspace's runs, or an automation's runs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onAutomationsChanged`. */
-  automationsFollow(scope: AutomationFollow): Effect.Effect<void>;
-  /** A held list or history let go, kept followed a while among those let go lately. */
-  automationsUnfollow(scope: AutomationFollow): Effect.Effect<void>;
-  /** A held list or history read again at once, as Try again asks. */
-  automationsRetry(scope: AutomationFollow): Effect.Effect<void>;
-  /** One of the automations' held reads, whole, by its name, each time any of its keys moves. */
-  onAutomationsChanged(listener: (held: Partial<AppAutomationReads>) => void): () => void;
   /** One part of one agent's pull request held for the windows' Pull request tabs from now until let go, asked again as a window comes forward and as the pull request moves; what it holds is heard through `onPullRequestPartsChanged`. */
   pullRequestPartFollow(params: PullRequestPartParams): Effect.Effect<void>;
   /** One pull request's part let go by the windows, kept a while among those let go lately. */
@@ -250,14 +154,6 @@ export interface HostOperator {
   pullRequestPartRetry(params: PullRequestPartParams): Effect.Effect<void>;
   /** One of the Pull request tabs' held parts, whole, by its read's name, each time any of its keys moves. */
   onPullRequestPartsChanged(listener: (held: Partial<AppPullRequestParts>) => void): () => void;
-  /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
-  installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
-  /** A workspace's skills let go by the windows. */
-  installedSkillsUnfollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
-  /** A workspace's held skills asked again at once, as Try again asks; done once the ask has landed. */
-  installedSkillsRetry(params: InstalledSkillFollowParams): Effect.Effect<void>;
-  /** Every workspace's skills the host holds for the windows, whole, each time any of them moves. */
-  onInstalledSkillsChanged(listener: (held: AppInstalledSkills) => void): () => void;
   /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onWorkspaceToolsChanged`. */
   agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
   /** One agent's own tools let go by the windows. */
@@ -266,22 +162,6 @@ export interface HostOperator {
   agentWorkspaceToolsRetry(params: AgentPullRequestParams): Effect.Effect<void>;
   /** Every agent's own tools the host holds for the windows, whole, each time any of them moves. */
   onWorkspaceToolsChanged(listener: (held: AppWorkspaceTools) => void): () => void;
-  /** The account's own provider keys as hints and statuses, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onProviderKeysChanged`. */
-  providerKeysFollow(): Effect.Effect<void>;
-  /** The account's provider keys let go by the windows. */
-  providerKeysUnfollow(): Effect.Effect<void>;
-  /** The account's held provider keys asked again at once, as Try again asks; done once the ask has landed. */
-  providerKeysRetry(): Effect.Effect<void>;
-  /** The account's provider keys the host holds for the windows, whole, each time any of them moves. */
-  onProviderKeysChanged(listener: (held: AppProviderKeys) => void): () => void;
-  /** The member's own GitHub token as its login, hint, and status, never the token, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onGitHubTokenChanged`. */
-  githubTokenFollow(): Effect.Effect<void>;
-  /** The member's GitHub token let go by the windows. */
-  githubTokenUnfollow(): Effect.Effect<void>;
-  /** The member's held GitHub token asked again at once, as Try again asks; done once the ask has landed. */
-  githubTokenRetry(): Effect.Effect<void>;
-  /** The member's GitHub token the host holds for the windows, whole, each time it moves. */
-  onGitHubTokenChanged(listener: (held: AppGitHubTokens) => void): () => void;
   /** One task's or agent's inbox held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHolderInboxesChanged`. */
   agentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
   /** One task's or agent's inbox let go by the windows: it stays followed among those let go lately until later ones push it out. */
@@ -296,12 +176,8 @@ export interface HostOperator {
   agentAccountInboxUnfollow(): Effect.Effect<void>;
   /** What waits across the followed account, or why there is none, each time it moves. */
   onAccountInboxChanged(listener: (answer: AgentAccountInboxAnswerView) => void): () => void;
-  /** Every inbox item the account reaches read again at once, as Try again asks. */
-  agentInboxItemsRetry(): Effect.Effect<void>;
   /** Every inbox item the account reaches, whole, each time the host's read of them for the session moves. */
   onInboxItemsChanged(listener: (read: AppHostRead<AppInboxItems>) => void): () => void;
-  /** The account's preferences row read again at once, as Try again asks. */
-  agentPreferencesRetry(): Effect.Effect<void>;
   /** The account's preferences row, whole, each time the host's read of it for the session moves or a write is drawn over it. */
   onAccountPreferencesChanged(listener: (held: AppAccountPreferences) => void): () => void;
   /** One agent's or worker's transcript held followed for the windows from now until let go, and kept a while after among those let go lately, following no longer; what it holds is heard through `onTranscriptsChanged`. */
@@ -452,47 +328,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
 
   const on = gatewayEventReader(client);
 
-  /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
-  const integrationTarget = (params: IntegrationProviderParams) => ({
-    provider: params.provider,
-    ...(params.connection !== undefined ? { connection: params.connection } : undefined),
-    ...(params.add !== undefined ? { add: params.add } : undefined),
-  });
-
   return {
-    integrationsFollow: () => fire(client.call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW, {})),
-    integrationsUnfollow: () => fire(client.call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW, {})),
-    integrationsRetry: () => fire(client.call(GATEWAY_METHOD.INTEGRATIONS_RETRY, {})),
-    onIntegrationsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.INTEGRATIONS_CHANGED,
-        // Note that the held integrations are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppIntegrations>(payload) : undefined),
-        listener,
-      ),
-    integrationsToolsFollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, integrationTarget(params))),
-    integrationsToolsUnfollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_UNFOLLOW, integrationTarget(params))),
-    integrationsToolsRetry: (params) =>
-      fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_RETRY, integrationTarget(params))),
-    onIntegrationToolsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED,
-        // Note that the held tools are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppIntegrationTools>(payload) : undefined),
-        listener,
-      ),
-    mcpClientsFollow: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_FOLLOW, {})),
-    mcpClientsUnfollow: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_UNFOLLOW, {})),
-    mcpClientsRetry: () => fire(client.call(GATEWAY_METHOD.MCP_CLIENTS_RETRY, {})),
-    onMcpClientsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.MCP_CLIENTS_CHANGED,
-        // Note that the held clients are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppMcpClients>(payload) : undefined),
-        listener,
-      ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
         Option.fromUndefinedOr(answered<HostBootstrap>(record(answer))),
@@ -533,130 +369,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(tasksPageAnswerSchema, TASK_UNANSWERED),
       ),
-    workspaceIntegrationsFollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW, {
-          workspaceId: params.workspaceId,
-        }),
-      ),
-    workspaceIntegrationsUnfollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_UNFOLLOW, {
-          workspaceId: params.workspaceId,
-        }),
-      ),
-    workspaceIntegrationsRetry: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_RETRY, {
-          workspaceId: params.workspaceId,
-        }),
-      ),
-    onWorkspaceIntegrationsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.WORKSPACE_INTEGRATIONS_CHANGED,
-        // Note that the held integrations are the host's own, handed over in this process, so they are passed on as built, as the held people are.
-        (payload) => (isRecord(payload) ? answered<AppWorkspaceIntegrations>(payload) : undefined),
-        listener,
-      ),
-    workspaceSlackChannelsFollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_FOLLOW, {
-          workspaceId: params.workspaceId,
-        }),
-      ),
-    workspaceSlackChannelsUnfollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_UNFOLLOW, {
-          workspaceId: params.workspaceId,
-        }),
-      ),
-    workspaceSlackChannelsRetry: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_RETRY, {
-          workspaceId: params.workspaceId,
-        }),
-      ),
-    onSlackChannelsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.SLACK_CHANNELS_CHANGED,
-        // Note that the held channels are the host's own, handed over in this process, so they are passed on as built.
-        (payload) => (isRecord(payload) ? answered<AppSlackChannels>(payload) : undefined),
-        listener,
-      ),
-    workspaceMembersFollow: (scope) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: scope.workspaceId }),
-      ),
-    workspaceMembersUnfollow: (scope) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS_UNFOLLOW, { workspaceId: scope.workspaceId }),
-      ),
-    workspaceMembersRetry: (scope) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS_RETRY, { workspaceId: scope.workspaceId }),
-      ),
-    onWorkspaceMembersChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED,
-        // Note that the held people are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) => (isRecord(payload) ? answered<AppWorkspaceMembers>(payload) : undefined),
-        listener,
-      ),
-    workspaceInvitationsFollow: (scope) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, {
-          workspaceId: scope.workspaceId,
-        }),
-      ),
-    workspaceInvitationsUnfollow: (scope) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, {
-          workspaceId: scope.workspaceId,
-        }),
-      ),
-    workspaceInvitationsRetry: (scope) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_RETRY, {
-          workspaceId: scope.workspaceId,
-        }),
-      ),
-    onWorkspaceInvitationsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED,
-        // Note that the held invitations are the host's own, handed over in this process, so they are passed on as built, as the held people are.
-        (payload) => (isRecord(payload) ? answered<AppWorkspaceInvitations>(payload) : undefined),
-        listener,
-      ),
     onWorkspacePhotosChanged: (listener) =>
       on(
         GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED,
         // Note that the held photos are the host's own, handed over in this process, so they are passed on as built, as the held people are.
         (payload) => (isRecord(payload) ? answered<AppWorkspacePhotos>(payload) : undefined),
-        listener,
-      ),
-    workspaceTokenRepositoriesFollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW, {
-          workspaceId: params.workspaceId,
-        }),
-      ),
-    workspaceTokenRepositoriesUnfollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW, {
-          workspaceId: params.workspaceId,
-        }),
-      ),
-    workspaceTokenRepositoriesRetry: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_RETRY, {
-          workspaceId: params.workspaceId,
-        }),
-      ),
-    onTokenRepositoriesChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED,
-        // Note that the held repositories are the host's own, handed over in this process, so they are passed on as built, as the held people are.
-        (payload) => (isRecord(payload) ? answered<AppTokenRepositories>(payload) : undefined),
         listener,
       ),
     agentModelsFollow: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_FOLLOW, {})),
@@ -689,17 +406,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppDevicePresences>(payload) : undefined),
         listener,
       ),
-    automationsFollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, scope)),
-    automationsUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, scope)),
-    automationsRetry: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_RETRY, scope)),
-    onAutomationsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.AUTOMATIONS_CHANGED,
-        // Note that the held reads are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) =>
-          isRecord(payload) ? answered<Partial<AppAutomationReads>>(payload) : undefined,
-        listener,
-      ),
     pullRequestPartFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_FOLLOW, pullRequestPart(params))),
     pullRequestPartUnfollow: (params) =>
@@ -712,23 +418,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held parts are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
         (payload) =>
           isRecord(payload) ? answered<Partial<AppPullRequestParts>>(payload) : undefined,
-        listener,
-      ),
-    installedSkillsFollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW, { workspaceId: params.workspaceId }),
-      ),
-    installedSkillsUnfollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_UNFOLLOW, { workspaceId: params.workspaceId }),
-      ),
-    installedSkillsRetry: (params) =>
-      fire(client.call(GATEWAY_METHOD.INSTALLED_SKILLS_RETRY, { workspaceId: params.workspaceId })),
-    onInstalledSkillsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.INSTALLED_SKILLS_CHANGED,
-        // Note that the held skills are the host's own, handed over in this process, so they are passed on as built, as the held memories are.
-        (payload) => (isRecord(payload) ? answered<AppInstalledSkills>(payload) : undefined),
         listener,
       ),
     agentWorkspaceToolsFollow: (params) =>
@@ -744,26 +433,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.WORKSPACE_TOOLS_CHANGED,
         // Note that the held tools are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppWorkspaceTools>(payload) : undefined),
-        listener,
-      ),
-    providerKeysFollow: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW, {})),
-    providerKeysUnfollow: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_UNFOLLOW, {})),
-    providerKeysRetry: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_RETRY, {})),
-    onProviderKeysChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.PROVIDER_KEYS_CHANGED,
-        // Note that the held keys are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppProviderKeys>(payload) : undefined),
-        listener,
-      ),
-    githubTokenFollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW, {})),
-    githubTokenUnfollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW, {})),
-    githubTokenRetry: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_RETRY, {})),
-    onGitHubTokenChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.GITHUB_TOKEN_CHANGED,
-        // Note that the held token is the host's own, handed over in this process, so it is passed on as built, as the held keys are.
-        (payload) => (isRecord(payload) ? answered<AppGitHubTokens>(payload) : undefined),
         listener,
       ),
     agentInboxFollow: (scope) =>
@@ -797,8 +466,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
-    agentInboxItemsRetry: () => fire(client.call(GATEWAY_METHOD.AGENTS_INBOX_ITEMS_RETRY, {})),
-    agentPreferencesRetry: () => fire(client.call(GATEWAY_METHOD.AGENTS_PREFERENCES_RETRY, {})),
     onAccountPreferencesChanged: (listener) =>
       on(
         GATEWAY_EVENT.ACCOUNT_PREFERENCES_CHANGED,

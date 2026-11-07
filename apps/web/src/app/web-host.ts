@@ -348,13 +348,9 @@ function portDependencies(
       haltSessionReplay: operator.haltSessionReplay,
       resumeSessionReplay: operator.resumeSessionReplay,
     },
-    accountAsks: { host },
     acts: operator.acts,
     agentInbox: { host },
     agents: { host, notices },
-    automations: { host },
-    installedSkills: { host },
-    integrations: { host },
     // Note that nothing is pushed on the tab's port: the tab hears the host
     // through the in-process bridge's own listeners, so its push stream is
     // never opened and this table stays empty.
@@ -376,7 +372,7 @@ function portDependencies(
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
     },
-    workspaces: { host, openExternal: async (url) => tabs.open(url) },
+    workspaces: { openExternal: async (url) => tabs.open(url) },
   };
 }
 

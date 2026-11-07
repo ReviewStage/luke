@@ -8,7 +8,6 @@ import {
   type IntegrationConnectView,
   type IntegrationProviderParams,
   type IntegrationRenameParams,
-  integrationProviderParamsSchema,
 } from "@repo/features/integration-view";
 import {
   INTEGRATION_STATUS,
@@ -18,28 +17,15 @@ import {
 import type { LIVE_READ } from "@repo/features/live-wire";
 import type { McpClientsView } from "@repo/features/mcp-client-view";
 import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
-import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethodTable,
-  readParams,
-} from "@repo/gateway";
 import { declaredWrite, type EntityPool } from "@repo/sync";
-import { Effect, FiberHandle, FiberMap, Option, type Scope } from "effect";
+import { Effect, Option, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import {
-  type AppIntegrations,
-  type AppIntegrationTools,
-  type AppMcpClients,
-  NO_KEYS_HELD,
-} from "./app-state.js";
+import { NO_KEYS_HELD } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import type { INTEGRATION_ACTS } from "./contract/index.js";
-import type { HostMethodTable } from "./gateway-door.js";
+import { type INTEGRATION_ACTS, INTEGRATION_FOLLOWS } from "./contract/index.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
-import type { HostActTable } from "./host-acts.js";
+import { type HostActTable, liveTold } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   type HeldIntegrations,
@@ -55,8 +41,8 @@ import type { WindowFocus } from "./window-focus.js";
  *
  * Where the integrations stand is held for the windows that draw one
  * (`integrations-follow.ts`), under the account signed in, followed on the
- * service's live read with GitHub's standing asked beside it, and told as
- * `INTEGRATIONS_CHANGED` events to the app state every window draws. A
+ * service's live read with GitHub's standing asked beside it, and told on
+ * its slice (`liveTold`) to the app state every window draws. A
  * Connect asks the service to begin a sign-in to one provider and opens the
  * address it answered in the browser through the native node, here, so the
  * address, which begins a grant for the account, never reaches a window or
@@ -72,13 +58,12 @@ import type { WindowFocus } from "./window-focus.js";
  * tools are fetched for the windows that hold them (`held-fetch.ts`), by the
  * server's name, asked as a window first holds them, again as a window comes
  * forward, which is how the developer comes back from mending a connection
- * in the browser, and on Try again, and told as `INTEGRATION_TOOLS_CHANGED`
- * events. Behind a closed account gate, or on a run that sends nothing,
+ * in the browser, and on Try again, and told on their slice. Behind a closed account gate, or on a run that sends nothing,
  * every ask answers unanswered.
  *
  * The outside MCP clients the account allowed are fetched the same way,
  * under the account signed in, while Settings › MCP holds them,
- * and told as `MCP_CLIENTS_CHANGED` events. A revoke that lands lays the
+ * and told on their slice. A revoke that lands lays the
  * clients it answered as they then stand before it answers, so the
  * window's list already stands without the client; one that did not finish
  * answers unanswered and lays nothing, so the client stands with its Revoke.
@@ -109,8 +94,8 @@ export interface IntegrationsDependencies {
 }
 
 export interface IntegrationsComposer extends Composer {
-  /** The integrations' plain asks, answered directly as the panel's port asks them. */
-  readonly acts: HostActTable<typeof INTEGRATION_ACTS>;
+  /** The integrations' plain asks and live follows, answered directly as the panel's port asks them. */
+  readonly acts: HostActTable<typeof INTEGRATION_ACTS> & HostActTable<typeof INTEGRATION_FOLLOWS>;
   /** Every server's tools a window holds followed anew, and the windows' holds on where the integrations stand and on the outside MCP clients taken anew under the account signed in, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
   /** Every server's tools, the held integrations, and the outside MCP clients let go, as a sign-out lets them go; the windows' holds stand. */
@@ -135,12 +120,10 @@ interface HeldMcpClients {
 /** What the composer holds for the windows: where the integrations stand, each server's tools, and the outside MCP clients, and the windows' holds on them. */
 interface Held {
   readonly integrations: HeldIntegrations;
-  /** The windows' hold on where the integrations stand, one fiber standing until let go, under the account signed in as it was taken. */
-  readonly integrationsHold: FiberHandle.FiberHandle<void>;
+  /** The windows' hold on where the integrations stand, under the account signed in. */
+  readonly integrationsHold: AccountHeld;
   /** Each server's tools, by its name. */
   readonly tools: HeldFetch<string, IntegrationToolsAnswer>;
-  /** The windows' hold on each server's tools, one fiber standing until let go. */
-  readonly toolHolds: FiberMap.FiberMap<string>;
   readonly clients: HeldMcpClients;
 }
 
@@ -179,8 +162,7 @@ export function composeIntegrations(
       gate,
       focus,
       pool: dependencies.pool,
-      tell: (held: AppIntegrations) =>
-        kernel.emit(GATEWAY_EVENT.INTEGRATIONS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, INTEGRATION_FOLLOWS.INTEGRATIONS_FOLLOW),
     });
     const tools = yield* heldFetch<typeof LIVE_READ.INTEGRATION_TOOLS, string>({
       empty: NO_KEYS_HELD,
@@ -195,8 +177,7 @@ export function composeIntegrations(
           "failure" in answer ? Option.none() : Option.some(answer),
         );
       },
-      tell: (held: AppIntegrationTools) =>
-        kernel.emit(GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, INTEGRATION_FOLLOWS.INTEGRATIONS_TOOLS_FOLLOW),
     });
     // Note that the clients are asked for the account signed in now alone, since the service answers that account's.
     const clients = yield* heldFetch<typeof LIVE_READ.MCP_CLIENTS, string>({
@@ -210,13 +191,12 @@ export function composeIntegrations(
           : Effect.map(asked(mcpClients.list()), (answer) =>
               "failure" in answer ? Option.none() : Option.some(answer),
             ),
-      tell: (held: AppMcpClients) => kernel.emit(GATEWAY_EVENT.MCP_CLIENTS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, INTEGRATION_FOLLOWS.MCP_CLIENTS_FOLLOW),
     });
     return composed(dependencies, asked, {
       integrations,
-      integrationsHold: yield* FiberHandle.make<void>(),
+      integrationsHold: yield* accountHeld(integrations, accountId),
       tools,
-      toolHolds: yield* FiberMap.make<string>(),
       clients: { read: clients, hold: yield* accountHeld(clients, accountId) },
     });
   });
@@ -226,32 +206,9 @@ export function composeIntegrations(
 function composed(
   dependencies: IntegrationsDependencies,
   asked: Asked,
-  { integrations, integrationsHold, tools, toolHolds, clients }: Held,
+  { integrations, integrationsHold, tools, clients }: Held,
 ): IntegrationsComposer {
   const { client, mcpClients, accountId, openExternal, pool } = dependencies;
-
-  type Params = Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0];
-
-  /** The account the params name (a provider, and the account and an add where named), or the invalid-params refusal. */
-  const targetOf = (params: Params) =>
-    readParams(
-      integrationProviderParamsSchema,
-      params,
-      "the ask names a provider this build knows",
-    );
-
-  /** Whether any window holds where the integrations stand, so the gate opening holds them anew under whoever signed in. */
-  let holding = false;
-  /** The windows' hold taken under the account signed in now, in place of any taken before; none while nobody is. */
-  const holdIntegrations = Effect.suspend(() => {
-    const userId = dependencies.accountId();
-    return userId === undefined
-      ? FiberHandle.clear(integrationsHold)
-      : FiberHandle.run(
-          integrationsHold,
-          Effect.scoped(Effect.andThen(integrations.hold(userId), Effect.never)),
-        );
-  });
 
   /** A write to one account confirmed once the held read carries it, where it moves what that read shows of the account (`HeldIntegrations.confirmed`). */
   const confirmed = (
@@ -315,8 +272,15 @@ function composed(
       return answer;
     });
 
-  /** The integrations' plain asks, answered as the panel's port asks them (`INTEGRATION_ACTS`). */
-  const acts: HostActTable<typeof INTEGRATION_ACTS> = {
+  /** `read` asked again for the account signed in now, as Try again asks; nothing while nobody is. */
+  const retried = (read: { readonly retry: (userId: string) => Effect.Effect<void> }) =>
+    Effect.suspend(() => {
+      const userId = accountId();
+      return userId === undefined ? Effect.void : read.retry(userId);
+    });
+
+  /** The integrations' plain asks and live follows, answered as the panel's port asks them (`INTEGRATION_ACTS`, `INTEGRATION_FOLLOWS`). */
+  const acts: IntegrationsComposer["acts"] = {
     INTEGRATIONS_CONNECT: connect,
     // A Cancel answers once the held read draws the account where the Cancel left it.
     INTEGRATIONS_CANCEL: ({ provider, connection }) =>
@@ -351,69 +315,32 @@ function composed(
         }),
     }),
     MCP_CLIENTS_REVOKE: ({ clientId }) => revoke(clientId),
-  };
-
-  const methods: HostMethodTable = {
-    // The outside MCP clients are held for the windows while Settings › MCP shows them, under the account signed in, and told only on the app state (`MCP_CLIENTS_CHANGED`); a revoke's own answer is laid there too.
-    [GATEWAY_METHOD.MCP_CLIENTS_FOLLOW]: () => Effect.as(clients.hold.follow, {}),
-    [GATEWAY_METHOD.MCP_CLIENTS_UNFOLLOW]: () => Effect.as(clients.hold.unfollow, {}),
-    [GATEWAY_METHOD.MCP_CLIENTS_RETRY]: () =>
-      Effect.suspend(() => {
-        const userId = accountId();
-        return Effect.as(userId === undefined ? Effect.void : clients.read.retry(userId), {});
-      }),
-    // Where the integrations stand is held for the windows while any draws one, under the account signed in, and told only on the app state (`INTEGRATIONS_CHANGED`).
-    [GATEWAY_METHOD.INTEGRATIONS_FOLLOW]: () =>
-      Effect.gen(function* () {
-        holding = true;
-        yield* holdIntegrations;
-        return {};
-      }),
-    [GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW]: () =>
-      Effect.gen(function* () {
-        holding = false;
-        yield* FiberHandle.clear(integrationsHold);
-        return {};
-      }),
-    [GATEWAY_METHOD.INTEGRATIONS_RETRY]: () =>
-      Effect.gen(function* () {
-        const userId = dependencies.accountId();
-        if (userId !== undefined) yield* integrations.retry(userId);
-        return {};
-      }),
-    // A server's tools are held for the windows while a surface listing it shows, and told only on the app state (`INTEGRATION_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const server = serverName(yield* targetOf(params));
-        yield* FiberMap.run(
-          toolHolds,
-          server,
-          Effect.scoped(Effect.andThen(tools.hold(server), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.INTEGRATIONS_TOOLS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        yield* FiberMap.remove(toolHolds, serverName(yield* targetOf(params)));
-        return {};
-      }),
-    [GATEWAY_METHOD.INTEGRATIONS_TOOLS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        yield* tools.retry(serverName(yield* targetOf(params)));
-        return {};
-      }),
+    // Where the integrations stand is held for the windows while any draws one, under the account signed in.
+    INTEGRATIONS_FOLLOW: {
+      hold: () => integrationsHold.hold,
+      retry: () => retried(integrations),
+    },
+    // A server's tools are held for the windows while a surface listing it shows, by the server's name.
+    INTEGRATIONS_TOOLS_FOLLOW: {
+      hold: (server) => tools.hold(serverName(server)),
+      retry: (server) => tools.retry(serverName(server)),
+    },
+    // The outside MCP clients are held for the windows while Settings › MCP shows them, under the account signed in; a revoke's own answer is laid there too.
+    MCP_CLIENTS_FOLLOW: {
+      hold: () => clients.hold.hold,
+      retry: () => retried(clients.read),
+    },
   };
 
   return {
-    methods,
+    methods: {},
     acts,
     lifetime: Effect.void,
     // Note that where the integrations stand is held anew under whoever signed in, in place of the hold before, rather than followed again under the account it was held for.
     open: Effect.gen(function* () {
       yield* tools.open;
       yield* clients.hold.open;
-      if (holding) yield* holdIntegrations;
+      yield* integrationsHold.open;
     }),
     reset: Effect.gen(function* () {
       yield* tools.end;

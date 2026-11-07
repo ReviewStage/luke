@@ -105,6 +105,11 @@ const DECLARED: readonly {
     payload: { agentId: AGENT_ID, pictureId: "4fb17055-c16e-4293-bea5-7a8b9cadbec5" },
     refusal: "Could not read the agent's picture on this system.",
   },
+  {
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEMS_RETRY,
+    payload: undefined,
+    refusal: "Could not read the inbox again on this system.",
+  },
 ];
 
 type HostAsk = AgentInboxProceduresDependencies["host"];

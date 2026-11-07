@@ -1891,13 +1891,13 @@ it.effect(
   "an account's items refused before they ever answered are told failed, and Try again reads them at once",
   () =>
     Effect.gen(function* () {
-      const { open, call, asked, sealItems, live, accountItems } = yield* subject();
+      const { open, acts, asked, sealItems, live, accountItems } = yield* subject();
       sealItems(undefined);
       yield* open;
       yield* toldTimes(accountItems, 1);
 
       sealItems(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_ITEMS_RETRY);
+      yield* acts.AGENTS_INBOX_ITEMS_RETRY(undefined);
       yield* settled;
       deliverItems(live, [stampOf(HELD_ITEM, TASK_ID)], [HELD_ITEM]);
       yield* toldTimes(accountItems, 2);

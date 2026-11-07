@@ -28,8 +28,6 @@ export interface AgentInboxProceduresDependencies {
     agentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
     /** A held task's or agent's inbox read again at once, as Try again asks. */
     agentInboxRetry(scope: AgentInboxScope): Effect.Effect<void>;
-    /** Every item the account reaches read again at once, as Try again asks. */
-    agentInboxItemsRetry(): Effect.Effect<void>;
   };
 }
 
@@ -63,12 +61,6 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.agentInboxRetry(input);
-    }),
-    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEMS_RETRY]: actPort[
-      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEMS_RETRY
-    ].effect(function* ({ context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      yield* host.agentInboxItemsRetry();
     }),
   };
 }

@@ -11,7 +11,11 @@ import {
   type AutomationRunsLiveRows,
   type AutomationsLiveRows,
 } from "@repo/features/automation-live";
-import { AUTOMATION_CALL_FAILURE, AUTOMATION_FOLLOW } from "@repo/features/automation-view";
+import {
+  AUTOMATION_CALL_FAILURE,
+  AUTOMATION_FOLLOW,
+  type AutomationFollow,
+} from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -22,22 +26,17 @@ import {
   AUTOMATION_TRIGGER,
 } from "@repo/features/automation-wire";
 import { LIVE_POLL_URL, LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import {
-  GATEWAY_CLIENT_ROLE,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayEventKind,
-  type GatewayMethod,
-} from "@repo/gateway";
+import { GATEWAY_EVENT, type GatewayEventKind } from "@repo/gateway";
 import { entityPool } from "@repo/sync";
-import type { WireRecord, WireValue } from "@repo/wire";
+import type { WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Deferred, Duration, Effect, Fiber } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import type { AppAutomationReads } from "./app-state.js";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
+import { toldLive } from "./testing/told-live.js";
 
 /**
  * The automations concern: behind a closed gate nothing is asked of the
@@ -75,8 +74,6 @@ const nextPoll = Effect.andThen(
   settled,
   Effect.andThen(TestClock.adjust(Duration.millis(500)), settled),
 );
-
-const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 const SCHEDULE = {
   kind: AUTOMATION_TRIGGER.SCHEDULE,
@@ -290,22 +287,17 @@ function subject(
       client: service.client,
       pool: yield* entityPool(),
     }).pipe(Effect.provide(noNetwork));
-    const call = (method: GatewayMethod, params: WireRecord = {}) => {
-      const handler = composer.methods[method];
-      assert.ok(handler, `no handler for ${method}`);
-      return handler(params, context);
-    };
-    /** What the held reads told the windows' app state, in order. */
-    const told = () =>
-      emitted
-        .filter((each) => each.kind === GATEWAY_EVENT.AUTOMATIONS_CHANGED)
-        .map((each) => each.payload as Partial<AppAutomationReads>);
+    /** One window's hold on what `key` names, for the caller's scope. */
+    const hold = (key: AutomationFollow) => composer.acts.AUTOMATIONS_FOLLOW.hold(key);
     /** Each time `read`'s slice was told, in order. */
     const toldOf = <Read extends keyof AppAutomationReads>(read: Read) =>
-      told().flatMap((held) => {
-        const slice = held[read];
-        return slice === undefined ? [] : [slice as AppAutomationReads[Read]];
-      });
+      // SAFETY: the host tells each automations slice whole, as built.
+      toldLive(emitted, read) as AppAutomationReads[Read][];
+    /** What the held reads told the windows' app state, in order. */
+    const told = () =>
+      emitted.flatMap((each) =>
+        each.kind === GATEWAY_EVENT.LIVE_READ_CHANGED ? [each.payload] : [],
+      );
     /** The workspace's list as each tell laid it, by its automations' ids and whether each is on, where it held rows. */
     const listed = () =>
       toldOf(LIVE_READ.AUTOMATIONS).flatMap((held) => {
@@ -315,7 +307,7 @@ function subject(
           : [automations.map(({ id, enabled }) => ({ id, enabled }))];
       });
     return {
-      call,
+      hold,
       /** The composer's declared acts, each handed its input as the port reads it. */
       acts: composer.acts,
       asked: service.asked,
@@ -337,8 +329,8 @@ const RUNS = { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID } as const;
 it.effect("behind a closed account gate, or on a run that sends nothing, nothing is asked", () =>
   Effect.gen(function* () {
     for (const options of [{ signedIn: false }, { sendsNetwork: false }]) {
-      const { call, acts, asked, told } = yield* subject(options);
-      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE), {});
+      const { hold, acts, asked, told } = yield* subject(options);
+      yield* hold(WORKSPACE);
       yield* settled;
       assert.deepEqual(yield* acts.AUTOMATIONS_CREATE(CREATE), {
         failure: AUTOMATION_CALL_FAILURE.UNANSWERED,
@@ -380,13 +372,13 @@ it.effect(
   "a new webhook secret is minted here, only its hash is sent to the service, and the secret is answered to the window that asked, as a webhook's made or changed to is, never on app state; a refused replacement answers no secret",
   () =>
     Effect.gen(function* () {
-      const { call, acts, asked, live, replies, told } = yield* subject();
+      const { hold, acts, asked, live, replies, told } = yield* subject();
       const refusing = yield* subject({ replaceRefused: true });
       const closed = yield* subject({ signedIn: false });
       const named = { automationId: AUTOMATION_ID };
       const webhook = { ...SUMMARY, trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } } as const;
       live.list.set({ automations: [ROW] });
-      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
+      yield* hold(WORKSPACE);
       yield* settled;
       replies.create = {
         automation: { ...webhook, id: "6b7c8d9e-0f1a-4b2c-9d3e-4f5a6b7c8d9e" },
@@ -457,11 +449,11 @@ it.effect(
   "a held list is laid as it stands for the account signed in, a gone automation's runs are laid failed, and a sign-out lets every follow go and lays none",
   () =>
     Effect.gen(function* () {
-      const { call, asked, toldOf, reset } = yield* subject();
+      const { hold, asked, toldOf, reset } = yield* subject();
 
-      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE), {});
+      yield* hold(WORKSPACE);
       yield* settled;
-      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, RUNS), {});
+      yield* hold(RUNS);
       yield* settled;
       assert.deepEqual(toldOf(LIVE_READ.AUTOMATIONS).at(-1), { [WORKSPACE_ID]: { rows: [] } });
       assert.deepEqual(toldOf(LIVE_READ.AUTOMATION_RUNS).at(-1), {
@@ -479,7 +471,7 @@ it.effect(
 
       const signedOut = yield* subject();
       signedOut.live.list.refuse(LIVE_SIGNED_OUT);
-      yield* signedOut.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
+      yield* signedOut.hold(WORKSPACE);
       yield* settled;
       assert.deepEqual(signedOut.told(), []);
       assert.equal(signedOut.asked.length, 1);
@@ -488,13 +480,14 @@ it.effect(
 
 it.effect("two holds of a list and a remount read it once", () =>
   Effect.gen(function* () {
-    const { call, asked, listed } = yield* subject();
+    const { hold, asked, listed } = yield* subject();
 
-    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
-    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
+    const remounted = yield* Scope.make();
+    yield* hold(WORKSPACE).pipe(Scope.provide(remounted));
+    yield* hold(WORKSPACE);
     yield* settled;
-    yield* call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, WORKSPACE);
-    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
+    yield* Scope.close(remounted, Exit.void);
+    yield* hold(WORKSPACE);
     yield* settled;
 
     assert.deepEqual(asked, [["list-live", WORKSPACE_ID, ACCOUNT_ID]]);
@@ -506,11 +499,11 @@ it.effect(
   "an automation deleted while its runs are held keeps them laid as they stood, and the follow ends without asking again",
   () =>
     Effect.gen(function* () {
-      const { call, asked, toldOf, live } = yield* subject();
+      const { hold, asked, toldOf, live } = yield* subject();
       live.runs = POLLED_RUNS;
       live.runsPolled = { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
 
-      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, RUNS);
+      yield* hold(RUNS);
       yield* settled;
 
       assert.deepEqual(toldOf(LIVE_READ.AUTOMATION_RUNS), [{ [AUTOMATION_ID]: { rows: [] } }]);
@@ -520,10 +513,10 @@ it.effect(
 
 it.effect("a run's agent passing its grace with no row moving is redrawn on the held runs", () =>
   Effect.gen(function* () {
-    const { call, toldOf, live } = yield* subject();
+    const { hold, toldOf, live } = yield* subject();
     const rows = POLLED_RUNS.queries.runs;
     live.runs = { ...POLLED_RUNS, queries: { runs: { ...rows, rows: [STARTING_RUN] } } };
-    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, RUNS);
+    yield* hold(RUNS);
     yield* settled;
     const statuses = () =>
       toldOf(LIVE_READ.AUTOMATION_RUNS).map((held) =>
@@ -542,9 +535,9 @@ it.effect(
   "a switch turned stands from the press until the held list carries its transaction, through an answer from before it, and a refused one is put back",
   () =>
     Effect.gen(function* () {
-      const { call, acts, live, replies, listed } = yield* subject();
+      const { hold, acts, live, replies, listed } = yield* subject();
       live.list.set({ automations: [ROW] });
-      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
+      yield* hold(WORKSPACE);
       yield* settled;
       // An answer Sync woke hands the follow its wait for a write's transaction.
       live.list.set({ automations: [ROW] }, ["1"]);
@@ -591,8 +584,8 @@ it.effect(
   "a new automation stands on its held list from the press, before the service answers, and one the service refused is taken back",
   () =>
     Effect.gen(function* () {
-      const { call, acts, listed, replies } = yield* subject();
-      yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
+      const { hold, acts, listed, replies } = yield* subject();
+      yield* hold(WORKSPACE);
       yield* settled;
       const answered = yield* Deferred.make<void>();
       replies.createAnswered = Deferred.await(answered);
@@ -612,10 +605,10 @@ it.effect(
 
 it.effect("a Run now answers once its workspace's held runs carry it, as its list does", () =>
   Effect.gen(function* () {
-    const { call, acts, live, replies } = yield* subject();
+    const { hold, acts, live, replies } = yield* subject();
     live.list.set({ automations: [ROW] });
-    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
-    yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, {
+    yield* hold(WORKSPACE);
+    yield* hold({
       kind: AUTOMATION_FOLLOW.WORKSPACE_RUNS,
       id: WORKSPACE_ID,
     });
