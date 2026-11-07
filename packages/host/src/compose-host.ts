@@ -282,6 +282,18 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       const { automationId, ...agent } = taskless;
       return automationId === null ? agent : { ...agent, automationId };
     };
+    /** Waits until the task list says an agent's sandbox stands open, answering whether it waited: false at once where it already says so, or does not know. */
+    const sandboxOpened = (agentId: string) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          // Note that each drawing of the list is listened to before the list is read, so one drawn between the two is not missed.
+          const drawings = yield* tasks.pullRequestListings;
+          const closed = () => agentListed(agentId)?.sandboxOpen === false;
+          if (!closed()) return false;
+          yield* Stream.runHead(Stream.filter(drawings, () => !closed()));
+          return true;
+        }),
+      );
     const agents = yield* served(
       composeAgents({
         kernel,
@@ -404,6 +416,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
                 credential: account.credential,
               }),
               openSocket,
+              sandboxOpened,
             }),
           )
         : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };

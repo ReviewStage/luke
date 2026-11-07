@@ -57,7 +57,10 @@ import type { RunMode } from "./run-mode.js";
  * events. A socket that dropped — a sleep, a network change, the relay
  * function's bound — is opened again on its own, after a wait that doubles
  * to ten seconds and starts over once the shell attaches; one whose agent
- * has not opened its sandbox is asked after every five seconds; and one the
+ * has not opened its sandbox waits on the task list, which carries the
+ * agent's sandbox live (`AgentSummary.sandboxOpen`), and asks again as it
+ * opens, or after a wait that doubles to thirty seconds where the list
+ * already says it opened and the relay still answers starting; and one the
  * relay ended as stopped, gone, or exited, or one the deployment
  * serves no relay for, stays ended until the tab attaches again, as does
  * one gone `TERMINAL_IDLE` with nothing typed in it, nothing printed by its
@@ -109,8 +112,14 @@ export const TERMINAL_RECONNECT = {
   FIRST: Duration.millis(500),
   /** The longest wait after a drop. */
   LONGEST: Duration.seconds(10),
-  /** The wait between asks while the agent has not opened its sandbox. */
-  STARTING_EVERY: Duration.seconds(5),
+} as const;
+
+/** How long a connection waits to ask again where the list says the sandbox opened and the relay still answers starting. */
+export const TERMINAL_OPENING_RETRY = {
+  /** The first wait, doubling on each ask that still answers starting. */
+  FIRST: Duration.seconds(1),
+  /** The longest wait. */
+  LONGEST: Duration.seconds(30),
 } as const;
 
 /** How long a connection stays open with nothing typed, printed, or shown. */
@@ -129,6 +138,12 @@ export interface TerminalsDependencies {
   account: Pick<AccountComposer, "capabilitiesActive" | "credential">;
   client: TerminalClient;
   openSocket: OpenTerminalSocket;
+  /**
+   * Waits until the task list says the agent's sandbox stands open,
+   * answering whether it waited: false at once where the list already says
+   * so, or does not know.
+   */
+  sandboxOpened: (agentId: string) => Effect.Effect<boolean>;
 }
 
 export interface TerminalsComposer extends Composer {
@@ -153,6 +168,14 @@ const RECONNECT_BACKOFF = Schedule.exponential(TERMINAL_RECONNECT.FIRST).pipe(
     Effect.succeed(Duration.min(duration, TERMINAL_RECONNECT.LONGEST)),
   ),
 );
+
+/** The wait before the ask after `asked` asks that still answered starting over an open sandbox, doubling to the longest. */
+function openingWait(asked: number): Duration.Duration {
+  return Duration.min(
+    Duration.times(TERMINAL_OPENING_RETRY.FIRST, 2 ** asked),
+    TERMINAL_OPENING_RETRY.LONGEST,
+  );
+}
 
 /** The states a relay's close ends a connection in, by its code; any other close is a drop. */
 const ENDED_BY_CLOSE: ReadonlyMap<number, TerminalConnection> = new Map([
@@ -235,7 +258,7 @@ function composed(
   fibers: FiberMap.FiberMap<string>,
   http: HttpClient.HttpClient,
 ): Omit<TerminalsComposer, "methods"> & { readonly methods: ShellMethods } {
-  const { kernel, account, client, openSocket } = dependencies;
+  const { kernel, account, client, openSocket, sandboxOpened } = dependencies;
   const connections = new Map<string, Connection>();
   const socketOrigin = webSocketOrigin(kernel.hostedServiceBaseUrl);
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
@@ -357,14 +380,33 @@ function composed(
       }),
     );
 
+  /**
+   * The connection's socket opened, and opened again while the relay answers
+   * its sandbox starting: at once as the task list says the sandbox opened,
+   * and where the list already said so, the sandbox open but not yet
+   * running, after a wait that doubles on each ask.
+   */
+  const opening = (connection: Connection) =>
+    Effect.gen(function* () {
+      let asked = 0;
+      for (;;) {
+        const ending = yield* attempt(connection).pipe(
+          Effect.catchTag("SandboxStarting", () => Effect.succeed(undefined)),
+        );
+        if (ending !== undefined) return ending;
+        if (yield* sandboxOpened(connection.agentId)) {
+          asked = 0;
+          continue;
+        }
+        yield* Effect.sleep(openingWait(asked));
+        asked += 1;
+      }
+    });
+
   /** The connection's socket opened, and opened again after each drop, until the relay ends it. */
   const reopening = (connection: Connection) =>
     Effect.gen(function* () {
-      yield* attempt(connection).pipe(
-        Effect.retry({
-          schedule: Schedule.spaced(TERMINAL_RECONNECT.STARTING_EVERY),
-          while: (failure) => failure._tag === "SandboxStarting",
-        }),
+      yield* opening(connection).pipe(
         Effect.retry({
           schedule: RECONNECT_BACKOFF,
           while: (failure) => failure._tag === "RelayDropped",
