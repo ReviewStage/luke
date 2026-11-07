@@ -1,5 +1,5 @@
 /**
- * link-places.ts -- the window's link places, each declared once with the routes its params are read from: a task's comment thread, section, and page, and an agent's tab, message, worker, Changes, and review thread.
+ * link-places.ts -- every place a link names, each declared once with the routes its params are read from: a task's comment thread, section, and page, an agent's tab, message, worker, Changes, and review thread, and each routed place's own page.
  *
  * A link place is a place a link names within a task's own place, or an
  * agent's page, which its step does not stand at: a section and a comment
@@ -9,6 +9,11 @@
  * Its route is where its params are read (`panel-router.tsx`), so a link is
  * opened by matching it on the route tree, whichever door hands it: a press
  * in the window, the desktop's `SHOW_LINK`, or a page loaded at its address.
+ * A link to a routed place's own page, a task, a version, Home, the Board, a
+ * person, the Inbox or an item of it, an Automations page, or Admin, is
+ * matched the same way and opened through the door that place has; a page
+ * loaded there stands as that routed place, its link said through
+ * load-link, so it lands on nothing here.
  *
  * - Opened in the window, its link, canonical as `linkOf` writes it, is
  *   matched here and opened through the Tasks tab's doors, which navigate
@@ -78,6 +83,43 @@ function agentPlaceOf(params: PlaceParams, fields: Readonly<Record<string, unkno
   if (workspace === undefined || agentId === undefined) return undefined;
   const place = { ...fields, ...(taskId === undefined ? {} : { planId: taskId }), agentId };
   return isLinkPlace(place) ? place : undefined;
+}
+
+/** The place a route's params spell, read through the link grammar's own schema; none where they spell no place. */
+function placeOf(fields: Readonly<Record<string, unknown>>): LinkPlace | undefined {
+  return isLinkPlace(fields) ? fields : undefined;
+}
+
+/** A task's own place the task's address names with no comment thread in its query and no section in its fragment, as `readLink` reads it. */
+function taskPlaceOf({ params, search, hash }: LinkAddress): LinkPlace | undefined {
+  if (params.taskId === undefined || commentOf(search) !== undefined || hash !== "") {
+    return undefined;
+  }
+  return placeOf({ kind: LINK_PLACE.TASK, planId: params.taskId });
+}
+
+/** An Inbox item as its route's params name it: under its task, under its agent, or by its id alone. */
+function inboxItemOf({ taskId, agentId, itemId }: PlaceParams): LinkPlace | undefined {
+  if (taskId !== undefined) return placeOf({ kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId });
+  if (agentId !== undefined) {
+    return placeOf({ kind: LINK_PLACE.INBOX_ITEM, agentId, itemId });
+  }
+  return placeOf({ kind: LINK_PLACE.INBOX_ITEM, itemId });
+}
+
+/** An Admin view as its route's params name it: an account's, a workspace's, a day's, a section, or its Overview. */
+function adminOf({ userId, workspaceId, day, section }: PlaceParams): LinkPlace | undefined {
+  const view =
+    userId !== undefined
+      ? { userId }
+      : workspaceId !== undefined
+        ? { workspaceId }
+        : day !== undefined
+          ? { day }
+          : section !== undefined
+            ? { section }
+            : {};
+  return placeOf({ kind: LINK_PLACE.ADMIN, ...view });
 }
 
 /**
@@ -169,6 +211,99 @@ export const LINK_ROUTED_PLACE = {
         view: params.view,
       }),
   },
+  // A routed place's own page, which its link opens through the Tasks tab's door for it wherever the window stands, and
+  // which a page loaded there stands as its routed place, said through load-link as it always has (`routes` holds none).
+  TASK: {
+    kind: LINK_PLACE.TASK,
+    routes: [],
+    ownPlaceRoutes: ["/places/$workspace/task/$taskId/"],
+    read: taskPlaceOf,
+  },
+  VERSION: {
+    kind: LINK_PLACE.VERSION,
+    routes: [],
+    ownPlaceRoutes: ["/version-history/$workspace/task/$taskId/version/$revision/"],
+    read: ({ params }) =>
+      placeOf({
+        kind: LINK_PLACE.VERSION,
+        planId: params.taskId,
+        revision: Number(params.revision),
+      }),
+  },
+  HOME: {
+    kind: LINK_PLACE.HOME,
+    routes: [],
+    ownPlaceRoutes: ["/places/$workspace/"],
+    read: () => ({ kind: LINK_PLACE.HOME }),
+  },
+  BOARD: {
+    kind: LINK_PLACE.BOARD,
+    routes: [],
+    ownPlaceRoutes: ["/places/$workspace/tasks"],
+    read: () => ({ kind: LINK_PLACE.BOARD }),
+  },
+  PERSON: {
+    kind: LINK_PLACE.PERSON,
+    routes: [],
+    ownPlaceRoutes: ["/places/$workspace/person/$userId"],
+    read: ({ params }) => placeOf({ kind: LINK_PLACE.PERSON, userId: params.userId }),
+  },
+  INBOX: {
+    kind: LINK_PLACE.INBOX,
+    routes: [],
+    ownPlaceRoutes: ["/places/$workspace/inbox/", "/places/$workspace/inbox/task/$taskId"],
+    read: ({ params }) =>
+      placeOf({
+        kind: LINK_PLACE.INBOX,
+        ...(params.taskId === undefined ? {} : { planId: params.taskId }),
+      }),
+  },
+  INBOX_ITEM: {
+    kind: LINK_PLACE.INBOX_ITEM,
+    routes: [],
+    ownPlaceRoutes: [
+      "/places/$workspace/inbox/$itemId",
+      "/places/$workspace/task/$taskId/inbox/$itemId",
+      "/places/$workspace/agent/$agentId/inbox/$itemId",
+    ],
+    read: ({ params }) => inboxItemOf(params),
+  },
+  AUTOMATIONS: {
+    kind: LINK_PLACE.AUTOMATIONS,
+    routes: [],
+    ownPlaceRoutes: ["/places/$workspace/automation-pages/automations/"],
+    read: () => ({ kind: LINK_PLACE.AUTOMATIONS }),
+  },
+  AUTOMATION: {
+    kind: LINK_PLACE.AUTOMATION,
+    routes: [],
+    ownPlaceRoutes: ["/places/$workspace/automation-pages/automation/$automationId/"],
+    read: ({ params }) =>
+      placeOf({ kind: LINK_PLACE.AUTOMATION, automationId: params.automationId }),
+  },
+  AUTOMATION_RUN: {
+    kind: LINK_PLACE.AUTOMATION_RUN,
+    routes: [],
+    ownPlaceRoutes: ["/places/$workspace/automation-pages/automation/$automationId/run/$runId"],
+    read: ({ params }) =>
+      placeOf({
+        kind: LINK_PLACE.AUTOMATION_RUN,
+        automationId: params.automationId,
+        runId: params.runId,
+      }),
+  },
+  ADMIN: {
+    kind: LINK_PLACE.ADMIN,
+    routes: [],
+    ownPlaceRoutes: [
+      "/places/$workspace/admin/",
+      "/places/$workspace/admin/$section",
+      "/places/$workspace/admin/user/$userId",
+      "/places/$workspace/admin/workspace/$workspaceId",
+      "/places/$workspace/admin/day/$day",
+    ],
+    read: ({ params }) => adminOf(params),
+  },
 } as const satisfies { readonly [Name in string]: LinkPlaceDeclaration };
 
 const DECLARATIONS: readonly LinkPlaceDeclaration[] = Object.values(LINK_ROUTED_PLACE);
@@ -237,7 +372,8 @@ export function opensAtItsRoute(link: ReadLink): boolean {
   const declared: LinkPlaceDeclaration | undefined = DECLARATIONS.find(
     (each) => each.kind === link.place.kind,
   );
-  return declared !== undefined && (declared.lands?.(link.place) ?? true);
+  if (declared === undefined || declared.routes.length === 0) return false;
+  return declared.lands?.(link.place) ?? true;
 }
 
 /**

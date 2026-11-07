@@ -261,28 +261,22 @@ test.each([
       view: "conversation",
     },
   ],
+  [
+    "a worker of our own under /plan/, read as its task",
+    `${LINK_ORIGIN}/acme/plan/${TASK}/worker/toolu_1`,
+    LINK_ROUTED_PLACE.TASK,
+    { kind: LINK_PLACE.TASK, planId: TASK },
+  ],
+  [
+    "a channel's link, read as the Inbox",
+    `${LINK_ORIGIN}/acme/channel/c-1`,
+    LINK_ROUTED_PLACE.INBOX,
+    { kind: LINK_PLACE.INBOX },
+  ],
 ] as const)(
   "%s written in a part is handed to the window, which matches it on its route tree as that place",
   (_spelling, href, declared, place) => {
     assert.deepEqual(handed(href).map(matched), [{ declared, place }]);
-  },
-);
-
-test.each([
-  [
-    "a worker of our own under /plan/",
-    `${LINK_ORIGIN}/acme/plan/${TASK}/worker/toolu_1`,
-    LINK_PLACE.TASK,
-  ],
-  ["a channel's link", `${LINK_ORIGIN}/acme/channel/c-1`, LINK_PLACE.INBOX],
-] as const)(
-  "%s is handed to the window as the place it reads as, which no link place's route matches",
-  (_spelling, href, kind) => {
-    const links = handed(href);
-    assert.deepEqual(
-      links.map((link) => [link.place.kind, matched(link)]),
-      [[kind, undefined]],
-    );
   },
 );
 
