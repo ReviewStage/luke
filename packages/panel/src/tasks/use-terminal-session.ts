@@ -87,12 +87,37 @@ export const TerminalsContext = createContext<Terminals>(makeTerminals());
 
 /**
  * Detaches every session of an account but the one signed in, its shell
- * left running, as another account takes the window; the account's lists
- * and sessions are read under it at each door (`window-account.ts`).
+ * left running, and puts its lists on top in storage, as another account
+ * takes the window; the account's lists and sessions are read under it at
+ * each door (`window-account.ts`).
  */
 export function useTerminalsOwner(account: string | undefined): void {
-  const { sessions } = useContext(TerminalsContext);
-  useLayoutEffect(() => sessions.own(account), [sessions, account]);
+  const { held, sessions } = useContext(TerminalsContext);
+  useLayoutEffect(() => {
+    sessions.own(account);
+    held.own(account);
+  }, [held, sessions, account]);
+}
+
+/**
+ * Holds the terminals of the tabs given in the window's lists under the
+ * account signed in, each one not held yet minted as a real open mints it,
+ * so its tab stands: a fixture run's staged Terminal tabs, which no open
+ * minted.
+ */
+export function useHeldTerminalTabs(tabs: readonly TerminalStripTab[] | undefined): void {
+  const { held } = useContext(TerminalsContext);
+  const account = useWindowAccount();
+  useLayoutEffect(() => {
+    for (const tab of tabs ?? []) {
+      const shells = held.of(account, TERMINAL_KIND.CLOUD, tab.terminal);
+      if (shells.some((each) => each.shell === tab.shell)) continue;
+      held.set(account, TERMINAL_KIND.CLOUD, tab.terminal, [
+        ...shells,
+        { shell: tab.shell, title: tab.title },
+      ]);
+    }
+  }, [held, account, tabs]);
 }
 
 /** A cloud state from the host's word for it. */

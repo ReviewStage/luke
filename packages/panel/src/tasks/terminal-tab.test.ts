@@ -23,7 +23,7 @@ import type { TerminalStripTab } from "@repo/ui/tab-strip-model";
 import { terminalTab } from "@repo/ui/tab-strip-model";
 import { STILL_CLOCK, serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { UnparsedWireValue } from "@repo/wire";
-import { Clock, Context, Effect } from "effect";
+import { Clock, Context, Effect, Schema } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -75,21 +75,30 @@ const TAB: TerminalStripTab = terminalTab(
   "Cloud 1",
 );
 
+/** One account's terminals as the window keeps them. */
+type KeptLists = { cloud: Record<string, readonly HeldShell[]>; local: object };
+
+/** The window's terminals as it keeps them in its session storage: the account on top's, and every other's under its key. */
+type Kept = KeptLists & { account?: string; accounts?: Record<string, KeptLists> };
+
+/** What the window keeps in its session storage. */
+function keptValue(): Kept {
+  return JSON.parse(window.sessionStorage.getItem("vespin.terminals") ?? "{}");
+}
+
 /** Keeps the window's cloud terminals for the agent, of the account or of none, as a page before a reload left them in session storage. */
 function keep(shells: readonly HeldShell[], account?: string): void {
   window.sessionStorage.setItem(
     "vespin.terminals",
-    JSON.stringify([{ account, terminals: { cloud: { [AGENT.id]: shells }, local: {} } }]),
+    JSON.stringify({ account, cloud: { [AGENT.id]: shells }, local: {}, accounts: {} }),
   );
 }
 
 /** The agent's cloud terminals of the account, or of none, as the window keeps them in its session storage. */
 function kept(account?: string): readonly HeldShell[] {
-  const all: readonly {
-    account?: string;
-    terminals: { cloud: Record<string, readonly HeldShell[]> };
-  }[] = JSON.parse(window.sessionStorage.getItem("vespin.terminals") ?? "[]");
-  return all.find((each) => each.account === account)?.terminals.cloud[AGENT.id] ?? [];
+  const all = keptValue();
+  const lists = all.account === account ? all : all.accounts?.[account ?? ""];
+  return lists?.cloud[AGENT.id] ?? [];
 }
 
 /** A shell as the sandbox answers it. */
@@ -432,6 +441,57 @@ test("another account signing in detaches the tab's shell and ends none: its por
   assert.deepEqual(tab.kinds(before), [], "no shell was ended, and none started");
   assert.deepEqual(tab.terminals.held.of("grace", TERMINAL_KIND.CLOUD, AGENT.id), []);
   assert.deepEqual(kept("ada"), [{ shell: TAB.shell, title: "Cloud 1", terminal: MADE }]);
+});
+
+test("what the window keeps reads, through the shape the build before this one reads, as the signed-in account's terminals", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  await mount(true, true, "ada");
+  // The shape a build that held one list for every account reads, as that build declares it.
+  const shell = Schema.Struct({
+    shell: Schema.String,
+    title: Schema.String,
+    terminal: Schema.optional(Schema.String),
+  });
+  const byAgent = Schema.Record(Schema.String, Schema.Array(shell));
+  const before = Schema.fromJsonString(Schema.Struct({ cloud: byAgent, local: byAgent }));
+
+  const read = Schema.decodeUnknownSync(before)(window.sessionStorage.getItem("vespin.terminals"));
+
+  assert.deepEqual(read.cloud[AGENT.id], [{ shell: TAB.shell, title: "Cloud 1", terminal: MADE }]);
+});
+
+test("a switch moves the last account's terminals under its own key before the next one's take the top", async () => {
+  keep([{ shell: TAB.shell, title: TAB.title }], "ada");
+  const tab = await mount(true, true, "ada");
+
+  await tab.signIn("grace", false);
+
+  const value = keptValue();
+  assert.equal(value.account, "grace");
+  assert.deepEqual(value.cloud, {});
+  assert.deepEqual(value.accounts?.ada?.cloud[AGENT.id], [
+    { shell: TAB.shell, title: "Cloud 1", terminal: MADE },
+  ]);
+});
+
+test("the terminals a build before this one kept are the signed-in account's, and no other's", async () => {
+  window.sessionStorage.setItem(
+    "vespin.terminals",
+    JSON.stringify({
+      cloud: { [AGENT.id]: [{ shell: TAB.shell, title: TAB.title, terminal: RUNNING_ON }] },
+      local: {},
+    }),
+  );
+  const tab = await mount(true, true, "ada");
+  assert.deepEqual(tab.kinds(), ["terminal.attach"]);
+  assert.equal(
+    (lastPayload(ACT_KIND.TERMINAL_ATTACH) as { terminalId: string }).terminalId,
+    RUNNING_ON,
+  );
+
+  await tab.signIn("grace", false);
+
+  assert.deepEqual(tab.terminals.held.of("grace", TERMINAL_KIND.CLOUD, AGENT.id), []);
 });
 
 test("while another account is signed in, nothing the first's shell says reaches the window, and nothing typed reaches that shell", async () => {

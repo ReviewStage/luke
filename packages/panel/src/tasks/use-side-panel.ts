@@ -29,7 +29,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { absurd, Option, Schema } from "effect";
 import { InboxIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   type ByPullRequestTab,
@@ -43,6 +43,9 @@ import {
   TAB_PIN,
   untitledStripTab,
 } from "./strip-tab-kinds.js";
+import { type HeldShells, holdsShell, useOwnedShells } from "./terminal-held.js";
+import { TERMINAL_KIND } from "./terminal-session.js";
+import { TerminalsContext } from "./use-terminal-session.js";
 import { useWindowAccount } from "./window-account.js";
 
 /**
@@ -859,6 +862,8 @@ export interface DrawnTabs {
   heldAgents?: readonly string[] | undefined;
   /** The task's agents' cloud Browser tabs, by the id the service keeps each under, or nothing while unread. */
   cloudBrowsers?: readonly string[] | undefined;
+  /** The terminals the window holds for the account signed in, whose Terminal and Local tabs alone the strip draws, so another account's stand hidden until it signs in again. */
+  shells?: HeldShells | undefined;
 }
 
 /** The developer's own choices of fixed tab on the task. */
@@ -1442,15 +1447,28 @@ function drawsTranscript(
   return drawn.task.bare === true && drawn.taskAgents?.includes(tab.transcript) === true;
 }
 
+/** Whether a Terminal tab is drawn: its agent the task's, and its terminal held for the account signed in where the caller reads the lists. */
 export function drawsTerminal(
   tab: TerminalStripTab,
-  drawn: Pick<DrawnTabs, "taskAgents">,
+  drawn: Pick<DrawnTabs, "taskAgents" | "shells">,
 ): boolean {
-  return drawn.taskAgents?.includes(tab.terminal) === true;
+  return (
+    drawn.taskAgents?.includes(tab.terminal) === true &&
+    (drawn.shells === undefined ||
+      holdsShell(drawn.shells, TERMINAL_KIND.CLOUD, tab.terminal, tab.shell))
+  );
 }
 
-export function drawsLocal(tab: LocalStripTab, drawn: Pick<DrawnTabs, "taskAgents">): boolean {
-  return drawn.taskAgents?.includes(tab.local) === true;
+/** Whether a Local tab is drawn, on the terms of a Terminal tab. */
+export function drawsLocal(
+  tab: LocalStripTab,
+  drawn: Pick<DrawnTabs, "taskAgents" | "shells">,
+): boolean {
+  return (
+    drawn.taskAgents?.includes(tab.local) === true &&
+    (drawn.shells === undefined ||
+      holdsShell(drawn.shells, TERMINAL_KIND.LOCAL, tab.local, tab.shell))
+  );
 }
 
 /** The open file tabs of files opened on the task, by path, in the strip's order. */
@@ -1923,16 +1941,6 @@ function stagesOpened(
   }
 }
 
-/** The state with no Terminal or Local tab open or chosen, as another account signs in. */
-function withoutShellTabs(held: HeldState): HeldState {
-  const chosen = held.tab;
-  const shell =
-    chosen !== undefined &&
-    !isFixedTab(chosen) &&
-    (chosen.kind === STRIP_TAB_KIND.TERMINAL || chosen.kind === STRIP_TAB_KIND.LOCAL);
-  return { ...held, terminals: [], locals: [], ...(shell ? { tab: undefined } : undefined) };
-}
-
 /** A staged state made whole as a kept one is, with the file, page, and Terminal tabs and the Pull request views it stages open, and its file, page, or Terminal tab shown where it names one. */
 function stagedHeld(staged: StagedSidePanel): HeldState {
   const {
@@ -2163,15 +2171,10 @@ export function useSidePanel(
     },
     [stage],
   );
-  // A terminal is its account's (`terminal-held.ts`): another account signing
-  // in closes the last one's Terminal and Local tabs, whose shells run on, and
-  // that account opens them again from its lists, as after a reload.
-  const account = useWindowAccount();
-  const [tabsOf, setTabsOf] = useState(account);
-  if (tabsOf !== account) {
-    setTabsOf(account);
-    update(withoutShellTabs);
-  }
+  // A terminal is its account's (`terminal-held.ts`): the strip draws the
+  // Terminal and Local tabs of those the account signed in holds alone, so
+  // another account's stand hidden, as they were, until it signs in again.
+  const shells = useOwnedShells(useContext(TerminalsContext).held, useWindowAccount());
   const shownFor = (holds: TaskHolds) =>
     shownIn(state, {
       task: { id: taskId, holds },
@@ -2182,6 +2185,7 @@ export function useSidePanel(
       taskAgents,
       heldAgents,
       cloudBrowsers,
+      shells,
     });
 
   // Note that something arriving on the task adds its tab without taking
@@ -2222,8 +2226,22 @@ export function useSidePanel(
       taskAgents,
       heldAgents,
       cloudBrowsers,
+      shells,
     }),
-    [seen, agents, subagents, taskFiles, pagesHere, taskAgents, heldAgents, cloudBrowsers],
+    [seen, agents, subagents, taskFiles, pagesHere, taskAgents, heldAgents, cloudBrowsers, shells],
+  );
+  // The Terminal and Local tabs open of the terminals the account signed in holds.
+  const heldTerminals = useMemo(
+    () =>
+      state.terminals.filter((tab) =>
+        holdsShell(shells, TERMINAL_KIND.CLOUD, tab.terminal, tab.shell),
+      ),
+    [state.terminals, shells],
+  );
+  const heldLocals = useMemo(
+    () =>
+      state.locals.filter((tab) => holdsShell(shells, TERMINAL_KIND.LOCAL, tab.local, tab.shell)),
+    [state.locals, shells],
   );
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
@@ -2559,8 +2577,8 @@ export function useSidePanel(
     subagents: state.subagents,
     changes: taskTabs(state, taskId).changes ?? NO_CHANGES,
     pages: state.pages,
-    terminals: state.terminals,
-    locals: state.locals,
+    terminals: heldTerminals,
+    locals: heldLocals,
     lastTerminal: taskId === undefined ? undefined : state.lastTerminals[taskId],
     pullRequestViews: state.pullRequestViews,
     onPullRequestView,

@@ -48,43 +48,76 @@ const heldShellsSchema = Schema.Struct({
   [TERMINAL_KIND.LOCAL]: heldByAgentSchema,
 });
 
-type HeldShells = typeof heldShellsSchema.Type;
+export type HeldShells = typeof heldShellsSchema.Type;
 
-/** One account's terminals, or those of the window with no account signed in, which names none. */
-const ownedShellsSchema = Schema.Struct({
+/**
+ * Every account's terminals as the window keeps them: the account signed in
+ * last on top, in the shape a build that held one list for every account
+ * kept and still reads, which names that account (`account`, none for no
+ * account), and every other account's under its key (`accounts`). Note that
+ * a build before this one reads the top alone, and writes it alone, so a
+ * value with no `accounts` is that build's, its top the account's signed in.
+ */
+const keptShellsSchema = Schema.Struct({
+  [TERMINAL_KIND.CLOUD]: heldByAgentSchema,
+  [TERMINAL_KIND.LOCAL]: heldByAgentSchema,
   account: Schema.optional(Schema.String),
-  terminals: heldShellsSchema,
+  accounts: Schema.optional(Schema.Record(Schema.String, heldShellsSchema)),
 });
 
-/** Every account's terminals, as the window keeps them. */
-const keptShellsJson = Schema.fromJsonString(Schema.Array(ownedShellsSchema));
+const keptShellsJson = Schema.fromJsonString(keptShellsSchema);
 
-/** Each account's terminals, by the account's key, none for no account signed in. */
-type ShellsByAccount = ReadonlyMap<string | undefined, HeldShells>;
+/** The lists a window holds: each account's, by its key, none for no account; whose stand on top in storage; and those a build before this one kept, which the first account the window reads takes. */
+interface HeldState {
+  readonly accounts: ReadonlyMap<string | undefined, HeldShells>;
+  readonly top: string | undefined;
+  readonly unclaimed: HeldShells | undefined;
+}
 
 /** No terminal held. */
 const NONE_HELD: HeldShells = { [TERMINAL_KIND.CLOUD]: {}, [TERMINAL_KIND.LOCAL]: {} };
 const NOTHING_HELD: readonly HeldShell[] = [];
 
+/** A window that kept nothing. */
+const NONE_KEPT: HeldState = { accounts: new Map(), top: undefined, unclaimed: undefined };
+
 /** What the window kept before a reload, or nothing where it kept none, it no longer reads, or storage refuses. */
-function readHeld(): ShellsByAccount {
+function readHeld(): HeldState {
   try {
-    const kept = Schema.decodeUnknownOption(keptShellsJson)(
+    const decoded = Schema.decodeUnknownOption(keptShellsJson)(
       window.sessionStorage.getItem(HELD_KEY),
     );
-    return new Map(
-      Option.getOrElse(kept, () => []).map((each) => [each.account, each.terminals] as const),
-    );
+    if (Option.isNone(decoded)) return NONE_KEPT;
+    const { cloud, local, account, accounts } = decoded.value;
+    const top = { [TERMINAL_KIND.CLOUD]: cloud, [TERMINAL_KIND.LOCAL]: local };
+    if (accounts === undefined) return { ...NONE_KEPT, unclaimed: top };
+    const others = Object.entries(accounts).filter(([key]) => key !== account);
+    return {
+      accounts: new Map<string | undefined, HeldShells>([...others, [account, top]]),
+      top: account,
+      unclaimed: undefined,
+    };
   } catch {
-    return new Map();
+    return NONE_KEPT;
   }
 }
 
-/** Keeps the window's terminals for the next reload; a write that fails costs only the list a reload reads. */
-function writeHeld(accounts: ShellsByAccount): void {
-  const kept = [...accounts].map(([account, terminals]) =>
-    account === undefined ? { terminals } : { account, terminals },
+/**
+ * Keeps the window's terminals for the next reload, the account on top's in
+ * the shape a build before this one reads and every other account's under
+ * its own key, each read from its own entry so no write mixes two accounts;
+ * a write that fails costs only the lists a reload reads. Note that no
+ * account's lists are kept under a key but on top, since a key names an
+ * account.
+ */
+function writeHeld(state: HeldState): void {
+  const top = state.accounts.get(state.top) ?? NONE_HELD;
+  const accounts = Object.fromEntries(
+    [...state.accounts].flatMap(([key, shells]) =>
+      key === undefined || key === state.top ? [] : [[key, shells] as const],
+    ),
   );
+  const kept = { ...top, ...(state.top === undefined ? {} : { account: state.top }), accounts };
   try {
     window.sessionStorage.setItem(HELD_KEY, Schema.encodeSync(keptShellsJson)(kept));
   } catch {
@@ -92,9 +125,18 @@ function writeHeld(accounts: ShellsByAccount): void {
   }
 }
 
-/** One account's terminals. */
-function ownedOf(accounts: ShellsByAccount, account: string | undefined): HeldShells {
-  return accounts.get(account) ?? NONE_HELD;
+/** One account's terminals: its own, or, before any account took them, those a build before this one kept. */
+function ownedOf(state: HeldState, account: string | undefined): HeldShells {
+  return state.accounts.get(account) ?? state.unclaimed ?? NONE_HELD;
+}
+
+/** The state with what a build before this one kept taken by the account, where it holds none of its own. */
+function claimed(state: HeldState, account: string | undefined): HeldState {
+  if (state.unclaimed === undefined) return state;
+  const accounts = state.accounts.has(account)
+    ? state.accounts
+    : new Map(state.accounts).set(account, state.unclaimed);
+  return { ...state, accounts, unclaimed: undefined };
 }
 
 /**
@@ -103,8 +145,13 @@ function ownedOf(accounts: ShellsByAccount, account: string | undefined): HeldSh
  * through to storage.
  */
 export class TerminalsHeld {
-  /** The lists themselves; written only through `set`, which keeps storage in step. */
-  readonly all = new Store<ShellsByAccount>(readHeld());
+  /** The lists themselves; written only through `set` and `own`, which keep storage in step. */
+  readonly all = new Store<HeldState>(readHeld());
+
+  #write(next: HeldState): void {
+    writeHeld(next);
+    this.all.setState(() => next);
+  }
 
   /** One kind's terminals of one agent of the account, oldest first. */
   of(account: string | undefined, kind: TerminalKind, agentId: string): readonly HeldShell[] {
@@ -118,15 +165,21 @@ export class TerminalsHeld {
     agentId: string,
     shells: readonly HeldShell[],
   ): void {
-    const owned = ownedOf(this.all.state, account);
+    const state = claimed(this.all.state, account);
+    const owned = ownedOf(state, account);
     const { [agentId]: _was, ...others } = owned[kind];
     const next = {
       ...owned,
       [kind]: shells.length === 0 ? others : { ...others, [agentId]: shells },
     };
-    const accounts = new Map(this.all.state).set(account, next);
-    writeHeld(accounts);
-    this.all.setState(() => accounts);
+    this.#write({ ...state, accounts: new Map(state.accounts).set(account, next) });
+  }
+
+  /** Puts the account signed in on top in storage, the last one's moved under its own key, and gives it what a build before this one kept. */
+  own(account: string | undefined): void {
+    const state = claimed(this.all.state, account);
+    if (state === this.all.state && state.top === account) return;
+    this.#write({ ...state, top: account });
   }
 }
 
@@ -138,6 +191,21 @@ export function useHeldShells(
   agentId: string,
 ): readonly HeldShell[] {
   return useSelector(held.all, (all) => ownedOf(all, account)[kind][agentId] ?? NOTHING_HELD);
+}
+
+/** The terminals of every kind the window holds for the account, the same object until one changes. */
+export function useOwnedShells(held: TerminalsHeld, account: string | undefined): HeldShells {
+  return useSelector(held.all, (all) => ownedOf(all, account));
+}
+
+/** Whether the lists hold the terminal minted under `shell` of one kind's agent. */
+export function holdsShell(
+  owned: HeldShells,
+  kind: TerminalKind,
+  agentId: string,
+  shell: string,
+): boolean {
+  return owned[kind][agentId]?.some((each) => each.shell === shell) === true;
 }
 
 /** The name a new terminal takes: its kind's word and the next number past every name of that shape the agent's terminals of the kind hold. */

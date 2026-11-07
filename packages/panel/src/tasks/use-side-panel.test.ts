@@ -1,11 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { changesTab, fileTab, pageTab, terminalTab, transcriptTab } from "@repo/ui/tab-strip-model";
+import {
+  changesTab,
+  fileTab,
+  pageTab,
+  type TerminalStripTab,
+  terminalTab,
+  transcriptTab,
+} from "@repo/ui/tab-strip-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { onTerminals, windowTerminals } from "../testing/terminals.js";
+import { TERMINAL_KIND } from "./terminal-session.js";
 import {
   drawsChanges,
   drawsTerminal,
@@ -66,21 +75,38 @@ function launch(stood: Stood) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const render = (held: Stood) =>
+  const terminals = windowTerminals();
+  let account = stood.account;
+  const render = (held: Stood) => {
+    account = held.account;
     act(() =>
       root.render(
-        createElement(
-          WindowAccountContext.Provider,
-          { value: held.account },
-          createElement(Probe, { held }),
+        onTerminals(
+          terminals,
+          createElement(
+            WindowAccountContext.Provider,
+            { value: held.account },
+            createElement(Probe, { held }),
+          ),
         ),
       ),
     );
+  };
   render(stood);
   return {
     control: () => {
       assert.ok(control);
       return control;
+    },
+    /** Opens a Terminal tab as a real open does: its terminal held for the account signed in, then its tab chosen. */
+    open: (tab: TerminalStripTab) => {
+      act(() =>
+        terminals.held.set(account, TERMINAL_KIND.CLOUD, tab.terminal, [
+          ...terminals.held.of(account, TERMINAL_KIND.CLOUD, tab.terminal),
+          { shell: tab.shell, title: tab.title },
+        ]),
+      );
+      act(() => control?.onChoose(tab));
     },
     render,
     quit: () => {
@@ -142,7 +168,7 @@ test("a record keeps each tab without its kind, as a build before tabs carried t
 
 test("a Changes tab closed stays closed across a launch, and closing the chosen one chooses the tab viewed before it", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
-  act(() => first.control().onChoose(CLOUD));
+  first.open(CLOUD);
   act(() => first.control().onChoose(changesTab(AGENT)));
   act(() => first.control().onClose(changesTab(AGENT)));
   assert.deepEqual(first.control().changes, []);
@@ -157,8 +183,8 @@ test("a Changes tab closed stays closed across a launch, and closing the chosen 
 
 test("an agent's Terminal tab opens once at the strip's end and chosen, stands only on its agent's plan, and is kept across no launch", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
-  act(() => first.control().onChoose(CLOUD));
-  act(() => first.control().onChoose(CLOUD));
+  first.open(CLOUD);
+  first.open(CLOUD);
   assert.deepEqual(first.control().terminals, [CLOUD], "opened once, chosen again");
   assert.deepEqual(first.control().strip.at(-1), CLOUD);
   assert.deepEqual(first.control().tab, CLOUD);
@@ -176,7 +202,7 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   act(() => first.control().onClose(CLOUD));
   assert.deepEqual(first.control().terminals, []);
   assert.equal(first.control().tab, undefined);
-  act(() => first.control().onChoose(OTHER_CLOUD));
+  first.open(OTHER_CLOUD);
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
@@ -184,14 +210,19 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   assert.equal(second.control().tab, undefined);
 });
 
-test("another account signing in closes the last one's Terminal tabs, leaving its other tabs", () => {
+test("another account signing in hides the last one's Terminal tabs, which stand again as they were once it signs in again", () => {
   const panel = launch({ task: TASK, taskAgents: [AGENT], account: "ada" });
   act(() => panel.control().onChoose(changesTab(AGENT)));
-  act(() => panel.control().onChoose(CLOUD));
+  panel.open(CLOUD);
   panel.render({ task: TASK, taskAgents: [AGENT], account: "grace" });
-  assert.deepEqual(panel.control().terminals, []);
-  assert.deepEqual(panel.control().strip, [changesTab(AGENT)]);
-  assert.deepEqual(panel.control().tab, changesTab(AGENT));
+  const forGrace = panel.control();
+  panel.render({ task: TASK, taskAgents: [AGENT], account: "ada" });
+
+  assert.deepEqual(forGrace.terminals, []);
+  assert.deepEqual(forGrace.strip, [changesTab(AGENT)]);
+  assert.deepEqual(forGrace.tab, changesTab(AGENT));
+  assert.deepEqual(panel.control().terminals, [CLOUD]);
+  assert.deepEqual(panel.control().tab, CLOUD);
 });
 
 test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its pull request's name", () => {
@@ -308,8 +339,8 @@ test("a file named alone, as ⌘K finds it, shows the tab it has as it stands, a
 test("the agent whose Terminal tab was shown last on a plan is the plan's own, which ⌘J goes to among several", () => {
   const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.equal(panel.control().lastTerminal, undefined);
-  act(() => panel.control().onChoose(CLOUD));
-  act(() => panel.control().onChoose(OTHER_CLOUD));
+  panel.open(CLOUD);
+  panel.open(OTHER_CLOUD);
   act(() => panel.control().onChoose(changesTab(AGENT)));
   assert.equal(panel.control().lastTerminal, OTHER_AGENT);
   panel.render({ task: OTHER_TASK, taskAgents: [] });
@@ -340,7 +371,7 @@ test('closing the last tab shuts the panel and leaves full screen, and the toggl
 test("a new stop starts with the panel shut, whatever its strip holds, unless a tab was asked for there, as a pin or a link opens one, and a plan whose strip holds no tab draws none", () => {
   const panel = launch({ task: TASK, taskAgents: [AGENT] });
   // Note that the agent works on both tasks, so its Terminal tab stands on each.
-  act(() => panel.control().onChoose(CLOUD));
+  panel.open(CLOUD);
   assert.equal(panel.control().open, true);
 
   panel.render({ task: OTHER_TASK, taskAgents: [AGENT] });

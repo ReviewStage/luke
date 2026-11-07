@@ -86,19 +86,21 @@ const HELD: readonly HeldShell[] = [
 
 /** The agent's terminals as the window keeps them in its session storage. */
 function kept(): readonly HeldShell[] {
-  const all: readonly { terminals: { local: Record<string, readonly HeldShell[]> } }[] = JSON.parse(
-    window.sessionStorage.getItem("vespin.terminals") ?? "[]",
+  const all: { local?: Record<string, readonly HeldShell[]> } = JSON.parse(
+    window.sessionStorage.getItem("vespin.terminals") ?? "{}",
   );
-  return all[0]?.terminals.local[AGENT.id] ?? [];
+  return all.local?.[AGENT.id] ?? [];
 }
 
 /** Keeps the window's terminals for the agent, as a page before a reload left them in session storage. */
 function keep(shells: readonly HeldShell[]): void {
   window.sessionStorage.setItem(
     "vespin.terminals",
-    JSON.stringify([
-      { terminals: { cloud: {}, local: shells.length === 0 ? {} : { [AGENT.id]: shells } } },
-    ]),
+    JSON.stringify({
+      cloud: {},
+      local: shells.length === 0 ? {} : { [AGENT.id]: shells },
+      accounts: {},
+    }),
   );
 }
 
