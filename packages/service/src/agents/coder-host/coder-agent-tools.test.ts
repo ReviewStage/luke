@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Database } from "@repo/database/core/query";
-import { sweepAbandonedTurns, TURN_ABANDON } from "@repo/database/models/abandoned-turns";
 import {
   readAccountPreferences,
   writeAccountPreferences,
@@ -3119,7 +3118,7 @@ async function failedTurnOn(agent: StartedAgent): Promise<void> {
   );
 }
 
-test("list_agents and read_agent say why each failed agent failed: a turn failed midway, a session that never started, a turn the sweep abandoned, and a failure after an earlier turn completed", async () => {
+test("list_agents and read_agent say why each failed agent failed: a turn failed midway, a session that never started, and a failure after an earlier turn completed", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const agentSessions = await fakeCoderSessions(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, agentSessions.services);
@@ -3135,11 +3134,6 @@ test("list_agents and read_agent say why each failed agent failed: a turn failed
         .where(eq(agentTable.id, unstarted.id)),
     ),
   );
-  const abandoned = await agentOn(bob, tasks.billing);
-  await turnOn(abandoned, false);
-  await database.run(
-    sweepAbandonedTurns({ writer }, { now: NOW + TURN_ABANDON.AGENT_AFTER_MS + 1 }),
-  );
   const afterCompleted = await agentOn(bob, tasks.billing);
   await turnOn(afterCompleted, true);
   await failedTurnOn(afterCompleted);
@@ -3147,7 +3141,6 @@ test("list_agents and read_agent say why each failed agent failed: a turn failed
   const failed = (failure: string) => [AGENT_STATUS.FAILED, failure, AGENT_STATUS.FAILED, failure];
   assert.deepEqual(await standingAsRead(call, midway.id), failed(AGENT_FAILURE.MODEL));
   assert.deepEqual(await standingAsRead(call, unstarted.id), failed(AGENT_FAILURE.NOT_STARTED));
-  assert.deepEqual(await standingAsRead(call, abandoned.id), failed(AGENT_FAILURE.ABANDONED));
   assert.deepEqual(await standingAsRead(call, afterCompleted.id), failed(AGENT_FAILURE.MODEL));
 });
 

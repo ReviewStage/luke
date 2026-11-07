@@ -1,19 +1,19 @@
-import type { MemoriesFollowParams } from "@repo/features/agent-view";
 import { Effect, MutableHashMap, Stream } from "effect";
 import { ACCOUNT_ASK_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /**
- * account-ask-procedures.ts -- the account's holds from Settings: its provider keys, its GitHub token, and a workspace's memories, each followed and asked again.
+ * account-ask-procedures.ts -- the account's holds from Settings: its provider keys and its GitHub token, each followed and asked again.
  *
  * The one check these procedures make is who asked: only a panel draws
  * Settings, so every one refuses the takeover and any other window, in its
- * own sentence. The account's provider keys and GitHub token, and each
- * workspace's memories, are held at the host while a panel holds their
- * stream open, and reach every panel on app state; how many streams stand
- * open is all that is held here. The account's plain asks are declared
- * (`contract/account-asks.ts`) and answered by the agents' composer.
+ * own sentence. The account's provider keys and GitHub token are held at
+ * the host while a panel holds their stream open, and reach every panel on
+ * app state; how many streams stand open is all that is held here. The
+ * account's plain asks, and a workspace's memories, a live follow, are
+ * declared (`contract/account-asks.ts`) and answered by the agents'
+ * composer.
  */
 export interface AccountAskProceduresDependencies {
   host: {
@@ -27,11 +27,6 @@ export interface AccountAskProceduresDependencies {
     githubTokenUnfollow(): Effect.Effect<void>;
     /** The account's held GitHub token asked again at once, as Try again asks; done once the ask has landed. */
     githubTokenRetry(): Effect.Effect<void>;
-    /** A workspace's memories held at the host while any stream of them stands; what it holds reaches the panel on app state. */
-    memoriesFollow(params: MemoriesFollowParams): Effect.Effect<void>;
-    memoriesUnfollow(params: MemoriesFollowParams): Effect.Effect<void>;
-    /** A workspace's held memories asked again at once, as Try again asks; done once the ask has landed. */
-    memoriesRetry(params: MemoriesFollowParams): Effect.Effect<void>;
   };
 }
 
@@ -46,8 +41,6 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
   const openKeys: OpenFollows = MutableHashMap.empty();
   /** The account's GitHub token while a window holds a stream open of it, so the host lets it go only with the last. */
   const openToken: OpenFollows = MutableHashMap.empty();
-  /** Each workspace's memories while a window holds a stream open of them, by the workspace. */
-  const openMemories: OpenFollows = MutableHashMap.empty();
   return {
     [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW]: actPort[
       ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW
@@ -91,26 +84,5 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.githubTokenRetry();
     }),
-    [ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW]: actPort[ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const hold = followedStream(
-          {
-            keyOf: (held: MemoriesFollowParams) => held.workspaceId,
-            follow: host.memoriesFollow,
-            unfollow: host.memoriesUnfollow,
-          },
-          openMemories,
-          input,
-        );
-        return streamed(yield* Stream.toAsyncIterableEffect(hold));
-      },
-    ),
-    [ACCOUNT_ASK_ACT_KIND.MEMORIES_RETRY]: actPort[ACCOUNT_ASK_ACT_KIND.MEMORIES_RETRY].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        yield* host.memoriesRetry(input);
-      },
-    ),
   };
 }

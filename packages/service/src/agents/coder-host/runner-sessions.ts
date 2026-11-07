@@ -100,6 +100,7 @@ import {
   RUNNER_ENV,
   type RunnerConfig,
   type RunnerEnd,
+  type RunnerTrace,
 } from "@repo/agent-runner/protocol";
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { settleRunnerLostTurns } from "@repo/database/models/abandoned-turns";
@@ -164,6 +165,7 @@ import {
 } from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import { logStoreFailure } from "../../http/store-failure.js";
+import { sentryRunnerTrace } from "../../observability/sentry.js";
 import {
   AgentMachine,
   type AgentMachineService,
@@ -851,6 +853,16 @@ export const runnerSessions = <
       fork = false,
     ) =>
       Effect.gen(function* () {
+        // The launch's trace, read here on its span, for a runner in the cloud's sandbox to trace
+        // its startup in; a device's runner is handed none and sends Sentry nothing.
+        const traced =
+          place.running.machine === AGENT_MACHINE.VERCEL
+            ? yield* Effect.sync(sentryRunnerTrace)
+            : undefined;
+        const trace: RunnerTrace | undefined =
+          traced === undefined
+            ? undefined
+            : { ...traced, ...(path === undefined ? undefined : { path }) };
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
         const delivered = machine.deliverCredentials(agent, [
           ...(credential.credentials ?? []),
@@ -904,6 +916,7 @@ export const runnerSessions = <
                       : undefined),
                     ...(fork ? { fork } : undefined),
                     ...(warm ? { warm } : undefined),
+                    ...(trace === undefined ? undefined : { trace }),
                   },
                   rewind,
                 };
@@ -1653,7 +1666,7 @@ export const runnerSessions = <
      * started, runs on. The ended runner's bearer is let go and the place's
      * record cleared, as `haltHolding` leaves them, so nothing it posts on its
      * way down is taken and the next message relaunches; its sandbox stops
-     * at the sweep (`native-sandbox-sweep.ts`), since a killed runner posts
+     * at its timeout, since a killed runner posts
      * no END. A turn ended meanwhile, as a runner that heard the Stop ends
      * it within seconds, is left as it ended.
      */
@@ -2099,7 +2112,7 @@ export const runnerSessions = <
       // conversation's turn under way, to the command of the launch running it, and naming that
       // launch, so a Stop delayed past its turn never interrupts the next launch's. A Stop taken
       // is forced past the answer (`forcedStop`), its wait run there rather than holding the
-      // request; a caller with no after-response door leaves an unconfirmed Stop to the sweep.
+      // request; a caller with no after-response door leaves an unconfirmed Stop to the turn's lease.
       cancel: (sessionId, turnId) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);

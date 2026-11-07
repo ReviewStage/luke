@@ -3,7 +3,6 @@ import {
   MESSAGE_ROLE,
   type MessageRole,
   type StoredMessageMetadata,
-  TURN_STATUS,
   type TurnOrigin,
   type TurnStatus,
 } from "@repo/wire";
@@ -341,6 +340,15 @@ export const turns = pgTable(
     failureDetail: text("failure_detail"),
     cancelRequestedAt: timestamptz("cancel_requested_at"),
     /**
+     * Until when the turn's runner is held to be at work, while the turn is
+     * queued or runs: set as it is queued or started and pushed on by every
+     * post its runner makes (`../models/turn-lease.ts`). Past it, every
+     * reader takes the runner as lost, and the next touch of the agent
+     * settles the turn so. Null for a turn from before the column, which only
+     * that settle reads as lapsed, once a lease has passed since its queueing.
+     */
+    leaseUntil: timestamptz("lease_until"),
+    /**
      * The key of the tool call whose Stop stamped `cancel_requested_at`,
      * where an agent's `stop_agent` made it: the call run again finds the turn
      * it stopped by this key, and never stops a newer one in its place. Null
@@ -368,11 +376,6 @@ export const turns = pgTable(
       table.queuedAt.desc().nullsFirst(),
       table.id.desc().nullsFirst(),
     ),
-    // The abandoned-turn sweep reads the turns still running past the bound.
-    // The predicate is DDL, which takes no bound parameter, so the status is inlined rather than passed.
-    index("turns_running_started")
-      .on(table.startedAt, table.id)
-      .where(sql`${table.status} = ${sql.raw(`'${TURN_STATUS.RUNNING}'`)}`),
   ],
 );
 

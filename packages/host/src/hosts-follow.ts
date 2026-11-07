@@ -10,20 +10,13 @@ import {
   type EntityPool,
   type FieldChange,
   fieldKind,
-  type HeldRows,
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
 import { Effect, type Scope } from "effect";
-import { type AppHostReads, type AppHosts, NO_KEYS_HELD } from "./app-state.js";
-import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
-import {
-  confirmWrite,
-  followTakingRows,
-  LIVE_GONE,
-  restarting,
-  type TxWait,
-} from "./live-follow.js";
+import { type AppHosts, NO_KEYS_HELD } from "./app-state.js";
+import { type HeldSlice, heldSlice } from "./live-collection.js";
+import { followLiveRead } from "./live-read-follow.js";
 
 /**
  * hosts-follow.ts -- the account's hosts the windows hold, followed over the service's held poll into the sync engine's pool by their ids, told whole on their app-state slice, and a removal drawn gone over them the moment it is asked.
@@ -34,18 +27,16 @@ import {
  * every open page within the service's coalesce window. Each host is one
  * row of the pool (`@repo/sync`), by its id, and the page draws them as the
  * held read answers them (`@repo/features/host-live`), beside the install
- * script's address the service answered with them. A removal is a write the
- * pool draws over its host at once (`hostRemove`), standing until the read
- * carries its transaction, so no answer from before it puts the host back,
- * and taken back where the service refused it.
- *
- * A read the service did not answer is told unanswered and asked for again
- * after `LIVE_RESTART`, as a follow that stops is. One refused because the
- * session is no longer the account the follow started for ends unsaid, and
- * the next sign-in follows it again.
+ * script's address the service answered with them, followed as every pool
+ * read is (`followLiveRead`). A removal is a write the pool draws over its
+ * host at once (`hostRemove`), standing until the read carries its
+ * transaction, so no answer from before it puts the host back, and taken
+ * back where the service refused it. A read the service did not answer is
+ * asked for again; one under another account's session ends unsaid, and the
+ * next sign-in follows it again.
  */
 
-/** A host as the pool holds it, by its id, every write to it a change of its fields or its removal. */
+/** A host as the pool holds it, by its id, the key its part declares, every write to it a change of its fields or its removal. */
 const HOST = fieldKind((row: HostLiveRow) => row.id);
 
 /** A read the service did not answer, as the client and the gate tell it. */
@@ -70,75 +61,6 @@ export interface HostsFollowDependencies {
 }
 
 /**
- * Follows `userId`'s hosts until let go, each change told through
- * `answers`: the rows as the read last answered them, with every removal
- * standing drawn over them, beside the install script's address. Nothing is
- * told before the read first answers, since a removal drawn on no hosts
- * shows nothing.
- */
-function followHosts(
-  dependencies: HostsFollowDependencies,
-  userId: string,
-  answers: HeldAnswers<AppHostReads[typeof LIVE_READ.HOSTS]>,
-): Effect.Effect<void> {
-  const seal = (poll: boolean, after?: string) =>
-    userId === dependencies.accountId()
-      ? dependencies.seal(userId, poll, after)
-      : Effect.succeed(LIVE_SIGNED_OUT);
-  const attempt = Effect.scoped(
-    Effect.gen(function* () {
-      const first = yield* seal(false);
-      if ("failure" in first) {
-        if (first.failure === LIVE_SIGNED_OUT.failure) return false;
-        answers.unanswered();
-        return true;
-      }
-      const { installScriptUrl } = first;
-      let wait: TxWait | undefined;
-      let answered = false;
-      const drawn: Effect.Effect<void> = Effect.sync(() => {
-        if (answered) answers.answered({ hosts: hostsOfLiveRows(hosts.rows()), installScriptUrl });
-      });
-      const hosts: HeldRows<HostLiveRow> = yield* dependencies.pool.stand(HOST, {
-        redraw: () => drawn,
-        confirmation: () => {
-          const handed = wait;
-          return handed === undefined ? undefined : (txid) => confirmWrite(handed, txid);
-        },
-      });
-      const gone = yield* followTakingRows(
-        {
-          poll: (after) =>
-            Effect.map(seal(true, after), (read) =>
-              "failure" in read
-                ? { failure: read.failure, gone: read.failure === LIVE_SIGNED_OUT.failure }
-                : read,
-            ),
-          onTxWait: (handed) => {
-            wait = handed;
-          },
-        },
-        first,
-        HOSTS_READ.rows,
-        (rows) =>
-          Effect.andThen(
-            hosts.answer(rows.hosts),
-            Effect.suspend(() => {
-              answered = true;
-              return drawn;
-            }),
-          ),
-      ).pipe(
-        Effect.as(false),
-        Effect.catch((broken) => Effect.succeed(broken.reason === LIVE_GONE)),
-      );
-      return !gone;
-    }),
-  );
-  return restarting(attempt);
-}
-
-/**
  * The held lifetime over the account's hosts the windows hold
  * (`heldSlice`), keyed by the account, told whole on their slice: the
  * read as its follow last told it, kept where a later read does not answer,
@@ -151,7 +73,26 @@ export function heldHosts(
     empty: NO_KEYS_HELD,
     path: (userId) => [userId],
     gate: dependencies.gate,
-    follow: (userId, answers) => followHosts(dependencies, userId, answers),
+    follow: (userId, answers) =>
+      followLiveRead(
+        {
+          seal: (poll, after) =>
+            userId === dependencies.accountId()
+              ? dependencies.seal(userId, poll, after)
+              : Effect.succeed(LIVE_SIGNED_OUT),
+          rows: HOSTS_READ.rows,
+          part: "hosts",
+          pool: dependencies.pool,
+          kind: HOST,
+          // Note that no refusal ends the follow but another account's session, which every follow ends on.
+          endsFollow: () => false,
+          draw: (rows, first) => ({
+            hosts: hostsOfLiveRows(rows),
+            installScriptUrl: first.installScriptUrl,
+          }),
+        },
+        answers,
+      ),
     tell: dependencies.tell,
   });
 }

@@ -4,15 +4,17 @@ import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { type RecordedRequest, recordingHttpClient } from "@repo/wire/testing";
 import { Context, Effect, Layer, type Scope } from "effect";
 import { declaredActProcedures } from "../act-port/declared-acts.js";
+import { liveFollowProcedures } from "../act-port/live-follows.js";
 import { type TestActPort, testActPort } from "../act-port/testing.js";
 import { hostAssemblyLayer } from "../compose-host.js";
 import { HOST_ACTS } from "../contract/index.js";
 import { HostAssemblyTag, hostStandingLayer } from "../effect/host.js";
+import { createHostOperator, type LiveReadChanged } from "../host-operator.js";
 import { fixedAccountSource } from "./fixed-account-source.js";
 import { machineOver } from "./host-machine.js";
 
 /**
- * host-act-port.ts -- a window's act port served over the whole host standing: every declared act answered by its own composer, over a service the test answers.
+ * host-act-port.ts -- a window's act port served over the whole host standing: every declared act and live follow answered by its own composer, over a service the test answers.
  *
  * Nothing between the port and the composer is faked: the port reads the
  * input, the composer asks the service through the host's own client, and
@@ -28,6 +30,8 @@ export interface HostActPort {
   readonly port: TestActPort<unknown>;
   /** Every request the host sent the service, in order. */
   readonly requests: readonly RecordedRequest[];
+  /** Every live follow's slice the host told, whole, in order, as the client hears it (`LIVE_READ_CHANGED`). */
+  readonly told: readonly LiveReadChanged[];
 }
 
 /**
@@ -58,9 +62,19 @@ export const hostActPort = /* @__PURE__ */ Effect.fn("testing/hostActPort")(func
     ),
   );
   const host = yield* Effect.orDie(Layer.build(standing));
-  const port = testActPort(
-    declaredActProcedures(HOST_ACTS, Context.get(host, HostAssemblyTag).acts),
+  const assembly = Context.get(host, HostAssemblyTag);
+  const port = testActPort({
+    ...declaredActProcedures(HOST_ACTS, assembly.acts),
+    ...liveFollowProcedures(HOST_ACTS, assembly.acts),
+  });
+  const told: LiveReadChanged[] = [];
+  const operator = createHostOperator({ client: assembly.gateway, report: () => undefined });
+  const unheard = operator.onLiveReadChanged((changed) => told.push(changed));
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      unheard();
+      port.close();
+    }),
   );
-  yield* Effect.addFinalizer(() => Effect.sync(() => port.close()));
-  return { port, requests: service.requests };
+  return { port, requests: service.requests, told };
 });

@@ -14,6 +14,7 @@
     "./github-installation-vocabulary": "./src/github-installation-vocabulary.js",
     "./integration-vocabulary": "./src/integration-vocabulary.js",
     "./models/abandoned-turns": "./src/models/abandoned-turns.js",
+    "./models/turn-lease": "./src/models/turn-lease.js",
     "./models/account-store": "./src/models/account-store.js",
     "./models/agent-name": "./src/models/agent-name.js",
     "./models/claude-session-entries": "./src/models/claude-session-entries.js",

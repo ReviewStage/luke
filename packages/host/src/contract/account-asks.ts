@@ -17,11 +17,13 @@ import {
   providerKeySaveParamsSchema,
   providerKeysAnswerViewSchema,
 } from "@repo/features/agent-view";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT } from "@repo/sync";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { contractOf, declaredActs, hostAct } from "./declared-act.js";
 import { ACCOUNT_ASK_ACT_KIND } from "./kinds.js";
+import { followsContractOf, HOLD, liveFollow, liveFollows } from "./live-follow.js";
 
 /**
  * account-asks.ts -- the account's own asks of the host from Settings and a dictating box, declared, and the procedures of the holds beside them.
@@ -32,8 +34,9 @@ import { ACCOUNT_ASK_ACT_KIND } from "./kinds.js";
  * key and a dictated clip each pass through to the host once and are noted
  * nowhere, and a refusal or a defect of the host's is drawn as the
  * coding-agent calls' unanswered failure, as every one was before it was
- * declared. Each hold, and its Try again, stays a procedure of its own
- * (`act-port/account-ask-procedures.ts`): a live read, not a plain act.
+ * declared. A workspace's memories are a live follow, declared once
+ * (`live-follow.ts`); the keys' and the token's holds, and their Try again,
+ * stay procedures of their own (`act-port/account-ask-procedures.ts`).
  */
 
 /** What the window draws for an ask the host could not answer. */
@@ -123,8 +126,24 @@ export const ACCOUNT_ASK_ACTS = declaredActs({
   }),
 });
 
+/** A workspace's memories, followed for Settings › Memory while it holds them. */
+export const ACCOUNT_ASK_FOLLOWS = liveFollows({
+  MEMORIES_FOLLOW: liveFollow({
+    slice: LIVE_READ.MEMORIES,
+    hold: HOLD.WINDOW,
+    key: memoriesFollowParamsSchema,
+    refusal: "Could not follow the workspace's memory on this system.",
+    panelOnly: true,
+    retry: {
+      name: "MEMORIES_RETRY",
+      refusal: "Could not read the workspace's memory again on this system.",
+    },
+  }),
+});
+
 export const accountAskActsContract = {
   ...contractOf(ACCOUNT_ASK_ACTS),
+  ...followsContractOf(ACCOUNT_ASK_FOLLOWS),
   // Note that the hold's stream carries nothing: the held keys reach the panel on app state, and the stream is the window's hold on them.
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW]: actProcedure(
     "Couldn't follow your API keys on this system.",
@@ -146,16 +165,5 @@ export const accountAskActsContract = {
     "Could not read your GitHub token again on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held memories reach the panel on app state, and the stream is the window's hold on them.
-  [ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW]: actProcedure(
-    "Could not follow the workspace's memory on this system.",
-  )
-    .input(exactInput(memoriesFollowParamsSchema))
-    .output(eventIterator(type<never>())),
-  [ACCOUNT_ASK_ACT_KIND.MEMORIES_RETRY]: actProcedure(
-    "Could not read the workspace's memory again on this system.",
-  )
-    .input(exactInput(memoriesFollowParamsSchema))
     .output(EffectSchema.Void),
 };
