@@ -2622,7 +2622,7 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will. `MaintenanceSweeps`
-(`src/maintenance/maintenance-sweep.ts`) runs ten sweeps in turn and
+(`src/maintenance/maintenance-sweep.ts`) runs eight sweeps in turn and
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 

@@ -74,7 +74,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turnlessUserLine, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER, messageSenderSchema } from "../storage-vocabulary.js";
-import { TURN_ABANDON } from "./abandoned-turns.js";
+import { LOST_TURNS } from "./abandoned-turns.js";
 import { type HandedFile, lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
@@ -1919,7 +1919,7 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   yield* deleteWithdrawnLine({ conversationId: context.target.conversationId, clientId });
   yield* deleteStaleWithdrawnLines({
     conversationId: context.target.conversationId,
-    before: new Date(context.now.getTime() - TURN_ABANDON.AGENT_AFTER_MS),
+    before: new Date(context.now.getTime() - LOST_TURNS.WITHDRAWN_LINE_KEEP_MS),
   });
   // A line already under the key is the send a lost answer was for: the runtime has it, and hears nothing again.
   const standing = yield* messageByClientId(context, clientId);
@@ -1996,11 +1996,10 @@ const deleteWithdrawnLine = SqlSchema.void({
 
 /**
  * Deletes the conversation's withdrawn lines no turn took, withdrawn before
- * the instant given. Note that the bound is a coding agent's turn bound,
- * because the runtime hands a line it took to the turn under way or to one
- * it opens at once, and a turn running past that bound is settled, so a
- * line withdrawn longer ago is one no turn will ever take, which every read
- * already leaves out.
+ * the instant given (`LOST_TURNS.WITHDRAWN_LINE_KEEP_MS` ago). Note that the
+ * runtime hands a line it took to the turn under way or to one it opens at
+ * once, so a line withdrawn that long ago is one no turn will ever take,
+ * which every read already leaves out.
  */
 const deleteStaleWithdrawnLines = SqlSchema.void({
   Request: Schema.Struct({ conversationId: Schema.String, before: Schema.Date }),
