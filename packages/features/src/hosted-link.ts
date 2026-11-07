@@ -1,4 +1,4 @@
-import { LIVE_POLL } from "./live-wire.js";
+import type { LIVE_POLL } from "./live-wire.js";
 
 /**
  * hosted-link.ts -- the hosted contract's oRPC client, carried by the one account call.
