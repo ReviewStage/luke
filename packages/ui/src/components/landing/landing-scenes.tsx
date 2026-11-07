@@ -1,7 +1,7 @@
 import { AUTOMATION_TRIGGER } from "@repo/features/automation-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { TASK_STATUS, type TaskStatus } from "@repo/features/task-wire";
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, type RefObject, useRef } from "react";
 import {
   ComposeIcon,
   MicrophoneIcon,
@@ -90,7 +90,7 @@ import {
   SidePanelToggle,
 } from "./landing-desktop.js";
 import { LandingPanel, LandingPhone, LandingWindow } from "./landing-devices.js";
-import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
+import { MINUTE, STORY_NOW, still, useNarrowPage, useStory } from "./landing-story.js";
 
 /**
  * landing-scenes.tsx -- the landing's moving screens: the app's own components, composed as the panel composes them, stepping through a short story each.
@@ -103,11 +103,32 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  * with it, the plan's sub-tasks beside it; an automation's page fires a run;
  * the phone holds the same Inbox; and Settings › Agents connects Claude on
  * its plan and Codex on an API key. None is pressed: each plays its story on a clock that
- * runs only while it is on screen (`landing-story.ts`).
+ * runs only while it is on screen (`landing-story.ts`). On a page too narrow
+ * for a whole window, the Inbox and the task play only from their telling
+ * moment, the ask and the hand-off, which is all their crop shows.
  */
 
 /** How long each scene holds a step, in milliseconds. */
 const BEAT = { HERO: 900, INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
+
+/**
+ * A window's story: how many steps it plays, the last it draws (held for the
+ * rest), and the step a narrow page's crop opens on.
+ */
+const STORY = {
+  INBOX: { STEPS: 7, LAST: 5, NARROW_FROM: 2 },
+  AGENTS: { STEPS: 7, LAST: 5, NARROW_FROM: 3 },
+} as const;
+
+/** The step a window's `story` draws: all of it on a wide page, from its telling moment on a narrow one. */
+function useWindowStory(
+  ref: RefObject<HTMLDivElement | null>,
+  story: (typeof STORY)[keyof typeof STORY],
+  beat: number,
+): number {
+  const from = useNarrowPage(ref) ? story.NARROW_FROM : 0;
+  return Math.min(useStory(ref, story.STEPS - from, beat) + from, story.LAST);
+}
 
 /** The scenes the landing plays, by the feature each shows. */
 export const LANDING_SCENE = {
@@ -513,11 +534,12 @@ function InboxPage({ step }: { step: number }): React.JSX.Element {
 }
 
 function InboxScene(): React.JSX.Element {
-  const [ref, step] = useStory(7, BEAT.INBOX);
+  const ref = useRef<HTMLDivElement>(null);
+  const step = useWindowStory(ref, STORY.INBOX, BEAT.INBOX);
   return (
     <div ref={ref} className="ui-landing-scene">
       <DesktopWindow label="The Inbox, where an agent's question is answered">
-        <InboxPage step={Math.min(step, 5)} />
+        <InboxPage step={step} />
       </DesktopWindow>
     </div>
   );
@@ -818,11 +840,12 @@ function TaskPage({ step }: { step: number }): React.JSX.Element {
 }
 
 function AgentsScene(): React.JSX.Element {
-  const [ref, step] = useStory(7, BEAT.AGENTS);
+  const ref = useRef<HTMLDivElement>(null);
+  const step = useWindowStory(ref, STORY.AGENTS, BEAT.AGENTS);
   return (
     <div ref={ref} className="ui-landing-scene">
       <DesktopWindow label="A task's agent starting another agent, and the two trading messages">
-        <TaskPage step={Math.min(step, 5)} />
+        <TaskPage step={step} />
       </DesktopWindow>
     </div>
   );
@@ -1000,7 +1023,8 @@ function AutomationPage({ step }: { step: number }): React.JSX.Element {
 }
 
 function AutomationsScene(): React.JSX.Element {
-  const [ref, step] = useStory(5, BEAT.RUNS);
+  const ref = useRef<HTMLDivElement>(null);
+  const step = useStory(ref, 5, BEAT.RUNS);
   return (
     <div ref={ref} className="ui-landing-scene">
       <DesktopWindow label="An automation's page, a scheduled run firing and finishing">
@@ -1108,7 +1132,8 @@ const KEY_ROWS: readonly KeyRow[] = [
  * are inert, since none of them is ever pressed.
  */
 function KeysScene(): React.JSX.Element {
-  const [ref, step] = useStory(5, BEAT.KEYS);
+  const ref = useRef<HTMLDivElement>(null);
+  const step = useStory(ref, 5, BEAT.KEYS);
   return (
     <div
       ref={ref}
@@ -1257,7 +1282,8 @@ function heroItems(step: number): readonly InboxItem[] {
 
 /** The hero's moving screen: the Inbox's column alone, agents' posts arriving on top and carrying the older ones off its foot. */
 export function LandingHeroScene(): React.JSX.Element {
-  const [ref, step] = useStory(HERO_POSTS.length * 2, BEAT.HERO);
+  const ref = useRef<HTMLDivElement>(null);
+  const step = useStory(ref, HERO_POSTS.length * 2, BEAT.HERO);
   const rows = useRef<HTMLDivElement>(null);
   return (
     <div ref={ref} className="ui-landing-scene">

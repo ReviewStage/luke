@@ -2,7 +2,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { SETTINGS_ACT_KIND } from "@repo/host/contract";
 import {
   type AppSettingField,
@@ -15,7 +14,6 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPort, refusedOnPort } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
@@ -87,8 +85,8 @@ function rows(page: DrawnPage, settings: ReturnType<typeof settingsView>) {
     Fragment,
     null,
     createElement(SchemaSettingRows, { page, section, view }),
-    // Note that the toasts read the window's own registry, on the one Query client the rows stand on.
-    createElement(RegistryContext.Provider, { value: rendererRegistry }, createElement(ToastHost)),
+    // Note that the toasts draw on the one Query client the rows stand on.
+    createElement(ToastHost),
   );
 }
 

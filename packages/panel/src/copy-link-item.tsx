@@ -1,6 +1,5 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
-import { Atom } from "effect/reactivity";
+import { createStore, useSelector } from "@tanstack/react-store";
 import { createContext, useContext, useEffect } from "react";
 import { commandAction, PANEL_COMMAND } from "./command-items.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
@@ -23,7 +22,7 @@ import { useNumberedPlace } from "./tasks/use-link-standing.js";
  */
 
 /** The links ⇧⌘C would copy now, as the keyboard stands outside the side panel and in it, which the window's Copy link holds (`useHoldChordLinks`). */
-const chordLinksAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
+const chordLinksStore = createStore<readonly string[]>([]);
 
 const LinkWorkspaceContext = createContext<string | undefined>(undefined);
 
@@ -37,17 +36,16 @@ export function useLinkWorkspace(): string | undefined {
 
 /** Holds the links ⇧⌘C copies now, the first at hand outside the side panel and in it, for as long as the window's Copy link stands. */
 export function useHoldChordLinks(outside: string | undefined, inPanel: string | undefined): void {
-  const hold = useAtomSet(chordLinksAtom);
   useEffect(() => {
     const held = [outside, inPanel].filter((link) => link !== undefined);
-    hold(held);
-    return () => hold((standing) => (standing === held ? [] : standing));
-  }, [outside, inPanel, hold]);
+    chordLinksStore.setState(() => held);
+    return () => chordLinksStore.setState((standing) => (standing === held ? [] : standing));
+  }, [outside, inPanel]);
 }
 
 /** The links ⇧⌘C would copy now, which a Copy link item prints the chord beside. */
 export function useChordLinks(): readonly string[] {
-  return useAtomValue(chordLinksAtom);
+  return useSelector(chordLinksStore);
 }
 
 /**

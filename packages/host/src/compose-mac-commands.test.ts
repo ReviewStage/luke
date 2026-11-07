@@ -10,12 +10,7 @@ import {
   type MacCommandResult,
   macCommandKindsRead,
 } from "@repo/features/mac-command-wire";
-import {
-  GATEWAY_CLIENT_ROLE,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayEventKind,
-} from "@repo/gateway";
+import { GATEWAY_EVENT, type GatewayEventKind } from "@repo/gateway";
 import { MAC_COMMAND_MODE, type MacCommandMode } from "@repo/settings";
 import { isRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
@@ -182,9 +177,6 @@ const machine = (spawner: ReturnType<typeof scriptedSpawner>, reported: string[]
     noNetwork,
   );
 
-/** The operator a test answers an ask as. */
-const CONTEXT = { client: { clientId: "panel", role: GATEWAY_CLIENT_ROLE.OPERATOR } } as const;
-
 /** The gate as a test holds it: the setting, whether an account is signed in, and which. */
 interface Gate {
   mode: MacCommandMode;
@@ -240,11 +232,7 @@ const subject = (
       /** The asks waiting as last told. */
       asks: () => told.at(-1) ?? [],
       answer: (id: string, decision: MacCommandDecision) =>
-        Effect.gen(function* () {
-          const method = composer.methods[GATEWAY_METHOD.MAC_COMMAND_ANSWER];
-          assert.ok(method);
-          return yield* method({ id, decision }, CONTEXT);
-        }),
+        composer.acts.MAC_COMMAND_ANSWER({ id, decision }),
     }),
   );
 };
@@ -483,9 +471,7 @@ it.effect(
           yield* settled;
           assert.deepEqual(spawner.spawned, [], "nor while the ask waits inside the timeout");
 
-          assert.deepEqual(yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE), {
-            answered: true,
-          });
+          yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE);
           yield* settled;
           assert.deepEqual(built.asks(), [], "the ask goes as it is answered");
           assert.deepEqual(built.written, [], "allowing once writes no setting");
@@ -535,9 +521,9 @@ it.effect("Deny answers the call as not run, declined, and runs nothing", () =>
         yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.DENY);
         yield* settled;
         assert.deepEqual(built.asks(), []);
-        assert.deepEqual(yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE), {
-          answered: false,
-        });
+        // An answer after the ask went runs nothing (below).
+        yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE);
+        yield* settled;
       }),
     );
     const answered = service.settledResults.get(COMMAND.id);
@@ -672,9 +658,8 @@ it.effect(
           yield* TestClock.adjust("15 seconds");
           yield* settled;
           assert.deepEqual(built.asks(), []);
-          assert.deepEqual(yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE), {
-            answered: false,
-          });
+          yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE);
+          yield* settled;
         }),
       );
       assert.deepEqual(spawner.spawned, []);

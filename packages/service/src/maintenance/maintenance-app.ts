@@ -20,7 +20,6 @@ import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { sweepCodexPlanSwaps } from "./codex-plan-sweep.js";
 import { sweepDeviceLeases } from "./device-lease-sweep.js";
 import { sweepDeviceWarmRunners } from "./device-warm-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
@@ -94,11 +93,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
     purgeStaleFirewalls: (now) => dropStaleFirewalls(new Date(now - FIREWALL_RECORD_KEEP_MS)),
-    renewCodexPlanSwaps: (now) =>
-      sweepCodexPlanSwaps(environment.providerKeyEncryptionKeys, new Date(now)).pipe(
-        Effect.provideContext(startContext),
-        Effect.provideService(HostedEnvironment, environment),
-      ),
   });
 });
 

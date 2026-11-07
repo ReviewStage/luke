@@ -28,16 +28,15 @@
   --ui-display-lead-leading: 1.55;
 
   /* The landing's devices: a Mac window's corners, and a phone's outer
-     corners and its screen's, which follow them inside the bezel. */
+     corners and its screen's, which follow them inside the bezel, as
+     shares of the phone's width (`landing.css`'s devices). */
   --ui-display-window-radius: 0.625rem;
   /* The landing's bar once it floats: half its 56px height, a pill round
      the 44px call it holds 6px in from its end. */
   --ui-display-bar-radius: 1.75rem;
-  --ui-display-phone-radius: 3rem;
-  --ui-display-phone-screen-radius: 2.5rem;
+  --ui-display-phone-radius: 19cqw;
+  --ui-display-phone-screen-radius: 15.7cqw;
   --ui-display-island-radius: 0.75rem;
-  --ui-display-phone-radius-narrow: 1.75rem;
-  --ui-display-phone-screen-radius-narrow: 1.4rem;
 
   /* The product's name beside the mark, in the wordmark's face. */
   --ui-display-wordmark-size: 1rem;
