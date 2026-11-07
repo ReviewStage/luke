@@ -653,11 +653,20 @@ function runOnMacWords(standing: AgentStanding): string {
   return offers(standing, AGENT_TOOL.RUN_ON_MAC) ? ` ${RUN_ON_MAC_WORDS}` : "";
 }
 
+/**
+ * What an agent in a sandbox of ours is told it may set up there: anything as
+ * root, and Docker, whose daemon the image's `docker` starts on first use
+ * (`apps/web/agent-image/Dockerfile`), so a repository's own setup runs as
+ * its README says.
+ */
+const SANDBOX_SETUP_WORDS =
+  "You have passwordless `sudo`, so install what the repository's setup needs that the sandbox lacks, such as a system package with `sudo apt-get install`. Docker is installed too: `docker` and `docker compose` start its daemon on first use, and a port a container publishes is on `localhost`.";
+
 /** The checkout section's words after where it stands and the tools' own: how GitHub is reached, and the Mac beside the sandbox. */
 function checkoutReachWords(machine: CoderMachine, standing: AgentStanding): string {
   return machine.local
     ? `GitHub is reachable through \`gh\` and \`git\` from the shell, already signed in for you, so never put a token in a URL or a command, and never try to sign in. ${DEVICE_DIRECT_WORDS} ${DEVICE_WORKTREE_WORDS}`
-    : `GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in.${runOnMacWords(standing)}`;
+    : `GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. ${SANDBOX_SETUP_WORDS}${runOnMacWords(standing)}`;
 }
 
 /** How the agent looks at what it built before it publishes: on the sandbox's Playwright, display, and browser, or on the developer's machine with whatever the repository runs. */
@@ -825,7 +834,7 @@ You work in a folder of your own with no repository in it. ${DEVICE_DIRECT_WORDS
   }
   return `## Your sandbox
 
-You have a sandbox of your own, with no repository in it, which opens the first time you use it. ${tools.sandbox} No GitHub credential is set in it, so never try to sign in.${runOnMacWords(standing)}`;
+You have a sandbox of your own, with no repository in it, which opens the first time you use it. ${tools.sandbox} No GitHub credential is set in it, so never try to sign in. ${SANDBOX_SETUP_WORDS}${runOnMacWords(standing)}`;
 }
 
 /**

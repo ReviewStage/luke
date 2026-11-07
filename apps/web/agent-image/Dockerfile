@@ -34,6 +34,16 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 COPY tmux.conf /etc/tmux.conf
 
+# Docker's engine, its Compose and Buildx plugins, so a repository whose dev server or tests run in
+# containers runs them here as on a laptop. Its daemon is started by the `docker` below on first use
+# rather than at every launch, since no process outlives a sandbox's stop and most repositories never
+# ask for it. The default user, every Terminal shell's, joins the `docker` group here; the `agent`
+# user, made as a sandbox opens, joins it at each launch (`vercel-machine.ts`'s `readyScript`).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends docker.io docker-compose-v2 docker-buildx \
+ && usermod -aG docker ubuntu \
+ && rm -rf /var/lib/apt/lists/*
+
 # Playwright and its full Chromium beside the headless shell, so a coding agent screenshots what it
 # built, and the agent's own browser runs headful under Xvfb, where a sign-in sees an ordinary Chrome.
 # The browsers live inside the package, where every user reads them; the last line fails the image
@@ -70,6 +80,39 @@ export GH_TOKEN="${GH_TOKEN:-"ghp_"000000000000000000000000000000000000}"
 if [ "${1:-}" = stack ]; then shift; exec /usr/local/lib/gh-stack/gh-stack "$@"; fi
 exec /usr/bin/gh "$@"
 EOF
+
+# `docker` with its daemon started first where none runs, detached as root in a session of its own so
+# it outlives the command that asked, and waited on until it answers on every call, since a call
+# beside the one that started it may find it running before it answers; the CLI's plugins,
+# `compose` among them, all run through it. Note that a call naming another daemon than the local
+# socket, by `DOCKER_HOST` or `DOCKER_CONTEXT`, is left alone, and the CLI runs even where the
+# daemon never answers, because a command that asks no daemon, `--version` or `context use` among
+# them, must still work.
+COPY --chmod=0755 <<'EOF' /usr/local/bin/docker
+#!/usr/bin/env bash
+case "${DOCKER_HOST:-}" in "" | unix:///var/run/docker.sock | unix:///run/docker.sock) local_host=1 ;; *) local_host= ;; esac
+case "${DOCKER_CONTEXT:-}" in "" | default) local_context=1 ;; *) local_context= ;; esac
+if [ -n "$local_host" ] && [ -n "$local_context" ]; then
+  if ! pgrep -x dockerd > /dev/null; then
+    sudo -n sh -c 'setsid -f dockerd >> /var/log/dockerd.log 2>&1 < /dev/null'
+  fi
+  if ! timeout 30 sh -c 'until /usr/bin/docker info > /dev/null 2>&1; do sleep 0.2; done'; then
+    echo "docker: the daemon did not answer; its log is /var/log/dockerd.log" >&2
+  fi
+fi
+exec /usr/bin/docker "$@"
+EOF
+
+# The `agent` user each harness runs as may run anything as root, as the default user every
+# Terminal shell runs as already may, so an agent installs what a repository's setup needs that
+# the image lacks, a system package or a service, as its README says to. Nothing it guards is kept
+# from root: the tokens an agent uses stand at the sandbox's firewall, outside it
+# (`sandbox-firewall.ts`). The rule names a user the image does not yet hold, which sudo matches
+# once the sandbox makes it; the last line fails the image where sudo would refuse the file.
+COPY --chmod=0440 <<'EOF' /etc/sudoers.d/agent
+agent ALL=(ALL:ALL) NOPASSWD: ALL
+EOF
+RUN visudo -cf /etc/sudoers.d/agent
 
 # GitHub's own `gh stack` extension, its release's Linux binary checked against the digest GitHub
 # publishes, which the wrapper above runs; the last line fails the image where an unprivileged user
