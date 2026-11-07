@@ -352,9 +352,12 @@ export function composeMacCommands(
      * instead. A claim the service did not answer is asked again a few times
      * (`CLAIM_RETRY`), since the rows that named it may not change again to
      * say so. Note that the claim and its answer are uninterruptible and run
-     * on the concern's own set rather than the follow's fiber, because a
-     * command the service granted is this Mac's alone to answer, and a follow
-     * ended mid-claim would otherwise leave its call waiting out its time.
+     * on a set of the concern's own (`claims`), never cleared, rather than the
+     * follow's fiber or the set of commands running, because a command the
+     * service granted is this Mac's alone to answer, a follow ended mid-claim
+     * would otherwise leave its call waiting out its time, and a clear of the
+     * commands running would wait out the claim, holding up the next
+     * account's follow past its own commands' claim window.
      */
     const claimed = (running: FiberSet.FiberSet, userId: string, command: MacCommandRead) =>
       Effect.gen(function* () {
@@ -401,7 +404,12 @@ export function composeMacCommands(
      * waiting. A follow ends where the gate shuts, the session signs out, or
      * the account signed in changes.
      */
-    const followed = (running: FiberSet.FiberSet, userId: string, first: MacCommandsLiveAnswer) =>
+    const followed = (
+      running: FiberSet.FiberSet,
+      claims: FiberSet.FiberSet,
+      userId: string,
+      first: MacCommandsLiveAnswer,
+    ) =>
       Effect.suspend(() => {
         let tried = new Set<string>();
         const claimNew = (commands: readonly MacCommandRead[]) =>
@@ -409,7 +417,7 @@ export function composeMacCommands(
             const fresh = commands.filter((command) => !tried.has(command.id));
             tried = new Set(commands.map((command) => command.id));
             for (const command of fresh) {
-              yield* FiberSet.run(running, claimed(running, userId, command));
+              yield* FiberSet.run(claims, claimed(running, userId, command));
             }
           });
         const rows = decodedLiveRows(
@@ -438,7 +446,7 @@ export function composeMacCommands(
      * Every turn begins by letting go of the asks of any account but the one
      * signed in, since a follow ends as the account changes.
      */
-    const turn = (running: FiberSet.FiberSet) =>
+    const turn = (running: FiberSet.FiberSet, claims: FiberSet.FiberSet) =>
       Effect.gen(function* () {
         yield* withdrawOtherAccounts;
         if (moves !== clearedAt) {
@@ -454,17 +462,18 @@ export function composeMacCommands(
         if ("failure" in sealed) {
           return yield* Effect.raceFirst(waitOrRegained(LIVE_RESTART), Effect.asVoid(left(userId)));
         }
-        yield* followed(running, userId, sealed);
+        yield* followed(running, claims, userId, sealed);
       });
 
     const lifetime = Effect.gen(function* () {
       const running = yield* FiberSet.make();
+      const claims = yield* FiberSet.make();
       // Note that the changes are subscribed to before the gate is first worked out, so one that lands meanwhile is heard rather than lost.
       const changes = yield* dependencies.changed;
       yield* gateMoved;
       yield* Effect.forkScoped(Stream.runForEach(changes, () => gateMoved));
       // A turn that died is reported and the reads rest before the next.
-      const guarded = Effect.catchDefect(turn(running), () =>
+      const guarded = Effect.catchDefect(turn(running, claims), () =>
         Effect.andThen(
           Effect.sync(() => report("the Mac command read failed")),
           Effect.sleep(DIED_REST),

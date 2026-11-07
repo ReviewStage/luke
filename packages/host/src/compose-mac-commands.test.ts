@@ -443,6 +443,43 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a claim still waiting on the service holds up no read for the account signed in next",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      // The service is slow to grant the first account's claim.
+      const service = scriptedService({ duringClaim: Effect.sleep("20 seconds") });
+      service.queue(COMMAND, NOW);
+      const gate: Gate = { mode: MAC_COMMAND_MODE.ALWAYS, signedIn: true, account: ACCOUNT };
+      const { composer, moved } = yield* subject(service, spawner, gate);
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* composer.lifetime;
+          yield* settled;
+          gate.account = "user-other";
+          yield* moved;
+          yield* settled;
+          assert.ok(
+            service.reads.some((read) => read.userId === "user-other"),
+            "the next account is read before the claim is answered",
+          );
+          yield* TestClock.adjust("20 seconds");
+          yield* settled;
+        }),
+      );
+
+      const answered = service.settledResults.get(COMMAND.id);
+      assert.ok(
+        answered !== undefined && "stderr" in answered,
+        "the claim granted late is answered",
+      );
+      assert.match(answered.stderr, /switched off/u);
+      assert.deepEqual(spawner.spawned, []);
+    }),
+);
+
 /** The ask a claimed command is told as, under Ask every time, once the follow has claimed it. */
 const askedFor = (
   service: ReturnType<typeof scriptedService>,
