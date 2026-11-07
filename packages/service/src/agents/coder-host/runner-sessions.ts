@@ -1684,10 +1684,10 @@ export const runnerSessions = <
         if (live === undefined) return;
         const { handle } = live;
         yield* delivered(agent, live, [stopLine(live.mark.firstSequence)]);
-        // Note that a read of the exit answers null for a command still running once its own wait is up.
-        const exited = machine.runnerExit(handle).pipe(Effect.timeoutOption(CODER.RUNNER_HALT));
+        // Note that the read is handed the bound, because it answers null for a command still running once its own wait is up.
+        const exited = machine.runnerExit(handle, CODER.RUNNER_HALT);
         const stopped = yield* exited;
-        if (Option.isNone(stopped) || stopped.value === null) {
+        if (stopped === null) {
           yield* machine.kill(handle);
           yield* exited;
         }

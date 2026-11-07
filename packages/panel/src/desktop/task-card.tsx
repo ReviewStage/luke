@@ -57,8 +57,7 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * The icon is how the task's agents stand, most pressing first: a failure,
  * an agent at work, or the pull request they left, in `@repo/ui`'s
  * `TaskAgentsMark` (`task-agents-model.ts`). How many of its threads wait on
- * the reader is no part of it: the row draws that count before the icon
- * (`SidebarTask`'s `WaitingCount`), as the Tasks page draws it. The card leads, as the
+ * the reader is no part of it, nor of the row. The card leads, as the
  * task board's card does, with its status's mark and its name, its key, its
  * repository, and how long ago it was updated under the name, and its
  * priority's mark and its assignee's face in the corner, icons alone, each
