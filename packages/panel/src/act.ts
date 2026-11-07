@@ -21,10 +21,12 @@
 
 import { ORPCError } from "@orpc/client";
 import type { AGENT_CALL_FAILURE, AgentAgentAnswer } from "@repo/features/agent-view";
+import type { SendTrace } from "@repo/features/sentry-tracing";
 import { FAILURE_CONDITION, FAILURE_SURFACE, failureAboutOf } from "@repo/features/shown-failure";
 import { ACT_UNREACHED_WORDS } from "@repo/features/words";
 import {
   ACT_ERROR,
+  type ActPortCallContext,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
@@ -96,6 +98,7 @@ function stagedAnswer(
 async function portAct(
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
+  trace?: SendTrace,
 ): Promise<PortActResult<PortActKind>> {
   const staged = stagedAnswer(kind, payload);
   if (staged !== undefined) return staged.answer;
@@ -104,8 +107,9 @@ async function portAct(
     // paired this payload with it; the erasure is the one dispatch on the kind.
     const call = actPort()[kind] as (
       payload: PortActPayload<PortActKind>,
+      options?: { readonly context: ActPortCallContext },
     ) => Promise<PortActResult<PortActKind>>;
-    return await call(payload);
+    return await call(payload, trace === undefined ? undefined : { context: { trace } });
   } catch (error) {
     if (error instanceof ORPCError && error.code === ACT_ERROR.REFUSED) {
       throw new ActRefusal(error.message, { cause: error });
@@ -119,10 +123,11 @@ async function portAct(
 async function performAct<Kind extends PortActKind>(
   kind: Kind,
   payload: ActPayload<Kind> | undefined,
+  trace?: SendTrace,
 ): Promise<ActResult<Kind>> {
   // SAFETY: ActArguments paired this payload with this kind, and a kind's
   // answer is the one its own procedure's output schema encoded.
-  return (await portAct(kind, payload as PortActPayload<PortActKind>)) as ActResult<Kind>;
+  return (await portAct(kind, payload as PortActPayload<PortActKind>, trace)) as ActResult<Kind>;
 }
 
 /**
@@ -134,14 +139,16 @@ export type ActVariables<Kind extends PortActKind> =
 
 /**
  * An act a mutation sends from its `mutationFn` (`act-mutations.ts`), a
- * refusal rejected as the sentence it carries, for the mutation's error.
+ * refusal rejected as the sentence it carries, for the mutation's error; a
+ * send carries its press's trace (`send-traces.ts`).
  */
 export function sendAct<Kind extends PortActKind>(
   kind: Kind,
   variables: ActVariables<Kind>,
+  trace?: SendTrace,
 ): Promise<ActResult<Kind>> {
   // SAFETY: ActVariables is the kind's payload, or void for a kind that carries none, which the port reads as undefined.
-  return performAct(kind, variables as ActPayload<Kind> | undefined);
+  return performAct(kind, variables as ActPayload<Kind> | undefined, trace);
 }
 
 /**

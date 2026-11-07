@@ -24,6 +24,7 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
+import { SENTRY_SEND_SPAN } from "@repo/features/sentry-tracing";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { agentMovedAt, agentsOfTask } from "@repo/features/task-agents-model";
 import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
@@ -130,7 +131,7 @@ import {
   sendAct,
   unreachedAs,
 } from "../act.js";
-import { actMutation, pressMutation } from "../act-mutations.js";
+import { actMutation, pressMutation, sendMutation } from "../act-mutations.js";
 import { type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import type { AutomationsRoute } from "../automations-route.js";
@@ -1450,7 +1451,12 @@ export function useTasksTab(input: {
   const { mutateAsync: sendParent } = useMutation(actMutation(ACT_KIND.TASKS_SET_PARENT));
   const { mutateAsync: sendRelation } = useMutation(actMutation(ACT_KIND.TASKS_CHANGE_RELATION));
   const { mutateAsync: sendRestore } = useMutation(actMutation(ACT_KIND.TASKS_RESTORE));
-  const { mutateAsync: sendTaskStart } = useMutation(actMutation(ACT_KIND.TASKS_START));
+  // Note that a task started with its agent is traced as a send; one started with none is not.
+  const { mutateAsync: sendTaskStart } = useMutation(
+    sendMutation(ACT_KIND.TASKS_START, (start) =>
+      start.agent === undefined ? undefined : SENTRY_SEND_SPAN.TASK_START,
+    ),
+  );
   // Note that which agent is shown is told, quiet whatever comes back, since no person pressed for it.
   const { mutate: tellShown } = useMutation(actMutation(ACT_KIND.AGENTS_SHOWN));
   const { mutate: refreshTasks } = useMutation(pressMutation(ACT_KIND.TASKS_REFRESH));

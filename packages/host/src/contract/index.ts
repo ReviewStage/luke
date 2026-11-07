@@ -4,6 +4,7 @@ import type {
   InferContractRouterInputs,
   InferContractRouterOutputs,
 } from "@orpc/contract";
+import type { SendTrace } from "@repo/features/sentry-tracing";
 import { ACCOUNT_ACTS, accountActsContract } from "./account.js";
 import { ACCOUNT_ASK_ACTS, accountAskActsContract } from "./account-asks.js";
 import { AGENT_INBOX_ACTS, agentInboxActsContract } from "./agent-inbox.js";
@@ -152,8 +153,17 @@ export const actPortContract = {
   ...pushesContract,
 };
 
+/**
+ * What a window may hand one call of its act port beside its input: the
+ * trace of the send it was pressed for, which the port carries to the host
+ * as Sentry's own headers (`@repo/features/sentry-tracing`).
+ */
+export interface ActPortCallContext {
+  readonly trace?: SendTrace | undefined;
+}
+
 /** The window's typed client of the act port. */
-export type ActPortClient = ContractRouterClient<typeof actPortContract>;
+export type ActPortClient = ContractRouterClient<typeof actPortContract, ActPortCallContext>;
 
 /** What one port kind takes. */
 export type PortActPayload<Kind extends PortActKind> = InferContractRouterInputs<

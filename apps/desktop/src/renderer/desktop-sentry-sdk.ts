@@ -15,6 +15,7 @@ import {
 } from "@repo/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@repo/features/sentry-tracing";
 import { sendShownFailure } from "@repo/features/shown-failure";
+import { sentrySendTracer } from "@repo/panel/send-traces";
 import { appStateQuery } from "@repo/panel/use-app-state";
 import {
   browserProfilingIntegration,
@@ -22,10 +23,12 @@ import {
   captureException,
   getActiveSpan,
   getCurrentScope,
+  getTraceData,
   init,
   logger,
   startInactiveSpan,
   startNewTrace,
+  startSpan,
   uiProfiler,
   withStreamedSpan,
 } from "@sentry/electron/renderer";
@@ -63,6 +66,10 @@ const PANEL_SPAN_OP = "ui.panel";
  * slow frame, and Interaction to Next Paint, which the SDK's web vitals
  * report by default. A page that hangs is main's to report, from Electron's
  * own word that it stopped answering (`main/window/renderer-health.ts`).
+ * A send the developer presses is a span of its own, whose trace its act
+ * carries to main, which sends it on to the service
+ * (`@repo/panel/send-traces`), because main's own fetch tracing would carry
+ * main's trace rather than the press's.
  *
  * The window profiles from the moment the SDK stands to its close, in
  * chunks of a minute, wherever main served its document with the profiling
@@ -116,6 +123,8 @@ export function initDesktopSentry(queryClient: QueryClient): DesktopSentry {
         recorded.end(new Date(span.endedAt));
       });
     },
+    // A send pressed, a span of its own whose trace its act carries to main and on to the service.
+    traceSend: sentrySendTracer({ startNewTrace, startSpan, getTraceData }),
     // A log line through main, which sends what the window logs, and an issue where nothing named it.
     reportShownFailure: (report) =>
       sendShownFailure({ captureException, logger, getActiveSpan, getCurrentScope }, report),

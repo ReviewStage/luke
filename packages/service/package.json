@@ -148,6 +148,7 @@
     "./member-mcp/resource": "./src/member-mcp/resource.js",
     "./maintenance/maintenance-bounds": "./src/maintenance/maintenance-bounds.js",
     "./maintenance/maintenance-sweep": "./src/maintenance/maintenance-sweep.js",
+    "./observability/caller-trace": "./src/observability/caller-trace.js",
     "./observability/sentry": "./src/observability/sentry.js",
     "./observability/sentry-tunnel-app": "./src/observability/sentry-tunnel-app.js",
     "./orpc/base": "./src/orpc/base.js",
