@@ -10,7 +10,7 @@
  * routed place's declaration names its gate (`places/routed-places.ts`).
  */
 
-import { TASKS_READ, type TasksView } from "@repo/features/tasks-view";
+import type { TasksView } from "@repo/features/tasks-view";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import {
@@ -100,21 +100,6 @@ function listedTasksView(state: AppStateSnapshot): TasksView | undefined {
  */
 function selectWorkspaces(state: AppStateSnapshot): readonly GateWorkspace[] {
   return listedTasksView(state)?.workspaces ?? NO_WORKSPACES;
-}
-
-/**
- * Whether the account's workspaces are read by `state`: some are listed, or
- * the list's read failed. Every account holds a workspace of its own, so
- * none listed means none read yet.
- */
-function selectWorkspacesRead(state: AppStateSnapshot | undefined): boolean {
-  const view = state === undefined ? undefined : listedTasksView(state);
-  return (view?.workspaces.length ?? 0) > 0 || view?.listStatus === TASKS_READ.FAILED;
-}
-
-/** Whether the account's workspaces are read, which a task's link waits on, its slug read against them (`StatePlace`). */
-export function useWorkspacesRead(): boolean {
-  return useQuery({ ...appStateQuery, select: selectWorkspacesRead }).data === true;
 }
 
 /**

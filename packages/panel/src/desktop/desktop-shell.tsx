@@ -55,7 +55,6 @@ import { SETUP_GATE } from "../onboarding/setup-model.js";
 import { SetupSteps, useSetupGate } from "../onboarding/setup-steps.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { ROUTED_PLACE, useWindowPlace } from "../places/routed-places.js";
-import { useWorkspacesRead } from "../route-gates.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SignInGate } from "../sign-in-gate.js";
@@ -82,7 +81,7 @@ import { AgentRoutePage } from "./desktop-agent-page.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
-import { DesktopHomePage, DesktopTasks, TaskOpening } from "./desktop-tasks.js";
+import { DesktopHomePage, DesktopTasks } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { NewTaskButton } from "./new-task-button.js";
@@ -1197,9 +1196,6 @@ export function UnknownWorkspacePlace(): React.JSX.Element {
  */
 export function StatePlace(): React.JSX.Element {
   const { tasks, room, looks, away } = useShellPlaces();
-  // A link's task waits on the account's workspaces, its slug read against them, its loading frame standing meanwhile.
-  const workspacesRead = useWorkspacesRead();
-  if (!workspacesRead) return <TaskOpening tasks={tasks} room={room} away={away} />;
   return <DesktopTasks tasks={tasks} looks={looks} room={room} away={away} />;
 }
 

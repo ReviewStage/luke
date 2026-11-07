@@ -1524,7 +1524,7 @@ function StartingTaskPage({
  * on the account's workspaces stands it or a task pressed waits on the host:
  * the task's page in the shape it lands in, as its document's read draws it.
  */
-export function TaskOpening({
+function TaskOpening({
   tasks,
   room = SHELL_ROOM.WIDE,
   away,

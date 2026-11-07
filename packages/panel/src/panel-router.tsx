@@ -205,12 +205,12 @@ const boardRoute = createRoute({
 
 /**
  * A task's own place (`ROUTED_PLACE.TASK`), which the window's state draws
- * (`StatePlace`). A link to it is read against the account's workspaces, so
- * as the window loads at it the place draws the task's loading frame until
- * they are read, rather than the window resting anywhere else meanwhile.
- * Note that the wait is the place's own rather than a `loader`'s, because a
- * move from one task to another is a new match of the route, whose pending
- * frame would stand in for the task's page and draw it anew on every move.
+ * (`StatePlace`). A link to it is opened once the account's workspaces are
+ * read, its slug read against them (`app.tsx`), the task's loading frame
+ * standing at its address meanwhile as it does for any task on its way.
+ * Note that it waits on no `loader`, because a move from one task to another
+ * is a new match of the route, whose pending frame would stand in for the
+ * task's page and draw it anew on every move.
  */
 const taskRoute = createRoute({
   getParentRoute: () => workspaceRoute,
