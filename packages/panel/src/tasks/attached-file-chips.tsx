@@ -97,6 +97,15 @@ export function messageFileChips(message: AgentTranscriptMessage): MessageFileCh
   });
 }
 
+/** A text file's words, or nothing where its bytes spell no base64, so a row read back with a damaged file still draws, its chip saying its size. */
+function wordsOf(base64: string): string | undefined {
+  try {
+    return attachmentText(base64);
+  } catch {
+    return undefined;
+  }
+}
+
 /** One file's chip in a row: its thumbnail or its type's icon, its name and size, its open, and its way off where the row has one. */
 function FileChipOf({
   file,
@@ -117,7 +126,7 @@ function FileChipOf({
   const thumbnail = view === ATTACHMENT_VIEW.IMAGE;
   // Note that a text file's words are read once for its file, since a chip draws again on every keystroke of the box it stands in.
   const text = useMemo(
-    () => (view === ATTACHMENT_VIEW.TEXT ? attachmentText(base64) : undefined),
+    () => (view === ATTACHMENT_VIEW.TEXT ? wordsOf(base64) : undefined),
     [view, base64],
   );
   return (
