@@ -25,6 +25,7 @@ import { KEPT } from "../act.js";
 import type { AgentRoute } from "../agent-route.js";
 import type { AutomationsRoute } from "../automations-route.js";
 import type { InboxRoute } from "../inbox-route.js";
+import type { TaskRoute } from "../task-route.js";
 import { descriptionEditMutation } from "../tasks/description-edit-mutation.js";
 import {
   AGENT_RENAME_SHAPE,
@@ -477,6 +478,18 @@ export const HOME_AWAY: HomeRoute = {
   onTurn: ignore,
 };
 
+/** No task's own place standing, for a tab drawn with no router: none opens. */
+export const TASK_AWAY: TaskRoute = {
+  at: undefined,
+  saved: undefined,
+  atNow: () => undefined,
+  workspaceNow: () => undefined,
+  onOpen: ignore,
+};
+
+/** No arrival counted, for a tab drawn with no router, whose window never moves. */
+export const NO_ARRIVALS = (): number => 0;
+
 /**
  * A signed-in Tasks tab on screen on Home with no tasks, every
  * press ignored, bound for whichever task it is given as open; the agents
@@ -604,6 +617,9 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onSelect: ignore,
     onResume: ignore,
     onRestoreTask: ignore,
+    onStandTask: ignore,
+    taskView: { taskId: undefined },
+    onArriveTask: ignore,
     onShowAgent: ignore,
     onShowColumnTab: ignore,
     onShowPanelTab: ignore,

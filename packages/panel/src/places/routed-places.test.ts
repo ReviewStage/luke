@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { EXPERIMENT, NO_EXPERIMENTS } from "@repo/settings";
-import { agentTab } from "@repo/ui/tab-strip-model";
+import { agentTab, changesTab } from "@repo/ui/tab-strip-model";
 import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { test } from "vitest";
@@ -111,6 +111,14 @@ test.each<readonly [string, string, Partial<PlaceThere>]>([
     "a task's step on a task since deleted",
     "/acme/task/7",
     { taskStep: { taskId: TASK_ID }, taskStands: () => false },
+  ],
+  [
+    "a narrow room's task step at its side panel's Pull request address, on a task since deleted",
+    "/acme/agent/agent-1/changes",
+    {
+      taskStep: { taskId: TASK_ID, panel: { open: true, tab: changesTab("agent-1") } },
+      taskStands: () => false,
+    },
   ],
   [
     "a task's step on a column tab since closed",

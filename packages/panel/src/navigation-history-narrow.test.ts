@@ -25,7 +25,7 @@ import {
   useWindowHistory,
   type WindowHistoryLists,
 } from "./navigation-history.js";
-import { usePlaceBinding } from "./places/place-binding.js";
+import { PLACE_BINDING, usePlaceBinding } from "./places/place-binding.js";
 import { type SettingsRoute, useSettingsRoute } from "./settings-link.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
@@ -321,8 +321,11 @@ function mount(
     usePlaceBinding({
       known: true,
       place: routed?.place,
+      task: tasks.taskView.taskId,
+      page: routed?.place.binding === PLACE_BINDING.TASK ? undefined : routed?.address,
       bound: tasks.boundFor,
       onUnbind: tasks.onUnbindTask,
+      onSelect: tasks.onArriveTask,
       onToBound: () => history?.onLeaveRouted(),
       onToUnbound: home.onOpen,
     });

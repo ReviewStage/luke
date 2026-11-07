@@ -63,6 +63,7 @@ import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import type { OpenSurface } from "../use-surface-open.js";
+import { PLACE_BINDING, type PlaceBinding } from "./place-binding.js";
 import { openPanelTab, type TaskStep } from "./task-step.js";
 
 /** A route of the panel's tree, by its id. */
@@ -70,22 +71,6 @@ type PanelRouteId = RouteIds<RegisteredRouter["routeTree"]>;
 
 /** The params an address's routes read, every match's together. */
 export type PlaceParams = Readonly<Record<string, string | undefined>>;
-
-/**
- * What a place holds of the task the host binds the window to while it
- * stands (`place-binding.ts`): none, as Home is the page of no task bound,
- * so arriving on it asks the host to bind none and the host binding one
- * leaves it; the task bound itself, as the task's own place is that task's
- * page, so the host binding none under it gives way to the place of no
- * task; or whatever stands bound, kept as it is under it.
- */
-export const PLACE_BINDING = {
-  NONE: "none",
-  TASK: "task",
-  KEPT: "kept",
-} as const;
-
-export type PlaceBinding = (typeof PLACE_BINDING)[keyof typeof PLACE_BINDING];
 
 /** What a declaration reads to name a step later: the task a version history's address names, the task an Inbox item is of, by the item's id, and what a task's step holds. */
 interface PlaceNaming {
@@ -139,6 +124,13 @@ export interface PlaceDeclaration {
   readonly binding: PlaceBinding;
   /** Whether it stands over the plan's place beside the sidebar, the window's state staying as it was under it, its workspace its address's. */
   readonly overThePlan: boolean;
+  /**
+   * Whether it stands in the task's own place, as the Inbox does, so a door
+   * opening a task, or starting one, stands the task's place in its stead; a
+   * place standing beside it, as the Board, keeps standing, the task opening
+   * under it, and Home and the task's own place are the task's place already.
+   */
+  readonly inTaskPlace: boolean;
   /** Whether Back and Forward pass over a step of it once another workspace is listed than the one its address names, as a place over the plan that the listed workspace's work fills. */
   readonly listedOnly: boolean;
   /** What its step is called as the window stands on it. */
@@ -244,6 +236,7 @@ export const ROUTED_PLACE = {
     stillThere: () => true,
     binding: PLACE_BINDING.KEPT,
     overThePlan: false,
+    inTaskPlace: false,
     listedOnly: false,
     title: () => ({ label: "Settings" }),
     named: () => undefined,
@@ -268,6 +261,7 @@ export const ROUTED_PLACE = {
     stillThere: () => true,
     binding: PLACE_BINDING.KEPT,
     overThePlan: false,
+    inTaskPlace: false,
     listedOnly: false,
     // Note that Admin's step is named as the place the window's state holds under it, as it was while Admin stood in for that place.
     title: (_tasks, under) => under(),
@@ -293,6 +287,7 @@ export const ROUTED_PLACE = {
     stillThere: () => true,
     binding: PLACE_BINDING.KEPT,
     overThePlan: true,
+    inTaskPlace: false,
     listedOnly: true,
     title: (tasks, under) => (tasks.boardView.open ? { label: "Tasks" } : under()),
     named: () => undefined,
@@ -310,6 +305,7 @@ export const ROUTED_PLACE = {
     stillThere: () => true,
     binding: PLACE_BINDING.KEPT,
     overThePlan: true,
+    inTaskPlace: false,
     listedOnly: true,
     title: (tasks, under) =>
       tasks.personView.userId === undefined
@@ -337,6 +333,7 @@ export const ROUTED_PLACE = {
       params.automationId === undefined || there.automationStands(params.automationId),
     binding: PLACE_BINDING.KEPT,
     overThePlan: true,
+    inTaskPlace: false,
     listedOnly: true,
     title: (tasks, under) => (tasks.automationsView.open ? { label: "Automations" } : under()),
     named: () => undefined,
@@ -373,6 +370,7 @@ export const ROUTED_PLACE = {
       there.historyTask === undefined || there.taskStands(there.historyTask),
     binding: PLACE_BINDING.KEPT,
     overThePlan: false,
+    inTaskPlace: true,
     listedOnly: false,
     // Note that a history whose task is not yet bound for is named as the place under it, as it stands until its task opens.
     title: (tasks, under) => {
@@ -402,6 +400,7 @@ export const ROUTED_PLACE = {
     stillThere: () => true,
     binding: PLACE_BINDING.KEPT,
     overThePlan: true,
+    inTaskPlace: true,
     // Note that an agent's page is reached under whichever workspace it opened in, as it always was.
     listedOnly: false,
     title: (tasks, under) => (tasks.agentView.agentId === undefined ? under() : { label: "Agent" }),
@@ -425,6 +424,7 @@ export const ROUTED_PLACE = {
       (taskStands(taskStep.taskId) && columnStands(taskStep.taskId, taskStep.column)),
     binding: PLACE_BINDING.TASK,
     overThePlan: false,
+    inTaskPlace: false,
     listedOnly: false,
     // Note that the task's own place is the place the window's state says, the task bound for, so it is named and linked as that place.
     title: (_tasks, under) => under(),
@@ -447,6 +447,7 @@ export const ROUTED_PLACE = {
     stillThere: () => true,
     binding: PLACE_BINDING.NONE,
     overThePlan: false,
+    inTaskPlace: false,
     // Note that Back reaches Home under whichever workspace it stood in, as it always has, and stands it under the one listed (`home-route.ts`).
     listedOnly: false,
     title: () => ({ label: HOME_WORDS }),
@@ -465,6 +466,7 @@ export const ROUTED_PLACE = {
     stillThere: () => true,
     binding: PLACE_BINDING.KEPT,
     overThePlan: true,
+    inTaskPlace: true,
     listedOnly: false,
     // Note that it is no step, so it has no name of its own.
     title: () => undefined,
@@ -485,6 +487,7 @@ export const ROUTED_PLACE = {
     },
     binding: PLACE_BINDING.KEPT,
     overThePlan: true,
+    inTaskPlace: true,
     listedOnly: true,
     title: (tasks, under) => {
       if (!tasks.inboxView.open) return under();
@@ -550,6 +553,20 @@ export function routedPlaceOf(
   return undefined;
 }
 
+/**
+ * The routed place a step at what `matches` name stands on: a task's own place
+ * wherever the step holds a task's step, whatever address its link gave it, as
+ * a narrow room's side panel names a Pull request tab by its agent alone; else
+ * the routed place there, where one is.
+ */
+export function stepPlaceOf(
+  matches: readonly RouteMatchSeen[],
+  access: RouteAccess,
+  taskStep: TaskStep | undefined,
+): RoutedPlace | undefined {
+  return taskStep === undefined ? routedPlaceOf(matches, access) : ROUTED_PLACE.TASK;
+}
+
 /** The params every match of an address reads, together. */
 export function placeParamsOf(matches: readonly RouteMatchSeen[]): PlaceParams {
   return Object.assign({}, ...matches.map((match) => match.params));
@@ -568,7 +585,7 @@ export function routedStepStands(
   access: RouteAccess,
   there: PlaceThere,
 ): boolean {
-  const place = routedPlaceOf(matches, access);
+  const place = stepPlaceOf(matches, access, there.taskStep);
   if (place === undefined) return true;
   const params = placeParamsOf(matches);
   if (!place.gate(params, access) || !place.stillThere(params, search, there)) return false;

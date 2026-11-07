@@ -94,6 +94,11 @@ function choiceTaskOf(choice: InboxChoice): string | undefined {
   return "taskId" in choice ? choice.taskId : undefined;
 }
 
+/** Whether a choice is an item still being found by its address, chosen without being opened (`useFoundChoice`). */
+function beingFound(choice: InboxChoice): boolean {
+  return !("taskId" in choice) && !("agentId" in choice) && choice.opened !== true;
+}
+
 /** The item `itemId` where the service says it stands: under its task, or its agent where it has none. */
 function choiceAt(itemId: string, home: InboxItemHome): InboxChoice {
   return home.planId === null
@@ -144,7 +149,8 @@ export function useInboxRoute(input: { onClose: () => void; onStay: () => void }
   const onChoose = (chosen: InboxChoice, at?: InboxAt) => {
     const to = at ?? standingAt;
     if (to === undefined) return;
-    choices.setState((map) => new Map(map).set(chosen.itemId, chosen));
+    // Note that an item still being found by its address is no door's choice, so it is held nowhere and found again where it stands.
+    if (!beingFound(chosen)) choices.setState((map) => new Map(map).set(chosen.itemId, chosen));
     // An item of another task, or of an agent on no task, leaves the task the list is narrowed to, so the list it opens in holds it.
     const keeps = to.narrowed === undefined || to.narrowed === choiceTaskOf(chosen);
     visit(itemAt(chosen.itemId, keeps ? to : { ...to, narrowed: undefined }));

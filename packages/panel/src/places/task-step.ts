@@ -1,5 +1,5 @@
 /**
- * task-step.ts -- what a step holds of what its page shows, which its address does not say, and when showing another thing there is a step of its own.
+ * task-step.ts -- what a step holds of what its page shows, which its address does not say, and when showing another thing there is a step of its own, and which task a task's own address names.
  *
  * A task's own place (`ROUTED_PLACE.TASK`) is one page whatever its panes
  * show, its address naming the task alone, so its step holds the rest in its
@@ -20,6 +20,8 @@
  * turned takes the standing step in place.
  */
 
+import { taskLinkStep } from "@repo/features/link-grammar";
+import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
@@ -138,4 +140,72 @@ export function stepWithin(standing: StepShown, next: StepShown, led: StepLed): 
   const chose = led.pressed && !sameChosen(standing, next);
   const opened = led.opened && !sameShownSide(standing, next);
   return chose || opened ? STEP_WITHIN.VISIT : STEP_WITHIN.SETTLE;
+}
+
+/** Where a task's own place stands by its address: the step of the workspace it is under, and the step its links name the task by. */
+export interface TaskAt {
+  readonly workspace: string;
+  readonly task: string;
+}
+
+/** A task as the window holds it, which its address names by its number in its workspace, or by its id. */
+export interface TaskAddressed {
+  readonly id: string;
+  readonly number?: number | undefined;
+  readonly workspaceId: string;
+}
+
+/** A workspace as an address names it, by its slug, or its id where it has none. */
+type WorkspaceAddressed = Pick<Workspace, "id" | "slug" | "formerSlugs">;
+
+/** A task step naming a task by its number in its workspace, as no id is. */
+const NUMBER_STEP = /^\d+$/u;
+
+/**
+ * The task an address names among `tasks`: by its id, or by the step its
+ * links name it by under the workspace named, where that is the reader's. An id the window holds no
+ * task for names that task all the same, as a link's does, while a number
+ * none of them has names none, since only the service finds it.
+ */
+export function taskOfAt(
+  at: TaskAt,
+  tasks: readonly TaskAddressed[],
+  workspaces: readonly WorkspaceAddressed[],
+): string | undefined {
+  const home = workspaceOfSlug(workspaces, at.workspace);
+  // Note that an address naming none of the reader's workspaces, once they are read, names none of their tasks by number either.
+  const named = home !== undefined || workspaces.length === 0;
+  const found = tasks.find(
+    (task) =>
+      task.id === at.task ||
+      (named &&
+        taskLinkStep(task) === at.task &&
+        (home === undefined || task.workspaceId === home.id)),
+  );
+  if (found !== undefined) return found.id;
+  return NUMBER_STEP.test(at.task) ? undefined : at.task;
+}
+
+/**
+ * Where a task's own place stands, as its links name it: by its number, or
+ * its id, under its workspace, or under `listed` where the window holds no
+ * such task, else the workspace whose address step the window stands under,
+ * `standingIn`; none while no workspace of it is known, nor for an id
+ * reading as a number that names no task the window holds.
+ */
+export function taskAtOf(
+  taskId: string,
+  tasks: readonly TaskAddressed[],
+  workspaces: readonly WorkspaceAddressed[],
+  listed: WorkspaceAddressed | undefined,
+  standingIn: string | undefined,
+): TaskAt | undefined {
+  const task = tasks.find((each) => each.id === taskId);
+  // Note that an id the window holds no task for that reads as a number has no address of its own, as it would name the task of that number.
+  if (task === undefined && NUMBER_STEP.test(taskId)) return undefined;
+  const home =
+    task === undefined ? listed : workspaces.find((each) => each.id === task.workspaceId);
+  const workspace = home?.slug ?? home?.id ?? task?.workspaceId ?? standingIn;
+  if (workspace === undefined) return undefined;
+  return { workspace, task: task === undefined ? taskId : taskLinkStep(task) };
 }

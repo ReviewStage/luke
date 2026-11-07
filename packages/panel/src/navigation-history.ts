@@ -32,8 +32,8 @@
  * the router navigates there, and the trail follows each write as a routed
  * step, which holds only its address, stands where the router's history
  * stands, and is reachable as its declaration says (`routedStepStands`). A
- * task's own place is a routed step too, which the window writes as the task
- * bound for stands, and which holds, in its entry's typed history state
+ * task's own place is a routed step too, which a door opening a task
+ * navigates to and the window writes once the task bound for stands there, and which holds, in its entry's typed history state
  * beside its address, the task by its id and what its panes show
  * (`TaskStep`), none of which its address says; the Board and a person's page are theirs in the
  * workspace their address names, so Back passes over them once another is
@@ -137,6 +137,7 @@ import {
   type RoutedPlace,
   routedPlaceOf,
   routedStepStands,
+  stepPlaceOf,
   tabSurface,
   useWindowPlace,
 } from "./places/routed-places.js";
@@ -425,16 +426,18 @@ function visitWrite(
   up: Place | undefined,
   pressed: boolean,
   opened: boolean,
+  onTaskRoute: (address: string) => boolean,
 ): TrailWrite | undefined {
   const standing = trail.entries[trail.at];
   const entry: TrailEntry = { address, state: place };
   const wentUp = up !== undefined && sameStep(up, place);
-  // An entry the router wrote at a task's address, as a gate's redirect writes one, holding none of the task's step, is that task's step.
+  // An entry the router wrote on a task's own place, as a door's navigation or a gate's redirect writes one, holding none of
+  // the task's step, is that task's step, which the window writes only once the task bound for is the one its address names.
   const routedHere =
     standing !== undefined &&
     standing.state.task === undefined &&
     place.task !== undefined &&
-    standing.address === address;
+    (standing.address === address || onTaskRoute(standing.address));
   // What the place shows within the page standing, as a step of its own, the window settling, or the step standing (`places/task-step.ts`).
   const within =
     standing !== undefined && samePage(standing.state, place)
@@ -471,8 +474,9 @@ function afterVisit(
   up: Place | undefined,
   pressed: boolean,
   opened: boolean,
+  onTaskRoute: (address: string) => boolean,
 ): Trail {
-  const write = visitWrite(trail, place, address, up, pressed, opened);
+  const write = visitWrite(trail, place, address, up, pressed, opened, onTaskRoute);
   return write === undefined ? trail : written(trail, write);
 }
 
@@ -833,6 +837,11 @@ export function savesStep(location: HistoryLocation): boolean {
   return savedStepOf(location) !== undefined;
 }
 
+/** The task the step saved in `location`'s entry holds, where it is a task's own step; none in an entry no window wrote one in. */
+export function savedTaskOf(location: HistoryLocation): string | undefined {
+  return savedStepOf(location)?.place.task?.taskId;
+}
+
 /** Stands the trail on `next`, telling every listener, unless it is the trail standing. */
 function standTrail(held: WindowTrail, next: Trail): void {
   if (next.entries === held.trail.entries && next.at === held.trail.at) return;
@@ -1069,6 +1078,8 @@ function useHistory(input: {
   guard: LeaveGuard["guard"];
   /** How many times a door naming a thing opened it in the side panel (`SidePanelControl.opened`). */
   opened: number;
+  /** Whether an address is on a task's own place. */
+  onTaskRoute: (address: string) => boolean;
 }): NavigationHistory & {
   backTo: (place: Place) => boolean;
   upTo: (place: Place, stand: () => void) => void;
@@ -1079,14 +1090,14 @@ function useHistory(input: {
   /** Goes back to that step, answering whether one stood there to go to. */
   stepAway: () => boolean;
 } {
-  const { held, place, address, reachable, named, guard, opened } = input;
+  const { held, place, address, reachable, named, guard, opened, onTaskRoute } = input;
   // Note that the presses read the trail as they land, because a
   // key can land between a move and the render that shows it, and the latest
   // `place`, `reachable`, `go`, and `guard` through a ref, so a press stays the same
   // function across renders.
-  const latest = useRef({ place, reachable, go: input.go, guard, opened });
+  const latest = useRef({ place, reachable, go: input.go, guard, opened, onTaskRoute });
   useLayoutEffect(() => {
-    latest.current = { place, reachable, go: input.go, guard, opened };
+    latest.current = { place, reachable, go: input.go, guard, opened, onTaskRoute };
   });
   // The list a narrow screen went up to with no step behind, which the next visit takes in place.
   const wentUp = useRef<Place | undefined>(undefined);
@@ -1130,7 +1141,7 @@ function useHistory(input: {
     const pressed = presses.current !== pressesWritten.current;
     const opens = opened !== openedWritten.current;
     const trail = writes
-      ? afterVisit(trailNow, place, address, wentUp.current, pressed, opens)
+      ? afterVisit(trailNow, place, address, wentUp.current, pressed, opens, onTaskRoute)
       : trailNow;
     const next = readingOf(trail, reachable, named);
     if (drawn.current === undefined || !sameReading(drawn.current, next)) drawn.current = next;
@@ -1164,9 +1175,20 @@ function useHistory(input: {
       if (latest.current.reachable(loaded.state)) latest.current.go(loaded.state);
       return;
     }
+    // Note that a routed place the router moved off since the window was drawn, as a door earlier in the same commit moves
+    // it, is no visit, since the window is drawn again where the router stands.
+    if (!isTaskPlace(place) && place.address !== held.history.location.href) return;
     const pressed = presses.current !== pressesWritten.current;
     const opens = latest.current.opened !== openedWritten.current;
-    const write = visitWrite(held.trail, place, address, up, pressed, opens);
+    const write = visitWrite(
+      held.trail,
+      place,
+      address,
+      up,
+      pressed,
+      opens,
+      latest.current.onTaskRoute,
+    );
     if (write !== undefined) own(() => recordTrail(held, write));
   }, [held, place, address, own]);
 
@@ -1345,7 +1367,7 @@ export function useWindowHistory(input: {
     | "boundFor"
     | "tasks"
     | "listFailed"
-    | "onRestoreTask"
+    | "taskView"
     | "onLeaveTask"
     | "onGoHome"
     | "history"
@@ -1397,14 +1419,24 @@ export function useWindowHistory(input: {
   const listedWorkspace = tasks.workspace?.id;
   // A routed step is reachable as its route's gate would let the window stand there (`route-gates.ts`).
   const access = useRouteAccess();
-  const router = useRouter();
   // The routed place the window is leaving for the place its state says, which it stands on as a visit, by its address,
-  // so a move from it to another routed place, as from the Board to a person's page, stands that one.
+  // so a move from it to another routed place, as from the Board to a person's page, stands that one; a task's own place
+  // among them, left for the task bound (`places/place-binding.ts`).
   const [leaving, setLeaving] = useState<string>();
+  const router = useRouter();
+  // Note that an address no routed place claims is where the router's history stands, as a narrow room's task step at its side panel's link.
+  const standingAddress = input.routed?.address ?? router.history.location.href;
   const routedAddress = routed?.address === leaving ? undefined : routed?.address;
   useEffect(() => {
-    if (routed?.address !== leaving) setLeaving(undefined);
-  }, [routed, leaving]);
+    if (standingAddress !== leaving) setLeaving(undefined);
+  }, [standingAddress, leaving]);
+  // Note that a task's own place naming another task than the one bound for is no step, because the binding is about to
+  // move one or the other: the host asked for the task arrived on, or the window to the task bound, as it is left for it.
+  const taskAhead =
+    (input.routed === undefined || input.routed.place === ROUTED_PLACE.TASK) &&
+    tasks.taskView.taskId !== undefined &&
+    tasks.taskView.taskId !== boundFor &&
+    standingAddress !== leaving;
   // A routed place left with no task bound is left for Home, the place of no task, as a visit after it; Home itself stays.
   const leftForNone = routed !== undefined && routed.address === leaving && boundFor === undefined;
   const leftHome = leftForNone && routed.place === ROUTED_PLACE.HOME;
@@ -1465,7 +1497,7 @@ export function useWindowHistory(input: {
     }
     // Note that with no task bound and no routed place standing the window stands on no place yet: a link's task waiting on
     // its open, or the host's binding of none on its way to Home (`places/place-binding.ts`).
-    if (boundFor === undefined || taskAddress === undefined) return undefined;
+    if (taskAhead || boundFor === undefined || taskAddress === undefined) return undefined;
     return taskPlace(taskAddress, {
       taskId: boundFor,
       panel: narrow ? { open: panelOpen, tab: panelTab } : undefined,
@@ -1476,6 +1508,7 @@ export function useWindowHistory(input: {
     known,
     unknownWorkspace,
     homeBound,
+    taskAhead,
     taskAddress,
     routedAddress,
     narrow,
@@ -1578,9 +1611,8 @@ export function useWindowHistory(input: {
     const holder = chosen === undefined ? agentId : choiceHolder(chosen);
     standSide(holder, itemId ?? agentId, to.side);
   };
-  // The task a step holds, bound again where another is, with the tabs its panes showed.
+  // The task a step holds, with the tabs its panes showed; its task is asked for as the window arrives on its place (`places/place-binding.ts`).
   const goToTask = (to: TaskStep) => {
-    if (boundFor !== to.taskId) tasks.onRestoreTask(to.taskId);
     if (to.column !== undefined) tasks.mainTabs.onShow(to.taskId, to.column);
     if (to.panel !== undefined) standPanel(to.taskId, to.panel);
     else standSide(to.taskId, to.taskId, to.side);
@@ -1624,13 +1656,19 @@ export function useWindowHistory(input: {
   const routedNamed = (to: Place): NamedStep | undefined => {
     const matches = router.matchRoutes(pathOf(to.address));
     const naming = { historyTask: historyTaskOf(matches), itemTask, taskStep: to.task };
-    return routedPlaceOf(matches, access)?.named(
+    return stepPlaceOf(matches, access, to.task)?.named(
       placeParamsOf(matches),
       searchOf(to.address),
       naming,
     );
   };
   const named = (to: Place) => liveStepTitle(routedNamed(to), titleOf(to), tasks, members);
+  // Whether an address is on a task's own place, whose entry the router wrote before the window wrote the task's step in it.
+  const onTaskRoute = useCallback(
+    (address: string) =>
+      routedPlaceOf(router.matchRoutes(pathOf(address)), access) === ROUTED_PLACE.TASK,
+    [router, access],
+  );
   const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({
     held,
     place,
@@ -1640,6 +1678,7 @@ export function useWindowHistory(input: {
     go,
     guard: tasks.leaveGuard.guard,
     opened: tasks.sidePanel.opened,
+    onTaskRoute,
   });
   // A phone has no Home: wherever the window would stand on it, it stands on
   // the Inbox's list (`mobile-bar.tsx`), which takes Home's step in place, so
@@ -1710,7 +1749,7 @@ export function useWindowHistory(input: {
   return useSteadyDoors({
     ...history,
     onLeaveRouted: () => {
-      if (routed !== undefined) setLeaving(routed.address);
+      if (standingAddress !== undefined) setLeaving(standingAddress);
     },
     onStayRouted: () => setLeaving(undefined),
     onLeaveVersionHistory: () => {

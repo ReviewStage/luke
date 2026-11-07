@@ -29,9 +29,11 @@ import {
   useWindowHistory,
   type WindowHistoryLists,
 } from "./navigation-history.js";
-import { usePlaceBinding } from "./places/place-binding.js";
+import { PLACE_BINDING, usePlaceBinding } from "./places/place-binding.js";
 import type { RoutedPlace } from "./places/routed-places.js";
+import { taskOfAt } from "./places/task-step.js";
 import { SHELL_ROOM } from "./shell-room.js";
+import { useTaskRoute } from "./task-route.js";
 import { isOverviewTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
@@ -161,9 +163,15 @@ function mount(
         home.onTurn(listedStep);
       }
     });
+    // The task's own place stands where the router does, its task named by its address among those listed, as the Tasks tab reads it.
+    const taskAt = useTaskRoute().at;
     const tasks: TasksControl = {
       ...standing,
       atHome: home.open,
+      taskView: {
+        taskId:
+          taskAt === undefined ? undefined : taskOfAt(taskAt, standing.tasks, standing.workspaces),
+      },
       // As the real one does, binding no task drops the task asked for at once, the host's answer still on its way.
       onUnbindTask: () => {
         standing.onUnbindTask();
@@ -237,8 +245,11 @@ function mount(
     usePlaceBinding({
       known: true,
       place: routed?.place,
+      task: tasks.taskView.taskId,
+      page: routed?.place.binding === PLACE_BINDING.TASK ? undefined : routed?.address,
       bound: tasks.boundFor,
       onUnbind: tasks.onUnbindTask,
+      onSelect: tasks.onArriveTask,
       onToBound: () => history?.onLeaveRouted(),
       onToUnbound: home.onOpen,
     });
@@ -1133,7 +1144,7 @@ test("Back to another task whose panel stood shut leaves the panel to shut as th
       page: TASKS_PAGE.DOCUMENT,
       activeTaskId: taskId,
       boundFor: taskId,
-      onRestoreTask: (id) => done.push(`task:${id}`),
+      onArriveTask: (id) => done.push(`task:${id}`),
       sidePanel: {
         ...base.sidePanel,
         open: side !== undefined,

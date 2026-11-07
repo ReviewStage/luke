@@ -929,12 +929,6 @@ function taskRowPinnedAt(row: TaskRow): number | undefined {
   return row.kind === TASK_ROW.TASK ? row.task.pinnedAt : row.agent.pinnedAt;
 }
 
-/** Shows one of the side panel's tabs, the version history put away first so the tab is not shown behind it. */
-function shownOverHistory(tasks: TasksControl, show: () => void): void {
-  if (tasks.history.open) tasks.history.onClose();
-  show();
-}
-
 /** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals. */
 interface PanelOfferDoors {
   /** The account signed in, whose cloud Browser draft a row starts. */
@@ -1017,7 +1011,14 @@ function agentRows(
       })
         .filter((entry) => entry.row.section !== undefined)
         .flatMap(paletteEntries)
-        .map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
+        // Note that the task's own place stands first, as a version history over it gives way, so the tab is not shown behind it.
+        .map((entry) => ({
+          ...entry,
+          onPick: () => {
+            tasks.onStandTask();
+            entry.onPick();
+          },
+        }))
     : [];
   const entries: readonly AddEntry[] = [...inbox, ...agents, ...places];
   const standing = entries.map(({ row, endMark, card, onPick, agent }) => {
@@ -1401,7 +1402,10 @@ function panelTabRows(
     // Note that the row says the kind, Show plan, while its glyph is the Plan tab's, the task's status.
     const { icon } = tabLook({ kind: TAB_KIND.PANEL, tab, plan });
     const label = `Show ${SIDE_PANEL_TAB_KIND[tab].label.toLowerCase()}`;
-    const pick = () => shownOverHistory(tasks, () => tasks.sidePanel.onChoose(tab));
+    const pick = () => {
+      tasks.onStandTask();
+      tasks.sidePanel.onChoose(tab);
+    };
     return { icon, label, terms: [label], onChoose: () => show(pick) };
   });
 }
@@ -2307,7 +2311,10 @@ export function CommandPalette({
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.
   const openFile = (path: string) =>
-    onTasks(() => shownOverHistory(tasks, () => tasks.sidePanel.onOpenFile({ path })));
+    onTasks(() => {
+      tasks.onStandTask();
+      tasks.sidePanel.onOpenFile({ path });
+    });
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] => {
     if (kind === PALETTE_FILTER.FILES) {
       return (filesOpen ? matchedPaths : []).map((path) => fileRow(path, openFile));

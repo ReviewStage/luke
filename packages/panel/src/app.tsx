@@ -79,7 +79,7 @@ import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider, PreloadPersonProvider } from "./person-door.js";
 import { forgetPictures } from "./picture-query.js";
-import { usePlaceBinding } from "./places/place-binding.js";
+import { usePlaceArrivals, usePlaceBinding } from "./places/place-binding.js";
 import { ROUTED_PLACE } from "./places/routed-places.js";
 import { forgetAccountReads } from "./query-keys.js";
 import { useOpenHostConnect } from "./settings/host-connect-dialog.js";
@@ -88,6 +88,7 @@ import { type SettingsRoute, useSettingsRoute } from "./settings-link.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
+import { useTaskRoute } from "./task-route.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
@@ -465,6 +466,8 @@ function AppWindow(): React.JSX.Element {
     listed: () => listedSlug.current,
     onClose: () => leaveRouted.current(),
   });
+  const taskView = useTaskRoute();
+  const arrivals = usePlaceArrivals();
   const tasks = useTasksTab({
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
@@ -492,6 +495,9 @@ function AppWindow(): React.JSX.Element {
     inboxView,
     unknownWorkspaceView,
     homeView,
+    taskView,
+    place: routedHere?.place,
+    arrivals,
   });
   // Note that a workspace an older service named no slug for is named in its address by its id (`workspace-routes.ts`).
   listedSlug.current =
@@ -638,12 +644,15 @@ function AppWindow(): React.JSX.Element {
   });
   leaveRouted.current = history.onLeaveRouted;
   stayRouted.current = history.onStayRouted;
-  // Home and the task the host binds follow each other, each on the other's edge (`places/place-binding.ts`).
+  // The place standing and the task the host binds follow each other, each on the other's edge (`places/place-binding.ts`).
   usePlaceBinding({
     known,
     place: routedHere?.place,
+    task: tasks.taskView.taskId,
+    page: routedHere?.place === ROUTED_PLACE.TASK ? undefined : routedHere?.address,
     bound: tasks.boundFor,
     onUnbind: tasks.onUnbindTask,
+    onSelect: tasks.onArriveTask,
     onToBound: history.onLeaveRouted,
     onToUnbound: homeView.onOpen,
   });
