@@ -58,8 +58,9 @@ import { agentStillWriting } from "./agent-model.js";
  * the Mac's port differs ("from :3000"). Under them, a port may be shared
  * by a public link (`PORT_SHARE_SET`): one row per port, "Share :3000",
  * and while one is shared, its link, which opens it, Copy, and Stop
- * sharing, as the host keeps the link beside the ports. Every word drawn is the app's own,
- * port numbers among them, so a screen recording shows them as they read.
+ * sharing, as the host keeps the link beside the ports. Every word drawn
+ * but the link is the app's own, port numbers among them, so a screen
+ * recording shows them as they read.
  */
 
 /** What an agent forwarding is off for reads. */
@@ -221,6 +222,8 @@ function shareRows(
   return [
     {
       label: shared.url,
+      // Note that the link opens the port to anyone holding it, so a screen recording keeps it masked.
+      replayMasked: true,
       icon: <GlobeIcon aria-hidden="true" />,
       onSelect: () => appPlatform().openWeb(shared.url),
     },
