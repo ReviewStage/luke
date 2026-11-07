@@ -38,12 +38,9 @@ interface Recorded {
   sandboxed: number[];
   native: number[];
   wakeups: number[];
-  withdrawnLines: number[];
   automated: number[];
   pictures: number[];
   syncLog: number[];
-  staleFirewalls: number[];
-  codexPlanSwaps: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -55,12 +52,9 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     sandboxed: [],
     native: [],
     wakeups: [],
-    withdrawnLines: [],
     automated: [],
     pictures: [],
     syncLog: [],
-    staleFirewalls: [],
-    codexPlanSwaps: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -101,15 +95,10 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.wakeups.push(now);
         return { delivered: 1, failed: 0 };
       }),
-    purgeWithdrawnLines: (now) =>
-      Effect.sync(() => {
-        recorded.withdrawnLines.push(now);
-        return 2;
-      }),
     sweepAutomations: (now) =>
       Effect.sync(() => {
         recorded.automated.push(now);
-        return { fired: 1, started: 1, skipped: 0, failed: 0, archived: 0 };
+        return { fired: 1, started: 1, skipped: 0, failed: 0 };
       }),
     purgeUnsavedPictures: (now) =>
       Effect.sync(() => {
@@ -121,16 +110,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.syncLog.push(now);
         return 5;
-      }),
-    purgeStaleFirewalls: (now) =>
-      Effect.sync(() => {
-        recorded.staleFirewalls.push(now);
-        return 7;
-      }),
-    renewCodexPlanSwaps: (now) =>
-      Effect.sync(() => {
-        recorded.codexPlanSwaps.push(now);
-        return { renewed: 2, failed: 0 };
       }),
     ...overrides,
   };
@@ -159,12 +138,9 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       sandboxed: [],
       native: [],
       wakeups: [],
-      withdrawnLines: [],
       automated: [],
       pictures: [],
       syncLog: [],
-      staleFirewalls: [],
-      codexPlanSwaps: [],
     });
   }),
 );
@@ -187,12 +163,9 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       native: [],
       wakeups: [],
-      withdrawnLines: [],
       automated: [],
       pictures: [],
       syncLog: [],
-      staleFirewalls: [],
-      codexPlanSwaps: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -202,12 +175,9 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       native: [],
       wakeups: [],
-      withdrawnLines: [],
       automated: [],
       pictures: [],
       syncLog: [],
-      staleFirewalls: [],
-      codexPlanSwaps: [],
     });
   }),
 );
@@ -225,8 +195,6 @@ it.effect(
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.equal(answer.body.syncLog, 5);
-      assert.equal(answer.body.staleFirewalls, 7);
-      assert.deepEqual(answer.body.codexPlanSwaps, { renewed: 2, failed: 0 });
       const [instant] = recorded.purged;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
@@ -237,12 +205,9 @@ it.effect(
         sandboxed: [instant],
         native: [instant],
         wakeups: [instant],
-        withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
         syncLog: [instant],
-        staleFirewalls: [instant],
-        codexPlanSwaps: [instant],
       });
     }),
 );
@@ -273,8 +238,6 @@ it.effect(
       assert.deepEqual(answer.body.automations, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(recorded.syncLog.length, 1);
-      assert.equal(recorded.staleFirewalls.length, 1);
-      assert.equal(recorded.codexPlanSwaps.length, 1);
       assert.equal(recorded.pictures.length, 1);
     }),
 );

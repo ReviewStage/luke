@@ -21,10 +21,11 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries, testQueryClientNow } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -161,7 +162,11 @@ async function settleLoaded(): Promise<void> {
   await act(async () => {
     await Promise.all([import("lucide-react"), import("unicode-emoji-json/data-by-group.json")]);
   });
-  await settle();
+  // The picker reads them through the test's Query client, which hands each answer on a tick of its own.
+  await vi.waitFor(() =>
+    assert.equal(testQueryClientNow().isFetching({ queryKey: [QUERY_ROOT.SECTION_ICONS] }), 0),
+  );
+  await settleQueries(settle);
 }
 
 /** Types `words` into a field, as a person would. */

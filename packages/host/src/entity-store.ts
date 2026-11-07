@@ -48,10 +48,7 @@ import {
   taskSectionSchema,
 } from "@repo/features/task-section-wire";
 import { repositoryPinSchema } from "@repo/features/task-wire";
-import {
-  workspaceInvitationsLiveRowsSchema,
-  workspaceMembersLiveRowsSchema,
-} from "@repo/features/workspace-live";
+import { WORKSPACE_INVITATIONS_READ, WORKSPACE_MEMBERS_READ } from "@repo/features/workspace-live";
 import { workspaceSchema } from "@repo/features/workspace-wire";
 import type { QueuedEntry } from "@repo/sync";
 import {
@@ -118,12 +115,12 @@ const keptRowsSchema = Schema.Struct({
     pins: Schema.Array(repositoryPinSchema),
   }),
   [KEPT_READ.WORKSPACES]: Schema.Array(workspaceSchema),
-  [KEPT_READ.MEMBERS]: Schema.Record(Schema.String, workspaceMembersLiveRowsSchema),
+  [KEPT_READ.MEMBERS]: Schema.Record(Schema.String, WORKSPACE_MEMBERS_READ.rows),
   [KEPT_READ.INVITATIONS]: Schema.Record(
     Schema.String,
     Schema.Struct({
       origin: Schema.String,
-      invitations: workspaceInvitationsLiveRowsSchema.fields.invitations,
+      invitations: WORKSPACE_INVITATIONS_READ.rows.fields.invitations,
     }),
   ),
   [KEPT_READ.AUTOMATIONS]: Schema.Record(Schema.String, automationsLiveRowsSchema),

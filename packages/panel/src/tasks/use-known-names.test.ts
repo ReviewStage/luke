@@ -175,17 +175,26 @@ test("an untitled agent is named by the catalog around the reader, as its tab an
   const model = "openai/gpt-6.1-sol";
   const task: TaskSummary = {
     ...INVITES,
-    agents: {
-      total: 1,
-      working: 1,
-      agents: [{ id: agentId, title: null, model, effort: "high", status: AGENT_STATUS.RUNNING }],
-      pullRequestTotal: 0,
-      pullRequests: [],
-    },
+    agents: { total: 1, working: 1, pullRequestTotal: 0 },
+  };
+  const held = holding([task], 1);
+  // The task's agent, as the list followed live holds it.
+  const followed = {
+    id: agentId,
+    planId: task.id,
+    title: null,
+    model,
+    effort: "high",
+    status: AGENT_STATUS.RUNNING,
+    createdAt: AT,
+    turnId: null,
+    workspaceId: task.workspaceId,
+    repository: task.repository,
   };
   fakeAppBridge({
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve(holding([task], 1)),
+    requestAppState: () =>
+      Promise.resolve({ ...held, tasks: { ...held.tasks, taskAgents: [followed] } }),
   });
   let seen: KnownNames | undefined;
   function Reader(): null {

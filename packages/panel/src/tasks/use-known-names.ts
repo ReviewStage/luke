@@ -86,11 +86,9 @@ function heldNamesOf(
   const tasks = new Map(planning?.tasks.map((task) => [task.id, task.name]));
   const agents = new Map<string, string>();
   const agentModels = new Map<string, string>();
-  for (const task of planning?.tasks ?? []) {
-    for (const agent of task.agents?.agents ?? []) {
-      agents.set(agent.id, agentName(agent));
-      agentModels.set(agent.id, agent.model);
-    }
+  for (const agent of planning?.taskAgents ?? []) {
+    agents.set(agent.id, agentName(agent));
+    agentModels.set(agent.id, agent.model);
   }
   const automations = new Map<string, string>();
   for (const agent of planning?.tasklessAgents ?? []) {
@@ -150,14 +148,12 @@ const selectHeldStatuses = memoizedSelect(
     ),
 );
 
-/** Each listed agent's status, a task's row's and those on no task, by its id, built as the task statuses are. */
+/** Each listed agent's status, a task's and those on no task, by its id, built as the task statuses are. */
 const selectHeldAgentStatuses = memoizedSelect(
   (state) => [state.tasks],
   (planning): ReadonlyMap<string, AgentStatus> =>
     new Map([
-      ...planning.tasks.flatMap((task) =>
-        (task.agents?.agents ?? []).map((agent) => [agent.id, agent.status] as const),
-      ),
+      ...(planning.taskAgents ?? []).map((agent) => [agent.id, agent.status] as const),
       ...(planning.tasklessAgents ?? []).map((agent) => [agent.id, agent.status] as const),
     ]),
 );

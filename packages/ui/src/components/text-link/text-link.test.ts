@@ -11,7 +11,7 @@ import { TEXT_LINK_CURRENT, TEXT_LINK_LOOK, TextLink } from "./text-link.js";
  * announced as current, as the page or as the part of the site; an external
  * link in a new tab opens there and is still named by its words alone; a
  * link with no address is its words and no link; and its press is heard
- * before the browser follows it.
+ * before the browser follows it, a middle-click's as a click's.
  */
 
 const roots: Root[] = [];
@@ -102,6 +102,31 @@ test("a press on a TextLink is heard, and the link is still followed", () => {
   act(() => link?.click());
 
   expect(presses).toEqual([false]);
+});
+
+test("a middle-click is handed to the link's press, which keeps the browser from following where it opens the address itself", () => {
+  const presses: number[] = [];
+  const container = mount(
+    createElement(TextLink, {
+      href: "https://github.com/acme/app/pull/42",
+      onClick: (event) => {
+        event.preventDefault();
+        presses.push(event.button);
+      },
+      children: "Fix the refresh",
+    }),
+  );
+  const link = container.querySelector("a");
+  let followed = true;
+  act(() => {
+    followed =
+      link?.dispatchEvent(
+        new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }),
+      ) ?? true;
+  });
+
+  expect(presses).toEqual([1]);
+  expect(followed).toBe(false);
 });
 
 test("a TextLink with no address is its words, and no link", () => {

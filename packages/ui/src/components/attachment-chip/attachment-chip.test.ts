@@ -130,6 +130,17 @@ test("a file that is here hangs its card while the pointer rests: its icon, whol
   assert.ok(card?.querySelector("[data-file-icon]"), "the file's own icon leads the card");
 });
 
+test("a text file's card shows the head of its words under its name", () => {
+  const list = drawn({
+    name: "Pasted text 1.txt",
+    detail: "48 lines",
+    peek: "TypeError: x is undefined",
+  });
+  hover(list.querySelector("li") ?? assert.fail("a chip"));
+  const card = document.querySelector("[data-attachment-card]");
+  assert.equal(card?.textContent?.includes("TypeError: x is undefined"), true);
+});
+
 test("a chip without an open or a way off presses nothing", () => {
   const list = drawn({ name: "trace.txt" });
   assert.deepEqual(buttonNames(list), []);

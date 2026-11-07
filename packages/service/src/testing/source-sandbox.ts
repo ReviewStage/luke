@@ -2,8 +2,8 @@
  * source-sandbox.ts -- a coding agent's sandbox at Vercel's REST boundary, as `@vercel/sandbox` reads it, its shell a real one over a git checkout on disk, for the suites that copy a source agent's work.
  *
  * The double answers Vercel Sandbox's API as the scenario has it: the
- * session's drive where it is named, or none, as for a source from before
- * drives; the session's sandbox
+ * session's sandbox under the name given, stopped on a snapshot, or under a
+ * name of eve's that no lookup by the session's name finds,
  * in the status given, a resume that brings it up under a
  * fresh session, a stop that stops it where it is sent as JSON and is
  * refused with 415 where not, as Vercel refuses it, a firewall policy
@@ -109,12 +109,13 @@ export interface SourceSandbox {
   readonly answer: (sent: SentToSandbox) => Response | undefined;
 }
 
-/** The double over the checkout given, its sandbox first listed in the status given, or none listed for a session that never opened one, and the session's drive standing where it is named. */
+/** The double over the checkout given, its sandbox first listed in the status given, or none listed for a session that never opened one, under the name given with a snapshot to resume from where it is named. */
 export function sourceSandbox(
   source: SourceCheckout,
   status: string | undefined,
-  drive?: string,
+  snapshotted?: string,
 ): SourceSandbox {
+  const name = snapshotted ?? SOURCE_SANDBOX.NAME;
   const state: SourceSandbox["state"] = {
     status,
     session: status === "running" ? SOURCE_SANDBOX.RUNNING : undefined,
@@ -157,34 +158,22 @@ export function sourceSandbox(
       policies.push({ session, hosts: Object.keys(JSON.parse(body).allow ?? {}) });
       return Response.json(sessionAnswered({ id: session, status: "running" }));
     }
-    // A source from before drives has no drive of its own, so its work is copied.
-    if (parsed.pathname.startsWith("/api/v2/sandboxes/drives/")) {
-      return parsed.pathname.endsWith(`/${drive}`)
-        ? Response.json({
-            drive: {
-              id: `drv_${drive}`,
-              name: drive,
-              projectId: "prj_fixture",
-              region: "iad1",
-              maxSizeBytes: 2 ** 40,
-              createdAt: 1,
-              updatedAt: 1,
-            },
-          })
-        : new Response(null, { status: 404 });
-    }
     if (parsed.searchParams.get("resume") === "true") {
       state.status = "running";
       state.session = SOURCE_SANDBOX.WOKEN;
     }
     const listed = {
-      name: SOURCE_SANDBOX.NAME,
+      name,
       status: state.status ?? "stopped",
       currentSessionId: state.session ?? SOURCE_SANDBOX.STOPPED,
       createdAt: 0,
+      ...(snapshotted === undefined ? undefined : { currentSnapshotId: "snap_source" }),
     };
-    if (parsed.pathname === `/api/v2/sandboxes/${SOURCE_SANDBOX.NAME}`) {
-      return Response.json(sandboxFound(listed));
+    // A lookup by any other name finds none, as for a source whose sandbox eve named.
+    if (/^\/api\/v2\/sandboxes\/[^/]+$/u.test(parsed.pathname)) {
+      return parsed.pathname === `/api/v2/sandboxes/${name}` && state.status !== undefined
+        ? Response.json(sandboxFound(listed))
+        : new Response(null, { status: 404 });
     }
     return (
       sandboxListRefusal(parsed) ??

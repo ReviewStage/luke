@@ -1,23 +1,25 @@
 /**
- * agent-sandbox-open.ts -- the one way an agent's sandbox is opened, by whichever caller opens it: `Sandbox.getOrCreate` under its session's name, on its session's drive, from the agents' image.
+ * agent-sandbox-open.ts -- the one way an agent's sandbox is opened, by whichever caller opens it: `Sandbox.getOrCreate` under its session's name, from the agents' image or a snapshot.
  *
  * An agent's sandbox is named after its session (`agentSandboxName`) and
  * opened as Vercel's persistent sandboxes are
  * (https://vercel.com/docs/sandbox/concepts/persistent-sandboxes): the one
  * standing under the name is resumed, one is created where none stands, and
  * one whose snapshot is gone is deleted and created again under the same
- * name, its session's drive mounted at the workspace (`agent-drive.ts`),
- * which holds the checkout through it. Whichever caller opens it, a message's
+ * name: from the agents' image, or from the snapshot a launch names
+ * (`machine/vercel-machine.ts`), whose disk already holds a checkout.
+ * Whichever caller opens it, a message's
  * launch (`machine/vercel-machine.ts`), the Terminal, or the agent's browser,
  * opens it here, so a sandbox any of them creates is the same sandbox: the
  * `agent` user made in its `onCreate`, as the SDK makes one, beside what the
- * caller's own `onCreate` adds, which only a launch adds (the checkout).
+ * caller's own `onCreate` adds, which only a launch adds (the checkout). A
+ * sandbox created from a snapshot of another agent's sandbox has that user
+ * already, so it is not made again.
  */
 
 import { createHash } from "node:crypto";
 import { AGENT_USER, CODEX_PIN } from "@repo/agent-runner/pins";
 import { Duration, Effect, Schedule } from "effect";
-import { AGENT_DRIVE, agentDriveName } from "./agent-drive.js";
 import { AgentImage } from "./coder-host/agent-image.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
@@ -65,9 +67,8 @@ const IMAGE_RETRY = {
 
 /**
  * The session's sandbox's name, which `getOrCreate` opens it under: the
- * prefix and a digest of the session's id, as its drive is named
- * (`agentDriveName`), so every open of the session finds the one sandbox
- * standing under it.
+ * prefix and a digest of the session's id, so every open of the session
+ * finds the one sandbox standing under it.
  */
 export function agentSandboxName(sessionId: string): string {
   const digest = createHash("sha256").update(sessionId).digest("hex");
@@ -80,20 +81,32 @@ export function agentSandboxTags(sessionId: string, agentId: string): Record<str
 }
 
 /**
- * What an agent's sandbox is opened as: its session, its tags, and how many
- * vCPUs it runs on, Vercel's default where unsaid. A launch names the
- * agent's own (`agentSandboxTags`, `sandboxVcpus`); a caller that opens one
- * already standing again names those it stands with.
+ * A snapshot an agent's sandbox is created from in place of the image, and
+ * whether the `agent` user stands in it already, as in a snapshot of another
+ * agent's sandbox; a repository's base snapshot holds none.
+ */
+export interface AgentSnapshotSource {
+  readonly snapshotId: string;
+  readonly holdsUser: boolean;
+}
+
+/**
+ * What an agent's sandbox is opened as: its session, its tags, how many
+ * vCPUs it runs on, Vercel's default where unsaid, and the snapshot it is
+ * created from where it is created, the image where unsaid. A launch names
+ * the agent's own (`agentSandboxTags`, `sandboxVcpus`); a caller that opens
+ * one already standing again names those it stands with.
  */
 export interface AgentSandboxOf {
   readonly sessionId: string;
   readonly tags: Readonly<Record<string, string>>;
   readonly vcpus: number | undefined;
+  readonly snapshot?: AgentSnapshotSource;
 }
 
 /**
  * The agent's sandbox opened through `getOrCreate`, as above, from the
- * agents' image, asked again while the registry still prepares the image
+ * agents' image or the snapshot named, asked again while the registry still prepares the image
  * (`IMAGE_RETRY`): running, with whether this call created it. A sandbox it
  * creates has the `agent` user made in it, and is then handed to the
  * caller's `onCreate` where it gives one; a failure of either fails the open,
@@ -106,17 +119,22 @@ export const openAgentSandbox = (
   onCreate?: (created: OpenedSandbox) => Promise<void>,
 ) =>
   Effect.gen(function* () {
-    const image = yield* Effect.flatMap(AgentImage, (agentImage) => agentImage.reference).pipe(
-      Effect.catchTag("AgentImageMissing", () =>
-        Effect.fail(new SandboxUnavailable({ detail: IMAGE_MISSING })),
-      ),
-    );
+    const from =
+      of.snapshot === undefined
+        ? {
+            image: yield* Effect.flatMap(AgentImage, (agentImage) => agentImage.reference).pipe(
+              Effect.catchTag("AgentImageMissing", () =>
+                Effect.fail(new SandboxUnavailable({ detail: IMAGE_MISSING })),
+              ),
+            ),
+          }
+        : { snapshotId: of.snapshot.snapshotId };
     let created = false;
     const sandbox = yield* api
       .getOrCreate(
         {
           name: agentSandboxName(of.sessionId),
-          image,
+          from,
           tags: of.tags,
           timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
           ...(of.vcpus === undefined ? undefined : { vcpus: of.vcpus }),
@@ -126,8 +144,9 @@ export const openAgentSandbox = (
             deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
           },
           env: SANDBOX_ENV,
-          mounts: { [AGENT_DRIVE.MOUNT_PATH]: agentDriveName(of.sessionId) },
-          user: { name: AGENT_USER, homeFolders: AGENT_HOME_FOLDERS },
+          ...(of.snapshot?.holdsUser === true
+            ? undefined
+            : { user: { name: AGENT_USER, homeFolders: AGENT_HOME_FOLDERS } }),
         },
         async (opened) => {
           created = true;

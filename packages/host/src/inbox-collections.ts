@@ -62,8 +62,6 @@ export type InboxChange =
       readonly itemId: string;
       /** When, in epoch milliseconds; null where the reminder is canceled. */
       readonly until: number | null;
-      /** When the write was asked, which a canceled reminder comes due at. */
-      readonly at: number;
     }
   | { readonly kind: typeof INBOX_CHANGE.ANSWERED; readonly item: InboxItem };
 
@@ -74,27 +72,12 @@ export interface InboxWritten {
   readonly kept: boolean;
 }
 
-/**
- * When a reminder standing for `was` comes due once the change is drawn
- * over it: until the change's instant, or, where the change ends it, until
- * when it was asked, as the service ends one by bringing the item back
- * then; one already past, or none, stands as it was.
- */
-export function remindAtAfter(
-  was: number | null | undefined,
-  change: { readonly until: number | null; readonly at: number },
-): number | undefined {
-  if (change.until !== null) return change.until;
-  if (was === undefined || was === null) return undefined;
-  return Math.min(was, change.at);
-}
-
-/** The item as a reminder change leaves it; none where it stands so already. */
+/** The item as a reminder change leaves it, with none where the change cancels it, as the service cancels one; none where it stands so already. */
 function remindedItem(
   item: InboxItem,
   change: Extract<InboxChange, { readonly kind: typeof INBOX_CHANGE.REMINDED }>,
 ): InboxItem | undefined {
-  const until = remindAtAfter(item.remindAt, change);
+  const until = change.until ?? undefined;
   if (item.remindAt === until) return undefined;
   const { remindAt: _was, ...rest } = item;
   return until === undefined ? rest : { ...rest, remindAt: until };

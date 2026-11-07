@@ -20,17 +20,16 @@ import { EXPERIMENT } from "@repo/settings";
 import { COMMAND_KEY } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
 import { cloudBrowserTab } from "@repo/ui/tab-strip-model";
+import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { WireBoundaryInput } from "@repo/wire";
 import { useQuery } from "@tanstack/react-query";
 import { Clock, Context, Duration, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { browserTabsQuery } from "../live-reads.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
@@ -277,9 +276,8 @@ it.effect(
       document.body.append(container);
       const root = createRoot(container);
       roots.push(root);
-      const registry = AtomRegistry.make({
-        initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
-      });
+      serveEffectsOn(Context.make(Clock.Clock, clock));
+      const registry = AtomRegistry.make();
       act(() =>
         root.render(
           onRegistry(
@@ -789,9 +787,8 @@ it.effect(
       document.body.append(container);
       const root = createRoot(container);
       roots.push(root);
-      const registry = AtomRegistry.make({
-        initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
-      });
+      serveEffectsOn(Context.make(Clock.Clock, clock));
+      const registry = AtomRegistry.make();
       act(() =>
         root.render(
           onRegistry(

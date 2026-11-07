@@ -68,39 +68,44 @@ function causeTraceOf(answer: object): unknown {
   return traceId;
 }
 
+it.effect("starts an agent with the request as sent", () =>
+  Effect.gen(function* () {
+    const request = { idempotencyKey: "press-1", ...CHOICE };
+    const api = fakeCloudApi({
+      [`POST /api/plans/${TASK_ID}/agents`]: {
+        answer: () => ({ agent: AGENT }),
+        status: 201,
+      },
+    });
+    const started = yield* Effect.provide(client().start(TASK_ID, request), api.layer);
+    assert.deepEqual(started, { agent: AGENT });
+    assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), request);
+  }),
+);
+
 it.effect(
-  "starts an agent with the request as sent, and reads each refusal as its own failure",
+  "a Start and a choice the catalog refuses as an invalid request read as a choice the service does not offer now",
   () =>
     Effect.gen(function* () {
-      const request = { idempotencyKey: "press-1", ...CHOICE };
-      const api = fakeCloudApi({
+      const refusing = fakeCloudApi({
         [`POST /api/plans/${TASK_ID}/agents`]: {
-          answer: () => ({ agent: AGENT }),
-          status: 201,
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_REQUEST }),
+          status: HTTP_STATUS.BAD_REQUEST,
+        },
+        [`PATCH /api/agents/${AGENT_ID}`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_REQUEST }),
+          status: HTTP_STATUS.BAD_REQUEST,
         },
       });
-      const refusals = [
-        [HOSTED_API_ERROR.NO_REPOSITORY, AGENT_CALL_FAILURE.NO_REPOSITORY],
-        [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE],
-        [HOSTED_API_ERROR.INVALID_REQUEST, AGENT_CALL_FAILURE.INVALID_CHOICE],
-        [HOSTED_API_ERROR.GITHUB_UNANSWERED, AGENT_CALL_FAILURE.GITHUB_UNANSWERED],
-        [HOSTED_API_ERROR.UNAVAILABLE, AGENT_CALL_FAILURE.UNANSWERED],
-      ] as const;
 
-      const started = yield* Effect.provide(client().start(TASK_ID, request), api.layer);
-      assert.deepEqual(started, { agent: AGENT });
-      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), request);
+      const started = yield* Effect.provide(
+        client().start(TASK_ID, { idempotencyKey: "press-1", ...CHOICE }),
+        refusing.layer,
+      );
+      const chosen = yield* Effect.provide(client().choose(AGENT_ID, CHOICE), refusing.layer);
 
-      for (const [error, failure] of refusals) {
-        const refusing = fakeCloudApi({
-          [`POST /api/plans/${TASK_ID}/agents`]: {
-            answer: () => ({ error }),
-            status: HTTP_STATUS.CONFLICT,
-          },
-        });
-        const refused = yield* Effect.provide(client().start(TASK_ID, request), refusing.layer);
-        assert.deepEqual(uncaused(refused), { failure }, error);
-      }
+      assert.deepEqual(started, { failure: AGENT_CALL_FAILURE.INVALID_CHOICE });
+      assert.deepEqual(chosen, { failure: AGENT_CALL_FAILURE.INVALID_CHOICE });
     }),
 );
 

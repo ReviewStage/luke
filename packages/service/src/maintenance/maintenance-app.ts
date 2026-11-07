@@ -1,14 +1,12 @@
 import type { DatabaseServices } from "@repo/database/core/query";
-import { purgeWithdrawnLines, sweepAbandonedTurns } from "@repo/database/models/abandoned-turns";
+import { sweepAbandonedTurns } from "@repo/database/models/abandoned-turns";
 import { purgeUnsavedAttachments } from "@repo/database/models/description-attachments";
 import { hostedStore } from "@repo/database/models/hosted-store";
-import { dropStaleFirewalls } from "@repo/database/models/sandbox-firewall-store";
 import { pruneSyncLog } from "@repo/database/models/sync-log";
 import { storeWriter } from "@repo/database/models/writer";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
-import { CODER } from "../agents/coder-host/bounds.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
@@ -20,7 +18,6 @@ import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { sweepCodexPlanSwaps } from "./codex-plan-sweep.js";
 import { sweepDeviceLeases } from "./device-lease-sweep.js";
 import { sweepDeviceWarmRunners } from "./device-warm-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
@@ -40,9 +37,6 @@ const SWEEP_MONITOR: CronMonitor = {
 
 /** How long a picture pasted into a description waits for a save to name it before the sweep deletes it: a day, so an edit left open over lunch keeps its pictures. */
 const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
-
-/** How long a sandbox firewall's record outlives its last write before the sweep drops it: an hour past the longest a session runs, so its session has surely ended. */
-const FIREWALL_RECORD_KEEP_MS = CODER.SANDBOX_MAX_LIFETIME_MS + 60 * 60 * 1_000;
 
 /**
  * The scheduled sweep handed the deployment's real seams. An automation's run
@@ -87,18 +81,11 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sweepNativeWakeups: (now) =>
       sweepNativeWakeups(sessionsFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepAgentQueues: () => sweepAgentQueues(sessionsFor).pipe(Effect.provideContext(startContext)),
-    purgeWithdrawnLines: (now) => purgeWithdrawnLines(now),
     sweepAutomations: (now) =>
       sweepAutomations(sessionsFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
       purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
-    purgeStaleFirewalls: (now) => dropStaleFirewalls(new Date(now - FIREWALL_RECORD_KEEP_MS)),
-    renewCodexPlanSwaps: (now) =>
-      sweepCodexPlanSwaps(environment.providerKeyEncryptionKeys, new Date(now)).pipe(
-        Effect.provideContext(startContext),
-        Effect.provideService(HostedEnvironment, environment),
-      ),
   });
 });
 

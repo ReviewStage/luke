@@ -15,7 +15,6 @@ import {
   INBOX_CHANGE,
   INBOX_ITEM,
   type InboxChange,
-  remindAtAfter,
   settles,
 } from "./inbox-collections.js";
 import { answeredCollection, rowsOf } from "./live-collection.js";
@@ -119,7 +118,7 @@ function entryChanged<Row extends Entry>(
 ): Row | "gone" | undefined {
   if (!changedIds(change).includes(entry.id)) return undefined;
   if (change.kind === INBOX_CHANGE.REMINDED) {
-    const until = remindAtAfter(entry.remindAt, change) ?? null;
+    const { until } = change;
     return (entry.remindAt ?? null) === until ? undefined : { ...entry, remindAt: until };
   }
   if (change.kind === INBOX_CHANGE.ANSWERED && entry.updatedAt > change.item.updatedAt) {

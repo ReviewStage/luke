@@ -40,6 +40,11 @@ test("a plan's link reloaded on a Mac by an account that chose the Mac app is no
 
   assert.ok(app !== undefined, "the host stands");
   // The plan drawn comes well after a hand-off would have, which asks the service once.
-  await vi.waitFor(() => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")));
+  // Note that the 5 s bound covers a known regression in the panel's cold first render in jsdom since the TanStack work, about
+  // 500 ms to about 850 ms unloaded, which "Bring the panel's first render back to its pre-TanStack time" (STAG-1593) fixes.
+  await vi.waitFor(
+    () => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")),
+    5_000,
+  );
   assert.deepEqual(opened, []);
 });

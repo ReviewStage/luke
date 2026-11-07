@@ -15,7 +15,12 @@ import { MODEL_PROVIDER, type ModelProvider } from "./models-wire.js";
  * value outside the set, one a later build dropped or a row never written,
  * reads as Haiku. OpenAI's model of each tier is named here too, so a
  * Generate can say which model it would run on before it runs
- * (`chaptersModelOn`) and the chapters it told can name it after.
+ * (`chaptersModelOn`) and the chapters it told can name it after. A member
+ * who saved both an Anthropic and an OpenAI API key picks on the Chapters
+ * tab which model, and so whose key, chapters run on: the pick is kept as
+ * the account's chapters model, Claude's tier or OpenAI's model of it
+ * (`CHAPTERS_PICK_LIST`), and its provider is the one a Generate tries
+ * first (`chaptersProviderOf`), Anthropic's until they pick.
  */
 
 /** The models a member may tell chapters on, at Anthropic's own ids. */
@@ -59,21 +64,39 @@ export const OPENAI_CHAPTERS_MODEL_LABEL = {
 } as const;
 
 /** The provider's own id of the model a choice's tier runs on, on a key of that provider. */
-export function chaptersModelOn(provider: ModelProvider, modelId: ChaptersModelId): string {
+export function chaptersModelOn(provider: ModelProvider, modelId: ChaptersModelId): ChaptersPick {
   return provider === MODEL_PROVIDER.ANTHROPIC ? modelId : OPENAI_CHAPTERS_MODEL[modelId];
 }
 
-/** One of the choices, as the wire carries it. */
-const chaptersModelSchema = Schema.Literals(CHAPTERS_MODEL_LIST);
+/** A model an account's preferences keep chapters on: a Claude choice, or OpenAI's model of one, which a member picks on the Chapters tab. */
+export type ChaptersPick =
+  | ChaptersModelId
+  | (typeof OPENAI_CHAPTERS_MODEL)[keyof typeof OPENAI_CHAPTERS_MODEL];
+
+/** Every model an account's preferences may keep: Claude's choices, then OpenAI's model of each. */
+export const CHAPTERS_PICK_LIST: readonly ChaptersPick[] = [
+  ...CHAPTERS_MODEL_LIST,
+  ...Object.values(OPENAI_CHAPTERS_MODEL),
+];
+
+/** One of the picks, as the wire carries it. */
+const chaptersModelSchema = Schema.Literals(CHAPTERS_PICK_LIST);
 
 const readsChaptersModel = Schema.is(chaptersModelSchema);
 
-/** Whether a value is one of the choices, as one arriving from storage or the wire is read. */
-export function isChaptersModel(value: UnparsedWireValue): value is ChaptersModelId {
+/** Whether a value is one of the picks, as one arriving from storage or the wire is read. */
+export function isChaptersModel(value: UnparsedWireValue): value is ChaptersPick {
   return readsChaptersModel(value);
 }
 
-/** The choice a stored value stands for: itself where it is one, Haiku otherwise. */
-export function chaptersModelFrom(stored: UnparsedWireValue): ChaptersModelId {
+/** The pick a stored value stands for: itself where it is one, Haiku otherwise. */
+export function chaptersModelFrom(stored: UnparsedWireValue): ChaptersPick {
   return isChaptersModel(stored) ? stored : CHAPTERS_MODEL_DEFAULT;
+}
+
+const OPENAI_PICKS: ReadonlySet<ChaptersPick> = new Set(Object.values(OPENAI_CHAPTERS_MODEL));
+
+/** The provider whose key a pick runs on first: OpenAI's for one of its models, Anthropic's otherwise. */
+export function chaptersProviderOf(pick: ChaptersPick): ModelProvider {
+  return OPENAI_PICKS.has(pick) ? MODEL_PROVIDER.OPENAI : MODEL_PROVIDER.ANTHROPIC;
 }

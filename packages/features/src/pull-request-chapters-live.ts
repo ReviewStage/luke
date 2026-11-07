@@ -6,6 +6,7 @@ import {
   type PullRequestChaptersAnswerView,
 } from "./pull-request-chapters-view.js";
 import {
+  type ChaptersRunsOn,
   chaptersRunsOnSchema,
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
   PULL_REQUEST_CHAPTERS_STATE,
@@ -39,6 +40,7 @@ export const pullRequestChaptersLiveAnswerSchema = EffectSchema.Struct({
   queries: EffectSchema.Struct({ chapters: sealedLiveQuerySchema }),
   generatable: EffectSchema.Boolean,
   runsOn: EffectSchema.optionalKey(chaptersRunsOnSchema),
+  runsOnChoices: EffectSchema.optionalKey(EffectSchema.Array(chaptersRunsOnSchema)),
 });
 
 export type PullRequestChaptersLiveAnswer = typeof pullRequestChaptersLiveAnswerSchema.Type;
@@ -46,15 +48,23 @@ export type PullRequestChaptersLiveAnswer = typeof pullRequestChaptersLiveAnswer
 /** What the reader's Generate stands on, as a sealed answer carries it beside its statement. */
 export type ChaptersGenerator = Pick<
   NonNullable<PullRequestChaptersAnswer["pullRequest"]>,
-  "generatable" | "runsOn"
+  "generatable" | "runsOn" | "runsOnChoices"
 >;
+
+/** Two models a Generate may run on as the same, by their provider and id. */
+function sameRunsOn(a: ChaptersRunsOn | undefined, b: ChaptersRunsOn | undefined): boolean {
+  return a?.provider === b?.provider && a?.model === b?.model;
+}
 
 /** Whether two answers' readers stand on the same Generate, so a change between them is drawn. */
 export function sameGenerator(a: ChaptersGenerator, b: ChaptersGenerator): boolean {
+  const choices = a.runsOnChoices ?? [];
+  const others = b.runsOnChoices ?? [];
   return (
     a.generatable === b.generatable &&
-    a.runsOn?.provider === b.runsOn?.provider &&
-    a.runsOn?.model === b.runsOn?.model
+    sameRunsOn(a.runsOn, b.runsOn) &&
+    choices.length === others.length &&
+    choices.every((choice, at) => sameRunsOn(choice, others[at]))
   );
 }
 
@@ -135,8 +145,14 @@ export function pullRequestChaptersOfLive(
   if (Option.isNone(read)) return UNAVAILABLE;
   const chapters = stateOf(read.value[0]);
   if (chapters === undefined) return UNAVAILABLE;
-  const { generatable, runsOn } = generator;
+  const { generatable, runsOn, runsOnChoices } = generator;
   return {
-    pullRequest: { number, generatable, ...(runsOn === undefined ? {} : { runsOn }), chapters },
+    pullRequest: {
+      number,
+      generatable,
+      ...(runsOn === undefined ? {} : { runsOn }),
+      ...(runsOnChoices === undefined ? {} : { runsOnChoices }),
+      chapters,
+    },
   };
 }

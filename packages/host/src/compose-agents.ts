@@ -1,4 +1,6 @@
 import type { HostedAgentClient } from "@repo/features";
+import { ACCOUNT_PREFERENCES_READ } from "@repo/features/account-preferences-live";
+import { AGENT_ORIGIN_READ } from "@repo/features/agent-origin-live";
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
@@ -62,7 +64,8 @@ import {
 } from "@repo/features/inbox-writes";
 import { WRITE_UNTAKEN, writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
-import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire";
+import { WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
+import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import { pullRequestChaptersReadParamsSchema } from "@repo/features/pull-request-chapters-view";
@@ -103,7 +106,11 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
-import { agentDefaultWritten, heldAccountPreferences } from "./account-preferences-follow.js";
+import {
+  agentDefaultWritten,
+  chaptersProviderWritten,
+  heldAccountPreferences,
+} from "./account-preferences-follow.js";
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
@@ -250,11 +257,10 @@ const AGENT_QUEUED_WRITE = {
 export type AgentClient = Pick<
   HostedAgentClient,
   | "pullRequestChaptersLive"
-  | "agentOriginLive"
   | "generateChapters"
   | "models"
-  | "accountPreferencesLive"
   | "writeDefault"
+  | "writeChaptersProvider"
   | "liveRead"
   | "devicePresence"
   | "removeHost"
@@ -303,7 +309,6 @@ export type AgentClient = Pick<
   | "readGitHubToken"
   | "saveGitHubToken"
   | "removeGitHubToken"
-  | "workspaceMemoriesLive"
   | "forgetMemory"
   | "transcribeDictation"
   | "answerInbox"
@@ -543,7 +548,9 @@ export function composeAgents(
     });
     const origins = yield* heldAgentOrigins({
       seal: (agentId, poll, userId, after) =>
-        asked(client.agentOriginLive(agentId, userId, poll, after)),
+        asked(
+          client.liveRead(AGENT_ORIGIN_READ, { id: agentId, userId }, poll ? { after } : undefined),
+        ),
       accountId: dependencies.accountId,
       gate,
       tell: (held: AppAgentOrigins) =>
@@ -565,7 +572,8 @@ export function composeAgents(
         tellItems,
       );
     const preferences = yield* heldAccountPreferences({
-      seal: (userId, poll, after) => asked(client.accountPreferencesLive(userId, poll, after)),
+      seal: (userId, poll, after) =>
+        asked(client.liveRead(ACCOUNT_PREFERENCES_READ, { userId }, poll ? { after } : undefined)),
       gate,
       pool: dependencies.pool,
       tell: (held: AppAccountPreferences) =>
@@ -576,7 +584,13 @@ export function composeAgents(
       Effect.scoped(Effect.andThen(preferences.hold(userId), Effect.never));
     const memories = yield* heldMemories({
       seal: (workspaceId, userId, poll, after) =>
-        asked(client.workspaceMemoriesLive(workspaceId, userId, poll, after)),
+        asked(
+          client.liveRead(
+            WORKSPACE_MEMORIES_READ,
+            { userId, workspaceId },
+            poll ? { after } : undefined,
+          ),
+        ),
       accountId: dependencies.accountId,
       gate,
       pool: dependencies.pool,
@@ -734,8 +748,8 @@ function presenceOf(answer: DevicePresenceAnswer, askedAt: number): AppDevicePre
  * account's; that the models are asked again as the keys move, since a key,
  * a plan, or a plan's default moves which models no credential pays for;
  * and that
- * an ask of the beats which fails, or runs past
- * `MAC_PRESENCE.READ_TIMEOUT_MS`, after one answered keeps the beats it
+ * an ask of the beats which fails, its deadline of
+ * `MAC_PRESENCE.READ_TIMEOUT_MS` among the ways, after one answered keeps the beats it
  * answered, marked stale, under the new instant, so a window says it cannot
  * check rather than that a device left.
  */
@@ -755,15 +769,10 @@ function fetchedReads(
       fetch: (userId, held) =>
         Effect.gen(function* () {
           if (userId !== accountId()) return Option.none();
-          // Note that a read past its bound counts as one that failed, so a window says it cannot check rather than letting every device age away while it hangs.
-          const answer = yield* Effect.timeoutOption(
-            asked(client.devicePresence()),
-            Duration.millis(MAC_PRESENCE.READ_TIMEOUT_MS),
-          );
+          // Note that a read past its deadline fails like any other, so a window says it cannot check rather than letting every device age away while it hangs.
+          const answer = yield* asked(client.devicePresence());
           const askedAt = yield* Clock.currentTimeMillis;
-          if (Option.isSome(answer) && !("failure" in answer.value)) {
-            return Option.some(presenceOf(answer.value, askedAt));
-          }
+          if (!("failure" in answer)) return Option.some(presenceOf(answer, askedAt));
           return held === undefined
             ? Option.none()
             : Option.some({ beats: held.beats, askedAt, stale: true as const });
@@ -788,7 +797,6 @@ function fetchedReads(
       path: (userId) => [userId],
       gate,
       focus,
-      every: MODEL_CATALOG_TTL,
       fetch: (userId) =>
         userId === accountId()
           ? Effect.map(asked(client.models()), (answer) =>
@@ -1263,7 +1271,7 @@ function composed(
   /** An item's reminder set for an instant, or canceled, drawn at once; whether it is read stands as it was. */
   const reminded = inboxWrite<AgentInboxRemindParams, AgentInboxReadStateView>(
     ({ itemId }) => [itemId],
-    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until, at: kernel.now() }),
+    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until }),
     ({ itemId, until }, key) => asked(client.remindInboxItem(itemId, until, key)),
     {
       name: INBOX_QUEUED_WRITE.REMIND,
@@ -1374,6 +1382,13 @@ function composed(
     AGENTS_DEFAULT_WRITE: declaredWrite(
       dependencies.pool,
       agentDefaultWritten((choice) => asked(client.writeDefault(choice)), dependencies.accountId),
+    ),
+    AGENTS_CHAPTERS_PROVIDER_WRITE: declaredWrite(
+      dependencies.pool,
+      chaptersProviderWritten(
+        (provider) => asked(client.writeChaptersProvider(provider)),
+        dependencies.accountId,
+      ),
     ),
     // A removal is drawn gone over the held hosts the moment it is asked.
     HOSTS_REMOVE: declaredWrite(

@@ -8,7 +8,7 @@ import {
   type AgentInboxMessageParams,
   INBOX_SCOPE_KIND,
 } from "@repo/features/agent-view";
-import { AGENT_STATUS } from "@repo/features/agent-wire";
+import { AGENT_BOUNDS, AGENT_STATUS } from "@repo/features/agent-wire";
 import { inboxAttachmentAddress } from "@repo/features/inbox-attachment-link";
 import {
   INBOX_ASK,
@@ -170,7 +170,7 @@ test("a thread leads with its item's title alone as its subject, whether the ite
   assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
 });
 
-test("a paste past an item's reply cap is cut to the room left and its note line says so, until the words change, with the counter standing from four fifths of the cap", async () => {
+test("a paste past an item's reply cap and too large for a file is cut to the room left and its note line says so, until the words change, with the counter standing from four fifths of the cap", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const pane = itemPane(page);
@@ -178,7 +178,7 @@ test("a paste past an item's reply cap is cut to the room left and its note line
   const note = () => pane.querySelector(".ui-composer-foot-note")?.textContent;
   assert.equal(pane.querySelector(".ui-length-counter"), null);
 
-  pasteInComposer(pane, "x".repeat(cap + 100));
+  pasteInComposer(pane, "x".repeat(AGENT_BOUNDS.MAX_TEXT_BYTES + 1));
   await settle();
   assert.equal(composerEditor(pane).textContent?.length, cap);
   assert.equal(note(), pasteCutWords(cap));

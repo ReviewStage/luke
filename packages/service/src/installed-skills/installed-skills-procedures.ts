@@ -20,7 +20,7 @@
  * one transaction, so a name already taken among several installs none.
  * Each write answers the
  * transaction it committed in, which a desktop holding the skills live
- * waits for (`installedSkillsLive`); the list still answers a desktop
+ * waits for (`installedSkillsRead`); the list still answers a desktop
  * released before it.
  */
 

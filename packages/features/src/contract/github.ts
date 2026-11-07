@@ -18,6 +18,11 @@
  * schema flipped, so oRPC's output check encodes the handler's value into
  * the bytes the wire carries (`packages/service/src/orpc/base.ts`).
  *
+ * The connection's procedures declare their own refusals: each refuses as
+ * any procedure may (a bearer or session not taken, a store that could not
+ * answer), and the disconnect also refuses GitHub as the account's last
+ * way to sign in as not permitted.
+ *
  * The list and each read of one repository refuse, beyond what any
  * procedure may (`declaredProcedure`), a workspace the account is not a
  * member of as not found (`packages/service/src/github/github-procedures.ts`).
@@ -52,7 +57,7 @@ import {
   workspaceIdSchema,
 } from "../task-wire.js";
 import { workspaceTokenRepositoryRequestSchema } from "../workspace-wire.js";
-import { bodyCap, declaredProcedure, exactInput, hostedProcedure, refuses } from "./base.js";
+import { bodyCap, declaredProcedure, exactInput, refuses } from "./base.js";
 import { taskFileQueryFields } from "./task-files.js";
 
 /** An intent's id is 43 base64url characters, so a claim past this carries no intent. */
@@ -88,18 +93,19 @@ export const numberedQuerySchema = EffectSchema.Struct({
 });
 
 export const githubContract = {
-  connect: hostedProcedure
+  connect: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_CONNECT }))
     .output(EffectSchema.flip(githubConnectAnswerSchema)),
-  claim: hostedProcedure
+  claim: declaredProcedure
     .meta(bodyCap(CLAIM_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_CONNECT_CLAIM }))
     .input(exactInput(githubConnectClaimRequestSchema))
     .output(EffectSchema.flip(githubConnectClaimAnswerSchema)),
-  connection: hostedProcedure
+  connection: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_CONNECTION }))
     .output(EffectSchema.flip(githubConnectionAnswerSchema)),
-  disconnect: hostedProcedure
+  disconnect: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_DISCONNECT }))
     .output(EffectSchema.flip(githubConnectionAnswerSchema)),
   repositories: declaredProcedure

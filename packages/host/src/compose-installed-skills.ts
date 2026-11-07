@@ -1,4 +1,5 @@
 import type { HostedInstalledSkillClient } from "@repo/features/installed-skill-client";
+import { INSTALLED_SKILLS_READ } from "@repo/features/installed-skill-live";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   installedSkillFollowParamsSchema,
@@ -46,7 +47,7 @@ import type { RunMode } from "./run-mode.js";
 /** The service's side of installed skills, as this concern asks it. */
 export type InstalledSkillsClient = Pick<
   HostedInstalledSkillClient,
-  "installedSkillsLive" | "read" | "preview" | "install" | "remove"
+  "liveRead" | "read" | "preview" | "install" | "remove"
 >;
 
 export interface InstalledSkillsDependencies {
@@ -81,7 +82,11 @@ export function composeInstalledSkills(
       seal: (workspaceId, userId, poll, after) =>
         gate()
           ? Effect.provideService(
-              client.installedSkillsLive(workspaceId, userId, poll, after),
+              client.liveRead(
+                INSTALLED_SKILLS_READ,
+                { userId, workspaceId },
+                poll ? { after } : undefined,
+              ),
               HttpClient.HttpClient,
               http,
             )

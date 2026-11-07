@@ -10,6 +10,7 @@ import { test } from "vitest";
 import { TOOL_STATE, ToolLine, type ToolState } from "./ai-elements/tool.js";
 import { TaskRowStatus } from "./desktop/task-card.js";
 import { AgentGlyph } from "./tasks/tab-look.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 
 /**
  * state-glyph.test.ts -- work that is working or failed wears one mark for
@@ -28,21 +29,7 @@ const WORKED_ON: TaskSummary = {
   createdAt: 1,
   updatedAt: 2,
   repository: "acme/relay",
-  agents: {
-    total: 1,
-    working: 1,
-    agents: [
-      {
-        id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-        title: "Alerts",
-        model: MODEL,
-        effort: "high",
-        status: AGENT_STATUS.RUNNING,
-      },
-    ],
-    pullRequestTotal: 0,
-    pullRequests: [],
-  },
+  agents: { total: 1, working: 1, pullRequestTotal: 0 },
 };
 
 /** The node drawn as `node` is, in a box of its own. */
@@ -66,7 +53,7 @@ function toolRow(state: ToolState): HTMLElement {
 
 test("a sidebar plan's row, an agent's tab, and a running call draw one working mark under one name", () => {
   const surfaces = {
-    sidebar: drawn(createElement(TaskRowStatus, { task: WORKED_ON })),
+    sidebar: drawn(withQueryClient(createElement(TaskRowStatus, { task: WORKED_ON }))),
     tab: drawn(
       createElement(AgentGlyph, { agent: { model: MODEL, status: AGENT_STATUS.RUNNING } }),
     ),

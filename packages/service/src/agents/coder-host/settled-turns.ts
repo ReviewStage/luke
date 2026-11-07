@@ -1,21 +1,24 @@
 /**
- * settled-turns.ts -- what hears of each coding agent turn the store writer settles, wherever it was settled: the deployment's count of it, the report to the agent's starter, and the turn on Slack, an automation run's result or a reply in its agent's thread.
+ * settled-turns.ts -- what hears of each coding agent turn the store writer settles, wherever it was settled: the deployment's count of it, the report to the agent's starter, the turn on Slack, an automation run's result or a reply in its agent's thread, and the archive of a finished automation run.
  *
  * The writer tells its `SettledTurnListener` once the settle's transaction
  * is done (`@repo/database/models/writer`), whichever path settled the turn:
  * the relay's or a runner's own end, a Stop, a lost session's, or the
  * sweep's abandon. This is the one listener the deployment provides
- * (`../../runtime.ts`), and it does three things with each turn: counts it
+ * (`../../runtime.ts`), and it does four things with each turn: counts it
  * (`../../events/server-events.ts`), hands its final message to the agent
  * that started it, where one did (`starter-report.ts`), and posts it on
  * Slack, as a DM of an automation run's result to its owner where the run's
  * automation asks for it, or else in the agent's current Slack thread,
- * where one speaks for it (`../../slack/slack-agent-starts.ts`). Each runs
+ * where one speaks for it (`../../slack/slack-agent-starts.ts`), and
+ * archives the automation run the agent belongs to where its last agent
+ * finished well (`../../automations/run-archive.ts`). Each runs
  * once the request has answered, where the runtime runs work past the
- * answer, since none is the settle's to wait on; and the report and the
- * Slack message run on the pool rather than on a transaction the settle may
- * have run inside, so their sends hold no transaction open over a harness or
- * Slack. Note that the work may start before such a transaction commits, so
+ * answer, since none is the settle's to wait on; and the report, the
+ * Slack message, and the archive run on the pool rather than on a
+ * transaction the settle may have run inside, so their sends hold no
+ * transaction open over a harness or Slack. Note that the work may start
+ * before such a transaction commits, so
  * a caller that runs the writer inside its own tells this listener only once
  * it has (`../native-events/runner-events-app.ts`), and the reads here see
  * the settle committed.
@@ -26,6 +29,7 @@ import { type SettledAgentTurn, SettledTurnListener } from "@repo/database/model
 import { Context, Effect, Layer } from "effect";
 import type { HttpClient } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { reconsiderRunArchiveAfterTurn } from "../../automations/run-archive.js";
 import type { HostedEnvironment } from "../../environment.js";
 import { turnEndCounted } from "../../events/server-events.js";
 import type { GitHubApp } from "../../github/github-app.js";
@@ -74,9 +78,16 @@ export const settledTurnListener: Layer.Layer<
         "an agent's turn on Slack",
         postTurnToSlack(turn).pipe(Effect.provideContext(reach), outsideTransaction),
       );
+    const archived = (turn: SettledAgentTurn) =>
+      afterResponse(
+        "a finished automation run's archive",
+        outsideTransaction(reconsiderRunArchiveAfterTurn(turn)),
+      );
     return {
       heard: (turn) =>
-        Effect.all([turnEndCounted(turn), reported(turn), posted(turn)], { discard: true }),
+        Effect.all([turnEndCounted(turn), reported(turn), posted(turn), archived(turn)], {
+          discard: true,
+        }),
     };
   }),
 );

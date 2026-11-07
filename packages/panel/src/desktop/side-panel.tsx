@@ -1,4 +1,3 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { AgentBrowserTab } from "@repo/features/agent-browser-tab-wire";
 import {
   AGENT_MACHINE,
@@ -77,8 +76,8 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { createStore, useSelector } from "@tanstack/react-store";
 import { absurd } from "effect";
-import * as Atom from "effect/reactivity/Atom";
 import {
   Fragment,
   type ReactNode,
@@ -1660,11 +1659,11 @@ export function ActivityList({
  * menu hangs from where the toggle asked for it with nothing to show; none
  * where no toggle is drawn.
  */
-const panelToggleRoomAtom = Atom.keepAlive(Atom.make<HTMLElement | null>(null));
+const panelToggleRoomStore = createStore<HTMLElement | null>(null);
 
 /** The ref the window hands the box its side panel's toggle stands in, which the panel's "+" menu hangs from (`ToggleOffers`). */
 export function usePanelToggleRoom(): (room: HTMLElement | null) => void {
-  return useAtomSet(panelToggleRoomAtom);
+  return useCallback((room: HTMLElement | null) => panelToggleRoomStore.setState(() => room), []);
 }
 
 /**
@@ -1683,7 +1682,7 @@ function ToggleOffers({
   entries: readonly AddEntry[];
   onAnswered: () => void;
 }): React.JSX.Element | null {
-  const toggle = useAtomValue(panelToggleRoomAtom);
+  const toggle = useSelector(panelToggleRoomStore);
   const [corner, setCorner] = useState<HTMLElement | null>(null);
   const room = toggle ?? corner;
   const [open, setOpen] = useState(true);

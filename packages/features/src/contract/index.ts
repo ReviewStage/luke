@@ -13,6 +13,7 @@ import { agentPortsContract } from "./agent-ports.js";
 import { agentPullRequestsContract } from "./agent-pull-requests.js";
 import { agentsContract } from "./agents.js";
 import { automationsContract } from "./automations.js";
+import { descriptionCommentsContract } from "./description-comments.js";
 import { deviceAgentsContract } from "./device-agents.js";
 import { dictationContract } from "./dictation.js";
 import { eventsContract } from "./events.js";
@@ -27,7 +28,6 @@ import { macCommandsContract } from "./mac-commands.js";
 import { mcpClientsContract } from "./mcp-clients.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
-import { descriptionCommentsContract } from "./description-comments.js";
 import { pullRequestChaptersContract } from "./pull-request-chapters.js";
 import { pullRequestsContract } from "./pull-requests.js";
 import { repositoryPinsContract } from "./repository-pins.js";
@@ -35,6 +35,7 @@ import { supportAccessContract } from "./support-access.js";
 import { taskFilesContract } from "./task-files.js";
 import { taskSectionsContract } from "./task-sections.js";
 import { tasksContract } from "./tasks.js";
+import { workspaceEnvironmentContract } from "./workspace-environment.js";
 import { workspaceGithubContract } from "./workspace-github.js";
 import { workspaceInvitationsContract } from "./workspace-invitations.js";
 import { workspaceSentryContract } from "./workspace-sentry.js";
@@ -80,6 +81,7 @@ export const hostedContract = {
   supportAccess: supportAccessContract,
   taskFiles: taskFilesContract,
   taskSections: taskSectionsContract,
+  workspaceEnvironment: workspaceEnvironmentContract,
   workspaceGithub: workspaceGithubContract,
   workspaceInvitations: workspaceInvitationsContract,
   workspaceSentry: workspaceSentryContract,

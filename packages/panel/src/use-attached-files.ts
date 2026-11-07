@@ -18,8 +18,11 @@ import { type FileDrop, useFileDrop } from "./use-file-drop.js";
  * drop come the same way in each: read on this machine, held to the box's
  * count and to the bytes a message carries together, and taken after
  * whatever the box holds as the read lands, so neither a read that landed first nor a chip taken off
- * meanwhile is undone. A paste takes the pictures on the clipboard alone,
- * so text pastes as it always does. The first file of a hand-off that
+ * meanwhile is undone. A paste takes the pictures on the clipboard, and
+ * words long enough to bury the message (`LONG_PASTE`) as a text file of
+ * their own, "Pasted text 1.txt", so the box keeps the words written
+ * around them; shorter words paste as they always did, and so do long
+ * ones the box has no room for as a file, which the box's bound then cuts. The first file of a hand-off that
  * cannot come says why in the box's one note, and a hand-off that all came
  * takes a standing file note down. A box keeps its files where it keeps its
  * draft, or here where it keeps none.
@@ -45,6 +48,35 @@ const REFUSAL = {
   FULL: (most: number) => `A message can carry up to ${most} files.`,
   TOO_MUCH: "These files are too large to send together.",
 } as const;
+
+/** How long pasted words run before they come as a file rather than into the box: either bound reached. */
+const LONG_PASTE = {
+  CHARS: 4_000,
+  LINES: 40,
+} as const;
+
+/** The name a pasted file takes, numbered past every pasted file the box holds. */
+const PASTED_NAME = /^Pasted text (\d+)\.txt$/u;
+
+/** Whether pasted words run long enough to come as a file. */
+function longPaste(words: string): boolean {
+  if (words.length >= LONG_PASTE.CHARS) return true;
+  let lines = 1;
+  for (let at = words.indexOf("\n"); at !== -1; at = words.indexOf("\n", at + 1)) {
+    lines += 1;
+    if (lines >= LONG_PASTE.LINES) return true;
+  }
+  return false;
+}
+
+/** The next pasted file's name: one past the highest the box holds, so a chip taken off frees no number a later paste reuses beside its neighbor. */
+function pastedName(held: readonly AgentAttachment[]): string {
+  const highest = held.reduce((most, file) => {
+    const number = PASTED_NAME.exec(file.name)?.[1];
+    return number === undefined ? most : Math.max(most, Number(number));
+  }, 0);
+  return `Pasted text ${String(highest + 1)}.txt`;
+}
 
 /** Whether bytes spell text a model can read: UTF-8, with no NUL, which no text file holds. */
 function spellsText(bytes: Uint8Array): boolean {
@@ -173,6 +205,8 @@ export interface AttachedFiles {
   readonly attach: (files: readonly File[]) => void;
   /** Takes the pictures among pasted files, answering whether there were any, so text pastes as it always does. */
   readonly paste: (files: readonly File[]) => boolean;
+  /** Takes pasted words as a text file where they run long and the box has room for them as one, answering whether it did. */
+  readonly pasteText: (words: string) => boolean;
   readonly remove: (index: number) => void;
   /** The files the box holds this moment, for a callback that outlives the render it was made in. */
   readonly now: () => readonly AgentAttachment[];
@@ -223,6 +257,23 @@ export function useAttachedFiles(options: AttachedFilesOptions): AttachedFiles {
       const pasted = imageFiles(files);
       if (pasted.length === 0) return false;
       attach(pasted);
+      return true;
+    },
+    pasteText: (words) => {
+      const { most = AGENT_BOUNDS.MAX_ATTACHMENTS, held } = latest.current;
+      if (held === true || !longPaste(words)) return false;
+      const bytes = new TextEncoder().encode(words);
+      if (bytes.length > AGENT_BOUNDS.MAX_TEXT_BYTES) return false;
+      // Note that the words are read here and now rather than through `attach`, so a box with no room for them keeps them as words.
+      const file: AgentAttachment = {
+        name: pastedName(heldNow()),
+        mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
+        data: base64Of(bytes),
+      };
+      const read = { attachments: [file], refusal: undefined };
+      if (withFiles(heldNow(), read, most).refusal !== undefined) return false;
+      latest.current.onRefusal(undefined);
+      holderNow().update((now) => withFiles(now, read, most).attachments);
       return true;
     },
     remove: (index) => {
