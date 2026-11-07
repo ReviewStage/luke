@@ -62,6 +62,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.syncLog.push(now);
         return 5;
       }),
+    sweepPortShares: () => Effect.succeed(0),
     ...overrides,
   };
   return { options, recorded };

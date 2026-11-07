@@ -1,5 +1,5 @@
 /**
- * relay.ts -- one tunnel: the desktop's socket piped to a bridge in the PTY of the agent's running sandbox, holding the sandbox while bytes cross it and closing when none have for twenty minutes.
+ * relay.ts -- one tunnel: the desktop's socket piped to a bridge in the PTY of the agent's running sandbox, holding the sandbox while bytes cross it and closing when none have for ten minutes.
  *
  * A connection reaches its agent through the one rule every agent route
  * keeps, as a Terminal's does, then opens a PTY only on a sandbox that is
@@ -61,7 +61,7 @@ import {
 
 export const TUNNEL_RELAY_BOUNDS = {
   /** How long a tunnel stays connected past the last byte that crossed it either way. */
-  IDLE: Duration.minutes(20),
+  IDLE: Duration.minutes(10),
   /** How often traffic moves the lease on, so a byte is not a write. */
   LEASE_WRITE_EVERY: Duration.minutes(1),
   /** How often a connection asks whether it has gone the idle bound without traffic. */

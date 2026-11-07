@@ -23,7 +23,7 @@ import { relayTunnel, type TunnelDependencies } from "./relay.js";
  * the tunnel closes as not running, but for a mirror that asks to wake,
  * which resumes it and starts its bridge; a running one starts the port bridge,
  * and once it is ready frames cross both ways, holding the sandbox as they
- * do, until twenty minutes without a byte close the tunnel as idle and end
+ * do, until ten minutes without a byte close the tunnel as idle and end
  * its keep-alive.
  */
 
@@ -139,7 +139,7 @@ it.effect(
 );
 
 it.effect(
-  "frames cross once the bridge is ready, holding the sandbox, until twenty idle minutes close it",
+  "frames cross once the bridge is ready, holding the sandbox, until ten idle minutes close it",
   () =>
     Effect.gen(function* () {
       const device = yield* scriptedSocket;
@@ -155,7 +155,7 @@ it.effect(
       const startFrame = JSON.parse("text" in pty.sent[0]! ? pty.sent[0].text : "{}");
       assert.equal(startFrame.args.at(-1), "5173");
       assert.deepEqual(lines(pty.sent), []);
-      assert.equal(heldUntil(), start + Duration.toMillis(Duration.minutes(21)));
+      assert.equal(heldUntil(), start + Duration.toMillis(Duration.minutes(11)));
 
       yield* pty.push(ready);
       yield* pty.push({ bytes: encode(`${DATA}\r\n`) });
@@ -163,12 +163,12 @@ it.effect(
       assert.deepEqual(lines(pty.sent), [`${OPEN}\n`]);
       assert.deepEqual(device.sent, [{ text: DATA }]);
 
-      // Traffic ten minutes on moves the lease on and the idle bound with it.
-      yield* TestClock.adjust(Duration.minutes(10));
+      // Traffic five minutes on moves the lease on and the idle bound with it.
+      yield* TestClock.adjust(Duration.minutes(5));
       yield* device.push({ text: DATA });
       yield* settle;
-      assert.equal(heldUntil(), start + Duration.toMillis(Duration.minutes(31)));
-      yield* TestClock.adjust(Duration.minutes(19));
+      assert.equal(heldUntil(), start + Duration.toMillis(Duration.minutes(16)));
+      yield* TestClock.adjust(Duration.minutes(9));
       assert.deepEqual(device.closed, []);
 
       yield* TestClock.adjust(Duration.minutes(2));
