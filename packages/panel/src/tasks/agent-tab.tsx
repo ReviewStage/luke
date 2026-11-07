@@ -75,7 +75,12 @@ import { skillWord } from "@repo/ui/skill-mention";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
-import { type GitHubLineMetadata, MESSAGE_ROLE, type WireValue } from "@repo/wire";
+import {
+  ACTION_RESULT_STATUS,
+  type GitHubLineMetadata,
+  MESSAGE_ROLE,
+  type WireValue,
+} from "@repo/wire";
 import { useQuery } from "@tanstack/react-query";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import {
@@ -2837,11 +2842,22 @@ function AgentTabView({
       unsent,
       notes: failedNotes,
       sending,
-      retry: (id: string) => retryLine?.(id),
-      takeBack: (id: string) => takeBackLine?.(id),
+      // Note that an archived agent takes no message, so a line refused before it was archived is only deleted.
+      retry: onUnarchive === undefined ? (id: string) => retryLine?.(id) : undefined,
+      takeBack: onUnarchive === undefined ? (id: string) => takeBackLine?.(id) : undefined,
       drop: (id: string) => dropLine?.(id),
     }),
-    [undelivered, composer.closed, unsent, failedNotes, sending, retryLine, takeBackLine, dropLine],
+    [
+      undelivered,
+      composer.closed,
+      unsent,
+      failedNotes,
+      sending,
+      retryLine,
+      takeBackLine,
+      dropLine,
+      onUnarchive,
+    ],
   );
   const starterActor = usePerson(agent.startedBy);
   const wholeParts = useWholePartDoor(agent.id);
@@ -3309,6 +3325,29 @@ function AgentTabBody({
     onOpenTarget === undefined
       ? undefined
       : (agentId: string) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId });
+  // An archived agent's box gives way to its Unarchive: the page's own where it draws the agent
+  // alone, else this tab's, as on a task, a refusal said as the page says it.
+  const unarchive =
+    control.onUnarchive ??
+    (agent.archivedAt === undefined
+      ? undefined
+      : () =>
+          control.onArchive(agent.id, false).then(
+            (result) => {
+              if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
+              toast({
+                words: result.reason,
+                tone: STATUS_TONE.DANGER,
+                hold: TOAST_HOLD.FAILED,
+                failure: {
+                  surface: FAILURE_SURFACE.AGENT_ARCHIVE,
+                  cause: result,
+                  about: { agentId: agent.id },
+                },
+              });
+            },
+            () => undefined,
+          ));
   // An agent a pilot started reports to it and takes no member's message, so its box names the pilot instead.
   const pilot = agent.startedByPilot;
   const reportsTo = pilotTarget(agent);
@@ -3377,7 +3416,7 @@ function AgentTabBody({
         counts={shown}
         delegationStarts={shown ? transcript.delegations : undefined}
         onStop={() => control.onStop(agent.id)}
-        onUnarchive={control.onUnarchive}
+        onUnarchive={unarchive}
         onOpenSubagent={onOpenSubagent}
         onOpenTarget={onOpenTarget}
         cards={cards}
@@ -3414,7 +3453,7 @@ function AgentTabBody({
         onMoveToCloud={moveToCloud}
         endTrail={
           // Note that the box's note names them while it stands, so the transcript names them only where an archive took the box.
-          continued.length === 0 || control.onUnarchive === undefined ? undefined : (
+          continued.length === 0 || unarchive === undefined ? undefined : (
             <ContinuedTrail {...continuedDoors} />
           )
         }

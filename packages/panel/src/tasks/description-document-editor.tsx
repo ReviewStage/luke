@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import { DOCUMENT_EDITOR_STATE, type DocumentEditor } from "@repo/features/description-edit-model";
 import { DESCRIPTION_ACTOR, TASK_BOUNDS, type Task } from "@repo/features/task-wire";
 import {
@@ -15,9 +14,9 @@ import {
 } from "@repo/ui";
 import { openThread, useDescriptionCommentsControl } from "@repo/ui/description-comments";
 import { markdownClass } from "@repo/ui/markdown-class";
+import { useQuery } from "@tanstack/react-query";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { Duration, Effect } from "effect";
-import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
 import {
@@ -987,7 +986,7 @@ export function DescriptionDocumentEditor({
     openThreads.map((thread) => thread.id),
   );
   // Whether the editor's bundle has landed, which mounts the editor in the room.
-  const ready = AsyncResult.isSuccess(useAtomValue(useSideBundles().descriptionEditor));
+  const ready = useQuery(useSideBundles().descriptionEditor).isSuccess;
   const room = useRef<HTMLElement>(null);
   const pictures = useEditorPictures(task.id, mentions?.place.workspace, handle);
   // A press on the document's empty room puts the caret there, at the text's end where it lands under it; one before the editor has loaded is where it opens.

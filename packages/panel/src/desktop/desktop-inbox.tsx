@@ -1024,7 +1024,7 @@ export function paneDoors(
   if (holder.kind === INBOX_HOLDER.TASK) {
     const { task } = holder;
     // An agent the item or its task's card names reads beside it, as a link to it does.
-    // Note that an archived agent's tab is never drawn, so the window opens it on its own page.
+    // Note that an archived agent's tab is not drawn beside the item, so the window opens it on its task.
     const openAgent = (taskId: string, agentId: string) =>
       seams.openPlace({ kind: LINK_PLACE.AGENT, planId: taskId, agentId }, () =>
         tasks.onShowAgent(taskId, agentId),

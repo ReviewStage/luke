@@ -1,7 +1,6 @@
-import { Effect } from "effect";
-import * as Atom from "effect/reactivity/Atom";
+import { queryOptions, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import type * as RehypeRaw from "rehype-raw";
-import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
 
 /**
  * markdown-html-parser.ts -- the HTML parser a reply's markdown is drawn through (`rehype-raw`), kept out of the bundle every window parses and loaded once per window as the panel first paints.
@@ -18,7 +17,10 @@ import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
  * moves bytes in words that hold none, the line breaks between a table's
  * rows among them. So a reply is never drawn without it. `MessageResponse`
  * draws nothing until it has landed, which, started after the panel's first
- * paint, is long before a transcript opens.
+ * paint, is long before a transcript opens. The load is read through
+ * TanStack Query (`markdownHtmlParserQuery`), as an import is async data:
+ * kept for the window's life once it settles, and asked for by whatever
+ * reads it first.
  */
 
 /** The library itself, once its chunk has landed. */
@@ -37,27 +39,30 @@ const rehypeRaw: typeof RehypeRaw.default = (options) => (tree, file) =>
 
 export default rehypeRaw;
 
-/** The parser's chunk, loaded once per window and kept for its life. */
-export const markdownHtmlParserAtom = Atom.keepAlive(
-  rendererRuntime.atom(
-    Effect.suspend(() =>
-      parser !== undefined
-        ? Effect.void
-        : Effect.tryPromise({
-            try: () => import("rehype-raw"),
-            catch: () => new Error("The markdown parser could not be loaded."),
-          }).pipe(
-            Effect.andThen((module) =>
-              Effect.sync(() => {
-                parser = module.default;
-              }),
-            ),
-          ),
+/**
+ * The parser's chunk, imported once per window and kept for its life. Note
+ * that a failure answers as a landing does, never tried again, so a reply
+ * is drawn as the words it can be rather than never.
+ */
+export const markdownHtmlParserQuery = queryOptions({
+  queryKey: ["markdown-html-parser"] as const,
+  queryFn: () =>
+    import("rehype-raw").then(
+      (module) => {
+        parser = module.default;
+        return true;
+      },
+      () => false,
     ),
-  ),
-);
+  staleTime: Number.POSITIVE_INFINITY,
+  gcTime: Number.POSITIVE_INFINITY,
+  retry: false,
+});
 
 /** Starts the parser loading, where it has not started already. */
-export function prefetchMarkdownHtmlParser(): void {
-  rendererRegistry.get(markdownHtmlParserAtom);
+export function usePrefetchMarkdownHtmlParser(): () => void {
+  const client = useQueryClient();
+  return useCallback(() => {
+    void client.prefetchQuery(markdownHtmlParserQuery);
+  }, [client]);
 }

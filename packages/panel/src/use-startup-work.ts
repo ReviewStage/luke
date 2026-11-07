@@ -3,7 +3,7 @@ import { sessionReplayBootstrap } from "@repo/host/app-state";
 import { useCallback, useEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
 import { usePrefetchEditorBundle } from "./bundle-loader.js";
-import { prefetchMarkdownHtmlParser } from "./markdown-html-parser.js";
+import { usePrefetchMarkdownHtmlParser } from "./markdown-html-parser.js";
 import type { SessionReplayWord } from "./session-replay.js";
 import { IDLE_TIMEOUT_MS, useWhenIdle } from "./use-when-idle.js";
 
@@ -79,6 +79,7 @@ function sameWord(before: SessionReplayWord | undefined, after: SessionReplayWor
  */
 export function usePrefetchBundles(): void {
   const prefetchEditorBundle = usePrefetchEditorBundle();
+  const prefetchMarkdownHtmlParser = usePrefetchMarkdownHtmlParser();
   useWhenIdle(() => {
     prefetchEditorBundle();
     prefetchMarkdownHtmlParser();

@@ -413,6 +413,12 @@ const declaredTaskCalls = {
   files: taskFilesContract,
   sections: taskSectionsContract,
   pins: repositoryPinsContract,
+  repositories: githubContract.repositories,
+  repositoryFile: githubContract.repositoryFile,
+  repositoryTree: githubContract.repositoryTree,
+  repositorySkills: githubContract.repositorySkills,
+  repositoryPullRequest: githubContract.repositoryPullRequest,
+  repositoryIssue: githubContract.repositoryIssue,
 };
 
 /** Every failure those procedures may end with, as the domain spells it. */

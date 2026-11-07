@@ -47,7 +47,7 @@ import {
  *   it where the link names one, a review thread of one of its agents' pull
  *   requests, and a pull request as `pullRequestBeside` opens it. An agent
  *   of its task the panel does not draw, an archived one, is the window's,
- *   which opens it on its own page; any other agent is the window's too,
+ *   which opens its tab on the task; any other agent is the window's too,
  *   which opens it in the middle. Another Inbox item is chosen in the Inbox the item stands in,
  *   rather than in its task's Inbox tab.
  * - A task's page and an agent's page preview a pull request one of their
@@ -355,7 +355,7 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
             view: at.view,
           })
         : NOTHING;
-    // A message of an agent of the item's own task the panel draws reads beside it, at the message; an archived one's, drawn on its own page, is the window's to open.
+    // A message of an agent of the item's own task the panel draws reads beside it, at the message; an archived one's is the window's to open, in its tab on the task.
     case LINK_PLACE.MESSAGE:
       return here.taskId !== undefined &&
         holdsAgent(at, here.taskId, here.agentIds) &&
@@ -367,7 +367,7 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
     // An agent of the item's own task reads beside it; one on no task, or another task's, is the window's to open.
     case LINK_PLACE.AGENT: {
       if (here.taskId === undefined || !holdsAgent(at, here.taskId, here.agentIds)) return NOTHING;
-      // An archived one, whose tab is never drawn, is the window's, which opens it on its own page.
+      // An archived one, which the panel does not draw, is the window's, which opens its tab on the task.
       return here.agentIds?.includes(at.agentId) === true
         ? preview({ kind: THING.TRANSCRIPT, agentId: at.agentId })
         : go({

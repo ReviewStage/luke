@@ -23,6 +23,7 @@ import { afterEach, beforeEach, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { LiveReadSubscription } from "../live-reads.js";
 import { AppStateSubscription, appStateQuery } from "../use-app-state.js";
+import { seedLanded } from "./landed-reads.js";
 
 /**
  * A client as the Testing guide makes one, a failed read not tried again,
@@ -41,6 +42,7 @@ function freshQueryClient(): QueryClient {
   });
   client.setQueryDefaults(appStateQuery.queryKey, { enabled: false });
   if (heldForFile !== undefined) client.setQueryData(appStateQuery.queryKey, heldForFile);
+  seedLanded(client);
   return client;
 }
 

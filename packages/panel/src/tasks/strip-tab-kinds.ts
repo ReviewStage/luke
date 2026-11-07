@@ -113,12 +113,11 @@ export interface TabKnown {
 
 /**
  * What the open task draws, which a tab closed on it is drawn again by: the
- * task's agents, archived ones left out, the agents whose tabs its column has
- * open, every agent of the task, an archived one among them, and its pages
+ * agents whose tabs its column has open, every agent of the task, an
+ * archived one among them, whose tab its column opens again, and its pages
  * by id, each none while unread.
  */
 export interface TaskDraws {
-  readonly agents: readonly string[] | undefined;
   readonly openAgents: DrawnTabs["agents"];
   readonly taskAgents: readonly string[] | undefined;
   readonly pages: readonly string[] | undefined;
@@ -239,7 +238,8 @@ const STRIP_TAB_KINDS = {
     }),
     surface: surfaceOf(PRODUCT_SURFACE.AGENT),
     link: NO_LINK,
-    drawsAgain: (tab, draws) => draws.agents === undefined || draws.agents.includes(tab.agent),
+    drawsAgain: (tab, draws) =>
+      draws.taskAgents === undefined || draws.taskAgents.includes(tab.agent),
     reopens: true,
     endsSession: false,
     closesIdle: true,
