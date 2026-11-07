@@ -62,7 +62,7 @@ import type { HttpClient } from "effect/http";
 import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "../../core.js";
 import { jsonOf } from "../../http/http-effect.js";
 import type { RelaySocket } from "../../terminal/relay.js";
-import { agentSandboxName, openAgentSandbox } from "../agent-sandbox-open.js";
+import { agentSandboxName, openAgentSandboxPromptly } from "../agent-sandbox-open.js";
 import { AgentImage, type AgentImageService } from "../coder-host/agent-image.js";
 import { ptyLinesOf, SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
@@ -131,6 +131,8 @@ export const BROWSER_UNREACHABLE = {
   SANDBOX_UNAVAILABLE: "sandbox-unavailable",
   /** The stopped sandbox did not come up within the bound. */
   NOT_RESUMED: "not-resumed",
+  /** The sandbox is being made again on an image Vercel still prepares, and comes up after the answer. */
+  STARTING: "starting",
   /** The stopped sandbox's snapshot is gone, expired or deleted, so it can never resume. */
   SNAPSHOT_GONE: "snapshot-gone",
   /** The sandbox's image carries no full Chromium: a snapshot made before it did. */
@@ -148,6 +150,7 @@ const UNREACHABLE_MESSAGE = {
   [BROWSER_UNREACHABLE.NOT_OPENED]: "the agent has not opened its sandbox yet",
   [BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE]: "Vercel Sandbox was unavailable",
   [BROWSER_UNREACHABLE.NOT_RESUMED]: "the agent's sandbox did not resume in time",
+  [BROWSER_UNREACHABLE.STARTING]: "the agent's sandbox is starting; try again in a minute",
   [BROWSER_UNREACHABLE.SNAPSHOT_GONE]:
     "the agent's sandbox shut down after being idle, and its next turn starts a fresh one",
   [BROWSER_UNREACHABLE.NO_CHROMIUM]: "the agent's sandbox carries no browser",
@@ -462,7 +465,11 @@ export function agentBrowserOver(
   /** The sandbox opened again as the agent's next turn opens it, where it stands under its session's name, or resumed by its own name where it was opened before. */
   const reopened = (sessionId: string, sandbox: ListedSandbox) =>
     sandbox.name === agentSandboxName(sessionId)
-      ? openAgentSandbox(api, { sessionId, tags: { ...sandbox.tags }, vcpus: sandbox.vcpus }).pipe(
+      ? openAgentSandboxPromptly(api, {
+          sessionId,
+          tags: { ...sandbox.tags },
+          vcpus: sandbox.vcpus,
+        }).pipe(
           Effect.provideService(AgentImage, image),
           Effect.map((opened) => opened.sandbox),
         )
@@ -480,8 +487,8 @@ export function agentBrowserOver(
       // and that a refusal is tried again too, since a sandbox still stopping may refuse its resume; the
       // last try's failure is the answer, so an outage still says Vercel was unavailable. A snapshot
       // gone, which only a sandbox opened before `getOrCreate` answers, is answered at once, since no
-      // later try finds it again, as is an image still being prepared, which the open has already
-      // waited on as long as it ever does.
+      // later try finds it again, as is an image still being prepared, which the open waits on after
+      // the answer, so the answer says the sandbox is starting.
       const resumed = reopened(sessionId, sandbox).pipe(
         Effect.flatMap((found) =>
           found.status === SANDBOX_STATUS.RUNNING
@@ -502,7 +509,9 @@ export function agentBrowserOver(
             ? failure
             : snapshotGone(failure)
               ? unreachable(BROWSER_UNREACHABLE.SNAPSHOT_GONE, failure.status)
-              : sandboxUnavailable(failure),
+              : failure.code === IMAGE_NOT_READY
+                ? unreachable(BROWSER_UNREACHABLE.STARTING)
+                : sandboxUnavailable(failure),
         ),
       );
     });

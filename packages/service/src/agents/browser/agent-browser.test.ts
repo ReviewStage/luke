@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { CDP_FAILURE, type CdpFailure } from "@repo/features/browser-cdp";
 import { Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { keptAfterResponse } from "../../http/after-response.js";
 import {
   agentBrowserTestLayer,
   FAKE_BRIDGE,
@@ -314,7 +315,7 @@ it.effect("a resume whose snapshot is gone is given up on at once, saying so", (
 );
 
 it.effect(
-  "a reopen whose image is still being prepared is given up on once the open stops waiting on it",
+  "a reopen whose image is still being prepared answers starting at once, its wait on the image kept past the answer",
   () =>
     Effect.gen(function* () {
       const peer = yield* fakeCdpPeer();
@@ -324,15 +325,14 @@ it.effect(
         resumeUnavailable: 400,
         resumeCode: "image_not_ready",
       });
+      const kept = keptAfterResponse();
 
-      const opening = yield* Effect.forkChild(Effect.flip(service.ensure(SESSION)));
-      // Note that the open asks again every 10 s for 3 min, and the clock moves no further, so a
-      // resume tried again after it would never answer.
-      yield* TestClock.adjust(Duration.minutes(3));
-      const unreachable = yield* Fiber.join(opening);
+      // Note that the clock never moves, so an open that waited on the image here would never answer.
+      const unreachable = yield* Effect.flip(service.ensure(SESSION)).pipe(
+        Effect.provide(kept.layer),
+      );
 
-      assert.equal(unreachable.reason, BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE);
-      assert.equal(unreachable.status, 400);
+      assert.equal(unreachable.reason, BROWSER_UNREACHABLE.STARTING);
     }),
 );
 
