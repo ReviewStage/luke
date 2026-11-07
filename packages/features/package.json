@@ -141,6 +141,7 @@
     "./terminal-wire": "./src/terminal-wire.js",
     "./sandbox-tunnel-wire": "./src/sandbox-tunnel-wire.js",
     "./sandbox-mirror-wire": "./src/sandbox-mirror-wire.js",
+    "./mirror-steps": "./src/mirror-steps.js",
     "./listening-ports-wire": "./src/listening-ports-wire.js",
     "./workspace-invitation-wire": "./src/workspace-invitation-wire.js",
     "./sidebar-live": "./src/sidebar-live.js",

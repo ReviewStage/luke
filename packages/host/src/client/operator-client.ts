@@ -194,6 +194,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onPortForwardingChanged((portForwarding) => {
         state.update({ portForwarding });
       }),
+      gateway.host.onMirrorsChanged((mirrors) => {
+        state.update({ mirrors });
+      }),
       // The host's own answer about recording stands the halt down: it is the
       // account transition the halt was waiting on.
       gateway.host.onSessionReplayChanged((replay) => {

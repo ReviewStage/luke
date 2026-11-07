@@ -1,3 +1,4 @@
+import { SENTRY_SEND_SPAN } from "@repo/features/sentry-tracing";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_REFUSAL,
@@ -30,6 +31,7 @@ import {
   useRef,
 } from "react";
 import { askAct, tellAct } from "../act.js";
+import { tracedSend } from "../send-traces.js";
 import { type HeldShell, nextShellTitle, TerminalsHeld } from "./terminal-held.js";
 import {
   SERVICE_UNREACHED,
@@ -253,26 +255,29 @@ function cloudLink(
   };
 }
 
-/** How a Local tab reaches its shell on this Mac. */
+/** How a Local tab reaches its shell on this Mac, its open a span from its ask for the mirror to its shell open. */
 function localLink(agentId: string): ShellLink {
   const close = (terminalId: string) => tellAct(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId });
   return {
     agentId,
-    open: async (size) => {
-      const mirrored = await askAct(ACT_KIND.MAC_SHELL_MIRROR, { agentId }).catch(() => undefined);
-      if (mirrored === undefined) {
-        return { state: { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.MIRROR } };
-      }
-      const made = await askAct(ACT_KIND.MAC_SHELL_OPEN, {
-        agentId,
-        folder: mirrored.folder,
-        ...size,
-      }).catch(() => undefined);
-      if (made === undefined) {
-        return { state: { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SHELL } };
-      }
-      return { terminalId: made.terminalId };
-    },
+    open: (size) =>
+      tracedSend(SENTRY_SEND_SPAN.LOCAL_TERMINAL_OPEN, async () => {
+        const mirrored = await askAct(ACT_KIND.MAC_SHELL_MIRROR, { agentId }).catch(
+          () => undefined,
+        );
+        if (mirrored === undefined) {
+          return { state: { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.MIRROR } };
+        }
+        const made = await askAct(ACT_KIND.MAC_SHELL_OPEN, {
+          agentId,
+          folder: mirrored.folder,
+          ...size,
+        }).catch(() => undefined);
+        if (made === undefined) {
+          return { state: { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SHELL } };
+        }
+        return { terminalId: made.terminalId };
+      }),
     attach: (terminalId, size) =>
       askAct(ACT_KIND.MAC_SHELL_ATTACH, { agentId, terminalId, ...size }).then(
         () => ({ asked: true }),
