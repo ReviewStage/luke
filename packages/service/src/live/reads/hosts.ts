@@ -22,6 +22,9 @@
  * presence read. Nor does a box collecting its secret, which writes only
  * columns Sync ignores and deletes its pairing, which Sync does not
  * capture: the hold's own look on the clock finds the lapse instant gone.
+ * Note that a box which collects within one look of its lapse may leave the
+ * page for that look and come back with the next answer, because a box polls
+ * every few seconds from its start and an approve leaves it a minute at least.
  */
 
 import { queryBuilder } from "@repo/database/core/query";
