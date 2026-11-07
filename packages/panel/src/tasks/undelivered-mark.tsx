@@ -37,14 +37,15 @@ interface SentLineMarks {
   readonly undelivered: ReadonlySet<string>;
   /** Why the agent refused them for good, the box's own reason as it closed; none while it takes messages. */
   readonly closed: string | undefined;
-  /** The lines refused for now, each offering Retry, Edit, and Delete. */
+  /** The lines refused for now, each offering Retry, Edit, and Delete, or Delete alone while the agent is archived. */
   readonly unsent: ReadonlySet<string>;
   /** Why each line refused for now did not go, by its id. */
   readonly notes: ReadonlyMap<string, Failure>;
   /** The lines on their way, whose row has not been read back yet. */
   readonly sending: ReadonlySet<string>;
-  readonly retry: (id: string) => void;
-  readonly takeBack: (id: string) => void;
+  /** Sends the line again, and puts its words back in the box; none while the agent is archived and takes no message. */
+  readonly retry: ((id: string) => void) | undefined;
+  readonly takeBack: ((id: string) => void) | undefined;
   readonly drop: (id: string) => void;
 }
 
@@ -132,19 +133,24 @@ export function UndeliveredMark({ messageId }: { messageId: string }): ReactNode
     );
   }
   if (!marks.unsent.has(messageId)) return null;
+  const { retry, takeBack } = marks;
   return (
     <MessageFailedMark
       label={UNDELIVERED_WORDS}
       reason={marks.notes.get(messageId)?.text ?? UNDELIVERED_WORDS}
       groups={[
-        [
-          { label: ACT_WORDS.RETRY, icon: <GLYPH.RETRY />, onSelect: () => marks.retry(messageId) },
-          {
-            label: ACT_WORDS.EDIT,
-            icon: <GLYPH.RENAME />,
-            onSelect: () => marks.takeBack(messageId),
-          },
-        ],
+        ...(retry === undefined || takeBack === undefined
+          ? []
+          : [
+              [
+                { label: ACT_WORDS.RETRY, icon: <GLYPH.RETRY />, onSelect: () => retry(messageId) },
+                {
+                  label: ACT_WORDS.EDIT,
+                  icon: <GLYPH.RENAME />,
+                  onSelect: () => takeBack(messageId),
+                },
+              ],
+            ]),
         [
           {
             label: ACT_WORDS.DELETE,

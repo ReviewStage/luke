@@ -153,6 +153,7 @@ async function drawnTab(
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
+  let drawn = agent;
   const draw = (open: boolean) =>
     act(async () =>
       root.render(
@@ -163,7 +164,7 @@ async function drawnTab(
             null,
             open
               ? createElement(AgentTab, {
-                  agent,
+                  agent: drawn,
                   control,
                   shown: true,
                   onOpenSubagent: () => undefined,
@@ -201,6 +202,12 @@ async function drawnTab(
     },
     /** Opens the tab again on the same registry. */
     open: async () => {
+      await draw(true);
+      await settle();
+    },
+    /** Draws the agent archived, as its task's list carries it once archived. */
+    archive: async () => {
+      drawn = { ...agent, archivedAt: 5 };
       await draw(true);
       await settle();
     },
@@ -409,6 +416,24 @@ test("a refusal for good marks the lines refused for now before it as not delive
     [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
     [],
     "its menu says why with nothing to press",
+  );
+});
+
+test("a line refused before its agent was archived offers only Delete, since an archived agent takes no message", async () => {
+  const tab = await drawnTab([]);
+  await tab.send("Rebase on main");
+  await tab.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
+  await tab.archive();
+
+  const mark =
+    tab
+      .lines("Rebase on main")[0]
+      ?.querySelector<HTMLButtonElement>('button[aria-label="Not delivered"]') ??
+    assert.fail("the line wears the red alert");
+  await act(async () => mark.click());
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
+    ["Delete"],
   );
 });
 

@@ -176,7 +176,7 @@ test("no fork is offered on the developer's message, a task archived, a place th
   );
 });
 
-test("under a message, Forked to names the agents of the task forked at it in the order started, each opening its tab, an archived one named alone", () => {
+test("under a message, Forked to names the agents of the task forked at it in the order started, each opening its tab, an archived one's among them", () => {
   const from = { agentId: SOURCE, messageId: TURN, steps: 2, totalSteps: 3 };
   const listed = [
     summary(SOURCE),
@@ -197,11 +197,15 @@ test("under a message, Forked to names the agents of the task forked at it in th
   const chips = [...(line?.querySelectorAll<HTMLElement>("[data-actor-ref]") ?? [])];
   assert.deepEqual(
     chips.map((chip) => chip.tagName),
-    ["SPAN", "BUTTON"],
-    "the archived fork is named alone; the standing one opens",
+    ["BUTTON", "BUTTON"],
+    "the archived fork opens as the standing one does",
   );
+  act(() => chips[0]?.click());
   act(() => chips[1]?.click());
-  assert.deepEqual(view.opened, [{ kind: TOOL_TARGET.AGENT, agent: "fork-b" }]);
+  assert.deepEqual(view.opened, [
+    { kind: TOOL_TARGET.AGENT, agent: "fork-a" },
+    { kind: TOOL_TARGET.AGENT, agent: "fork-b" },
+  ]);
 });
 
 test("an agent with no task names under a message the agents its own summary says were forked at it, by their titles, each opening its page, since its page lists that agent alone", () => {
