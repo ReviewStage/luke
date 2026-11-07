@@ -14,6 +14,7 @@ import { storeWriter } from "@repo/database/models/writer";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace } from "@repo/database/testing";
 import { QUEUE_PAUSE } from "@repo/features/agent-queue-wire";
+import { LINE_GRACE_MILLIS } from "@repo/features/agent-status";
 import {
   AGENT_ATTACHMENT_TYPE,
   AGENT_KIND,
@@ -26,6 +27,7 @@ import type { WireBoundaryInput } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { noNetwork } from "@repo/wire/testing";
 import { Effect, Layer, Option } from "effect";
+import { TestClock } from "effect/testing";
 import {
   RUN_EVENT,
   RUN_STATUS,
@@ -75,6 +77,8 @@ import { SESSION_SEND_OUTCOME } from "./sessions/agent-sessions.js";
 it.layer(getTestDB())("an agent's queue", (it) => {
   /** Where a change to an agent's queue lands. */
   const AGENT_QUEUE = "/api/agents/queue";
+  /** Where an open of the agent, its own page, lands. */
+  const AGENT_OPEN = "/api/agents/agent";
 
   /** One change to the agent's queue as its owner asks it, and the queue it answers. */
   const queueChanged = (
@@ -556,6 +560,34 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           ["Second"],
         );
         assert.equal(queue?.paused, undefined, "the hand-off that lost the race pauses nothing");
+      }),
+  );
+
+  it.effect(
+    "a message whose hand-off claimed it and was cut off before sending it goes once, at an open of the agent after its claim lapsed",
+    () =>
+      Effect.gen(function* () {
+        const agentSessions = fakeAgentSessions();
+        const { agent, ask, owner, queued, stored } = yield* queuedBehindEndedTurn(agentSessions, [
+          "First",
+        ]);
+        const opened = ask(request(AGENT_OPEN, owner, { id: agent.id }));
+        // The turn's end claimed the head, and its function died before the send.
+        assert.ok(Option.isSome(yield* claimQueueHead(stored.id)));
+
+        yield* opened;
+        assert.equal(
+          handedCount(agentSessions, "First"),
+          0,
+          "a claim standing is a send under way",
+        );
+
+        yield* TestClock.adjust(LINE_GRACE_MILLIS);
+        yield* opened;
+        yield* opened;
+
+        assert.equal(handedCount(agentSessions, "First"), 1);
+        assert.deepEqual((yield* queued)?.messages ?? [], []);
       }),
   );
 

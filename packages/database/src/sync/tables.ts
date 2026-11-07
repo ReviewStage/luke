@@ -19,7 +19,7 @@
  * A table a delta read reads is logged too (`log`), its every write, or,
  * for one rewritten in place more often than any delta read reads it, its
  * rows' arrival and removal alone (`LOG.ROWS`): the task list's tables and
- * the inbox items' (`@repo/service`'s `tasksLive`, `inboxItemsLive`), each
+ * the inbox items' (`@repo/service`'s `tasksRead`, `inboxItemsRead`), each
  * declared logged once for every read that follows it by deltas.
  */
 

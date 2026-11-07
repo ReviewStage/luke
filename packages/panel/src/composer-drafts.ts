@@ -858,8 +858,10 @@ function adoptHeld(address: string, accountId: string): void {
 /**
  * Lets go of everything the window holds of its drafts and the lines beside
  * them, files and waits among it, once what it held unwritten is written: the
- * window's root is going, so nothing is left to read them, and a root
- * mounted after it starts from storage, as a window opened afresh does.
+ * window's document is ending, so nothing is left to read them, and a window
+ * opened after it starts from storage. Note that the window's root going is
+ * not that, because a root drawn again in the same document, as a boundary
+ * recovering from a throw draws it, finds what the window held where it was.
  */
 function forgetWindow(): void {
   for (const wait of storeLaterByOwner.values()) wait.stop();
@@ -929,23 +931,27 @@ export function useDraftsOwner(
   }, []);
   // Note that what the window holds unwritten is written at once wherever the words could be lost
   // or read elsewhere before the typing rests: the box losing focus, the window losing it, hidden,
-  // or closed, a quit's included, and the window's root going, which lets go of the rest.
+  // or closed, a quit's included, and the window's root going. Only the document ending lets go of
+  // the rest; a page kept in the back-forward cache has not ended, as it may come back as it stood.
   useEffect(() => {
     const store = () => changeOwned(STORE);
     const hidden = () => {
       if (document.visibilityState === "hidden") store();
     };
+    const leaving = (event: PageTransitionEvent) => {
+      store();
+      if (!event.persisted) forgetWindow();
+    };
     window.addEventListener("focusout", store);
     window.addEventListener("blur", store);
-    window.addEventListener("pagehide", store);
+    window.addEventListener("pagehide", leaving);
     document.addEventListener("visibilitychange", hidden);
     return () => {
       window.removeEventListener("focusout", store);
       window.removeEventListener("blur", store);
-      window.removeEventListener("pagehide", store);
+      window.removeEventListener("pagehide", leaving);
       document.removeEventListener("visibilitychange", hidden);
       store();
-      forgetWindow();
     };
   }, []);
 }

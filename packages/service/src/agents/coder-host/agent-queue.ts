@@ -20,7 +20,10 @@
  * on a turn end that came and went. A member's change claims in the request
  * itself (`claimNext`), before its answer reads the queue, so the answer
  * never lists a message about to go, and sends after the response
- * (`sendClaimed`), which no answer waits on.
+ * (`sendClaimed`), which no answer waits on. A hand-off cut off between its
+ * claim and its send leaves a claim that lapses, and the next touch of the
+ * agent, an open of it, hands the message on once it has (`queueAtTouch`),
+ * as a queue's next receive takes back a message whose visibility ran out.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
@@ -226,6 +229,33 @@ const handOnQueue = Effect.fn("web/handOnQueue")(function* (
 ) {
   const claimed = yield* claimNext(agent);
   if (Option.isSome(claimed)) yield* sendClaimed(sessionsFor, agent, claimed.value);
+});
+
+/**
+ * The agent's queue at a touch of the agent, once its lapsed runner is
+ * settled: handed on where the queue stands unpaused, its head not being
+ * edited, and no send stands claimed on it at the instant read, its head
+ * never claimed or claimed by a hand-off cut off a line's grace ago. Note
+ * that the queue is read first without its lock, so a touch with nothing to
+ * hand on, as nearly every one is, takes none, and that the hand-on claims
+ * the head again under the lock, so a touch racing a turn's end sends the
+ * message once.
+ */
+export const queueAtTouch = Effect.fn("web/queueAtTouch")(function* (
+  sessionsFor: QueueSessions,
+  agent: Agent,
+) {
+  const queue = yield* agentQueueNow(agent.id).pipe(
+    Effect.catchCause((cause) =>
+      Effect.as(Effect.logWarning("agent-queue: a queue read failed", cause), undefined),
+    ),
+  );
+  if (queue === undefined || queue.paused !== undefined) return;
+  const [head] = queue.messages;
+  if (head === undefined || head.editing) return;
+  const now = yield* DateTime.nowAsDate;
+  if (queue.messages.some((message) => claimedAt(message, now))) return;
+  yield* handOnQueue(sessionsFor, agent);
 });
 
 /**

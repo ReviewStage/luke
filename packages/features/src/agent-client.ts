@@ -10,7 +10,6 @@ import {
   callAnswered,
   jsonOf,
 } from "./account-call.js";
-import { ACCOUNT_INBOX_REPOSITORYLESS } from "./account-inbox-wire.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import {
   AGENT_ADD_REPOSITORY_RENAMES,
@@ -115,11 +114,9 @@ import {
 import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
 import { spelledFailure } from "./hosted-failure.js";
 import {
-  askLive,
   HOSTED_DEADLINE,
   type HostedClient,
   type HostedDeadline,
-  type HostedFailure,
   HostedUnanswered,
   hostedClient,
   hostedFailureFacts,
@@ -139,17 +136,7 @@ import {
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
 import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
-import {
-  type AccountInboxItemsLiveAnswer,
-  type AccountInboxLiveAnswer,
-  type AgentTranscriptLiveAnswer,
-  LIVE_POLL,
-  LIVE_SIGNED_OUT,
-  LIVE_USER_QUERY,
-  type ScopeInboxLiveAnswer,
-  TRANSCRIPT_NOW_QUERY,
-  type TranscriptNowAnswer,
-} from "./live-wire.js";
+import { TRANSCRIPT_NOW_QUERY, type TranscriptNowAnswer } from "./live-wire.js";
 import { MEMORY_QUERY } from "./memory-wire.js";
 import {
   agentDefaultWriteSchema,
@@ -218,31 +205,6 @@ type Failed = {
   readonly extraRepositoryRefusal?: ExtraRepositoryRefusal;
   readonly refusedRepository?: string;
 };
-
-/** The refusal a live read names as its own, by the service's own word for it: an agent's or a task's not found, or none for the account's inbox. */
-type LiveNamed = Readonly<Partial<Record<HostedApiError, AgentCallFailure>>>;
-
-/** The refusal a live read of one agent or one task names: not found. */
-const LIVE_ROW_NAMED = {
-  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
-} satisfies LiveNamed;
-
-/**
- * A live read's answer, or the refusal it failed with where the read names
- * it; unanswered for everything else, with the failure beneath it and the
- * trace its call traveled under, which the window reports and never draws.
- */
-function liveAnswer<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-  named: LiveNamed,
-): Effect.Effect<Answer | Failed, never, HttpClient.HttpClient> {
-  return Effect.catch(asked, (failed) => {
-    const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
-    return Effect.succeed(
-      failure === undefined ? { ...UNANSWERED, cause: hostedFailureFacts(failed) } : { failure },
-    );
-  });
-}
 
 /** A served file's refusal: not found where the service said so; unanswered for anything else. */
 function servedRefusal(payload: UnparsedWireValue): Failed {
@@ -827,42 +789,6 @@ export class HostedAgentClient {
   }
 
   /**
-   * One agent's transcript, or a worker's where the delegation call is
-   * named, sealed for following over Neon Realtime, answered at once: not
-   * found where the account reaches no such agent, unanswered for anything
-   * else, which the caller answers by sealing it again; with `poll`, its
-   * rows inline, for a reader polling while Realtime fails it; with
-   * `cursor`, its newest messages only past where the reader holds them.
-   * Sealed for the account `userId` names, and signed out where the session
-   * is no longer that account's.
-   */
-  agentTranscriptLive(
-    agentId: string,
-    userId: string,
-    callId?: string,
-    poll = false,
-    after?: string,
-    cursor?: string,
-  ): Effect.Effect<
-    AgentTranscriptLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = {
-      id: agentId,
-      [LIVE_USER_QUERY]: userId,
-      ...(cursor === undefined ? undefined : { [LIVE_POLL.CURSOR]: cursor }),
-    };
-    const named = callId === undefined ? read : { ...read, call: callId };
-    return Effect.catchIf(
-      askLive(this.#hosted.live.agentTranscript, named, poll, after),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => liveAnswer(signed, LIVE_ROW_NAMED));
-  }
-
-  /**
    * Sends one agent a message under the key the window made for the send,
    * which a retry carries again, and answers the agent as it then stands,
    * which is running; a message the service would refuse by shape is
@@ -1156,122 +1082,6 @@ export class HostedAgentClient {
       ),
       unansweredBare,
     );
-  }
-
-  /**
-   * What waits on the developer across the account sealed for following
-   * over Neon Realtime, or with `poll` its rows inline, answered at once:
-   * unanswered for anything that went wrong, which the caller answers by
-   * asking again. Sealed for the account `userId` names, and signed out
-   * where the session is no longer that account's.
-   */
-  accountInboxLive(
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    AccountInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    return Effect.catchIf(
-      askLive(
-        this.#hosted.live.inbox,
-        {
-          [LIVE_USER_QUERY]: userId,
-          [ACCOUNT_INBOX_REPOSITORYLESS.QUERY]: ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE,
-        },
-        poll,
-        after,
-      ),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => liveAnswer(signed, {}));
-  }
-
-  /**
-   * Every inbox item the account reaches, its rows inline, read by the sync
-   * id the reader holds them at (`LIVE_POLL.SYNC`): whole, with the id to
-   * read past next, where `sync` is empty or the reader is too far behind;
-   * past an id, only the items that moved since, each whole, with the ids
-   * of those that stand no longer for it, held by the service until
-   * something moves. Without `sync`, every item whole as it stands, answered
-   * at once. Unanswered for anything that went wrong, which the caller
-   * answers by asking again. Read for the account `userId` names, and signed
-   * out where the session is no longer that account's.
-   */
-  accountInboxItemsLive(
-    userId: string,
-    sync: string | undefined,
-  ): Effect.Effect<
-    AccountInboxItemsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = {
-      [LIVE_USER_QUERY]: userId,
-      ...(sync === undefined ? undefined : { [LIVE_POLL.SYNC]: sync }),
-    };
-    // Note that a read past an id is held by the service until something moves, so it travels under the held deadline.
-    return Effect.catchIf(
-      askLive(
-        this.#hosted.live.inboxItems,
-        read,
-        true,
-        undefined,
-        sync !== undefined && sync !== "",
-      ),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => liveAnswer(signed, {}));
-  }
-
-  /**
-   * One plan's inbox sealed for following over Neon Realtime, or with
-   * `poll` its rows inline, answered at once: not found where the account
-   * reaches no such plan, unanswered for anything else, which the caller
-   * answers by asking again. Sealed for the account `userId` names, and
-   * signed out where the session is no longer that account's.
-   */
-  taskInboxLive(
-    taskId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    ScopeInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = { id: taskId, [LIVE_USER_QUERY]: userId };
-    return Effect.catchIf(
-      askLive(this.#hosted.live.taskInbox, read, poll, after),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => liveAnswer(signed, LIVE_ROW_NAMED));
-  }
-
-  /** One agent's inbox sealed for following over Neon Realtime, on the terms a plan's is. */
-  agentInboxLive(
-    agentId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    ScopeInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = { id: agentId, [LIVE_USER_QUERY]: userId };
-    return Effect.catchIf(
-      askLive(this.#hosted.live.agentInbox, read, poll, after),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => liveAnswer(signed, LIVE_ROW_NAMED));
   }
 
   /**

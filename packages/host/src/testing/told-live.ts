@@ -1,5 +1,5 @@
 import type { LiveRead } from "@repo/features/live-wire";
-import { GATEWAY_EVENT, type GatewayEventKind } from "@repo/gateway";
+import { GATEWAY_EVENT } from "@repo/gateway";
 import { isRecord, type WireValue } from "@repo/wire";
 
 /**
@@ -12,7 +12,7 @@ import { isRecord, type WireValue } from "@repo/wire";
 
 /** Every telling of the slice `read` among `events`, whole, in order. */
 export function toldLive(
-  events: readonly { readonly kind: GatewayEventKind; readonly payload: WireValue }[],
+  events: readonly { readonly kind: string; readonly payload: WireValue }[],
   read: LiveRead,
 ): WireValue[] {
   return events.flatMap(({ kind, payload }) =>

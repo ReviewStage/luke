@@ -16,6 +16,7 @@ import {
   INSTALLED_SKILL_ACT_KIND,
   INTEGRATION_ACT_KIND,
   type PortActKind,
+  TASKS_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "../contract/index.js";
 import { hostActPort } from "../testing/host-act-port.js";
@@ -47,6 +48,7 @@ const SIGNED_IN = {
 } as const;
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const WORKSPACE_ID = "workspace-1";
 
 /** Each follow as a window holds it: its hold's and Try again's kinds and words, as the window drew them before they were declared, the key it holds by, the service path its read asks, and where its slice holds the key. */
@@ -211,9 +213,73 @@ const FOLLOWS = [
     slice: LIVE_READ.TOKEN_REPOSITORIES,
     at: [WORKSPACE_ID],
   },
+  {
+    follow: TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW,
+    followRefusal: "Could not follow your GitHub repositories on this system.",
+    retry: TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY,
+    retryRefusal: "Could not read your GitHub repositories again on this system.",
+    key: { workspaceId: WORKSPACE_ID },
+    path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES,
+    slice: LIVE_READ.REPOSITORY_LISTS,
+    at: [WORKSPACE_ID],
+  },
+  {
+    follow: TASKS_ACT_KIND.TASKS_LINK_STANDING_FOLLOW,
+    followRefusal: "Could not follow that link on this system.",
+    key: { workspaceId: WORKSPACE_ID, address: "https://github.com/acme/relay/pull/7" },
+    path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST,
+    slice: LIVE_READ.LINK_STANDINGS,
+    at: [WORKSPACE_ID, "https://github.com/acme/relay/pull/7"],
+  },
+  {
+    follow: TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
+    followRefusal: "Could not follow the task's Browser tabs on this system.",
+    key: { taskId: TASK_ID },
+    path: HOSTED_SERVICE_PATH.LIVE_TASK_BROWSER_TABS,
+    slice: LIVE_READ.BROWSER_TABS,
+    at: ["task", TASK_ID],
+  },
+  {
+    follow: TASKS_ACT_KIND.TASKS_PAGES_FOLLOW,
+    followRefusal: "Could not follow that task's pages on this system.",
+    key: { taskId: TASK_ID },
+    path: HOSTED_SERVICE_PATH.LIVE_TASK_PAGES,
+    slice: LIVE_READ.PAGES,
+    at: ["task", TASK_ID],
+  },
+  {
+    follow: TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW,
+    followRefusal: "Could not follow that task's description on this system.",
+    retry: TASKS_ACT_KIND.TASKS_DOCUMENT_RETRY,
+    retryRefusal: "Could not read that task's description again on this system.",
+    key: { taskId: TASK_ID },
+    path: HOSTED_SERVICE_PATH.LIVE_TASK_RECORD,
+    slice: LIVE_READ.DESCRIPTION_DOCUMENT,
+    at: [TASK_ID],
+  },
+  {
+    follow: TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW,
+    followRefusal: "Could not follow that description's history on this system.",
+    retry: TASKS_ACT_KIND.TASKS_HISTORY_RETRY,
+    retryRefusal: "Could not read that description's history again on this system.",
+    key: { taskId: TASK_ID },
+    path: HOSTED_SERVICE_PATH.LIVE_TASK_HISTORY,
+    slice: LIVE_READ.HISTORY,
+    at: [TASK_ID],
+  },
+  {
+    follow: TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW,
+    followRefusal: "Could not follow the task's comments on this system.",
+    retry: TASKS_ACT_KIND.TASKS_COMMENTS_RETRY,
+    retryRefusal: "Could not read the task's comments again on this system.",
+    key: { taskId: TASK_ID },
+    path: HOSTED_SERVICE_PATH.LIVE_TASK_COMMENTS,
+    slice: LIVE_READ.DESCRIPTION_COMMENTS,
+    at: ["description", TASK_ID],
+  },
 ] as const satisfies readonly {
   readonly follow: PortActKind;
-  readonly retry: PortActKind;
+  readonly retry?: PortActKind;
   readonly key: WireBoundaryInput;
   readonly [field: string]: unknown;
 }[];
@@ -246,10 +312,14 @@ it.effect(
       const refused = [];
       const expected = [];
       for (const each of FOLLOWS) {
-        for (const [kind, words] of [
-          [each.follow, each.followRefusal],
-          [each.retry, each.retryRefusal],
-        ] as const) {
+        const kinds: readonly (readonly [PortActKind, string])[] =
+          "retry" in each
+            ? [
+                [each.follow, each.followRefusal],
+                [each.retry, each.retryRefusal],
+              ]
+            : [[each.follow, each.followRefusal]];
+        for (const [kind, words] of kinds) {
           refused.push(yield* port.perform({ kind, payload: each.key }, OTHER_WINDOW));
           refused.push(yield* port.perform({ kind, payload: each.key }, PANEL, { trusted: false }));
           refused.push(yield* port.perform({ kind, payload: { stray: true } }, PANEL));
@@ -283,9 +353,11 @@ it.effect(
         assert.equal(asked(), 1, `${each.follow}: two holds share one follow`);
         assert.deepEqual(readAt(slice(), each.at), { failed: true }, `${each.follow}: told`);
 
-        yield* Effect.promise(() => port.as(PANEL)[each.retry](each.key as never));
-        yield* Effect.promise(() => until(() => asked() === 2));
-        assert.equal(asked(), 2, `${each.follow}: Try again asks once more`);
+        if ("retry" in each) {
+          yield* Effect.promise(() => port.as(PANEL)[each.retry](each.key as never));
+          yield* Effect.promise(() => until(() => asked() === 2));
+          assert.equal(asked(), 2, `${each.follow}: Try again asks once more`);
+        }
 
         yield* Effect.promise(() => one.return(undefined));
         yield* Effect.promise(() => two.return(undefined));

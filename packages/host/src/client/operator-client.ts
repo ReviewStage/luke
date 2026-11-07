@@ -113,20 +113,8 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onHolderInboxesChanged((held) => {
         state.update({ [LIVE_READ.HOLDER_INBOX]: held });
       }),
-      gateway.host.onLinkStandingsChanged((held) => {
-        state.update({ [LIVE_READ.LINK_STANDINGS]: held });
-      }),
       gateway.host.onModelsChanged((held) => {
         state.update({ [LIVE_READ.MODELS]: held });
-      }),
-      gateway.host.onPagesChanged((held) => {
-        state.update({ [LIVE_READ.PAGES]: held });
-      }),
-      gateway.host.onRepositoryListsChanged((held) => {
-        state.update({ [LIVE_READ.REPOSITORY_LISTS]: held });
-      }),
-      gateway.host.onBrowserTabsChanged((held) => {
-        state.update({ [LIVE_READ.BROWSER_TABS]: held });
       }),
       gateway.host.onPullRequestPartsChanged((held) => {
         state.update(held);
@@ -146,17 +134,11 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onWorkspaceToolsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_TOOLS]: held });
       }),
-      gateway.host.onDescriptionCommentsChanged((held) => {
-        state.update({ [LIVE_READ.DESCRIPTION_COMMENTS]: held });
-      }),
-      gateway.host.onHistoriesChanged((held) => {
-        state.update({ [LIVE_READ.HISTORY]: held });
-      }),
-      gateway.host.onDescriptionDocumentsChanged((held) => {
-        state.update({ [LIVE_READ.DESCRIPTION_DOCUMENT]: held });
-      }),
       gateway.host.onPortForwardingChanged((portForwarding) => {
         state.update({ portForwarding });
+      }),
+      gateway.host.onMirrorsChanged((mirrors) => {
+        state.update({ mirrors });
       }),
       // The host's own answer about recording stands the halt down: it is the
       // account transition the halt was waiting on.

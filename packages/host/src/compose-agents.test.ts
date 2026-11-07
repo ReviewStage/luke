@@ -13,6 +13,7 @@ import {
 } from "@repo/features/agent-wire";
 import { FAILURE_FACT, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_TYPE } from "@repo/features/github-image";
+import { FAILED_RUN_WINDOW_MILLIS } from "@repo/features/inbox-live";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -23,11 +24,7 @@ import {
   type InboxItem,
 } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
-import {
-  FAILED_RUN_WINDOW_MILLIS,
-  LIVE_SIGNED_OUT,
-  type TranscriptNowAnswer,
-} from "@repo/features/live-wire";
+import { LIVE_SIGNED_OUT, type TranscriptNowAnswer } from "@repo/features/live-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import {
   PULL_REQUEST_ACTION,

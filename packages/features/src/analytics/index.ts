@@ -36,6 +36,7 @@ export {
   ProductSettingValueSchema,
   type ProductSurface,
   type ProductSurfaceEventName,
+  productElapsedSeconds,
   productEventBatchFromWire,
   productEventBuildFromWire,
   productEventFromWire,

@@ -41,7 +41,7 @@
  */
 
 import { AUTOMATIONS_READ } from "@repo/features/automation-live";
-import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
+import { TASK_LIST_READ } from "@repo/features/task-list-live";
 import {
   agentSectionEntrySchema,
   taskSectionEntrySchema,
@@ -107,7 +107,7 @@ type KeptByWorkspace =
 
 /** Each kept read's rows as the file keeps them: what its follow last answered, the task list's with the sync id it was read at. */
 const keptRowsSchema = Schema.Struct({
-  [KEPT_READ.TASK_LIST]: Schema.Struct({ rows: taskListLiveRowsSchema, at: Schema.String }),
+  [KEPT_READ.TASK_LIST]: Schema.Struct({ rows: TASK_LIST_READ.rows, at: Schema.String }),
   [KEPT_READ.SIDEBAR]: Schema.Struct({
     sections: Schema.Array(taskSectionSchema),
     entries: Schema.Array(taskSectionEntrySchema),

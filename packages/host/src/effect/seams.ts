@@ -23,6 +23,7 @@ import {
   type Path,
   type Result,
   type Stream,
+  type Tracer,
 } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -152,6 +153,8 @@ export interface MirrorPlatformSeam {
   readonly listScript: (worktree: string) => string;
   /** The script that takes the mirror's worktree out of the shared clone. */
   readonly removeScript: (worktree: string) => string;
+  /** What the mirror's attempts and steps are traced on, main's Sentry on the desktop; Effect's own, which sends nothing, where none is handed. */
+  readonly tracer?: Tracer.Tracer | undefined;
 }
 
 export class MirrorPlatform extends Context.Service<MirrorPlatform, MirrorPlatformSeam>()(

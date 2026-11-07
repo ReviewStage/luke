@@ -1,3 +1,4 @@
+import { INPUT_LINE, type InputLine } from "@repo/agent-runner/protocol";
 import type {
   DeviceAgentBeat,
   DeviceAgentClaimedLine,
@@ -192,7 +193,8 @@ import { forgetOwnedAgent, keepOwnedAgent, ownedAgents } from "./local-agent-sta
  * A host that updates itself (`LocalAgentsDependencies.update`,
  * `daemon/host-update.ts`) says on every beat where its update stands, and
  * is handed each answered beat's newer release. Once it holds one checked,
- * the device switches to it as soon as it is idle: no runner runs, no
+ * every beat asks each runner to end where it is warm (`INPUT_LINE.RETIRE`),
+ * and the device switches to it as soon as it is idle: no runner runs, no
  * line it claimed waits to be delivered or is being delivered, no request
  * is being answered, and no claim's answer was lost. Its claims of lines
  * and requests stop first, under the lock every line's claim holds, and
@@ -261,6 +263,9 @@ type DeviceSetupRegister = Pick<DeviceAgentDevice, "setup" | "setupFailure">;
 
 const decodeLaunch = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
 const decodeStdin = Schema.decodeUnknownOption(deviceAgentStdinPayloadSchema);
+
+/** The stdin line that ends a runner where it is warm, and that one at work skips (`INPUT_LINE.RETIRE`). */
+const RETIRE_LINE = `${JSON.stringify({ type: INPUT_LINE.RETIRE } satisfies InputLine)}\n`;
 const decodeFiles = Schema.decodeUnknownOption(deviceAgentFilesPayloadSchema);
 
 /** The service's side of local agents, as this concern asks it. */
@@ -1269,14 +1274,40 @@ export function composeLocalAgents(
             if (!(yield* update.switched(beat))) paused = false;
           });
 
-        /** A beat's answer converged to (`reconciledBeat`), its release handed to the host's update, and the switch to one it holds where the device is idle. */
+        /**
+         * Every runner asked to end where it is warm, its turn over, so a
+         * release that waits is not kept from the device by runners the
+         * service would only retire past their window. A runner at work
+         * skips the line, and is asked again at the next beat; one that ends
+         * settles its launch as any exit does, and the service's next message
+         * relaunches it on the new release. Asked under `claiming`, and only
+         * where no line is claimed or waits to be delivered, so no message
+         * this device took lands on a runner's stdin behind the line; one the
+         * service writes as the runner ends is not fenced here, and its turn
+         * reads failed past `CODER.LINE_GRACE`.
+         */
+        const retiredWarm = claiming.withPermit(
+          Effect.suspend(() =>
+            claimTokens.size > 0 || undelivered > 0
+              ? Effect.void
+              : Effect.forEach(
+                  [...runners.values()],
+                  (runner) => Queue.offer(runner.stdin, RETIRE_LINE),
+                  { discard: true },
+                ),
+          ),
+        );
+
+        /** A beat's answer converged to (`reconciledBeat`), its release handed to the host's update, and, while one waits, the warm runners retired and the switch made where the device is idle. */
         const followedBeat = (heard: HeardBeat | undefined) =>
           Effect.gen(function* () {
             yield* reconciledBeat(heard);
             const { update } = dependencies;
             if (update === undefined || heard === undefined) return;
             yield* update.heard(heard.beat.release);
-            if (yield* update.waiting) yield* switchedWhileIdle(update);
+            if (!(yield* update.waiting)) return;
+            yield* retiredWarm;
+            yield* switchedWhileIdle(update);
           });
 
         yield* Effect.forkScoped(linesFollowed);

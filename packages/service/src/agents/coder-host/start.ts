@@ -89,6 +89,7 @@ import {
   repositoryNotReachable,
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
+import { agentSpansAnnotated } from "../../observability/sentry.js";
 import {
   ModelCatalog,
   ModelChoiceRefused,
@@ -938,7 +939,16 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   // Note that a retry is answered with the agent its key made before where it runs is decided, or its
   // source read, because its task may run elsewhere since, its device be away, or its source be gone.
   const taken = yield* takeoverOf(userId, ask);
-  if (taken.made !== undefined) return { agent: taken.made, created: false };
+  if (taken.made !== undefined) {
+    yield* agentSpansAnnotated({
+      agentId: taken.made.id,
+      userId: taken.made.userId,
+      workspaceId: taken.made.organizationId,
+      repository: taken.made.repository,
+      harness: undefined,
+    });
+    return { agent: taken.made, created: false };
+  }
   const rules = takeoverRules(taken.from, ask);
   const inherited: Inherited = { from: taken.from, rules };
   // An agent started from another runs on that agent's choice unless the Start names one, and is
@@ -1035,6 +1045,13 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { agent, created, txid } = started.value;
+  yield* agentSpansAnnotated({
+    agentId: agent.id,
+    userId: agent.userId,
+    workspaceId: agent.organizationId,
+    repository: agent.repository,
+    harness: runtime.runtime,
+  });
   if (!created) return { agent, created };
   // A blank agent opens no session: its first words open one as they reach it (`steer.ts`).
   const handed = brief.prompt ?? brief.descriptionSnapshot;

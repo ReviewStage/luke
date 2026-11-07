@@ -58,12 +58,15 @@ export type ActHandler<Declaration extends AnyHostActDeclaration> = (
  * a window's stream stands for, which counts its holders, so two windows
  * holding the same key share one follow, and its Try again.
  */
-export interface LiveFollowHandler<Follow extends AnyLiveFollowDeclaration> {
+export type LiveFollowHandler<Follow extends AnyLiveFollowDeclaration> = {
   /** Holds the read `key` names for the caller's scope; none for a read the account holds. */
   readonly hold: (key: FollowKey<Follow>) => Effect.Effect<void, never, Scope.Scope>;
-  /** Asks the read again at once, as Try again asks. */
-  readonly retry: (key: FollowKey<Follow>) => Effect.Effect<void>;
-}
+} & ([NonNullable<Follow["retryName"]>] extends [never]
+  ? { readonly retry?: never }
+  : {
+      /** Asks the read again at once, as Try again asks. */
+      readonly retry: (key: FollowKey<Follow>) => Effect.Effect<void>;
+    });
 
 /** One declared act's handler: a live follow's by its read, a row write's only from its write declaration, every other act's by any handler. */
 type HandlerOf<Act> = Act extends AnyLiveFollow

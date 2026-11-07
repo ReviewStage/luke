@@ -1,12 +1,12 @@
 /**
- * tasks-procedures.test.ts -- the Tasks tab's holds, their Try again, and the addresses it opens, through the act port as a window calls them, and every declared task act's refusal.
+ * tasks-procedures.test.ts -- the addresses the Tasks tab opens, through the act port as a window calls them, and every declared task act's refusal.
  *
  * Only a panel of this build's own renderer asks; any other window, and a
  * frame this build does not trust, are refused in each kind's own words
- * before the host is asked; the browser opens only the addresses each kind
- * may open; and a hold follows at the host once for every stream of it. Each
- * declared act is refused to any other window in its own words, over the
- * host that answers it.
+ * before the host is asked; and the browser opens only the addresses each
+ * kind may open. Each declared act is refused to any other window in its own
+ * words, over the host that answers it. The tab's live follows are held in
+ * `live-follows.test.ts`.
  */
 
 import assert from "node:assert/strict";
@@ -14,18 +14,15 @@ import { afterEach, it } from "@effect/vitest";
 import { ORPCError } from "@orpc/client";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { ADMIN_QUERY, ADMIN_READ } from "@repo/features/admin-wire";
-import { browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_SCOPE,
 } from "@repo/features/description-comment-wire";
-import { pagePlaceId } from "@repo/features/page-wire";
 import { READ_MARK } from "@repo/features/read-mark";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import { TASK_CALL_FAILURE, type TasksGitHubPageAnswer } from "@repo/features/tasks-view";
 import type { WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
-import { vi } from "vitest";
 import {
   ACT_ERROR,
   type ActPortClient,
@@ -38,7 +35,7 @@ import {
 import { highlightSnippet } from "../task-code.js";
 import { hostActPort } from "../testing/host-act-port.js";
 import type { ActSender } from "./base.js";
-import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
+import { tasksProcedures } from "./tasks-procedures.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
 // The platform's handle on the window that asked, which no procedure here reads.
@@ -61,14 +58,11 @@ const SIGNED_IN = {
 
 /** Each hand-written kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY]:
-    "Could not read your GitHub repositories again on this system.",
   [TASKS_ACT_KIND.GITHUB_OPEN]: "Could not open GitHub on this system.",
   [TASKS_ACT_KIND.WEB_OPEN]: "Could not open that link on this system.",
   [TASKS_ACT_KIND.GITHUB_CONNECT]: "Could not open GitHub's connection page on this system.",
   [TASKS_ACT_KIND.ADMIN_OPEN]: "Could not open the admin dashboard on this system.",
   [TASKS_ACT_KIND.TASKS_COLOR_CODE]: "Could not color that code on this system.",
-  [TASKS_ACT_KIND.TASKS_COMMENTS_RETRY]: "Could not read the task's comments again on this system.",
 } as const;
 
 type TasksKind = keyof typeof REFUSAL;
@@ -81,13 +75,11 @@ const PLAN = { planId: "plan-1" };
 
 /** One ask of every hand-written task kind, with a payload its schema admits. */
 const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
-  { kind: TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY, payload: { workspaceId: "workspace-acme" } },
   { kind: TASKS_ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay" } },
   { kind: TASKS_ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
   { kind: TASKS_ACT_KIND.GITHUB_CONNECT, payload: undefined },
   { kind: TASKS_ACT_KIND.ADMIN_OPEN, payload: undefined },
   { kind: TASKS_ACT_KIND.TASKS_COLOR_CODE, payload: { language: "ts", code: "const a = 1;" } },
-  { kind: TASKS_ACT_KIND.TASKS_COMMENTS_RETRY, payload: TASK },
 ];
 
 /** Every declared task act the relay answers, by its name, with a payload its schema admits, so only who asked can refuse it; Connect GitHub's, written by hand, is refused above. */
@@ -192,33 +184,8 @@ function windowPort(
       asked.push(line);
       return answer();
     });
-  const host: TasksProceduresDependencies["host"] = {
-    tasksRepositoriesFollow: (params) => ask(`repositories:${params.workspaceId}`, () => undefined),
-    tasksRepositoriesUnfollow: (params) =>
-      ask(`repositories-let-go:${params.workspaceId}`, () => undefined),
-    tasksRepositoriesRetry: (params) =>
-      ask(`repositories-retry:${params.workspaceId}`, () => undefined),
-    tasksLinkStandingFollow: (params) => ask(`link:${params.address}`, () => undefined),
-    tasksLinkStandingUnfollow: (params) => ask(`link-let-go:${params.address}`, () => undefined),
-    tasksCommentsFollow: (scope) => ask(`comments-follow:${scope.taskId}`, () => undefined),
-    tasksCommentsUnfollow: (scope) => ask(`comments-unfollow:${scope.taskId}`, () => undefined),
-    tasksCommentsRetry: (scope) => ask(`comments-retry:${scope.taskId}`, () => undefined),
-    tasksPagesFollow: (scope) => ask(`pages-follow:${pagePlaceId(scope)}`, () => undefined),
-    tasksPagesUnfollow: (scope) => ask(`pages-unfollow:${pagePlaceId(scope)}`, () => undefined),
-    tasksDocumentFollow: (scope) => ask(`document-follow:${scope.taskId}`, () => undefined),
-    tasksDocumentUnfollow: (scope) => ask(`document-unfollow:${scope.taskId}`, () => undefined),
-    tasksDocumentRetry: (scope) => ask(`document-retry:${scope.taskId}`, () => undefined),
-    tasksBrowserTabsFollow: (scope) =>
-      ask(`tabs-follow:${browserTabsPlaceId(scope)}`, () => undefined),
-    tasksBrowserTabsUnfollow: (scope) =>
-      ask(`tabs-unfollow:${browserTabsPlaceId(scope)}`, () => undefined),
-    tasksHistoryFollow: (scope) => ask(`history-follow:${scope.taskId}`, () => undefined),
-    tasksHistoryUnfollow: (scope) => ask(`history-unfollow:${scope.taskId}`, () => undefined),
-    tasksHistoryRetry: (scope) => ask(`history-retry:${scope.taskId}`, () => undefined),
-  };
   const port = testActPort(
     tasksProcedures({
-      host,
       acts: {
         GITHUB_CONNECT: () =>
           ask(
@@ -409,64 +376,3 @@ it("Connect GitHub opens the page the host named in the browser, and is refused 
   assert.deepEqual(browsed, [CONNECT_PAGE]);
   assert.deepEqual(asked, ["github-connect", "github-connect"]);
 });
-
-it("a description's comments are read again through the host from a panel", async () => {
-  const { client, asked } = windowPort(PANEL);
-
-  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_COMMENTS_RETRY, TASK), {
-    answer: undefined,
-  });
-  assert.deepEqual(asked, [`comments-retry:${TASK_ID}`]);
-});
-
-/** A window's act port as `windowPort` opens it. */
-type WindowClient = ReturnType<typeof windowPort>["client"];
-
-/** The holds a panel keeps on a plan's reads the host lays on app state, each opened as the window opens its stream, and the line the fake host notes it by. */
-const HOLDS = [
-  {
-    what: "pages",
-    line: "pages",
-    hold: (client: WindowClient) => client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK),
-  },
-  {
-    what: "Browser tabs",
-    line: "tabs",
-    hold: (client: WindowClient) => client[TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW](TASK),
-  },
-  {
-    what: "history",
-    line: "history",
-    hold: (client: WindowClient) => client[TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW](TASK),
-  },
-] as const;
-
-it.each(HOLDS)(
-  "a panel's hold on a plan's $what follows them at the host once for every stream of them, and the last one closed lets them go",
-  async ({ line, hold }) => {
-    const { client, asked } = windowPort(PANEL);
-
-    const one = await hold(client);
-    const other = await hold(client);
-    // Note that a stream is read so its hold opens, though nothing is ever heard down it.
-    void one.next();
-    void other.next();
-    await vi.waitFor(() => assert.deepEqual(asked, [`${line}-follow:${TASK_ID}`]));
-
-    await one.return?.(undefined);
-    await vi.waitFor(() => assert.equal(asked.length, 1, "the other stream still holds it"));
-    await other.return?.(undefined);
-    await vi.waitFor(() =>
-      assert.deepEqual(asked, [`${line}-follow:${TASK_ID}`, `${line}-unfollow:${TASK_ID}`]),
-    );
-  },
-);
-
-it.each(HOLDS)(
-  "a window that is not a panel is refused a plan's $what, and the host follows nothing",
-  async ({ hold }) => {
-    const { client, asked } = windowPort(OTHER_WINDOW);
-    await assert.rejects(hold(client));
-    assert.deepEqual(asked, []);
-  },
-);

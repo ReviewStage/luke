@@ -13,7 +13,7 @@ import {
   WORKSPACE_SLUG_PROBLEM,
   type WorkspaceMember,
 } from "@repo/features/workspace-wire";
-import { GATEWAY_EVENT, GATEWAY_METHOD, type GatewayEventKind } from "@repo/gateway";
+import { GATEWAY_EVENT, GATEWAY_METHOD } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { isRecord, type WireValue } from "@repo/wire";
 import { Deferred, Duration, Effect, Exit, Fiber, Layer, Scope } from "effect";
@@ -42,7 +42,6 @@ import {
   workspacesLiveRows,
 } from "./testing/tasks-subject.js";
 import { testCipher } from "./testing/test-cipher.js";
-import { toldLive } from "./testing/told-live.js";
 
 it.effect(
   "the first refresh follows the account's workspaces with their GitHub organizations, and a sign-out clears them",
@@ -577,19 +576,13 @@ const ALAN: WorkspaceMember = {
 
 const LEE = { userId: "user-lee", name: "Lee Park" };
 
-/** Every telling of the live follow's slice `read` the host told the windows, whole, the latest last. */
-function toldOn(
-  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
-  read: LiveRead,
-): WireValue[] {
-  return toldLive(
-    pushed.map(([kind, payload]) => ({ kind, payload })),
-    read,
-  );
+/** Every telling of the live follow's slice `read` the host told the windows, whole, the latest last, as the subject keeps it by its slice. */
+function toldOn(pushed: readonly (readonly [string, WireValue])[], read: LiveRead): WireValue[] {
+  return pushed.flatMap(([kind, payload]) => (kind === read ? [payload] : []));
 }
 
 /** Each workspace's people the host told the windows, the latest last. */
-function heldMembers(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
+function heldMembers(pushed: readonly (readonly [string, WireValue])[]): WireValue[] {
   return toldOn(pushed, LIVE_READ.WORKSPACE_MEMBERS);
 }
 
@@ -772,7 +765,7 @@ const ENG_CHANNEL = { id: "C0001", name: "eng", private: false, member: false };
 
 /** What the host last told the windows of `workspaceId`'s integrations; none where it told none. */
 function integrationsShown(
-  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
+  pushed: readonly (readonly [string, WireValue])[],
   workspaceId: string,
 ): WorkspaceIntegrations | undefined {
   const told = toldOn(pushed, LIVE_READ.WORKSPACE_INTEGRATIONS).at(-1);
@@ -783,7 +776,7 @@ function integrationsShown(
 
 /** What the host last told the windows of `workspaceId`'s Slack channels; none where it told none. */
 function channelsShown(
-  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
+  pushed: readonly (readonly [string, WireValue])[],
   workspaceId: string,
 ): readonly SlackListedChannel[] | undefined {
   const told = toldOn(pushed, LIVE_READ.SLACK_CHANNELS).at(-1);
@@ -925,7 +918,7 @@ it.effect(
 );
 
 /** Every telling of the workspaces' photos the host holds for the windows, whole, in order. */
-function heldPhotos(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
+function heldPhotos(pushed: readonly (readonly [string, WireValue])[]): WireValue[] {
   return pushed.flatMap(([kind, payload]) =>
     kind === GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED ? [payload] : [],
   );
@@ -962,7 +955,7 @@ it.effect(
 );
 
 /** Each workspace's pending invitations the host told the windows, the latest last. */
-function heldInvitations(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
+function heldInvitations(pushed: readonly (readonly [string, WireValue])[]): WireValue[] {
   return toldOn(pushed, LIVE_READ.WORKSPACE_INVITATIONS);
 }
 
@@ -1451,9 +1444,7 @@ it.effect(
 );
 
 /** Every telling of the token repositories the host holds for the windows, whole, in order. */
-function heldTokenRepositories(
-  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
-): WireValue[] {
+function heldTokenRepositories(pushed: readonly (readonly [string, WireValue])[]): WireValue[] {
   return toldOn(pushed, LIVE_READ.TOKEN_REPOSITORIES);
 }
 
