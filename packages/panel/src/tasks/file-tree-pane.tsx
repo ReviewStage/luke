@@ -1,4 +1,3 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import { noMatchWords, readingWords, TERM } from "@repo/features/words";
@@ -17,7 +16,7 @@ import {
   SearchField,
   SpinnerRegion,
 } from "@repo/ui";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import { unreadShown } from "../failure-report.js";
@@ -230,9 +229,9 @@ function FileTreeBody({
   floating: boolean;
 }): React.JSX.Element {
   const { fileTree } = useSideBundles();
-  const loaded = useAtomValue(fileTree);
-  const retryBundle = useAtomRefresh(fileTree);
-  const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
+  const loaded = useQuery(fileTree);
+  const retryBundle = () => void loaded.refetch();
+  const module = loaded.data;
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<FileTreeHandle | undefined>(undefined);
   const revealed = useRef<string | undefined>(undefined);
@@ -340,7 +339,7 @@ function FileTreeBody({
       </search>
       <FileTreeStage
         module={module}
-        missed={AsyncResult.isFailure(loaded)}
+        missed={loaded.isError}
         host={host}
         standing={standing}
         onRetry={() => handle.current?.relist()}

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { sideBundles, TERMINAL_LOAD_FAILED } from "./bundle-loader.js";
 import type { TerminalModule } from "./terminal/contract.js";
+import { bundleLanded } from "./testing/side-bundles.js";
 
 /**
  * bundle-loader.test.ts -- a bundle whose import failed, as one does over a
@@ -16,34 +16,21 @@ import type { TerminalModule } from "./terminal/contract.js";
 // SAFETY: a stand-in compared by identity alone, never drawn.
 const TERMINAL = { stand: "terminal" } as unknown as TerminalModule;
 
-/** A registry that lets go of an atom as soon as the reader holding it last has let go, where a window's does so a task later. */
-function registry(): AtomRegistry.AtomRegistry {
-  return AtomRegistry.make({
-    scheduleTask: (task) => {
-      queueMicrotask(task);
-      return () => undefined;
-    },
-  });
-}
-
 it.effect("a bundle whose import failed is imported again by its next reader", () =>
   Effect.gen(function* () {
     let online = false;
     const bundles = sideBundles({
       terminal: () => (online ? Promise.resolve(TERMINAL) : Promise.reject(new Error("offline"))),
     });
-    const window = registry();
 
-    const failed = yield* Effect.flip(AtomRegistry.getResult(window, bundles.terminal));
+    const failed = yield* Effect.flip(bundleLanded(bundles.terminal));
     assert.equal(failed.message, TERMINAL_LOAD_FAILED);
     // The import's own error rides along, so a report names the chunk that failed.
     assert.ok(failed.cause instanceof Error);
     assert.equal(failed.cause.message, "offline");
 
     online = true;
-    // The registry lets go of what no reader holds once the fiber yields.
-    yield* Effect.yieldNow;
-    assert.equal(yield* AtomRegistry.getResult(window, bundles.terminal), TERMINAL);
+    assert.equal(yield* bundleLanded(bundles.terminal), TERMINAL);
   }),
 );
 
@@ -53,11 +40,9 @@ it.effect("a bundle that landed is had by a later reader though its import would
     const bundles = sideBundles({
       terminal: () => (online ? Promise.resolve(TERMINAL) : Promise.reject(new Error("offline"))),
     });
-    const window = registry();
-    assert.equal(yield* AtomRegistry.getResult(window, bundles.terminal), TERMINAL);
+    assert.equal(yield* bundleLanded(bundles.terminal), TERMINAL);
 
     online = false;
-    yield* Effect.yieldNow;
-    assert.equal(yield* AtomRegistry.getResult(window, bundles.terminal), TERMINAL);
+    assert.equal(yield* bundleLanded(bundles.terminal), TERMINAL);
   }),
 );

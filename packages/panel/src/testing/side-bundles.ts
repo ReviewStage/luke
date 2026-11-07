@@ -1,15 +1,15 @@
 import { Effect } from "effect";
-import type * as AsyncResult from "effect/reactivity/AsyncResult";
-import type * as Atom from "effect/reactivity/Atom";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createElement, type ReactElement } from "react";
 import {
+  type SideBundle,
   type SideBundleImporters,
   type SideBundles,
   SideBundlesContext,
   sideBundles,
 } from "../bundle-loader.js";
 import type { TerminalModule } from "../terminal/contract.js";
+import { testQueryClientNow } from "./copy-feedback.js";
+import { landRead } from "./landed-reads.js";
 
 /**
  * side-bundles.ts -- the panel's own bundles under jsdom: one landed as a window that has shown it holds it, and stand-ins for others at their importers.
@@ -25,11 +25,9 @@ import type { TerminalModule } from "../terminal/contract.js";
  * out no box to fit a screen to.
  */
 
-/** Imports a bundle and settles once it has landed, so every later reader has it at once. */
-export function bundleLanded<A>(
-  bundle: Atom.Atom<AsyncResult.AsyncResult<A, Error>>,
-): Effect.Effect<A, Error> {
-  return AtomRegistry.getResult(AtomRegistry.make(), bundle);
+/** Reads a bundle into the test's Query client and settles once it has landed, so every later reader, and every client the file makes after, has it at once (`landed-reads.ts`); a failed import fails with its error. */
+export function bundleLanded<A>(bundle: SideBundle<A>): Effect.Effect<A, Error> {
+  return landRead(testQueryClientNow(), bundle);
 }
 
 /** The bundles over the importers given, each given one landed already, and the rest through their own entries. */
@@ -38,15 +36,30 @@ export function landedBundles(
 ): Effect.Effect<SideBundles, Error> {
   const bundles = sideBundles(importers);
   const given = Object.keys(importers).filter((key): key is keyof SideBundles => key in bundles);
-  return Effect.forEach(given, (key) => bundleLanded<unknown>(bundles[key]), {
+  const land = <Bundle extends keyof SideBundles>(key: Bundle) => bundleLanded(bundles[key]);
+  return Effect.forEach(given, land, {
     discard: true,
   }).pipe(Effect.as(bundles));
+}
+
+/**
+ * The bundles over the importers given, each of those read from its own
+ * importer in this case however the file landed it, its landing taken out
+ * of the test's client: for a case that wants a bundle unloaded, failing, or
+ * a stand-in of its own, said where the case is written.
+ */
+export function standInBundles(importers: Partial<SideBundleImporters>): SideBundles {
+  const bundles = sideBundles(importers);
+  const client = testQueryClientNow();
+  const given = Object.keys(importers).filter((key): key is keyof SideBundles => key in bundles);
+  for (const key of given) client.removeQueries({ queryKey: bundles[key].queryKey, exact: true });
+  return bundles;
 }
 
 /** The bundles as a window holds them before any has landed: each asked for, and none answering. */
 export function unlandedBundles(): SideBundles {
   const unlanded = () => Promise.withResolvers<never>().promise;
-  return sideBundles({
+  return standInBundles({
     descriptionEditor: unlanded,
     fileTree: unlanded,
     terminal: unlanded,

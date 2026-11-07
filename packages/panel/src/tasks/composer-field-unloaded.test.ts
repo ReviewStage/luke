@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { sideBundles } from "../bundle-loader.js";
+
 import { descriptionEditor } from "../description-editor/index.js";
 import { installEditorLayout, QUIET_COMPOSER } from "../testing/composer.js";
-import { withQueryClient } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { onSideBundles } from "../testing/side-bundles.js";
+import { onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { AgentComposer } from "./agent-composer.js";
 import { useAgentComposer } from "./use-agent-composer.js";
 
@@ -49,7 +49,7 @@ test("a box whose editor bundle could not be loaded says so beside Retry and sta
   roots.push(root);
   // Note that the chunk fails the first time it is asked for and lands the next, as a connection that dropped for a moment does.
   let failed = false;
-  const bundles = sideBundles({
+  const bundles = standInBundles({
     descriptionEditor: () => {
       if (failed) return Promise.resolve(descriptionEditor);
       failed = true;
@@ -57,12 +57,14 @@ test("a box whose editor bundle could not be loaded says so beside Retry and sta
     },
   });
   await act(async () => root.render(withQueryClient(onSideBundles(bundles, createElement(Box)))));
+  await settleQueries();
 
   const note = container.querySelector(".ui-composer-foot-note");
   assert.equal(note?.textContent, "The message box could not be loaded.Retry");
   assert.equal(container.querySelector(".agent-composer-input")?.getAttribute("aria-busy"), "true");
 
   await act(async () => note?.querySelector("button")?.click());
+  await settleQueries();
 
   assert.equal(container.querySelector(".ui-composer-foot-note"), null, "the note is gone");
   assert.notEqual(
