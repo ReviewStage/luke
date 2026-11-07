@@ -16,6 +16,7 @@ import {
   fakeCdpPeer,
   fakeSandboxApi,
 } from "../../testing/agent-browser-fake.js";
+import { SANDBOX_STATUS } from "../vercel-sandbox-api.js";
 import {
   AgentBrowser,
   agentBrowserOver,
@@ -47,6 +48,7 @@ function browserOver(
   return {
     service: agentBrowserOver(sandbox.api, fakeBridgePty(peer, bridge), FAKE_IMAGE),
     ran: sandbox.ran,
+    sandbox: sandbox.api,
   };
 }
 
@@ -319,7 +321,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const peer = yield* fakeCdpPeer();
-      const { service } = browserOver(peer, {
+      const { service, sandbox } = browserOver(peer, {
         status: "stopped",
         named: true,
         resumeUnavailable: 400,
@@ -335,9 +337,12 @@ it.effect(
       const opening = yield* Effect.forkChild(kept.run);
       yield* TestClock.adjust(Duration.seconds(10));
       yield* Fiber.join(opening);
+      // Read before the next open, which would resume the sandbox itself where the kept open failed.
+      const [opened] = yield* sandbox.listTagged(SESSION);
       const standing = yield* service.ensure(SESSION);
 
       assert.equal(unreachable.reason, BROWSER_UNREACHABLE.STARTING);
+      assert.equal(opened?.status, SANDBOX_STATUS.RUNNING);
       assert.deepEqual(standing, { sandboxSessionId: FAKE_SANDBOX.RESUMED_SESSION, started: true });
     }),
 );
