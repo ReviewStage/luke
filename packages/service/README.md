@@ -2622,7 +2622,7 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will. `MaintenanceSweeps`
-(`src/maintenance/maintenance-sweep.ts`) runs six sweeps in turn and
+(`src/maintenance/maintenance-sweep.ts`) runs five sweeps in turn and
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 
@@ -2630,8 +2630,6 @@ the rest still run, and any failure fails the cron's check-in. In order:
   is what a deleted task's agents' conversations come to, with their
   sessions' sandboxes queued for deletion.
 - `deviceWarmRunners`: local runners left warm past their device's window.
-- `sandboxes`: the Vercel Sandboxes queued for deletion deleted. An idle
-  sandbox stops on Vercel's own timeout.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.
 - `agentQueues`: unpaused queues of idle agents handed on.
