@@ -30,10 +30,10 @@ import {
   desc,
   eq,
   exists,
+  gt,
   gte,
   inArray,
   isNull,
-  lte,
   or,
   type SQL,
   sql,
@@ -560,65 +560,6 @@ const findRunByKey = SqlSchema.findOneOption({
     ),
 });
 
-const DueRowSchema = Schema.Struct({
-  id: Schema.String,
-  userId: Schema.String,
-  trigger: automationTriggerSchema,
-  dueAt: InstantColumnSchema,
-});
-
-/** One schedule the sweep found due: its automation, what fires it, and the instant it was due. */
-type DueAutomation = typeof DueRowSchema.Type;
-
-/** A firing the sweep's claim recorded: the schedule it is of, and its run, queued. */
-export interface ClaimedFiring {
-  readonly automation: DueAutomation;
-  readonly run: AutomationRun;
-}
-
-/** What a claim of the schedules due takes: the instant, how many at most, how late a firing may still run, and the next due instant of a schedule. */
-export interface DueClaim {
-  readonly now: Date;
-  readonly limit: number;
-  readonly graceMs: number;
-  /** The first instant strictly after `after` the trigger is due; null where it never is again. */
-  readonly nextAfter: (trigger: AutomationTrigger, after: Date) => Date | null;
-}
-
-/**
- * The enabled schedules due, soonest first, of owners who still reach
- * their tasks, locked for this claim. Note that a row another claim holds is
- * skipped rather than waited on, because the cron may call twice in one
- * minute and the second call must find nothing left rather than queue
- * behind the first; and that the trigger's kind is read beside the due
- * instant, so a due instant left on a trigger of another kind fires nothing.
- */
-const lockDue = SqlSchema.findAll({
-  Request: Schema.Struct({ now: Schema.Date, limit: Schema.Int }),
-  Result: DueRowSchema,
-  execute: ({ now, limit }) =>
-    Database.use((db) =>
-      db
-        .select({
-          id: automation.id,
-          userId: automation.userId,
-          trigger: automation.trigger,
-          dueAt: automation.nextRunAt,
-        })
-        .from(automation)
-        .where(
-          and(
-            eq(automation.enabled, true),
-            eq(automation.triggerKind, AUTOMATION_TRIGGER.SCHEDULE),
-            lte(automation.nextRunAt, now),
-          ),
-        )
-        .orderBy(asc(automation.nextRunAt), asc(automation.id))
-        .limit(limit)
-        .for("update", { skipLocked: true }),
-    ),
-});
-
 const writeNextRun = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, nextRunAt: Schema.NullOr(Schema.Date) }),
   execute: ({ id, nextRunAt }) =>
@@ -634,21 +575,50 @@ const findAutomationToRun = SqlSchema.findOneOption({
     ),
 });
 
-const findQueuedRuns = SqlSchema.findAll({
-  Request: Schema.Struct({ since: Schema.Date, limit: Schema.Int }),
+const findRunToAct = SqlSchema.findOneOption({
+  Request: Schema.Struct({ automationId: Schema.String, dedupeKey: Schema.String }),
   Result: QueuedRunSchema,
-  execute: ({ since, limit }) =>
+  execute: ({ automationId, dedupeKey }) =>
     Database.use((db) =>
       db
         .select(QUEUED_RUN_COLUMNS)
         .from(automationRun)
         .where(
+          and(eq(automationRun.automationId, automationId), eq(automationRun.dedupeKey, dedupeKey)),
+        ),
+    ),
+});
+
+const ScheduledRowSchema = Schema.Struct({
+  id: Schema.String,
+  organizationId: Schema.String,
+  enabled: Schema.Boolean,
+  trigger: automationTriggerSchema,
+});
+
+/** One scheduled automation as its schedule is kept for it: its id, its workspace, whether it runs, and what fires it. */
+export type ScheduledAutomation = typeof ScheduledRowSchema.Type;
+
+const findScheduled = SqlSchema.findAll({
+  Request: Schema.Struct({ after: Schema.NullOr(Schema.String), limit: Schema.Int }),
+  Result: ScheduledRowSchema,
+  execute: ({ after, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: automation.id,
+          organizationId: automation.organizationId,
+          enabled: automation.enabled,
+          trigger: automation.trigger,
+        })
+        .from(automation)
+        .where(
           and(
-            eq(automationRun.status, AUTOMATION_RUN_STATUS.QUEUED),
-            gte(automationRun.firedAt, since),
+            eq(automation.triggerKind, AUTOMATION_TRIGGER.SCHEDULE),
+            after === null ? undefined : gt(automation.id, after),
           ),
         )
-        .orderBy(asc(automationRun.firedAt), asc(automationRun.id))
+        .orderBy(asc(automation.id))
         .limit(limit),
     ),
 });
@@ -778,28 +748,6 @@ const findRunArchivableAgentsOf = SqlSchema.findAll({
     ),
 });
 
-const writeExpired = SqlSchema.findAll({
-  Request: Schema.Struct({
-    before: Schema.Date,
-    reason: automationRunReasonSchema,
-    now: Schema.Date,
-  }),
-  Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ before, reason, now }) =>
-    Database.use((db) =>
-      db
-        .update(automationRun)
-        .set({ status: AUTOMATION_RUN_STATUS.FAILED, reason, settledAt: now })
-        .where(
-          and(
-            eq(automationRun.status, AUTOMATION_RUN_STATUS.QUEUED),
-            lte(automationRun.firedAt, before),
-          ),
-        )
-        .returning({ id: automationRun.id }),
-    ),
-});
-
 const lockAutomationRow = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({ id: Schema.String }),
@@ -913,30 +861,6 @@ const findClaimed = SqlSchema.findAll({
             gte(automationRun.settledAt, since),
           ),
         ),
-    ),
-});
-
-const findStranded = SqlSchema.findAll({
-  Request: Schema.Struct({ before: Schema.Date, limit: Schema.Int }),
-  Result: Schema.Struct({
-    id: Schema.String,
-    automationId: Schema.String,
-    userId: Schema.String,
-    claimedAgentId: Schema.NullOr(Schema.String),
-  }),
-  execute: ({ before, limit }) =>
-    Database.use((db) =>
-      db
-        .select({
-          id: automationRun.id,
-          automationId: automationRun.automationId,
-          userId: automationRun.userId,
-          claimedAgentId: automationRun.claimedAgentId,
-        })
-        .from(automationRun)
-        .where(and(CLAIMED, lte(automationRun.settledAt, before)))
-        .orderBy(asc(automationRun.settledAt))
-        .limit(limit),
     ),
 });
 
@@ -1320,15 +1244,6 @@ export function automationRunsSince(
   return findRunsSince({ automationId, since });
 }
 
-/**
- * Claims the schedules due at `now`, at most `limit` of them, in one
- * transaction: each one's next due instant is written first, so a claim
- * that comes after finds it not due, and a firing no later than the grace
- * past its due instant is recorded as a run under that instant, which the
- * run's dedupe key holds to once even if two claims read the same row. A
- * firing later than the grace, a sweep that was down or a schedule just
- * resumed, is moved on without a run, so a backlog is never replayed.
- */
 /** One run that failed to start, as its automation's owner is told of it: the automation, why, and when. */
 export type OwnFailedRun = typeof FailedRunRowSchema.Type;
 
@@ -1342,28 +1257,6 @@ export function ownFailedAutomationRuns(
   );
 }
 
-export function claimDueAutomations(claim: DueClaim): TaskStoreEffect<readonly ClaimedFiring[]> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const due = yield* lockDue({ now: claim.now, limit: claim.limit });
-        const claimed: ClaimedFiring[] = [];
-        for (const each of due) {
-          yield* writeNextRun({ id: each.id, nextRunAt: claim.nextAfter(each.trigger, claim.now) });
-          if (claim.now.getTime() - each.dueAt.getTime() > claim.graceMs) continue;
-          const run = yield* recordAutomationRun(each, {
-            dedupeKey: each.dueAt.toISOString(),
-            firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: each.dueAt.getTime() },
-            firedAt: claim.now,
-          });
-          if (Option.isSome(run)) claimed.push({ automation: each, run: run.value });
-        }
-        return claimed;
-      }),
-    ),
-  );
-}
-
 /**
  * One automation by id, whoever owns it, for a run the service fires: the
  * sweep and a trigger hold no account's bearer, and the run's own start
@@ -1373,12 +1266,28 @@ export function readAutomationToRun(id: string): TaskStoreEffect<Option.Option<A
   return findAutomationToRun(id);
 }
 
-/** The runs still queued that fired at or after `since`, oldest first, at most `limit`, for the sweep to act on. */
-export function queuedAutomationRuns(
-  since: Date,
+/** The automation's run recorded under the firing's dedupe key, as a delivery of that firing acts on it; nothing where none was recorded. */
+export function automationRunToAct(
+  automationId: string,
+  dedupeKey: string,
+): TaskStoreEffect<Option.Option<QueuedRun>> {
+  return findRunToAct({ automationId, dedupeKey });
+}
+
+/** Writes when the schedule is next due, which the automation's list shows; null where it never is again. */
+export function advanceAutomationSchedule(
+  id: string,
+  nextRunAt: Date | null,
+): TaskStoreEffect<void> {
+  return writeNextRun({ id, nextRunAt });
+}
+
+/** The automations a schedule fires, paused ones among them, in id order after `after` (from the first where it is null), at most `limit`, for keeping their schedules. */
+export function scheduledAutomations(
+  after: string | null,
   limit: number,
-): TaskStoreEffect<readonly QueuedRun[]> {
-  return findQueuedRuns({ since, limit });
+): TaskStoreEffect<readonly ScheduledAutomation[]> {
+  return findScheduled({ after, limit });
 }
 
 /** The agents the automation's runs fired at or after `since` started, and that stand still. */
@@ -1487,16 +1396,6 @@ export function claimRunSlackDelivery(
     const claimed = yield* writeSlackDelivered({ runId: found.value.runId, now });
     return claimed.length === 0 ? Option.none() : found;
   });
-}
-
-/** Settles every run still queued that fired at or before `before` as failed for the reason given, answering how many. */
-export function expireQueuedAutomationRuns(
-  before: Date,
-  reason: AutomationRunReason,
-): TaskStoreEffect<number> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(writeExpired({ before, reason, now }), (rows) => rows.length),
-  );
 }
 
 const findCreatorMembership = SqlSchema.findAll({
@@ -1656,23 +1555,6 @@ export function failClaimedRun(
 /** How many of the automation's runs claimed at or after `since` are still starting, which count against its concurrency; a claim is dated by when it was made, whenever its run fired. */
 export function claimedRunsStarting(automationId: string, since: Date): TaskStoreEffect<number> {
   return Effect.map(findClaimed({ automationId, since }), (rows) => rows.length);
-}
-
-/** One claimed run left without its agent: its id, its automation, and its owner. */
-export interface StrandedRun {
-  readonly id: string;
-  readonly automationId: string;
-  readonly userId: string;
-  /** The agent the run was claimed to be sent to, where it was handed to one; null where it was to start its own. */
-  readonly claimedAgentId: string | null;
-}
-
-/** Claimed runs whose start never settled by `before`, a function that died between the claim and the agent: oldest first, at most `limit`. */
-export function strandedAutomationRuns(
-  before: Date,
-  limit: number,
-): TaskStoreEffect<readonly StrandedRun[]> {
-  return findStranded({ before, limit });
 }
 
 const WebhookRowSchema = Schema.Struct({

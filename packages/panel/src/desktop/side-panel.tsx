@@ -649,10 +649,10 @@ export function changesTabOf(
  * Opens an agent's Pull request tab, the one that stands for its pull
  * request (`changesTabOf`), on the view given: the conversation its pull
  * request's chip asks for, or the files a link to its changes does. A chip
- * is a link, so the tab opens as the panel's preview (`onPreview`).
+ * is a link, so the tab opens as a link does (`onOpen`).
  */
 export function showPullRequest(
-  panel: Pick<SidePanelControl, "changes" | "onPreview" | "onPullRequestView">,
+  panel: Pick<SidePanelControl, "changes" | "onOpen" | "onPullRequestView">,
   agents: AgentsControl,
   agentId: string,
   view: PullRequestView,
@@ -660,7 +660,7 @@ export function showPullRequest(
 ): void {
   const tab = changesTabOf(agents, agentId, panel.changes, number);
   panel.onPullRequestView(tab, view);
-  panel.onPreview(tab);
+  panel.onOpen(tab);
 }
 
 /**
@@ -1099,9 +1099,7 @@ function stripTabs(input: {
     ...drawn,
     unread: unread.some((each) => sameTab(each, tab)),
     selected: chosen(tab),
-    preview: panel.preview !== undefined && sameTab(tab, panel.preview),
     onSelect: () => panel.onChoose(tab),
-    onKeep: () => panel.onKeep(tab),
   });
   const fixed = panel.tabs.map((tab) => ({
     tab,
@@ -2933,46 +2931,38 @@ export function SidePanel({
           active={keys && focused && stripTabTakesFind(tab)}
           subject={{ task: taskId, tab }}
         >
-          {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}
-          <div
-            className="side-panel-keeps contents"
-            onInputCapture={() => {
-              if (panel.preview !== undefined && sameTab(panel.preview, tab)) panel.onKeep(tab);
-            }}
-          >
-            {/* Note that whatever the tab's body hands its ⋯ is handed for this tab, at any depth of the body (`useTabActions`). */}
-            <HandTabActionsContext.Provider value={(actions) => handTabActions(tab, actions)}>
-              <TabContent
-                tab={tab}
-                taskId={taskId}
-                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK || repositoryPlace !== undefined}
-                repositoryPlace={repositoryPlace}
-                pagePlace={pagePlace}
-                repository={repository}
-                files={files}
-                pages={pageTabs}
-                agents={agents}
-                agentsOf={agentsOf}
-                standings={standings}
-                shown={keys}
-                findActive={keys && focused}
-                onOpenTarget={onOpenTarget}
-                cards={cards}
-                onWorkerStatus={views.onWorkerStatus}
-                onWorkerHeld={views.onWorkerHeld}
-                fileTree={fileTree}
-                onBrowseFile={panel.onBrowseFile}
-                onFileHistory={panel.onFileHistory}
-                onCloseTab={panel.onClose}
-                pullRequestViews={panel.pullRequestViews}
-                onPullRequestView={panel.onPullRequestView}
-                cloudBrowsers={cloudBrowsers}
-                cloudDrafts={cloudDrafts}
-                transcript={transcript}
-                onTabActions={handTabActions}
-              />
-            </HandTabActionsContext.Provider>
-          </div>
+          {/* Note that whatever the tab's body hands its ⋯ is handed for this tab, at any depth of the body (`useTabActions`). */}
+          <HandTabActionsContext.Provider value={(actions) => handTabActions(tab, actions)}>
+            <TabContent
+              tab={tab}
+              taskId={taskId}
+              codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK || repositoryPlace !== undefined}
+              repositoryPlace={repositoryPlace}
+              pagePlace={pagePlace}
+              repository={repository}
+              files={files}
+              pages={pageTabs}
+              agents={agents}
+              agentsOf={agentsOf}
+              standings={standings}
+              shown={keys}
+              findActive={keys && focused}
+              onOpenTarget={onOpenTarget}
+              cards={cards}
+              onWorkerStatus={views.onWorkerStatus}
+              onWorkerHeld={views.onWorkerHeld}
+              fileTree={fileTree}
+              onBrowseFile={panel.onBrowseFile}
+              onFileHistory={panel.onFileHistory}
+              onCloseTab={panel.onClose}
+              pullRequestViews={panel.pullRequestViews}
+              onPullRequestView={panel.onPullRequestView}
+              cloudBrowsers={cloudBrowsers}
+              cloudDrafts={cloudDrafts}
+              transcript={transcript}
+              onTabActions={handTabActions}
+            />
+          </HandTabActionsContext.Provider>
         </FindScope>
       )}
     </PanelFrame>

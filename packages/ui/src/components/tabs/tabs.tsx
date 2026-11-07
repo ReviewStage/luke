@@ -471,10 +471,8 @@ export function Tab({
   hint: Hint,
   editor,
   tabRef,
-  preview = false,
   anchored = false,
   onSelect,
-  onKeep,
   onClose,
   contextMenu,
   onMenu,
@@ -503,13 +501,9 @@ export function Tab({
   hint?: TabHint | undefined;
   editor?: ReactNode;
   tabRef?: RefObject<HTMLButtonElement | null> | undefined;
-  /** Stands as its strip's preview, which the next one opened takes the place of: its label in italics, as VS Code draws one. */
-  preview?: boolean;
   /** Leads its strip and never moves: counted among no moves, dragged by none, and dropped before by none, as a task's Overview. */
   anchored?: boolean;
   onSelect: () => void;
-  /** Keeps a preview as a tab of its own, as a double-click on it asks. */
-  onKeep?: (() => void) | undefined;
   onClose?: (() => void) | undefined;
   contextMenu?: ContextMenuProps | undefined;
   onMenu?: ((placement: MenuPlacement, opener: HTMLElement) => void) | undefined;
@@ -546,7 +540,6 @@ export function Tab({
         pulsePress(event.currentTarget.closest<HTMLElement>(".ui-tab") ?? event.currentTarget);
         onSelect();
       }}
-      onDoubleClick={preview ? onKeep : undefined}
       {...contextMenu}
       onKeyDown={(event) => {
         if (onMenu !== undefined && opensMenu(event)) {
@@ -604,7 +597,6 @@ export function Tab({
       className={PILL}
       data-selected={String(selected)}
       data-closable={String(onClose !== undefined)}
-      data-preview={String(preview)}
       data-anchored={String(anchored)}
       data-unread={String(unread)}
       data-marked={String(endMark !== undefined)}

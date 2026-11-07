@@ -63,6 +63,7 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@repo/features/provider-key-wire";
+import { PULL_REQUEST_CHAPTERS_READ } from "@repo/features/pull-request-chapters-live";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import {
   PULL_REQUEST_ACTION,
@@ -321,6 +322,8 @@ function fakeService() {
   let committedIn: { readonly txid?: string } = {};
   /** The item as the agent changed it first, which a close is answered not taken with; none takes every close. */
   let changedFirst: InboxItem | undefined;
+  /** What each close waits on once asked, before it is answered. */
+  let closesWait: Effect.Effect<void> = Effect.void;
   /** The transaction the service says wrote a sent message's row; none says none was written. */
   let sentTxid: string | undefined;
   /** What a rename, an archive, a change of model, or a switch of servers waits on before the service answers it; nothing from the start. */
@@ -390,6 +393,8 @@ function fakeService() {
           case WORKSPACE_MEMORIES_READ.name:
             if (poll === undefined) asked.push(`memories-live:${params.workspaceId}`);
             return answered(live.memories);
+          case PULL_REQUEST_CHAPTERS_READ.name:
+            return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
           default:
             return assert.fail(`no script answers the live read ${read.name}`);
         }
@@ -569,7 +574,6 @@ function fakeService() {
         asked.push(`changes:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHANGES;
       }),
-    pullRequestChaptersLive: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     generateChapters: (agentId, number) =>
       Effect.sync(() => {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
@@ -773,13 +777,21 @@ function fakeService() {
     closeInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(`close:${itemId}:${request.revision}:${request.clientKey}`);
-        if (changedFirst !== undefined) return { item: changedFirst, taken: false };
-        return {
-          item: { ...ITEM, status: INBOX_STATUS.CLOSED, closedBy: { userId: "u1", name: "Dana" } },
-          taken: true,
-          ...committedIn,
-        };
-      }),
+      }).pipe(
+        Effect.andThen(Effect.suspend(() => closesWait)),
+        Effect.map(() => {
+          if (changedFirst !== undefined) return { item: changedFirst, taken: false };
+          return {
+            item: {
+              ...ITEM,
+              status: INBOX_STATUS.CLOSED,
+              closedBy: { userId: "u1", name: "Dana" },
+            },
+            taken: true,
+            ...committedIn,
+          };
+        }),
+      ),
     answerInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(`answer:${itemId}:${request.revision}:${request.reply}:${request.clientKey}`);
@@ -886,6 +898,10 @@ function fakeService() {
     /** The transaction a Start answers it committed in; none answers none. */
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
+    },
+    /** What each close from now on waits on once asked, before it is answered. */
+    answerClosesAfter: (wait: Effect.Effect<void>) => {
+      closesWait = wait;
     },
     /** Whether each Start from now on goes unanswered, as one sent offline does. */
     leaveStartsUnanswered: (unanswered: boolean) => {
@@ -1120,6 +1136,8 @@ function subject(
       /** The composer's row writes that may wait, as a relaunch lays its queue back by. */
       queueable: composer.queueable,
       flushHeldCloses: composer.flushHeldCloses,
+      letGoHeldCloses: composer.letGoHeldCloses,
+      answerClosesAfter: service.answerClosesAfter,
       transcripts,
       /** Each of `transcript`'s rows the host laid, in order. */
       held: (transcript?: { readonly agentId: string; readonly callId?: string }) =>
@@ -3708,6 +3726,80 @@ it.effect(
       assert.deepEqual(
         asked.filter((each) => each.startsWith("close:")),
         [`close:${ITEM.id}:${ITEM.revision}:close-1`],
+      );
+    }),
+);
+
+/** A close of `ITEM` held for its Undo under `clientKey`, as a window asks it. */
+const heldClose = (clientKey: string) => ({
+  itemId: ITEM.id,
+  revision: ITEM.revision,
+  clientKey,
+  held: true,
+});
+
+it.effect(
+  "a close held for its Undo is sent under the account that held it as that account leaves, before it has left",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const { acts, asked, letGoHeldCloses } = yield* subject({ accountId: () => account });
+      /** Each close the service was asked, with the account signed in as it was asked. */
+      const closesUnder = () => asked.filter((each) => each.startsWith("close:"));
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+
+      yield* letGoHeldCloses;
+      assert.deepEqual(closesUnder(), [`close:${ITEM.id}:${ITEM.revision}:close-1`]);
+      account = "user-ben";
+      yield* Fiber.join(closing);
+      assert.equal(closesUnder().length, 1);
+    }),
+);
+
+it.effect(
+  "a held close still out as its account leaves is dropped once the bound has passed, its item standing open, and is never sent under the next account",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const { acts, asked, letGoHeldCloses, answerClosesAfter } = yield* subject({
+        accountId: () => account,
+      });
+      const closes = () => asked.filter((each) => each.startsWith("close:"));
+      answerClosesAfter(Effect.never);
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+
+      const leaving = yield* Effect.forkChild(letGoHeldCloses);
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* Fiber.join(leaving);
+      const answer = yield* Fiber.join(closing);
+      assert.ok("failure" in answer, "the close is not taken, so its item stands open");
+      account = "user-ben";
+      answerClosesAfter(Effect.void);
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* settled;
+      assert.deepEqual(closes(), [`close:${ITEM.id}:${ITEM.revision}:close-1`]);
+    }),
+);
+
+it.effect(
+  "a held close let go once another account is signed in is never sent, and its item stands open",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const { acts, asked } = yield* subject({ accountId: () => account });
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+
+      account = "user-ben";
+      yield* acts.AGENTS_INBOX_CLOSE_RELEASE({ clientKey: "close-1", send: true });
+      const answer = yield* Fiber.join(closing);
+      assert.ok("failure" in answer, "the close is not taken, so its item stands open");
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [],
       );
     }),
 );

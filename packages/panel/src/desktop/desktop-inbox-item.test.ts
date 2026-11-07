@@ -1312,7 +1312,7 @@ test("in the window's Inbox a skill an answer's words name is the chip a sent me
   const files: string[] = [];
   const panel: SidePanelControl = {
     ...tasksControl().sidePanel,
-    onPreviewFile: (ref) => files.push(ref.path),
+    onOpenFile: (ref) => files.push(ref.path),
   };
   const { page } = mount([], { panel });
   await settle();
@@ -1334,7 +1334,7 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   const files: string[] = [];
   const panel: SidePanelControl = {
     ...tasksControl().sidePanel,
-    onPreviewFile: (ref) => files.push(ref.path),
+    onOpenFile: (ref) => files.push(ref.path),
   };
   const { page } = mount([], { panel });
   await settle();

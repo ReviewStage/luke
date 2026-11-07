@@ -69,7 +69,7 @@ Vespin is an inbox for all your coding agents. These are its notable changes,
 newest first. Each heading is a released version and the date its release was
 published.
 
-## 0.28.0 — 2026-11-07
+## 0.28.0 — 2026-11-06
 
 ### Cloud agents on your Mac
 

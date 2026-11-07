@@ -9,10 +9,12 @@ import {
 import { INBOX_IMAGE_TYPE } from "@repo/features/inbox-wire";
 import type { PictureAnswer } from "@repo/ui/picture-read";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@repo/wire";
+import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { withQueryClient } from "../testing/copy-feedback.js";
+import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { viewerPlace } from "../testing/viewer-place.js";
 import {
   type AgentPictureDoor,
@@ -93,6 +95,8 @@ const text = (words: string): WireRecord => ({ type: "text", text: words });
 function finished(parts: readonly WireRecord[]): AgentTranscriptMessage {
   return { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts, startedAt: 1_000, finishedAt: 61_000 };
 }
+
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 /** The message drawn as an agent's turn is, under a door recording each picture it is asked to read. */
 async function drawn(

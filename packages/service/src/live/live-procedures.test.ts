@@ -81,7 +81,7 @@ import { memoriesOfLiveRows, WORKSPACE_MEMORIES_READ } from "@repo/features/memo
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
-  pullRequestChaptersLiveAnswerSchema,
+  PULL_REQUEST_CHAPTERS_READ,
   pullRequestChaptersOfLive,
 } from "@repo/features/pull-request-chapters-live";
 import { SIDEBAR_READ } from "@repo/features/sidebar-live";
@@ -1860,7 +1860,7 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
 
         const polled = yield* askChapters({ bearer: teammate, agentId, number: 7, github });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(pullRequestChaptersLiveAnswerSchema)(polled.body);
+        const answer = Schema.decodeUnknownSync(PULL_REQUEST_CHAPTERS_READ.answer)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(pullRequestChaptersOfLive(answer.queries.chapters.rows ?? [], 7, answer), {
           pullRequest: {

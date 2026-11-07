@@ -423,7 +423,7 @@ test("each Inbox item is a stop of its own, so the panel a link opened beside on
   const panel = () => control ?? assert.fail("the panel is held");
 
   render("item-1");
-  act(() => panel().onPreview(changesTab(AGENT)));
+  act(() => panel().onOpen(changesTab(AGENT)));
   assert.equal(panel().open, true);
   render("item-2");
   assert.deepEqual(panel().strip, [changesTab(AGENT)]);
@@ -600,7 +600,7 @@ test("a link in the panel to an agent elsewhere carries the panel to the agent's
     panel().strip.flatMap((tab) => (typeof tab === "object" && "page" in tab ? [tab.page] : []));
 
   render(TASK);
-  act(() => panel().onPreview(pageTab(PAGE), { taskId: OTHER_TASK }));
+  act(() => panel().onOpen(pageTab(PAGE), { taskId: OTHER_TASK }));
   act(() => panel().onCarry());
   render(AGENT_TASK);
   assert.ok(panel().open, "the panel still open beside the agent's task");
@@ -637,7 +637,7 @@ test("a page of another task opens beside the Inbox item, drawn there, and Open 
   };
 
   render(true);
-  act(() => panel().onPreview(pageTab(PAGE), { taskId: OTHER_TASK }));
+  act(() => panel().onOpen(pageTab(PAGE), { taskId: OTHER_TASK }));
   const pagesDrawn = () =>
     panel().strip.flatMap((tab) => (typeof tab === "object" && "page" in tab ? [tab.page] : []));
   assert.deepEqual(pagesDrawn(), [PAGE], "drawn beside the item it opened on");
@@ -652,66 +652,7 @@ test("a page of another task opens beside the Inbox item, drawn there, and Open 
   assert.deepEqual(pagesDrawn(), [PAGE]);
 });
 
-test("a link opens its tab as the panel's preview, and the next link takes its place, so a run of links read leaves one tab", () => {
-  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
-  act(() => panel.control().onPreview(changesTab(AGENT)));
-  assert.deepEqual(panel.control().preview, changesTab(AGENT));
-  assert.deepEqual(panel.control().tab, changesTab(AGENT));
-
-  act(() => panel.control().onPreview(changesTab(OTHER_AGENT)));
-  assert.deepEqual(panel.control().preview, changesTab(OTHER_AGENT));
-  assert.deepEqual(panel.control().tab, changesTab(OTHER_AGENT));
-  assert.deepEqual(
-    panel.control().changes,
-    [changesTab(OTHER_AGENT)],
-    "the first preview gave way",
-  );
-});
-
-test("a preview kept stands as a tab of its own, so the next link opens beside it rather than in its place", () => {
-  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
-  act(() => panel.control().onPreview(changesTab(AGENT)));
-  act(() => panel.control().onKeep(changesTab(AGENT)));
-  assert.equal(panel.control().preview, undefined);
-
-  act(() => panel.control().onPreview(changesTab(OTHER_AGENT)));
-  assert.deepEqual(panel.control().changes, [changesTab(AGENT), changesTab(OTHER_AGENT)]);
-  assert.deepEqual(panel.control().preview, changesTab(OTHER_AGENT));
-});
-
-test("a link to a tab standing as one of its own only chooses it, the preview standing", () => {
-  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
-  act(() => panel.control().onChoose(changesTab(AGENT)));
-  act(() => panel.control().onPreview(changesTab(OTHER_AGENT)));
-  act(() => panel.control().onPreview(changesTab(AGENT)));
-  assert.deepEqual(panel.control().tab, changesTab(AGENT));
-  assert.deepEqual(panel.control().preview, changesTab(OTHER_AGENT), "the preview still stands");
-});
-
-test("a preview closed lets its preview go, so the same tab opened again by a chosen door stands as a tab of its own", () => {
-  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
-  act(() => panel.control().onPreview(changesTab(AGENT)));
-  act(() => panel.control().onClose(changesTab(AGENT)));
-  act(() => panel.control().onChoose(changesTab(AGENT)));
-  assert.equal(panel.control().preview, undefined);
-});
-
-test("a preview browsed on to another file stays the preview on that file, so the next link still takes its place", () => {
-  const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
-  act(() => panel.control().onPreviewFile({ path: "src/a.ts" }));
-  assert.deepEqual(panel.control().preview, fileTab("src/a.ts"));
-  act(() => panel.control().onBrowseFile("src/a.ts", "src/b.ts", false));
-  assert.deepEqual(panel.control().preview, fileTab("src/b.ts"));
-
-  act(() => panel.control().onPreview(changesTab(AGENT)));
-  assert.deepEqual(panel.control().preview, changesTab(AGENT));
-  assert.ok(
-    !panel.control().strip.some((tab) => typeof tab === "object" && "file" in tab),
-    "the browsed preview gave way",
-  );
-});
-
-test("an agent's transcript stands in a panel beside the Inbox alone, once the task's agents hold it, and as the panel's preview like any link's tab", () => {
+test("an agent's transcript stands in a panel beside the Inbox alone, once the task's agents hold it", () => {
   let control: SidePanelControl | undefined;
   function Probe({ bare }: { bare: boolean }) {
     control = useSidePanel(
@@ -734,11 +675,8 @@ test("an agent's transcript stands in a panel beside the Inbox alone, once the t
   };
 
   render(true);
-  act(() => panel().onPreview(transcriptTab(AGENT)));
+  act(() => panel().onOpen(transcriptTab(AGENT)));
   assert.deepEqual(panel().strip, [transcriptTab(AGENT)]);
-  assert.deepEqual(panel().preview, transcriptTab(AGENT));
-  act(() => panel().onPreview(transcriptTab(OTHER_AGENT)));
-  assert.deepEqual(panel().strip, [transcriptTab(OTHER_AGENT)], "the next link took its place");
 
   render(false);
   assert.ok(

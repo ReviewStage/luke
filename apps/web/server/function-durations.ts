@@ -3,6 +3,7 @@ import { LIVE_SOCKET } from "@repo/features/live-wire";
 import { SANDBOX_TUNNEL } from "@repo/features/sandbox-tunnel-wire";
 import { TERMINAL_RELAY } from "@repo/features/terminal-wire";
 import { WORKSPACE_MCP_FUNCTION, WORKSPACE_MCP_PATH } from "@repo/service/agents/workspace-mcp/app";
+import { AUTOMATION_RUNS } from "@repo/service/automations/automation-run-bounds";
 import {
   PULL_REQUEST_CHAPTERS_FUNCTION,
   PULL_REQUEST_CHAPTERS_ROUTE_PATHS,
@@ -69,6 +70,12 @@ export interface FunctionDefinition {
    * stays a function of its own.
    */
   readonly dispatches: boolean;
+  /**
+   * The queue topic the function consumes, where the queue alone invokes it:
+   * its trigger is written into its `.vc-config.json` (`build-output.ts`),
+   * and it answers on no public path, so no rewrite names it.
+   */
+  readonly queueTopic?: string;
 }
 
 interface GroupDefinition {
@@ -115,8 +122,24 @@ const STANDALONE_ROUTES: readonly string[] = [
 ].map(routeKeyOf);
 
 /**
+ * The queue consumers, each a function of its own, since a function the
+ * queue invokes is reached by nothing else: the automation-runs consumer,
+ * under the Fluid default a Start's function runs under.
+ */
+const QUEUE_CONSUMERS: readonly FunctionDefinition[] = [
+  {
+    file: routeKeyOf(AUTOMATION_RUNS.PATH),
+    maxDuration: AUTOMATION_RUNS.MAX_DURATION_SECONDS,
+    routes: [routeKeyOf(AUTOMATION_RUNS.PATH)],
+    dispatches: false,
+    queueTopic: AUTOMATION_RUNS.TOPIC,
+  },
+];
+
+/**
  * The functions a deploy carries, given every route key under `server/routes/`:
- * the grouped functions, the standalone WebSocket functions, and the default
+ * the grouped functions, the standalone WebSocket functions, the queue
+ * consumers, and the default
  * group over every route none of those claimed and the hosted oRPC route,
  * which holds every path that is no route file's. Sorted by file, so the
  * bundles and the rewrites are written in one order.
@@ -125,7 +148,11 @@ export function functionDefinitions(routeKeys: readonly string[]): readonly Func
   if (routeKeys.includes(ORPC_ROUTE_KEY)) {
     throw new Error(`the route key ${ORPC_ROUTE_KEY} is the hosted oRPC route's, not a file's`);
   }
-  const claimed = new Set([...GROUPS.flatMap((group) => group.routes), ...STANDALONE_ROUTES]);
+  const claimed = new Set([
+    ...GROUPS.flatMap((group) => group.routes),
+    ...STANDALONE_ROUTES,
+    ...QUEUE_CONSUMERS.flatMap((consumer) => consumer.routes),
+  ]);
   const unclaimed = routeKeys.filter((key) => !claimed.has(key));
   const definitions: FunctionDefinition[] = [
     { file: FUNCTION_GROUP.DEFAULT, routes: [...unclaimed, ORPC_ROUTE_KEY], dispatches: true },
@@ -136,6 +163,7 @@ export function functionDefinitions(routeKeys: readonly string[]): readonly Func
       routes: [route],
       dispatches: false,
     })),
+    ...QUEUE_CONSUMERS,
   ];
   return definitions.sort((left, right) => left.file.localeCompare(right.file));
 }

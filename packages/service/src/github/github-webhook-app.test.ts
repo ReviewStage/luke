@@ -481,7 +481,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
   );
 
   it.effect(
-    "an issue opened with a label an automation listens for queues one run under the delivery's id, and a redelivery, a bot, or another label queues none",
+    "an issue opened with a label an automation listens for queues one run under the delivery's id, and a redelivery records none, and a bot or another label queues none",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
@@ -537,11 +537,12 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           [first.body, again.body, fromBot.body, otherLabel.body],
           [
             { read: 0, queued: 1, told: 0 },
-            { read: 0, queued: 0, told: 0 },
+            { read: 0, queued: 1, told: 0 },
             { read: 0, queued: 0, told: 0 },
             { read: 0, queued: 0, told: 0 },
           ],
         );
+        // The redelivery's firing is published again and recorded under the same delivery id once.
         const runs = yield* listAutomationRuns(owner, made.id);
         assert.deepEqual(
           runs.map((run) => run.firing),

@@ -28,13 +28,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader.js";
+import { SIDE_BUNDLES, type SideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { onPhone } from "../testing/phone-tab.js";
-import { bundleLanded, fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js";
+import {
+  bundleLanded,
+  fittedTerminalBundles,
+  onSideBundles,
+  standInBundles,
+} from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { onTerminals, windowTerminals } from "../testing/terminals.js";
 import type { HeldShell } from "./terminal-held.js";
@@ -278,6 +283,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** The tab mounted for one of the agent's terminals, shown or not, with what it draws. */
@@ -557,7 +563,7 @@ test("a message on the port that is no message of main's is never drawn nor acte
 test("a terminal bundle that fails to load leaves the tab saying so with Retry, which imports it again and draws the screen", async () => {
   const landed = await Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal));
   let online = false;
-  const unloaded = sideBundles({
+  const unloaded = standInBundles({
     terminal: () =>
       online
         ? Promise.resolve(landed)

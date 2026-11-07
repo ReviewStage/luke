@@ -12,15 +12,15 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { type SideBundles, sideBundles } from "../bundle-loader.js";
+import type { SideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
-import { onSideBundles } from "../testing/side-bundles.js";
+import { onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 
@@ -682,6 +682,7 @@ async function openedOver(file: FileChip, bundles: SideBundles): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 test("a Mermaid file opened over the window is drawn as its diagram, zoomed and copied as a picture is", async () => {
@@ -694,7 +695,7 @@ test("a Mermaid file opened over the window is drawn as its diagram, zoomed and 
 
   await openedOver(
     textFile("invite.mmd", code),
-    sideBundles({ diagram: () => Promise.resolve(diagram) }),
+    standInBundles({ diagram: () => Promise.resolve(diagram) }),
   );
 
   const picture = document.querySelector<HTMLImageElement>(".ui-zoom-image");
@@ -706,7 +707,7 @@ test("a Mermaid file opened over the window is drawn as its diagram, zoomed and 
 
 test("a file that is no diagram opened over the window imports no diagram bundle", async () => {
   let imports = 0;
-  const bundles = sideBundles({
+  const bundles = standInBundles({
     diagram: () => {
       imports += 1;
       return Promise.resolve({ draw: () => Promise.resolve({ kind: DIAGRAM_DRAWING.REFUSED }) });

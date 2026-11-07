@@ -111,6 +111,7 @@ const emitted = await emitBuildOutput({
         path: functionPublicPath(definition),
         contents: await readFile(join(WEB, bundlePath(definition))),
         maxDuration: definition.maxDuration,
+        queueTopic: definition.queueTopic,
         files: shipsImage.has(join(WEB, bundlePath(definition)))
           ? [{ name: AGENT_IMAGE_FILE, contents: agentImage }]
           : [],

@@ -1,6 +1,5 @@
-import { useAtomValue } from "@effect/atom-react";
 import { cn } from "@repo/ui";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useQuery } from "@tanstack/react-query";
 import { FileIcon } from "lucide-react";
 import { useSideBundles } from "../bundle-loader.js";
 
@@ -84,16 +83,12 @@ export function FileTypeIcon({
   /** The place's own size and room for the icon, where it stands at a size of its own. */
   className?: string | undefined;
 }): React.JSX.Element {
-  const loaded = useAtomValue(useSideBundles().fileTree);
-  if (!AsyncResult.isSuccess(loaded)) return <FileIcon aria-hidden="true" />;
-  const icon = loaded.value.fileIcon(name);
+  const loaded = useQuery(useSideBundles().fileTree);
+  if (!loaded.isSuccess) return <FileIcon aria-hidden="true" />;
+  const icon = loaded.data.fileIcon(name);
   return (
     <svg
-      className={cn(
-        "file-type-icon fill-current",
-        TYPE_INK[icon.type] ?? UNCOLORED_INK,
-        className,
-      )}
+      className={cn("file-type-icon fill-current", TYPE_INK[icon.type] ?? UNCOLORED_INK, className)}
       data-file-type={icon.type}
       viewBox="0 0 16 16"
       aria-hidden="true"
