@@ -1263,7 +1263,7 @@ function composed(
   /** An item's reminder set for an instant, or canceled, drawn at once; whether it is read stands as it was. */
   const reminded = inboxWrite<AgentInboxRemindParams, AgentInboxReadStateView>(
     ({ itemId }) => [itemId],
-    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until, at: kernel.now() }),
+    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until }),
     ({ itemId, until }, key) => asked(client.remindInboxItem(itemId, until, key)),
     {
       name: INBOX_QUEUED_WRITE.REMIND,

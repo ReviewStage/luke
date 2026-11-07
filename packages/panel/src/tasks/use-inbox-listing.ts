@@ -18,7 +18,6 @@ import {
   inboxAtNow,
   inboxCounts,
   listedItems,
-  reminderClock,
   taskGroups,
 } from "./inbox-model.js";
 import { useAgents } from "./use-agents.js";
@@ -305,14 +304,11 @@ export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
     [held, holdings, everyTask, holdingAgents, listedWorkspace],
   );
   // Note that a reminder is weighed on the window's clock, since no read of the service's may read one, so an item comes back within the minute its reminder comes due.
-  const minute = useMinute();
+  const now = useMinute();
   const standing = useMemo(
     () =>
-      inboxAtNow(
-        narrowedTask === undefined ? everyItem : taskGroups(everyItem, narrowedTask),
-        reminderClock(minute),
-      ),
-    [everyItem, narrowedTask, minute],
+      inboxAtNow(narrowedTask === undefined ? everyItem : taskGroups(everyItem, narrowedTask), now),
+    [everyItem, narrowedTask, now],
   );
   // Note that every item marked read is pushed with each followed inbox, its marker among its rows, so nothing is read again.
   const marks = useInboxReadMarks({ workspaceId: tasks.workspace?.id });
