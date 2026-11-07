@@ -4,7 +4,6 @@ import type { AnyHostAct, AnyLiveFollow, FollowKey } from "../contract/index.js"
 import { isLiveFollow } from "../contract/index.js";
 import type { HostActTable, LiveFollowHandler } from "../host-acts.js";
 import { type ActPortContext, actPort } from "./base.js";
-import { streamed } from "./followed-stream.js";
 
 /**
  * live-follows.ts -- every live follow's two procedures, built once: a window's hold as the scope of its read's own hold, and its Try again.
@@ -18,6 +17,32 @@ import { streamed } from "./followed-stream.js";
  * What the read holds reaches every window on app state (`liveTold`), never
  * down the stream.
  */
+
+/**
+ * An async iterable as the iterator oRPC streams. Note that its end is
+ * handed straight to the iterable's own, rather than through an async
+ * generator, which would queue the end behind a read still waiting for the
+ * next change and so never close the stream.
+ */
+function streamed<A>(iterable: AsyncIterable<A>): AsyncIteratorObject<A, undefined, unknown> {
+  const iterator = iterable[Symbol.asyncIterator]();
+  const ended = async (): Promise<IteratorReturnResult<undefined>> => {
+    await iterator.return?.();
+    return { done: true, value: undefined };
+  };
+  const self: AsyncIteratorObject<A, undefined, unknown> = {
+    next: async () => {
+      const read = await iterator.next();
+      return read.done === true ? { done: true, value: undefined } : read;
+    },
+    return: ended,
+    [Symbol.asyncIterator]: () => self,
+    [Symbol.asyncDispose]: async () => {
+      await ended();
+    },
+  };
+  return self;
+}
 
 /** The procedures of the follows `Names` names, a hold's and a Try again's each, as the port's router types them. */
 type FollowProcedures<

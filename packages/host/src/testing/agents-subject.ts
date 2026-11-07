@@ -69,9 +69,9 @@ import {
   type GatewayMethod,
 } from "@repo/gateway";
 import { type EntityPool, entityPool } from "@repo/sync";
-import type { WireRecord, WireValue } from "@repo/wire";
+import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Exit, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { type AppTranscript, type AppTranscripts, OWN_TRANSCRIPT } from "../app-state.js";
 import { type AccountAsksClient, composeAccountAsks } from "../compose-account-asks.js";
@@ -79,7 +79,7 @@ import { type AgentClient, composeAgents } from "../compose-agents.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "../kept-content.js";
 import { windowFocus } from "../window-focus.js";
 import { type PolledLive, polledLive } from "./polled-live.js";
-import { toldLive as toldOf } from "./told-live.js";
+import { tellingsOf } from "./told-live.js";
 
 export const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 export const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -1072,6 +1072,21 @@ export const nextPoll = Effect.andThen(
   Effect.andThen(TestClock.adjust(Duration.millis(500)), settled),
 );
 
+/**
+ * A live follow's read held as one window's stream holds it, in a scope of
+ * its own, answering the effect that lets it go, as the window's stream
+ * closing does.
+ */
+export function holding(
+  hold: Effect.Effect<void, never, Scope.Scope>,
+): Effect.Effect<Effect.Effect<void>> {
+  return Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    yield* Scope.provide(hold, scope);
+    return Scope.close(scope, Exit.void);
+  });
+}
+
 /** The agent's own transcript, as a window follows it. */
 export const FOLLOWED = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID } as const;
 
@@ -1090,7 +1105,7 @@ export function subject(
     // Each event with how many reads the service had been asked as it was told.
     const events: { kind: GatewayEventKind; payload: WireValue; asked: number }[] = [];
     /** Every telling of a live follow's slice (`LIVE_READ_CHANGED`) named `read`, whole, in order. */
-    const toldLive = (read: LiveRead) => toldOf(events, read);
+    const toldLive = (read: LiveRead) => tellingsOf(events, read);
     const kernel = {
       runMode: { sendsNetwork: options.sendsNetwork ?? true },
       emit: (kind: GatewayEventKind, payload: WireValue) =>
@@ -1141,9 +1156,14 @@ export function subject(
       const laid: { readonly rows: AppTranscript | undefined; readonly asked: number }[] = [];
       let was: unknown;
       for (const event of events) {
-        if (event.kind !== GATEWAY_EVENT.TRANSCRIPTS_CHANGED) continue;
+        if (
+          event.kind !== GATEWAY_EVENT.LIVE_READ_CHANGED ||
+          !isRecord(event.payload) ||
+          event.payload.read !== LIVE_READ.TRANSCRIPT
+        )
+          continue;
         // SAFETY: the held transcripts are the host's own, told as built.
-        const held = event.payload as unknown as AppTranscripts;
+        const held = event.payload.held as unknown as AppTranscripts;
         const read = held[transcript.agentId]?.[transcript.callId ?? OWN_TRANSCRIPT];
         if (read === was) continue;
         was = read;
@@ -1200,10 +1220,7 @@ export function subject(
           event.kind === GATEWAY_EVENT.INBOX_ITEMS_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the models the host holds for the windows, whole, in order. */
-      models: () =>
-        events.flatMap((event) =>
-          event.kind === GATEWAY_EVENT.MODELS_CHANGED ? [event.payload] : [],
-        ),
+      models: () => toldLive(LIVE_READ.MODELS),
       /** Every telling of the account's preferences the host holds for the session, whole, in order. */
       preferences: () =>
         events.flatMap((event) =>
@@ -1218,15 +1235,9 @@ export function subject(
       /** Every telling of the memories the host holds for the windows, whole, in order. */
       memories: () => toldLive(LIVE_READ.MEMORIES),
       /** Every telling of the beats the host holds for the windows, whole, in order. */
-      beats: () =>
-        events.flatMap((event) =>
-          event.kind === GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED ? [event.payload] : [],
-        ),
+      beats: () => toldLive(LIVE_READ.DEVICE_PRESENCE),
       /** Every telling of the inboxes the host holds for the windows, whole, in order. */
-      told: () =>
-        events.flatMap((event) =>
-          event.kind === GATEWAY_EVENT.HOLDER_INBOXES_CHANGED ? [event.payload] : [],
-        ),
+      told: () => toldLive(LIVE_READ.HOLDER_INBOX),
       /** Every telling of the agents' origins the host holds for the windows, whole, in order. */
       origins: () => toldLive(LIVE_READ.AGENT_ORIGINS),
       /** The account gate opening, as the host opens it. */

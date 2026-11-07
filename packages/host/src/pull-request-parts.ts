@@ -40,7 +40,7 @@ import {
 import type { AgentPullRequest, AgentStatus } from "@repo/features/agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import type { ListedPullRequest } from "@repo/features/task-wire";
-import { Data, Effect, FiberMap, MutableHashMap, Option, type Scope, Stream } from "effect";
+import { Data, Effect, MutableHashMap, Option, type Scope, Stream } from "effect";
 import { type AppPullRequestParts, NO_KEYS_HELD, OWN_PULL_REQUEST } from "./app-state.js";
 import { type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { WindowFocus } from "./window-focus.js";
@@ -76,15 +76,16 @@ export interface PullRequestPartsDependencies {
   };
   /** The task list each time it is drawn, from the caller's listening on. */
   readonly listings: Effect.Effect<Stream.Stream<PullRequestListing>, never, Scope.Scope>;
-  readonly tell: (held: Partial<AppPullRequestParts>) => void;
+  /** How each part's slice is told, whole, each time any of its keys moves. */
+  readonly tell: {
+    readonly [Slice in keyof AppPullRequestParts]: (held: AppPullRequestParts[Slice]) => void;
+  };
 }
 
 /** The parts the windows hold, and what the host does for them. */
 export interface PullRequestParts {
-  /** Holds one part for the windows until let go, asking it where no window held it; holding it again holds nothing anew. */
-  readonly follow: (params: PullRequestPartParams) => Effect.Effect<void>;
-  /** Lets one part go, kept a while among those let go lately. */
-  readonly unfollow: (params: PullRequestPartParams) => Effect.Effect<void>;
+  /** Holds one part for the caller's scope, asking it where no window held it; let go with the last scope holding it, it is kept a while among those let go lately. */
+  readonly hold: (params: PullRequestPartParams) => Effect.Effect<void, never, Scope.Scope>;
   /** Asks one held part again at once, as Try again asks; answers once that ask has landed. */
   readonly retry: (params: PullRequestPartParams) => Effect.Effect<void>;
   /** Follows every held part anew, as the account gate opening asks. */
@@ -184,7 +185,7 @@ export function pullRequestParts(
           }
           return keptOver(answer, held);
         }),
-      tell: (held) => tell({ [LIVE_READ.PULL_REQUEST]: held }),
+      tell: tell[LIVE_READ.PULL_REQUEST],
     });
     const checks = yield* heldFetch<typeof LIVE_READ.PULL_REQUEST_CHECKS, PullRequestKey>({
       empty: NO_KEYS_HELD,
@@ -192,7 +193,7 @@ export function pullRequestParts(
       gate,
       focus,
       fetch: (key, held) => Effect.map(ask.checks(key), (answer) => keptOver(answer, held)),
-      tell: (held) => tell({ [LIVE_READ.PULL_REQUEST_CHECKS]: held }),
+      tell: tell[LIVE_READ.PULL_REQUEST_CHECKS],
     });
     const conversation = yield* heldFetch<
       typeof LIVE_READ.PULL_REQUEST_CONVERSATION,
@@ -203,7 +204,7 @@ export function pullRequestParts(
       gate,
       focus,
       fetch: (key, held) => Effect.map(ask.conversation(key), (answer) => keptOver(answer, held)),
-      tell: (held) => tell({ [LIVE_READ.PULL_REQUEST_CONVERSATION]: held }),
+      tell: tell[LIVE_READ.PULL_REQUEST_CONVERSATION],
     });
     const published = yield* heldFetch<typeof LIVE_READ.PULL_REQUEST_PUBLISHED, PullRequestKey>({
       empty: NO_KEYS_HELD,
@@ -217,7 +218,7 @@ export function pullRequestParts(
           }
           return keptOver(answer, held);
         }),
-      tell: (held) => tell({ [LIVE_READ.PULL_REQUEST_PUBLISHED]: held }),
+      tell: tell[LIVE_READ.PULL_REQUEST_PUBLISHED],
     });
     const reviewOptions = yield* heldFetch<typeof LIVE_READ.REVIEW_OPTIONS, PullRequestKey>({
       empty: NO_KEYS_HELD,
@@ -225,7 +226,7 @@ export function pullRequestParts(
       gate,
       focus,
       fetch: (key, held) => Effect.map(ask.reviewOptions(key), (answer) => keptOver(answer, held)),
-      tell: (held) => tell({ [LIVE_READ.REVIEW_OPTIONS]: held }),
+      tell: tell[LIVE_READ.REVIEW_OPTIONS],
     });
     const viewed = yield* heldFetch<typeof LIVE_READ.PULL_REQUEST_VIEWED, PullRequestKey>({
       empty: NO_KEYS_HELD,
@@ -233,7 +234,7 @@ export function pullRequestParts(
       gate,
       focus,
       fetch: (key) => Effect.map(ask.viewed(key), Option.some),
-      tell: (held) => tell({ [LIVE_READ.PULL_REQUEST_VIEWED]: held }),
+      tell: tell[LIVE_READ.PULL_REQUEST_VIEWED],
     });
     const fetches: { readonly [Part in PullRequestPart]: PartFetch } = {
       [PULL_REQUEST_PART.PULL_REQUEST]: pullRequest,
@@ -242,14 +243,6 @@ export function pullRequestParts(
       [PULL_REQUEST_PART.PUBLISHED]: published,
       [PULL_REQUEST_PART.REVIEW_OPTIONS]: reviewOptions,
       [PULL_REQUEST_PART.VIEWED]: viewed,
-    };
-    const holds: { readonly [Part in PullRequestPart]: FiberMap.FiberMap<PullRequestKey> } = {
-      [PULL_REQUEST_PART.PULL_REQUEST]: yield* FiberMap.make<PullRequestKey>(),
-      [PULL_REQUEST_PART.CHECKS]: yield* FiberMap.make<PullRequestKey>(),
-      [PULL_REQUEST_PART.CONVERSATION]: yield* FiberMap.make<PullRequestKey>(),
-      [PULL_REQUEST_PART.PUBLISHED]: yield* FiberMap.make<PullRequestKey>(),
-      [PULL_REQUEST_PART.REVIEW_OPTIONS]: yield* FiberMap.make<PullRequestKey>(),
-      [PULL_REQUEST_PART.VIEWED]: yield* FiberMap.make<PullRequestKey>(),
     };
     const every = Object.values(fetches);
     /** The parts asked again together as the pull request or its agent moves. */
@@ -291,16 +284,7 @@ export function pullRequestParts(
     yield* Effect.forkScoped(Stream.runForEach(yield* dependencies.listings, heard));
 
     return {
-      follow: (params) =>
-        Effect.asVoid(
-          FiberMap.run(
-            holds[params.part],
-            keyOf(params),
-            Effect.scoped(Effect.andThen(fetches[params.part].hold(keyOf(params)), Effect.never)),
-            { onlyIfMissing: true },
-          ),
-        ),
-      unfollow: (params) => FiberMap.remove(holds[params.part], keyOf(params)),
+      hold: (params) => fetches[params.part].hold(keyOf(params)),
       retry: (params) => fetches[params.part].retry(keyOf(params)),
       open: Effect.forEach(every, (fetch) => fetch.open, { discard: true }),
       end: Effect.forEach(every, (fetch) => fetch.end, { discard: true }),

@@ -248,7 +248,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     // A terminal's socket may have died in the sleep without a word, and one waiting out a backoff need not wait on.
     if (eventName === "resume") void run(operator.host.terminalWake());
     // The devices' beats a window draws were last read before the sleep, so they are read again rather than at the next poll.
-    if (eventName === "resume") void run(operator.host.hostsPresenceRefresh());
+    if (eventName === "resume") void run(operator.acts.HOSTS_PRESENCE_FOLLOW.retry(undefined));
     // So may the task list's follow; a resume and an unlock landing together seal it again once.
     if (eventName !== "user-did-become-active") void run(operator.host.tasksResync());
   };

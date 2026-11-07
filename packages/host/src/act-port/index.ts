@@ -10,10 +10,6 @@ import {
 } from "../contract/index.js";
 import type { HostActTable } from "../host-acts.js";
 import { type AccountProceduresDependencies, accountProcedures } from "./account-procedures.js";
-import {
-  type AgentInboxProceduresDependencies,
-  agentInboxProcedures,
-} from "./agent-inbox-procedures.js";
 import { type AgentProceduresDependencies, agentProcedures } from "./agents-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
 import { declaredActProcedures } from "./declared-acts.js";
@@ -88,8 +84,7 @@ export interface ActPortDependencies {
   readonly account: AccountProceduresDependencies;
   /** Every declared act's handler, which the port answers directly (`HostAssembly`'s). */
   readonly acts: HostActTable;
-  readonly agentInbox: AgentInboxProceduresDependencies;
-  /** The agents' holds and notices; the acts they note are answered from `acts`. */
+  /** The agents' notices; the acts they note are answered from `acts`. */
   readonly agents: Omit<AgentProceduresDependencies, "acts">;
   /** What main pushes each window, which the push stream reads. */
   readonly pushes: WindowPushes;
@@ -121,7 +116,6 @@ export function createActPortHandler<Sender>(
     ...accountProcedures(dependencies.account),
     ...declaredActProcedures(HOST_ACTS, dependencies.acts),
     ...liveFollowProcedures(HOST_ACTS, dependencies.acts),
-    ...agentInboxProcedures(dependencies.agentInbox),
     ...agentProcedures({ ...dependencies.agents, acts: dependencies.acts }),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),

@@ -31,14 +31,12 @@ import type { DevicePresenceAnswer } from "@repo/features/host-wire";
 import type { LIVE_READ } from "@repo/features/live-wire";
 import { WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
 import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD } from "@repo/gateway";
 import { declaredWrite, type EntityPool } from "@repo/sync";
 import { Clock, Duration, Effect, Option, Schedule, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountGateDependencies, type Asked, askedOf, gateOf } from "./account-gate.js";
 import {
   type AppDevicePresence,
-  type AppDevicePresences,
   type AppGitHubToken,
   type AppProviderKeyList,
   NO_KEYS_HELD,
@@ -50,7 +48,6 @@ import {
   type AGENT_ACTS,
   AGENT_FOLLOWS,
 } from "./contract/index.js";
-import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
 import { type HostActTable, liveTold } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -104,11 +101,14 @@ export type AccountAsksAgentAct =
   | "HOSTS_PAIRING_APPROVE"
   | "HOSTS_PAIRING_DENY";
 
-/** The acts this composer answers: the account's own asks, the hosts' and their pairing's, and the live follows of a workspace's memories and the account's hosts. */
+/** The agents' live follows this composer answers: the account's hosts, and their devices' beats. */
+export type AccountAsksAgentFollow = "HOSTS_FOLLOW" | "HOSTS_PRESENCE_FOLLOW";
+
+/** The acts this composer answers: the account's own asks, the hosts' and their pairing's, and the live follows of a workspace's memories, the account's hosts, and their devices' beats. */
 type AccountAsksActs = HostActTable<typeof ACCOUNT_ASK_ACTS> &
   HostActTable<typeof ACCOUNT_ASK_FOLLOWS> &
   HostActTable<Pick<typeof AGENT_ACTS, AccountAsksAgentAct>> &
-  HostActTable<Pick<typeof AGENT_FOLLOWS, "HOSTS_FOLLOW">>;
+  HostActTable<Pick<typeof AGENT_FOLLOWS, AccountAsksAgentFollow>>;
 
 export interface AccountAsksComposer extends Composer {
   /** The account's own asks and the hosts', answered directly as the panel's port asks them. */
@@ -229,8 +229,7 @@ function fetchedPresence(
           ? Option.none()
           : Option.some({ beats: held.beats, askedAt, stale: true as const });
       }),
-    tell: (held: AppDevicePresences) =>
-      kernel.emit(GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED, carried(held)),
+    tell: liveTold(kernel.emit, AGENT_FOLLOWS.HOSTS_PRESENCE_FOLLOW),
   });
 }
 
@@ -396,6 +395,11 @@ function actsOf(
       hold: () => hostsHold.hold,
       retry: () => retriedFor(dependencies.accountId, hosts),
     },
+    // The beats are held for the windows while any draws a device's standing, under the account signed in. Note that they are asked again only where a window holds them, as a window coming forward asks them.
+    HOSTS_PRESENCE_FOLLOW: {
+      hold: () => fetched.presenceHold.hold,
+      retry: () => fetched.presence.wake(() => true),
+    },
     // The keys are held for the windows while any draws them, under the account signed in; each write's own answer is laid there too.
     PROVIDER_KEYS_FOLLOW: {
       hold: () => fetched.keysHold.hold,
@@ -414,21 +418,6 @@ function actsOf(
   };
 }
 
-/** The holds of the beats, told only on the app state. */
-function methodsOf({ presence, presenceHold }: FetchedReads): HostMethodTable {
-  return {
-    // The beats are held for the windows while any draws a device's standing, under the account signed in, and told only on the app state (`DEVICE_PRESENCE_CHANGED`).
-    [GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW]: () => Effect.as(presenceHold.follow, {}),
-    [GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW]: () => Effect.as(presenceHold.unfollow, {}),
-    // Note that the beats are asked again only where a window holds them, as a window coming forward asks them.
-    [GATEWAY_METHOD.HOSTS_PRESENCE_REFRESH]: () =>
-      Effect.gen(function* () {
-        yield* presence.wake(() => true);
-        return {};
-      }),
-  };
-}
-
 export function composeAccountAsks(
   dependencies: AccountAsksDependencies,
 ): Effect.Effect<AccountAsksComposer, never, Scope.Scope | HttpClient.HttpClient> {
@@ -439,7 +428,7 @@ export function composeAccountAsks(
     const { memories, hosts, hostsHold } = follows;
     const { presence, presenceHold, keys, keysHold, token, tokenHold } = fetched;
     return {
-      methods: methodsOf(fetched),
+      methods: {},
       acts: actsOf(dependencies, asked, follows, fetched),
       lifetime: Effect.void,
       // Note that the beats, the hosts, the keys, and the token are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.

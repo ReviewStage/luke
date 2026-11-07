@@ -22,83 +22,6 @@ export const GATEWAY_METHOD = {
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
   /**
-   * The models a coding agent may run on as the account is offered them, and
-   * its devices, held for a window from now until it is let go, asked of the
-   * service at once, again as a window comes forward, as the account's
-   * provider keys move, and a while after
-   * among the reads let go lately. What it holds is heard as
-   * `MODELS_CHANGED` events, on the app state every window draws, never
-   * answered.
-   */
-  AGENTS_MODELS_FOLLOW: "agents.modelsFollow",
-  /** The models let go by the window that held them. */
-  AGENTS_MODELS_UNFOLLOW: "agents.modelsUnfollow",
-  /** The held models asked again at once, as Try again asks; answered once the ask has landed. */
-  AGENTS_MODELS_RETRY: "agents.modelsRetry",
-  /**
-   * When the account's own devices last beat, held for a window from now
-   * until it is let go, asked of the service at once and again every
-   * `MAC_PRESENCE.POLL_MS` while held, and a while after among the reads let
-   * go lately. What it holds is heard as `DEVICE_PRESENCE_CHANGED` events, on
-   * the app state every window draws, never answered.
-   */
-  HOSTS_PRESENCE_FOLLOW: "hosts.presenceFollow",
-  /** The account's devices' beats let go by the window that held them. */
-  HOSTS_PRESENCE_UNFOLLOW: "hosts.presenceUnfollow",
-  /** The account's devices' beats asked again now, where a window holds them: the window came back online, or the Mac woke. */
-  HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
-  /**
-   * One agent's transcript, or one of its workers', held followed for a
-   * window from now until it is let go, over the service's held poll, and
-   * kept a while after among those let go lately, following no longer. What
-   * it holds is heard as `TRANSCRIPTS_CHANGED` events, on the app state
-   * every window draws, never answered.
-   */
-  AGENTS_TRANSCRIPT_FOLLOW: "agents.transcriptFollow",
-  /** One agent's or worker's transcript let go by the window that held it: it stops following, and its messages stay among those let go lately until later ones push them out. */
-  AGENTS_TRANSCRIPT_UNFOLLOW: "agents.transcriptUnfollow",
-  /** One held transcript read again at once, as Try again asks; never answered. */
-  AGENTS_TRANSCRIPT_RETRY: "agents.transcriptRetry",
-  /**
-   * One part of one agent's pull request as its Pull request tab draws it,
-   * by the part, the agent, and the pull request's number, or no number for
-   * the agent's own: the pull request itself, its checks, its conversation,
-   * or what the agent published. Held for a window from now until it is let
-   * go, asked of the service at once, again as a window comes forward, and
-   * again with the tab's other parts as the agent ends or its listed pull
-   * request moves, and a while after among the reads let go lately. What it
-   * holds is heard as `PULL_REQUEST_PARTS_CHANGED` events, on the app state
-   * every window draws, never answered.
-   */
-  AGENTS_PULL_REQUEST_PART_FOLLOW: "agents.pullRequestPartFollow",
-  /** One pull request's part let go by the window that held it. */
-  AGENTS_PULL_REQUEST_PART_UNFOLLOW: "agents.pullRequestPartUnfollow",
-  /** One pull request's held part asked again at once, as Try again asks; answered once the ask has landed. */
-  AGENTS_PULL_REQUEST_PART_RETRY: "agents.pullRequestPartRetry",
-  /**
-   * Our own tools one agent is offered, held for a window from now until it
-   * is let go, asked of the service at once and again as a window comes
-   * forward, and a while after among the reads let go lately. What it holds
-   * is heard as `WORKSPACE_TOOLS_CHANGED` events, on the app state every
-   * window draws, never answered.
-   */
-  AGENTS_WORKSPACE_TOOLS_FOLLOW: "agents.workspaceToolsFollow",
-  /** One agent's own tools let go by the window that held them. */
-  AGENTS_WORKSPACE_TOOLS_UNFOLLOW: "agents.workspaceToolsUnfollow",
-  /** One agent's held tools asked again at once, as Try again asks; answered once the ask has landed. */
-  AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
-  /**
-   * One plan's inbox, or one agent's, held followed for a window from now
-   * until it is let go, over Neon Realtime, and a while after among the
-   * holders let go lately. What it holds is heard as `HOLDER_INBOXES_CHANGED`
-   * events, on the app state every window draws, never answered.
-   */
-  AGENTS_INBOX_FOLLOW: "agents.inboxFollow",
-  /** One plan's or agent's inbox let go by the window that held it: it stays among the holders let go lately until later ones push it out. */
-  AGENTS_INBOX_UNFOLLOW: "agents.inboxUnfollow",
-  /** One plan's or agent's held inbox read again at once, as Try again asks; never answered. */
-  AGENTS_INBOX_RETRY: "agents.inboxRetry",
-  /**
    * What waits on the developer across the account, followed from now until
    * it is let go or the account signs out: every open inbox item, heard as
    * `ACCOUNT_INBOX_CHANGED` events, never answered; following again starts
@@ -252,32 +175,20 @@ export const GATEWAY_EVENT = {
    * time any of them moves: `{ read, held }`.
    */
   LIVE_READ_CHANGED: "liveRead.changed",
-  /** Every agent's or worker's transcript the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  TRANSCRIPTS_CHANGED: "transcripts.changed",
-  /** Every plan's or agent's inbox the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
-  /** One of the Pull request tabs' held parts, every agent's pull request's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
-  PULL_REQUEST_PARTS_CHANGED: "pullRequestParts.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
   /** Every inbox item the account reaches, whole, as the host's read of them for the session stands, each time it moves. */
   INBOX_ITEMS_CHANGED: "inboxItems.changed",
   /** The account's preferences row, whole, as the host's read of it for the session stands with every write drawn over it, each time it moves. */
   ACCOUNT_PREFERENCES_CHANGED: "accountPreferences.changed",
-  /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
   /** Which machine This Mac is and the device its host's record names, under the account signed in, whole, as the host reads it at its start and every few seconds after, each time it moves. */
   THIS_MAC_HOST_CHANGED: "thisMacHost.changed",
-  /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
   /** The one agent whose cloud ports are forwarded to this Mac and how its forwarding stands, or none, each time it moves. */
   PORT_FORWARDS_CHANGED: "portForwards.changed",
   /** How each cloud agent's mirror on this Mac stands until its worktree does, by the agent, whole, each time one moves. */
   MIRRORS_CHANGED: "mirrors.changed",
   /** How many changes made offline the service refused as they were sent again, since the windows last cleared the count, each time it moves. */
   OFFLINE_REFUSED_CHANGED: "offlineRefused.changed",
-  /** The models the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  MODELS_CHANGED: "models.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
 } as const;

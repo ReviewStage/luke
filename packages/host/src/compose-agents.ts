@@ -25,21 +25,17 @@ import {
   type AgentRenameParams,
   type AgentServersParams,
   type AgentStartParams,
+  type AgentTranscriptKey,
   agentInboxAnswerParamsSchema,
   agentInboxCloseParamsSchema,
   agentInboxReadAllParamsSchema,
   agentInboxReadStateParamsSchema,
   agentInboxRemindParamsSchema,
-  agentInboxScopeSchema,
   agentMarkReadParamsSchema,
   agentPinParamsSchema,
-  agentPullRequestParamsSchema,
   agentRenameParamsSchema,
   agentStartParamsSchema,
-  agentTranscriptKeySchema,
   INBOX_SCOPE_KIND,
-  pullRequestPartParamsSchema,
-  TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
 import { AGENT_ARCHIVER, type AgentSummary, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { GATE_CLOSED_BY } from "@repo/features/failure-facts";
@@ -61,19 +57,11 @@ import {
 import { WRITE_UNTAKEN, writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import type { ModelsAnswer } from "@repo/features/models-wire";
-import { PRODUCT_NAME } from "@repo/features/product-name";
 import { PULL_REQUEST_CHAPTERS_READ } from "@repo/features/pull-request-chapters-live";
 import { markedAs } from "@repo/features/read-mark";
 import { commitShaSchema } from "@repo/features/task-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
-import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethodTable,
-  invalid,
-  readParams,
-} from "@repo/gateway";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD } from "@repo/gateway";
 import {
   type AnyWrite,
   anyWrite,
@@ -88,7 +76,6 @@ import {
   Duration,
   Effect,
   FiberHandle,
-  FiberMap,
   Option,
   RcMap,
   Schema,
@@ -115,25 +102,22 @@ import {
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
-  type AppHolderInboxes,
   type AppHostRead,
   type AppInboxItems,
-  type AppModels,
   type AppTranscript,
-  type AppTranscripts,
-  type AppWorkspaceTools,
   NO_KEYS_HELD,
   NO_TRANSCRIPTS,
   OWN_TRANSCRIPT,
   UNREAD,
 } from "./app-state.js";
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
-import type { AccountAsksAgentAct } from "./compose-account-asks.js";
+import type { AccountAsksAgentAct, AccountAsksAgentFollow } from "./compose-account-asks.js";
 import type { Composer } from "./composer.js";
 import {
   type AGENT_ACTS,
   AGENT_FOLLOWS,
   type AGENT_INBOX_ACTS,
+  AGENT_INBOX_FOLLOWS,
   type CHAPTERS_ACTS,
   CHAPTERS_FOLLOWS,
 } from "./contract/index.js";
@@ -170,6 +154,7 @@ import { heldAgentOrigins } from "./origin-follow.js";
 import {
   type PullRequestListing,
   type PullRequestParts,
+  type PullRequestPartsDependencies,
   pullRequestParts,
 } from "./pull-request-parts.js";
 import { untaken } from "./queued-writes.js";
@@ -210,17 +195,17 @@ const AGENT_QUEUED_WRITE = {
  * compose-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, the task's inbox, one item of it answered, and what waits across the account. The account's own asks are `compose-account-asks.ts`'s.
  *
  * Nothing is held here but the transcripts' subscriptions, the held
- * inboxes' (`scope-inbox-follow.ts`), told as `HOLDER_INBOXES_CHANGED`
- * events to the app state every window draws, and the reads the host
+ * inboxes' (`scope-inbox-follow.ts`), told on their live follow's slice
+ * (`liveTold`) to the app state every window draws, and the reads the host
  * fetches for the windows that hold them (`held-fetch.ts`): the models,
- * and an agent's own tools, each told the same way. The window holds the agents it draws and the cursor it reads
+ * a pull request's parts, and an agent's own tools, each told the same way. The window holds the agents it draws and the cursor it reads
  * from, asks when a task opens, when it starts or stops an agent, and while
  * an agent's tab shows its running transcript, and every ask is one call of
  * the service answered whole. An agent's or a worker's transcript is held
  * for the windows whose tab shows it and the few let go lately
  * (`heldSlice`), followed on the service's held poll of what its pages are
  * read from (`transcript-follow.ts`) only while a window holds it, and told
- * as `TRANSCRIPTS_CHANGED` events to the app state every window draws; a
+ * on its live follow's slice to the app state every window draws; a
  * sign-out lets every one go. What waits across the account is followed the same way, on the
  * account's own live read (`account-inbox-follow.ts`), heard as
  * `ACCOUNT_INBOX_CHANGED` events by main's notices rather than a window
@@ -318,10 +303,11 @@ export interface AgentsDependencies extends AccountGateDependencies {
   agentListed?: (agentId: string) => AgentSummary | undefined;
 }
 
-/** The acts this composer answers: the Inbox's, every agent act but This Mac's and the hosts', which their own concerns answer, and a pull request's chapters generated; and the live follows of an agent's origin and a pull request's chapters. */
+/** The acts this composer answers: the Inbox's, every agent act but This Mac's and the hosts', which their own concerns answer, and a pull request's chapters generated; and every agent's live follow but the hosts' and their beats', the Inbox's, and a pull request's chapters. */
 type AgentsActs = HostActTable<typeof AGENT_INBOX_ACTS> &
+  HostActTable<typeof AGENT_INBOX_FOLLOWS> &
   HostActTable<Omit<typeof AGENT_ACTS, "HOSTS_THIS_MAC_SET" | AccountAsksAgentAct>> &
-  HostActTable<Omit<typeof AGENT_FOLLOWS, "HOSTS_FOLLOW">> &
+  HostActTable<Omit<typeof AGENT_FOLLOWS, AccountAsksAgentFollow>> &
   HostActTable<typeof CHAPTERS_ACTS> &
   HostActTable<typeof CHAPTERS_FOLLOWS>;
 
@@ -379,6 +365,28 @@ const INBOX_QUEUED_WRITE = {
   REMIND: "agents.inboxSnooze",
   READ_ALL: "agents.inboxReadAll",
 } as const;
+
+/** The transcript a window holds, as the slice keys it. */
+function transcriptKeyOf({ agentId, callId }: AgentTranscriptKey): TranscriptKey {
+  return new TranscriptKey({ agentId, callId });
+}
+
+/** How each part of a Pull request tab is told: on its own slice, which its follow declares beside the pull request's. */
+function partsTold(emit: HostKernel["emit"]): PullRequestPartsDependencies["tell"] {
+  const follow = AGENT_FOLLOWS.AGENTS_PULL_REQUEST_PART_FOLLOW;
+  return {
+    [LIVE_READ.PULL_REQUEST]: liveTold(emit, follow),
+    [LIVE_READ.PULL_REQUEST_CHECKS]: liveTold(emit, follow, LIVE_READ.PULL_REQUEST_CHECKS),
+    [LIVE_READ.PULL_REQUEST_CONVERSATION]: liveTold(
+      emit,
+      follow,
+      LIVE_READ.PULL_REQUEST_CONVERSATION,
+    ),
+    [LIVE_READ.PULL_REQUEST_PUBLISHED]: liveTold(emit, follow, LIVE_READ.PULL_REQUEST_PUBLISHED),
+    [LIVE_READ.REVIEW_OPTIONS]: liveTold(emit, follow, LIVE_READ.REVIEW_OPTIONS),
+    [LIVE_READ.PULL_REQUEST_VIEWED]: liveTold(emit, follow, LIVE_READ.PULL_REQUEST_VIEWED),
+  };
+}
 
 /** Whether a commit names a read, by the rule a File tab's read at a commit is held to. */
 const isCommitSha = Schema.is(commitShaSchema);
@@ -445,12 +453,10 @@ export function composeAgents(
               ),
           ),
         ),
-      tell: (held: AppTranscripts) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.TRANSCRIPTS_CHANGED, carried(held)),
+      tell: liveTold(dependencies.kernel.emit, AGENT_FOLLOWS.AGENTS_TRANSCRIPT),
       pause: true,
       budget: { reads: HELD_TRANSCRIPTS, bytes: HELD_BYTES, bytesEach: HELD_BYTES_EACH },
     });
-    const transcriptHolds = yield* FiberMap.make<TranscriptKey>();
     const accountWide = accountWideReads();
     const inboxes = yield* scopeInboxes({
       seal: (scope, poll, userId, after) =>
@@ -489,8 +495,7 @@ export function composeAgents(
       Effect.sync(() => dependencies.kernel.emit(GATEWAY_EVENT.INBOX_ITEMS_CHANGED, carried(read)));
     const holders = yield* holderInboxes(inboxes, {
       gate,
-      tell: (held: AppHolderInboxes) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.HOLDER_INBOXES_CHANGED, carried(held)),
+      tell: liveTold(dependencies.kernel.emit, AGENT_INBOX_FOLLOWS.AGENTS_INBOX_FOLLOW),
     });
     const chapters = yield* heldChapters({
       seal: (key, poll, userId, after) =>
@@ -548,7 +553,6 @@ export function composeAgents(
     // Note that the row is held for the session rather than by a window, so the read stands until the session's reads close.
     const holdPreferences = (userId: string) =>
       Effect.scoped(Effect.andThen(preferences.hold(userId), Effect.never));
-    const inboxHolds = yield* FiberMap.make<InboxScopeKey>();
     const accountFollow = yield* FiberHandle.make();
     const fetched = yield* fetchedReads(dependencies, asked);
     const parts = yield* pullRequestParts({
@@ -563,14 +567,13 @@ export function composeAgents(
         viewed: (key) => asked(client.pullRequestViewed(key.agentId, key.number)),
       },
       listings: dependencies.pullRequestListings ?? Effect.succeed(Stream.empty),
-      tell: (held) =>
-        dependencies.kernel.emit(GATEWAY_EVENT.PULL_REQUEST_PARTS_CHANGED, carried(held)),
+      tell: partsTold(dependencies.kernel.emit),
     });
     return composed(
       dependencies,
       http,
-      { transcripts, slice: transcriptSlice, holds: transcriptHolds, queues },
-      { inboxes, holders, holds: inboxHolds, accountWide },
+      { transcripts, slice: transcriptSlice, queues },
+      { inboxes, holders, accountWide },
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems, preferences, holdPreferences },
       { chapters, origins },
@@ -580,20 +583,18 @@ export function composeAgents(
   });
 }
 
-/** The transcripts' subscriptions the windows share, the held lifetime over the transcripts the windows hold, and the windows' holds, one fiber per transcript held. */
+/** The transcripts' subscriptions the windows share, and the held lifetime over the transcripts the windows hold. */
 interface Transcripts {
   readonly transcripts: TranscriptFollows;
   readonly slice: HeldSlice<TranscriptKey> & HeldRows<TranscriptKey, AppTranscript>;
-  readonly holds: FiberMap.FiberMap<TranscriptKey>;
   /** Each agent's queue in the pool, fed from its own transcript, and the change of one. */
   readonly queues: AgentQueues;
 }
 
-/** The scopes' subscriptions the windows share, the held lifetime over them, and the windows' holds, one fiber per scope held. */
+/** The scopes' subscriptions the windows share, and the held lifetime over them. */
 interface ScopeFollows {
   readonly inboxes: ScopeInboxes;
   readonly holders: HeldSlice<InboxScopeKey>;
-  readonly holds: FiberMap.FiberMap<InboxScopeKey>;
   /** The account's own reads, which a thread started, drawing nothing, waits on. */
   readonly accountWide: AccountWideReads;
 }
@@ -625,8 +626,6 @@ interface LiveFollows {
 interface FetchedReads {
   /** Our own tools each agent is offered, by the agent. */
   readonly tools: HeldFetch<string, WorkspaceToolsAnswer>;
-  /** The windows' hold on each agent's tools, one fiber standing until let go. */
-  readonly toolsHolds: FiberMap.FiberMap<string>;
   /** The models a coding agent may run on as the account is offered them, and its devices, by the account. */
   readonly models: HeldFetch<string, ModelsAnswer>;
   /** The windows' hold on the models, under the account signed in. */
@@ -654,8 +653,7 @@ function fetchedReads(
         Effect.map(asked(client.workspaceTools(agentId)), (answer) =>
           "failure" in answer ? Option.none() : Option.some(answer),
         ),
-      tell: (held: AppWorkspaceTools) =>
-        kernel.emit(GATEWAY_EVENT.WORKSPACE_TOOLS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, AGENT_FOLLOWS.AGENTS_WORKSPACE_TOOLS_FOLLOW),
     });
     const models = yield* heldFetch<typeof LIVE_READ.MODELS, string>({
       empty: NO_KEYS_HELD,
@@ -668,11 +666,10 @@ function fetchedReads(
               "failure" in answer ? Option.none() : Option.some(answer),
             )
           : Effect.succeed(Option.none()),
-      tell: (held: AppModels) => kernel.emit(GATEWAY_EVENT.MODELS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, AGENT_FOLLOWS.AGENTS_MODELS_FOLLOW),
     });
     return {
       tools,
-      toolsHolds: yield* FiberMap.make<string>(),
       models,
       modelsHold: yield* accountHeld(models, accountId),
     };
@@ -683,15 +680,15 @@ function fetchedReads(
 function composed(
   dependencies: AgentsDependencies,
   http: HttpClient.HttpClient,
-  { transcripts, slice: transcriptSlice, holds: transcriptHolds, queues }: Transcripts,
-  { inboxes, holders, holds: inboxHolds, accountWide }: ScopeFollows,
+  { transcripts, slice: transcriptSlice, queues }: Transcripts,
+  { inboxes, holders, accountWide }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
   /** The session's account reads, every item the account reaches and its preferences among them. */
   { reads: sessionReads, followItems, preferences, holdPreferences }: SessionReads,
   /** The pull requests' chapters and the agents' origins the windows hold. */
   { chapters, origins }: LiveFollows,
-  { tools, toolsHolds, models, modelsHold }: FetchedReads,
+  { tools, models, modelsHold }: FetchedReads,
   /** The parts of the pull requests the windows' Pull request tabs hold. */
   parts: PullRequestParts,
 ): AgentsComposer {
@@ -1163,18 +1160,6 @@ function composed(
   );
 
   /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
-  const agentTranscriptOf = (
-    params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
-  ) =>
-    Effect.gen(function* () {
-      const sentence = "following a transcript names an agent, and a worker's call where it is one";
-      const transcript = yield* readParams(agentTranscriptKeySchema, params, sentence);
-      if (transcript.kind !== TRANSCRIPT_KIND.AGENT) return yield* invalid(sentence);
-      return {
-        transcript,
-        key: new TranscriptKey({ agentId: transcript.agentId, callId: transcript.callId }),
-      };
-    });
 
   /** The Inbox's acts, the agents' (`AGENT_ACTS`), and a pull request's chapters generated (`CHAPTERS_ACTS`), answered as the panel's port asks them. */
   const acts: AgentsActs = {
@@ -1306,6 +1291,32 @@ function composed(
       hold: ({ agentId, number }) => chapters.hold(new ChaptersKey({ agentId, number })),
       retry: ({ agentId, number }) => chapters.retry(new ChaptersKey({ agentId, number })),
     },
+    // The models are held for the windows while any draws a model or a device, under the account signed in.
+    AGENTS_MODELS_FOLLOW: {
+      hold: () => modelsHold.hold,
+      retry: () =>
+        Effect.suspend(() => {
+          const userId = dependencies.accountId();
+          return userId === undefined ? Effect.void : models.retry(userId);
+        }),
+    },
+    // A transcript is held for a window while its tab shows it.
+    AGENTS_TRANSCRIPT: {
+      hold: (transcript) => transcriptSlice.hold(transcriptKeyOf(transcript)),
+      retry: (transcript) => transcriptSlice.retry(transcriptKeyOf(transcript)),
+    },
+    // A Pull request tab's parts are held for the windows while the tab shows.
+    AGENTS_PULL_REQUEST_PART_FOLLOW: { hold: parts.hold, retry: parts.retry },
+    // An agent's own tools are held for the windows while its servers popover shows.
+    AGENTS_WORKSPACE_TOOLS_FOLLOW: {
+      hold: ({ agentId }) => tools.hold(agentId),
+      retry: ({ agentId }) => tools.retry(agentId),
+    },
+    // A task's or an agent's inbox is held for the windows while the Inbox shows it.
+    AGENTS_INBOX_FOLLOW: {
+      hold: (scope) => holders.hold(new InboxScopeKey({ kind: scope.kind, id: scope.id })),
+      retry: (scope) => holders.retry(new InboxScopeKey({ kind: scope.kind, id: scope.id })),
+    },
     // The session's inbox items, followed again at once, as Try again asks.
     AGENTS_INBOX_ITEMS_RETRY: () => sessionReads.reopen(LIVE_READ.INBOX_ITEMS, followItems),
     // The account's preferences, read again at once for the account signed in, as Try again asks.
@@ -1317,148 +1328,7 @@ function composed(
   };
 
   const methods: HostMethodTable = {
-    // The models are held for the windows while any draws a model or a device, under the account signed in, and told only on the app state (`MODELS_CHANGED`).
-    [GATEWAY_METHOD.AGENTS_MODELS_FOLLOW]: () => Effect.as(modelsHold.follow, {}),
-    [GATEWAY_METHOD.AGENTS_MODELS_UNFOLLOW]: () => Effect.as(modelsHold.unfollow, {}),
-    [GATEWAY_METHOD.AGENTS_MODELS_RETRY]: () =>
-      Effect.suspend(() => {
-        const userId = dependencies.accountId();
-        return Effect.as(userId === undefined ? Effect.void : models.retry(userId), {});
-      }),
-    // A transcript is held for a window while its tab shows it, and told only on the app state (`TRANSCRIPTS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { key } = yield* agentTranscriptOf(params);
-        yield* FiberMap.run(
-          transcriptHolds,
-          key,
-          Effect.scoped(Effect.andThen(transcriptSlice.hold(key), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { key } = yield* agentTranscriptOf(params);
-        yield* FiberMap.remove(transcriptHolds, key);
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_TRANSCRIPT_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const { key } = yield* agentTranscriptOf(params);
-        yield* transcriptSlice.retry(key);
-        return {};
-      }),
-    // A Pull request tab's parts are held for the windows while the tab shows, and told only on the app state (`PULL_REQUEST_PARTS_CHANGED`). Note that the windows' hold on each is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_FOLLOW]: (params) =>
-      Effect.as(
-        Effect.flatMap(
-          readParams(
-            pullRequestPartParamsSchema,
-            params,
-            "following a pull request's part names the part and one agent",
-          ),
-          parts.follow,
-        ),
-        {},
-      ),
-    [GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_UNFOLLOW]: (params) =>
-      Effect.as(
-        Effect.flatMap(
-          readParams(
-            pullRequestPartParamsSchema,
-            params,
-            "letting a pull request's part go names the part and one agent",
-          ),
-          parts.unfollow,
-        ),
-        {},
-      ),
-    [GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_RETRY]: (params) =>
-      Effect.as(
-        Effect.flatMap(
-          readParams(
-            pullRequestPartParamsSchema,
-            params,
-            "reading a pull request's part again names the part and one agent",
-          ),
-          parts.retry,
-        ),
-        {},
-      ),
-    // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPullRequestParamsSchema,
-          params,
-          `following an agent's ${PRODUCT_NAME} tools names one agent`,
-        );
-        yield* FiberMap.run(
-          toolsHolds,
-          agentId,
-          Effect.scoped(Effect.andThen(tools.hold(agentId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPullRequestParamsSchema,
-          params,
-          `letting an agent's ${PRODUCT_NAME} tools go names one agent`,
-        );
-        yield* FiberMap.remove(toolsHolds, agentId);
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPullRequestParamsSchema,
-          params,
-          `reading an agent's ${PRODUCT_NAME} tools again names one agent`,
-        );
-        yield* tools.retry(agentId);
-        return {};
-      }),
-    // Note that the windows' hold on a scope is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.AGENTS_INBOX_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const scope = yield* readParams(
-          agentInboxScopeSchema,
-          params,
-          "following an inbox names a plan or an agent",
-        );
-        const key = new InboxScopeKey(scope);
-        yield* FiberMap.run(
-          inboxHolds,
-          key,
-          Effect.scoped(Effect.andThen(holders.hold(key), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const scope = yield* readParams(
-          agentInboxScopeSchema,
-          params,
-          "letting an inbox go names a plan or an agent",
-        );
-        yield* FiberMap.remove(inboxHolds, new InboxScopeKey(scope));
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_INBOX_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const scope = yield* readParams(
-          agentInboxScopeSchema,
-          params,
-          "reading an inbox again names a plan or an agent",
-        );
-        yield* holders.retry(new InboxScopeKey(scope));
-        return {};
-      }),
+    // What waits across the account is followed for main's notices, never a window, so it is no live follow: told on its own event, and let go as the notices ask.
     [GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW]: () =>
       Effect.gen(function* () {
         const tell = (answer: AgentAccountInboxAnswerView) =>

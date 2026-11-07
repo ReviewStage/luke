@@ -142,19 +142,30 @@ function subject(failing: Set<PullRequestPart> = new Set()) {
         })),
       },
       listings: Effect.map(PubSub.subscribe(drawings), Stream.fromSubscription),
-      tell: (held) => void told.push(held),
+      tell: {
+        [LIVE_READ.PULL_REQUEST]: (held) => void told.push({ [LIVE_READ.PULL_REQUEST]: held }),
+        [LIVE_READ.PULL_REQUEST_CHECKS]: (held) =>
+          void told.push({ [LIVE_READ.PULL_REQUEST_CHECKS]: held }),
+        [LIVE_READ.PULL_REQUEST_CONVERSATION]: (held) =>
+          void told.push({ [LIVE_READ.PULL_REQUEST_CONVERSATION]: held }),
+        [LIVE_READ.PULL_REQUEST_PUBLISHED]: (held) =>
+          void told.push({ [LIVE_READ.PULL_REQUEST_PUBLISHED]: held }),
+        [LIVE_READ.REVIEW_OPTIONS]: (held) => void told.push({ [LIVE_READ.REVIEW_OPTIONS]: held }),
+        [LIVE_READ.PULL_REQUEST_VIEWED]: (held) =>
+          void told.push({ [LIVE_READ.PULL_REQUEST_VIEWED]: held }),
+      },
     });
     return {
       parts,
       asked,
       told,
       draw: (drawn: PullRequestListing) => Effect.andThen(PubSub.publish(drawings, drawn), settled),
-      /** Holds every part of the agent's own pull request, and of the reviewer's that its tab names by number. */
+      /** Holds every part of the agent's own pull request, and of the reviewer's that its tab names by number, for the caller's scope. */
       holdBoth: Effect.andThen(
         Effect.forEach(PARTS, (part) =>
           Effect.andThen(
-            parts.follow({ part, agentId: AGENT }),
-            parts.follow({ part, agentId: AGENT, number: 7 }),
+            parts.hold({ part, agentId: AGENT }),
+            parts.hold({ part, agentId: AGENT, number: 7 }),
           ),
         ),
         settled,
@@ -212,7 +223,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { parts, asked, draw } = yield* subject();
-      yield* Effect.forEach(MOVING, (part) => parts.follow({ part, agentId: AGENT }));
+      yield* Effect.forEach(MOVING, (part) => parts.hold({ part, agentId: AGENT }));
       const listed = listing();
       yield* draw({
         ...listed,
@@ -235,7 +246,7 @@ it.effect(
       const viewedHeld = () => told.findLast((held) => LIVE_READ.PULL_REQUEST_VIEWED in held);
       const key = { part: PULL_REQUEST_PART.VIEWED, agentId: AGENT } as const;
 
-      yield* parts.follow(key);
+      yield* parts.hold(key);
       yield* settled;
       failing.add(PULL_REQUEST_PART.VIEWED);
       yield* parts.retry(key);
@@ -257,7 +268,7 @@ it.effect(
       const checksHeld = () => told.findLast((held) => LIVE_READ.PULL_REQUEST_CHECKS in held);
       const key = { part: PULL_REQUEST_PART.CHECKS, agentId: AGENT } as const;
 
-      yield* parts.follow(key);
+      yield* parts.hold(key);
       yield* settled;
       assert.deepEqual(checksHeld(), {
         [LIVE_READ.PULL_REQUEST_CHECKS]: {

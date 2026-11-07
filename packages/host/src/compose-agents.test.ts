@@ -46,6 +46,7 @@ import {
   CHAPTERS,
   FOLLOWED,
   GATE_CLOSED_SIGNED_OUT,
+  holding,
   ITEM,
   type ITEMS_PARTS,
   LIVE_ANSWERED,
@@ -487,7 +488,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const {
-        call,
+        acts,
         asked,
         held,
         sealTranscript,
@@ -504,7 +505,7 @@ it.effect(
         wakeIn: 3_000,
       };
       script(between);
-      assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED), {});
+      const letGo = yield* holding(acts.AGENTS_TRANSCRIPT.hold(FOLLOWED));
       yield* settled;
       assert.deepEqual(held(), [
         {
@@ -551,7 +552,7 @@ it.effect(
       assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 1);
       assert.ok(!asked.includes(`messages-now:${AGENT_ID}:${AGENT_CURSOR_START}`));
 
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
+      yield* letGo;
       const laidBefore = held().length;
       const askedBefore = asked.length;
       transcriptRows(live, 4, 3);
@@ -566,7 +567,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const {
-        call,
+        acts,
         asked,
         held,
         sealTranscript,
@@ -577,7 +578,7 @@ it.effect(
       sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("1:0", "Reading the invites."));
       script(pageNow("1:0", { holds: true }));
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       transcriptRows(live, 1);
       yield* settled;
@@ -618,7 +619,7 @@ it.effect(
   "a line of the developer's that lands awaiting its turn after a stopped turn is laid with the agent at work, never under the stopped turn's word",
   () =>
     Effect.gen(function* () {
-      const { call, held, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
+      const { acts, held, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("1:0", "Reading the invites.", "40"));
       script(
@@ -628,7 +629,7 @@ it.effect(
           status: AGENT_STATUS.CANCELED,
         }),
       );
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       transcriptRows(live, 1);
       yield* nextPoll;
@@ -652,7 +653,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const {
-        call,
+        acts,
         asked,
         held,
         sealTranscript,
@@ -663,7 +664,7 @@ it.effect(
       sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("1:0", "Reading the invites.", "40"));
       script(pageNow("1:0", { holds: false, text: "Reading the invites." }));
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       transcriptRows(live, 1);
       yield* settled;
@@ -719,7 +720,7 @@ function queueFollowed() {
       queue: queueOf("Run the tests", 1),
     });
     harness.pageNow({ ...pageNow("1:0", { holds: false }), queue: queueOf("Run the tests", 1) });
-    yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+    yield* harness.acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
     yield* settled;
     transcriptRows(harness.live, 1);
     yield* settled;
@@ -782,7 +783,7 @@ it.effect(
 function laidBesideRead(pageCursor: string, pageText: string) {
   return Effect.gen(function* () {
     const {
-      call,
+      acts,
       held,
       sealTranscript,
       pageNow: script,
@@ -793,7 +794,7 @@ function laidBesideRead(pageCursor: string, pageText: string) {
     sealTranscript(LIVE_ANSWERED);
     pageNewest(newestPage("1:0", "Reading the invites."));
     script(pageNow("1:0", { holds: true }));
-    yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+    yield* acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
     yield* settled;
     transcriptRows(live, 1);
     yield* settled;
@@ -868,7 +869,7 @@ it.effect(
   "a full page is followed by the next at once, and the short one after it is caught up",
   () =>
     Effect.gen(function* () {
-      const { call, asked, held, sealTranscript, pageNow: script, live } = yield* subject();
+      const { acts, asked, held, sealTranscript, pageNow: script, live } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       const full: TranscriptNowAnswer = {
         ...pageNow("2:0", { holds: false }),
@@ -880,7 +881,7 @@ it.effect(
       };
       const rest = pageNow("3:0", { holds: true, text: "Done." });
       script(full, rest);
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       transcriptRows(live, 2);
       yield* settled;
@@ -899,10 +900,10 @@ it.effect(
     Effect.gen(function* () {
       const reach = yield* SubscriptionRef.make({ reachable: false, answeredAt: 0 });
       yield* Effect.gen(function* () {
-        const { call, asked, held, sealTranscript, live } = yield* subject();
+        const { acts, asked, held, sealTranscript, live } = yield* subject();
         const seals = () => asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
         sealTranscript(OFFLINE);
-        yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+        yield* acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
         yield* settled;
         yield* TestClock.adjust("2 minutes");
         yield* settled;
@@ -934,8 +935,8 @@ it.effect(
   "a live read the service does not answer leaves the newest page laid, is asked again a bounded number of times, then lays that the transcript could not be read beside it; Try again reads on from what is held",
   () =>
     Effect.gen(function* () {
-      const { call, asked, held, sealTranscript } = yield* subject();
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      const { acts, asked, held, sealTranscript } = yield* subject();
+      yield* acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       assert.deepEqual(ids(held().at(-1)), ["m-1"]);
       assert.equal(held().at(-1)?.cursor, "1:0");
@@ -954,7 +955,7 @@ it.effect(
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals);
 
       sealTranscript(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_RETRY, FOLLOWED);
+      yield* acts.AGENTS_TRANSCRIPT.retry(FOLLOWED);
       yield* settled;
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals + 1);
       assert.equal(held().at(-1)?.failure, undefined, "reading again lets the failure go");
@@ -967,10 +968,10 @@ it.effect(
   "a newest page the service keeps not answering is asked for a bounded number of times, then the follow ends on the failure laid",
   () =>
     Effect.gen(function* () {
-      const { call, asked, held, sealTranscript, pageNewest } = yield* subject();
+      const { acts, asked, held, sealTranscript, pageNewest } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       yield* TestClock.adjust("1 minute");
       yield* settled;
@@ -994,7 +995,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const {
-        call,
+        acts,
         asked,
         held,
         sealTranscript,
@@ -1008,7 +1009,7 @@ it.effect(
         messages: [said(1, "Reading the invites."), said(2, "Writing the expiry.")],
       });
       script(pageNow("2:0", { holds: true }));
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       transcriptRows(live, 2);
       yield* settled;
@@ -1035,10 +1036,10 @@ it.effect(
   "an older page read below the place the window names is laid before the messages held and answers that it landed; one asked below a place they no longer begin at, as once a newer page took their place, is dropped, and a worker's is read under its call",
   () =>
     Effect.gen(function* () {
-      const { call, acts, asked, held, sealTranscript, pageNewest } = yield* subject();
+      const { acts, asked, held, sealTranscript, pageNewest } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("1:0", "Reading the invites.", "40"));
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       assert.equal(held().at(-1)?.before, "40");
 
@@ -1081,7 +1082,7 @@ it.effect(
       const worker = { ...FOLLOWED, callId: "call-7" };
       const refused = yield* subject();
       refused.sealTranscript({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
-      yield* refused.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, worker);
+      yield* refused.acts.AGENTS_TRANSCRIPT.hold(worker);
       yield* settled;
       yield* TestClock.adjust("5 seconds");
       yield* settled;
@@ -1090,7 +1091,7 @@ it.effect(
       ]);
 
       const signedOut = yield* subject({ signedIn: false });
-      yield* signedOut.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* signedOut.acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       assert.deepEqual(signedOut.held(), []);
       assert.deepEqual(signedOut.asked, []);
@@ -1098,7 +1099,7 @@ it.effect(
       const followed = yield* subject();
       followed.sealTranscript(LIVE_ANSWERED);
       followed.pageNow(pageNow("1:0", { holds: true }));
-      yield* followed.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* followed.acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       assert.equal(followed.live.transcript.held(), 1, "its poll is held while nothing moves");
       yield* followed.reset;
@@ -1117,11 +1118,11 @@ function followedOnce(
     harness.sealTranscript(LIVE_ANSWERED);
     harness.pageNewest(newestPage("1:0", "Reading the invites.", "40"));
     harness.pageNow(pageNow("2:0", { holds: false, text: "Writing the expiry." }));
-    yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, transcript);
+    const letGo = yield* holding(harness.acts.AGENTS_TRANSCRIPT.hold(transcript));
     yield* settled;
     transcriptRows(harness.live, 2);
     yield* settled;
-    yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, transcript);
+    yield* letGo;
   });
 }
 
@@ -1144,7 +1145,7 @@ it.effect(
 
       const laidBefore = transcripts().length;
       const askedBefore = asked.length;
-      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* harness.acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       const laid = transcripts().slice(laidBefore);
       assert.equal(laid[0]?.asked, askedBefore, "what was held stands before any read");
@@ -1176,7 +1177,7 @@ it.effect(
       transcriptRows(live, 2);
       yield* settled;
 
-      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* harness.acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       assert.equal(held().at(-1)?.cursor, "2:1");
       assert.deepEqual(held().at(-1)?.messages, [
@@ -1199,7 +1200,7 @@ it.effect(
 
       const laidBefore = held().length;
       const askedBefore = asked.length;
-      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* harness.acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       const laid = held().slice(laidBefore);
       assert.ok(
@@ -1231,7 +1232,7 @@ it.effect(
         const { held } = harness;
         harness.pageNow({ failure: AGENT_CALL_FAILURE.UNANSWERED });
         harness.pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-        yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+        yield* harness.acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
         yield* settled;
         yield* TestClock.adjust("40 seconds");
         yield* settled;
@@ -1258,7 +1259,7 @@ it.effect(
       yield* followedOnce(signedOut);
       yield* signedOut.reset;
       assert.equal(signedOut.held().at(-1), undefined);
-      yield* signedOut.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* signedOut.acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       assert.equal(newestReads(signedOut.asked), 2);
 
@@ -1266,13 +1267,13 @@ it.effect(
       yield* followedOnce(archived);
       yield* archived.acts.AGENTS_ARCHIVE({ agentId: AGENT_ID, archived: true });
       assert.equal(archived.held().at(-1), undefined);
-      yield* archived.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* archived.acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       assert.equal(newestReads(archived.asked), 2);
 
       const shown = yield* subject();
       yield* followedOnce(shown);
-      yield* shown.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* shown.acts.AGENTS_TRANSCRIPT.hold(FOLLOWED);
       yield* settled;
       yield* shown.acts.AGENTS_ARCHIVE({ agentId: AGENT_ID, archived: true });
       assert.deepEqual(ids(shown.held().at(-1)), ["m-1:0", "m-2:0"]);
@@ -1323,7 +1324,7 @@ it.effect(
       const harness = yield* subject();
       // One a window holds throughout, its tab shown.
       const shown = { kind: TRANSCRIPT_KIND.AGENT, agentId: "agent-shown" };
-      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, shown);
+      yield* harness.acts.AGENTS_TRANSCRIPT.hold(shown);
       yield* settled;
       const transcripts = Array.from({ length: HELD_TRANSCRIPTS + 1 }, (_, index) => ({
         kind: TRANSCRIPT_KIND.AGENT,
@@ -1339,10 +1340,10 @@ it.effect(
       assert.notEqual(harness.held(last).at(-1), undefined);
       assert.notEqual(harness.held(shown).at(-1), undefined, "one a window holds stays drawn");
 
-      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, last);
+      yield* harness.acts.AGENTS_TRANSCRIPT.hold(last);
       yield* settled;
       assert.equal(newestReads(last.agentId), 1);
-      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, first);
+      yield* harness.acts.AGENTS_TRANSCRIPT.hold(first);
       yield* settled;
       assert.equal(newestReads(first.agentId), 2);
     }),
@@ -1386,9 +1387,9 @@ it.effect(
   "a held plan's inbox is told on the held inboxes from its live read once its rows land, again each time they move and never when an answer moved nothing; let go, it stays told among the holders let go lately",
   () =>
     Effect.gen(function* () {
-      const { call, asked, sealScope, live, told } = yield* subject();
+      const { acts, asked, sealScope, live, told } = yield* subject();
       sealScope(LIVE_ANSWERED);
-      assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE), {});
+      const letGo = yield* holding(acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE));
       yield* settled;
       assert.deepEqual(told(), []);
 
@@ -1419,7 +1420,7 @@ it.effect(
       assert.deepEqual(asked, [`description-inbox-live:${TASK_ID}`]);
 
       // Let go, the plan stays held among those let go lately, so a change still tells it.
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
+      yield* letGo;
       yield* settled;
       live.scope.set({ items: [ITEM_ROW] });
       yield* nextPoll;
@@ -1432,31 +1433,31 @@ it.effect(
   "a holder let go and held again draws from where its read stands, nothing read from cold, until later holders let go push it out, when it is read anew",
   () =>
     Effect.gen(function* () {
-      const { call, asked, sealScope, live, told } = yield* subject();
+      const { acts, asked, sealScope, live, told } = yield* subject();
       sealScope(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      const letGo = yield* holding(acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE));
       yield* settled;
       live.scope.set({ messages: [], files: [], items: [ITEM_ROW] });
       yield* toldTimes(told, 1);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
+      yield* letGo;
       yield* settled;
 
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      const letGoAgain = yield* holding(acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE));
       yield* settled;
       assert.deepEqual(asked, [`description-inbox-live:${TASK_ID}`], "nothing is read from cold");
       assert.deepEqual(heldOf(told, PLAN_SCOPE), { rows: [LIVE_ITEM] });
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
+      yield* letGoAgain;
       yield* settled;
 
       // Eight other holders held and let go push the plan out, and its read is let go with its rows.
       const others = Array.from({ length: 8 }, (_, at) => ({
-        kind: "agent",
+        kind: INBOX_SCOPE_KIND.AGENT,
         id: `0000000${at}-1111-4a6b-9c33-0d1e2f3a4b5c`,
       }));
       for (const scope of others) {
-        yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, scope);
+        const letGoOther = yield* holding(acts.AGENTS_INBOX_FOLLOW.hold(scope));
         yield* settled;
-        yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, scope);
+        yield* letGoOther;
         yield* settled;
       }
       assert.equal(heldOf(told, PLAN_SCOPE), undefined, "the plan is told no more");
@@ -1466,7 +1467,7 @@ it.effect(
         "letting it go reads nothing",
       );
 
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* settled;
       assert.equal(
         asked.filter((read) => read === `description-inbox-live:${TASK_ID}`).length,
@@ -1480,9 +1481,9 @@ it.effect(
   "a message landing after its item's row is told as soon as it lands, its item's thread whole",
   () =>
     Effect.gen(function* () {
-      const { call, sealScope, live, told } = yield* subject();
+      const { acts, sealScope, live, told } = yield* subject();
       sealScope(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* settled;
       live.scope.set({ messages: [], files: [], items: [ITEM_ROW] });
       yield* toldTimes(told, 1);
@@ -1511,17 +1512,17 @@ it.effect(
     Effect.gen(function* () {
       const refused = yield* subject();
       refused.sealScope({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
-      yield* refused.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
+      yield* refused.acts.AGENTS_INBOX_FOLLOW.hold(AGENT_SCOPE);
       yield* settled;
       assert.deepEqual(heldOf(refused.told, AGENT_SCOPE), { failed: true });
 
       const unsealed = yield* subject();
-      yield* unsealed.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
+      yield* unsealed.acts.AGENTS_INBOX_FOLLOW.hold(AGENT_SCOPE);
       yield* settled;
       assert.deepEqual(heldOf(unsealed.told, AGENT_SCOPE), { failed: true });
       assert.deepEqual(unsealed.asked, [`agent-inbox-live:${AGENT_ID}`]);
       unsealed.sealScope(LIVE_ANSWERED);
-      yield* unsealed.call(GATEWAY_METHOD.AGENTS_INBOX_RETRY, AGENT_SCOPE);
+      yield* unsealed.acts.AGENTS_INBOX_FOLLOW.retry(AGENT_SCOPE);
       yield* settled;
       assert.deepEqual(heldOf(unsealed.told, AGENT_SCOPE), {});
       assert.deepEqual(unsealed.asked, [
@@ -1530,7 +1531,7 @@ it.effect(
       ]);
 
       const signedOut = yield* subject({ signedIn: false });
-      yield* signedOut.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* signedOut.acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* settled;
       assert.deepEqual(signedOut.told(), []);
       assert.deepEqual(signedOut.asked, []);
@@ -1577,9 +1578,9 @@ it.effect(
   "a sign-out lets every held inbox go and tells none held, and the gate opening again reads what the windows still hold",
   () =>
     Effect.gen(function* () {
-      const { call, asked, sealScope, live, told, reset, open } = yield* subject();
+      const { acts, asked, sealScope, live, told, reset, open } = yield* subject();
       sealScope(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* settled;
       assert.equal(live.scope.held(), 1, "its poll is held while nothing moves");
       yield* reset;
@@ -1810,10 +1811,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, sealScope, sealItems, live } = harness;
+      const { acts, sealScope, sealItems, live } = harness;
       sealScope(LIVE_ANSWERED);
       sealItems(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* harness.open;
       yield* settled;
       live.scope.set({ items: [ITEM_ROW], messages: [], files: [] });
@@ -1936,10 +1937,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, acts, sealScope, sealItems, live, commitIn, changeFirst } = harness;
+      const { acts, sealScope, sealItems, live, commitIn, changeFirst } = harness;
       sealScope(LIVE_ANSWERED);
       sealItems(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* harness.open;
       yield* settled;
       // Each read is woken by a write once, so each hands a wait for the next.
@@ -2002,9 +2003,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const pool = yield* entityPool({ mintKey: () => "mark-key", replayRefused: Effect.void });
-      const { call, acts, sealScope, live, told, answerMarks, markKeys } = yield* subject({ pool });
+      const { acts, sealScope, live, told, answerMarks, markKeys } = yield* subject({ pool });
       sealScope(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* settled;
       live.scope.set({ items: [{ ...ITEM_ROW, unread: true }], messages: [], files: [] }, ["9100"]);
       yield* toldTimes(told, 1);
@@ -2041,9 +2042,9 @@ it.effect(
   "ten marks asked in a row each draw at once and answer once the service takes them, an item arriving meanwhile draws at once, and no mark is taken back on the way to the read carrying them",
   () =>
     Effect.gen(function* () {
-      const { call, acts, sealScope, live, commitIn, told } = yield* subject();
+      const { acts, sealScope, live, commitIn, told } = yield* subject();
       sealScope(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* settled;
       const unread = Array.from({ length: 10 }, (_, n) => ({
         ...ITEM_ROW,
@@ -2102,10 +2103,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, acts, sealScope, sealItems, live } = harness;
+      const { acts, sealScope, sealItems, live } = harness;
       sealScope(LIVE_ANSWERED);
       sealItems(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* harness.open;
       yield* settled;
       live.scope.set({ items: [ITEM_ROW], messages: [], files: [] });
@@ -2130,10 +2131,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, acts, sealScope, sealItems, live, commitIn } = harness;
+      const { acts, sealScope, sealItems, live, commitIn } = harness;
       sealScope(LIVE_ANSWERED);
       sealItems(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* harness.open;
       yield* settled;
       // Each read is woken by a write once, so each hands a wait for the reply.
@@ -2167,9 +2168,9 @@ it.effect(
   "an answer the agent posts over before the service answers it is drawn once, where the service wrote it, never again under its key below the agent's post",
   () =>
     Effect.gen(function* () {
-      const { call, acts, sealScope, live, commitIn, told, holdMessages } = yield* subject();
+      const { acts, sealScope, live, commitIn, told, holdMessages } = yield* subject();
       sealScope(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* acts.AGENTS_INBOX_FOLLOW.hold(PLAN_SCOPE);
       yield* settled;
       const askId = "6f1c2a4e-1b9d-4c7e-9a52-3d8e0f4b7c11";
       const postId = "8d3e5f7a-2c4b-4d6e-8f1a-3b5c7d9e1f2a";
@@ -2247,7 +2248,7 @@ it.effect(
   "a close drops its update from what waits across the account, its task counting one fewer as for a question, the moment it is asked, answers once the service takes it, and stands over the account's read until it carries it",
   () =>
     Effect.gen(function* () {
-      const { call, acts, sealAccount, live, commitIn, accountInboxes } = yield* subject();
+      const { acts, call, sealAccount, live, commitIn, accountInboxes } = yield* subject();
       sealAccount(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
@@ -2291,7 +2292,7 @@ it.effect(
   "a close held for its Undo drops its question at once and asks the service nothing until it is let go: undone, it stands again and the service never hears of it; let go, it is sent",
   () =>
     Effect.gen(function* () {
-      const { call, acts, sealAccount, live, asked, accountInboxes } = yield* subject();
+      const { acts, call, sealAccount, live, asked, accountInboxes } = yield* subject();
       sealAccount(LIVE_ANSWERED);
       yield* call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;

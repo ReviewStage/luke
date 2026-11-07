@@ -212,9 +212,7 @@ function windowPort(
       noted.push(`seen:${agentId}`);
     },
   };
-  // SAFETY: no hold is asked here, so the host's holds are never reached.
-  const host = {} as AgentProceduresDependencies["host"];
-  const port = testActPort(agentProcedures({ host, acts, notices }));
+  const port = testActPort(agentProcedures({ acts, notices }));
   ports.push(port);
   /** One kind called as this window, settled to its answer or the sentence of its refusal. */
   const call = (kind: PortActKind, payload: WireBoundaryInput) => port.call(actor, kind, payload);

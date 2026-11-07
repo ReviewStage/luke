@@ -216,8 +216,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           askBeforeSignOut: () => services.askBeforeLeaving(LEAVE.SIGN_OUT),
         },
         acts: operator.acts,
-        agentInbox: { host: operator.host },
-        agents: { host: operator.host, notices },
+        agents: { notices },
         pushes: windowPushes,
         settings: {
           host: operator.host,

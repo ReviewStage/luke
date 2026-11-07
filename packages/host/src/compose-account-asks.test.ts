@@ -11,7 +11,6 @@ import {
   MODEL_PROVIDER,
 } from "@repo/features/models-wire";
 import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
-import { GATEWAY_METHOD } from "@repo/gateway";
 import { isRecord, type WireValue } from "@repo/wire";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
@@ -20,6 +19,7 @@ import type { AppAccountPreferences, AppModels } from "./app-state.js";
 import {
   GATE_CLOSED_SIGNED_OUT,
   GITHUB_TOKEN,
+  holding,
   KEPT,
   MEMORY,
   nextPoll,
@@ -64,7 +64,7 @@ it.effect(
   "an account that stored no default reads the fallback its keys pay for, and once its keys move the models are asked again and the fallback moves with them",
   () =>
     Effect.gen(function* () {
-      const { call, acts, open, answerKeys, models, preferences } = yield* subject();
+      const { acts, open, answerKeys, models, preferences } = yield* subject();
       const openai = AGENT_FALLBACK_CHOICE[MODEL_PROVIDER.OPENAI];
       const claude: CatalogModel = {
         id: AGENT_DEFAULT_CHOICE.model,
@@ -91,7 +91,7 @@ it.effect(
 
       yield* open;
       yield* acts.PROVIDER_KEYS_FOLLOW.hold(undefined);
-      yield* call(GATEWAY_METHOD.AGENTS_MODELS_FOLLOW);
+      yield* acts.AGENTS_MODELS_FOLLOW.hold(undefined);
       yield* settled;
       assert.deepEqual(drawnDefault(), openai, "only an OpenAI key pays, so OpenAI's fallback");
 
@@ -299,12 +299,12 @@ it.effect(
   "the account's beats are asked as a window holds them and every twenty seconds while it does, and never once it lets them go",
   () =>
     Effect.gen(function* () {
-      const { call, asked, answerPresence, beats } = yield* subject();
+      const { acts, asked, answerPresence, beats } = yield* subject();
       const device = "6d2c1b0a-9f8e-4d7c-8b6a-5e4d3c2b1a09";
       answerPresence({ devices: [{ deviceId: device, ageMs: 5_000 }] });
       const presenceAsks = () => asked.filter((ask) => ask === "presence").length;
 
-      yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW);
+      const letGo = yield* holding(acts.HOSTS_PRESENCE_FOLLOW.hold(undefined));
       yield* settled;
       assert.equal(presenceAsks(), 1);
       // Note that the test's clock stands at 0, so a beat five seconds old beat at -5000.
@@ -316,7 +316,7 @@ it.effect(
       yield* settled;
       assert.equal(presenceAsks(), 2);
 
-      yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW);
+      yield* letGo;
       yield* TestClock.adjust(Duration.seconds(60));
       yield* settled;
       assert.equal(presenceAsks(), 2);
@@ -325,10 +325,10 @@ it.effect(
 
 it.effect("a read of the beats that fails keeps the beats it answered before, stale", () =>
   Effect.gen(function* () {
-    const { call, answerPresence, failPresence, beats } = yield* subject();
+    const { acts, answerPresence, failPresence, beats } = yield* subject();
     const device = "6d2c1b0a-9f8e-4d7c-8b6a-5e4d3c2b1a09";
     answerPresence({ devices: [{ deviceId: device, ageMs: 5_000 }] });
-    yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW);
+    yield* acts.HOSTS_PRESENCE_FOLLOW.hold(undefined);
     yield* settled;
 
     failPresence();

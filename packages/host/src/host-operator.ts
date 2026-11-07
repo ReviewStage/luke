@@ -1,12 +1,7 @@
 import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import {
   type AgentAccountInboxAnswerView,
-  type AgentInboxScope,
-  type AgentPullRequestParams,
-  type AgentPullRequestReadParams,
-  type AgentTranscriptKey,
   agentAccountInboxAnswerViewSchema,
-  type PullRequestPartParams,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
 import {
@@ -60,16 +55,10 @@ import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
   AppAccountPreferences,
-  AppDevicePresences,
-  AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
-  AppModels,
-  AppPullRequestParts,
   AppThisMacHosts,
-  AppTranscripts,
   AppWorkspacePhotos,
-  AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
 import { type MacCommandAsk, macCommandAsksSchema } from "./mac-command-ask.js";
@@ -93,8 +82,8 @@ interface HostSettingsChange {
  * The client's door to the host over the Gateway for what is not a declared
  * act, which the act port answers from the composers directly
  * (`act-port/declared-acts.ts`): the events the host pushes, each read by
- * its `on*Changed` reader; the snapshots a window boots from; the live
- * reads' follows, unfollows, and retries; and the calls the rest of the
+ * its `on*Changed` reader; the snapshots a window boots from; main's own
+ * follow of what waits across the account; and the calls the rest of the
  * client makes of its own accord. Those callers are the client's state and
  * notices (`client/operator-client.ts`, `client/client-notices.ts`), the
  * desktop's window service and network watch, the web tab's host
@@ -128,48 +117,8 @@ export interface HostOperator {
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** Every listed workspace's photo the host holds, whole, each time one is fetched or let go. */
   onWorkspacePhotosChanged(listener: (held: AppWorkspacePhotos) => void): () => void;
-  /** The models a coding agent may run on as the account is offered them, and its devices, held for the windows from now until let go, asked again as a window comes forward, and as the provider keys move; what they hold is heard through `onModelsChanged`. */
-  agentModelsFollow(): Effect.Effect<void>;
-  /** The models let go by the windows. */
-  agentModelsUnfollow(): Effect.Effect<void>;
-  /** The held models asked again at once, as Try again asks. */
-  agentModelsRetry(): Effect.Effect<void>;
-  /** The models the host holds for the windows, whole, each time any of them moves. */
-  onModelsChanged(listener: (held: AppModels) => void): () => void;
   /** One live follow's slice the host holds for the windows, whole, named by its read, each time any of its keys moves (`contract/live-follow.ts`). */
   onLiveReadChanged(listener: (changed: LiveReadChanged) => void): () => void;
-  /** The account's devices' beats held for the windows from now until let go, asked again every `MAC_PRESENCE.POLL_MS` while held; what they hold is heard through `onDevicePresenceChanged`. */
-  hostsPresenceFollow(): Effect.Effect<void>;
-  /** The account's devices' beats let go by the windows. */
-  hostsPresenceUnfollow(): Effect.Effect<void>;
-  /** The account's devices' beats asked again now, where a window holds them: the window came back online, or the Mac woke. */
-  hostsPresenceRefresh(): Effect.Effect<void>;
-  /** The account's devices' beats the host holds for the windows, whole, each time any of them moves. */
-  onDevicePresenceChanged(listener: (held: AppDevicePresences) => void): () => void;
-  /** One part of one agent's pull request held for the windows' Pull request tabs from now until let go, asked again as a window comes forward and as the pull request moves; what it holds is heard through `onPullRequestPartsChanged`. */
-  pullRequestPartFollow(params: PullRequestPartParams): Effect.Effect<void>;
-  /** One pull request's part let go by the windows, kept a while among those let go lately. */
-  pullRequestPartUnfollow(params: PullRequestPartParams): Effect.Effect<void>;
-  /** One pull request's held part asked again at once, as Try again asks; done once the ask has landed. */
-  pullRequestPartRetry(params: PullRequestPartParams): Effect.Effect<void>;
-  /** One of the Pull request tabs' held parts, whole, by its read's name, each time any of its keys moves. */
-  onPullRequestPartsChanged(listener: (held: Partial<AppPullRequestParts>) => void): () => void;
-  /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onWorkspaceToolsChanged`. */
-  agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
-  /** One agent's own tools let go by the windows. */
-  agentWorkspaceToolsUnfollow(params: AgentPullRequestParams): Effect.Effect<void>;
-  /** One agent's held tools asked again at once, as Try again asks; done once the ask has landed. */
-  agentWorkspaceToolsRetry(params: AgentPullRequestParams): Effect.Effect<void>;
-  /** Every agent's own tools the host holds for the windows, whole, each time any of them moves. */
-  onWorkspaceToolsChanged(listener: (held: AppWorkspaceTools) => void): () => void;
-  /** One task's or agent's inbox held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHolderInboxesChanged`. */
-  agentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
-  /** One task's or agent's inbox let go by the windows: it stays followed among those let go lately until later ones push it out. */
-  agentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
-  /** One held task's or agent's inbox read again at once, as Try again asks. */
-  agentInboxRetry(scope: AgentInboxScope): Effect.Effect<void>;
-  /** Every task's or agent's inbox the host holds for the windows, whole, each time any of them moves. */
-  onHolderInboxesChanged(listener: (held: AppHolderInboxes) => void): () => void;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
   agentAccountInboxFollow(): Effect.Effect<void>;
   /** The account inbox let go: nothing more is heard of it until it is followed again. */
@@ -180,14 +129,6 @@ export interface HostOperator {
   onInboxItemsChanged(listener: (read: AppHostRead<AppInboxItems>) => void): () => void;
   /** The account's preferences row, whole, each time the host's read of it for the session moves or a write is drawn over it. */
   onAccountPreferencesChanged(listener: (held: AppAccountPreferences) => void): () => void;
-  /** One agent's or worker's transcript held followed for the windows from now until let go, and kept a while after among those let go lately, following no longer; what it holds is heard through `onTranscriptsChanged`. */
-  transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
-  /** One held transcript let go by the window that held it. */
-  transcriptUnfollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
-  /** One held transcript read again at once, as Try again asks. */
-  transcriptRetry(transcript: AgentTranscriptKey): Effect.Effect<void>;
-  /** Every transcript the host holds for the windows, whole, each time any of them moves. */
-  onTranscriptsChanged(listener: (held: AppTranscripts) => void): () => void;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
@@ -276,18 +217,6 @@ interface HostOperatorOptions {
   report: (message: string) => void;
 }
 
-/** A Pull request tab's read as the gateway carries it: the agent, and the pull request's number where the tab names one other than the agent's own. */
-function pullRequestRead(params: AgentPullRequestReadParams): AgentPullRequestReadParams {
-  return params.number === undefined
-    ? { agentId: params.agentId }
-    : { agentId: params.agentId, number: params.number };
-}
-
-/** One part of a pull request held as the gateway carries it: the part, the agent, and the number where the tab names one. */
-function pullRequestPart(params: PullRequestPartParams): PullRequestPartParams {
-  return { part: params.part, ...pullRequestRead(params) };
-}
-
 /**
  * The host's answers are the same structured-clone payloads the windows
  * already receive over the bridge, carried through the protocol as JSON. The
@@ -309,12 +238,6 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 export interface LiveReadChanged {
   readonly read: LiveRead;
   readonly held: unknown;
-}
-
-/** A followed transcript as the gateway's params carry it. */
-function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
-  const { kind, agentId, callId } = transcript;
-  return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
 }
 
 /** A task call that reached no answer, as every task method answers one. */
@@ -376,16 +299,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppWorkspacePhotos>(payload) : undefined),
         listener,
       ),
-    agentModelsFollow: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_FOLLOW, {})),
-    agentModelsUnfollow: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_UNFOLLOW, {})),
-    agentModelsRetry: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_RETRY, {})),
-    onModelsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.MODELS_CHANGED,
-        // Note that the held models are the host's own, handed over in this process, so they are passed on as built, as the held keys are.
-        (payload) => (isRecord(payload) ? answered<AppModels>(payload) : undefined),
-        listener,
-      ),
     onLiveReadChanged: (listener) =>
       on(
         GATEWAY_EVENT.LIVE_READ_CHANGED,
@@ -394,63 +307,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           isRecord(payload) && isWireString(payload.read)
             ? answered<LiveReadChanged>(payload)
             : undefined,
-        listener,
-      ),
-    hostsPresenceFollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW, {})),
-    hostsPresenceUnfollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW, {})),
-    hostsPresenceRefresh: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_REFRESH, {})),
-    onDevicePresenceChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.DEVICE_PRESENCE_CHANGED,
-        // Note that the held beats are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppDevicePresences>(payload) : undefined),
-        listener,
-      ),
-    pullRequestPartFollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_FOLLOW, pullRequestPart(params))),
-    pullRequestPartUnfollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_UNFOLLOW, pullRequestPart(params))),
-    pullRequestPartRetry: (params) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_RETRY, pullRequestPart(params))),
-    onPullRequestPartsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.PULL_REQUEST_PARTS_CHANGED,
-        // Note that the held parts are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) =>
-          isRecord(payload) ? answered<Partial<AppPullRequestParts>>(payload) : undefined,
-        listener,
-      ),
-    agentWorkspaceToolsFollow: (params) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId: params.agentId })),
-    agentWorkspaceToolsUnfollow: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_UNFOLLOW, { agentId: params.agentId }),
-      ),
-    agentWorkspaceToolsRetry: (params) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_RETRY, { agentId: params.agentId })),
-    onWorkspaceToolsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.WORKSPACE_TOOLS_CHANGED,
-        // Note that the held tools are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
-        (payload) => (isRecord(payload) ? answered<AppWorkspaceTools>(payload) : undefined),
-        listener,
-      ),
-    agentInboxFollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id })),
-    agentInboxUnfollow: (scope) =>
-      fire(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, {
-          kind: scope.kind,
-          id: scope.id,
-        }),
-      ),
-    agentInboxRetry: (scope) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_INBOX_RETRY, { kind: scope.kind, id: scope.id })),
-    onHolderInboxesChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.HOLDER_INBOXES_CHANGED,
-        // Note that the held inboxes are the host's own, handed over in this process, so they are passed on as built, as the account's items are.
-        (payload) => (isRecord(payload) ? answered<AppHolderInboxes>(payload) : undefined),
         listener,
       ),
     agentAccountInboxFollow: () =>
@@ -479,19 +335,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the read is the host's own, handed over in this process, so it is passed on as built, as the tasks are.
         (payload) =>
           isRecord(payload) ? answered<AppHostRead<AppInboxItems>>(payload) : undefined,
-        listener,
-      ),
-    transcriptFollow: (transcript) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, transcriptParams(transcript))),
-    transcriptUnfollow: (transcript) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, transcriptParams(transcript))),
-    transcriptRetry: (transcript) =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_RETRY, transcriptParams(transcript))),
-    onTranscriptsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.TRANSCRIPTS_CHANGED,
-        // Note that the held transcripts are the host's own, handed over in this process, so they are passed on as built, as the held origins are.
-        (payload) => (isRecord(payload) ? answered<AppTranscripts>(payload) : undefined),
         listener,
       ),
     onSettingsChanged: (listener) =>
