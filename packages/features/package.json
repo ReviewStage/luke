@@ -132,6 +132,7 @@
     "./diff-hunks": "./src/diff-hunks.js",
     "./provider-key-wire": "./src/provider-key-wire.js",
     "./github-token-wire": "./src/github-token-wire.js",
+    "./workspace-environment-wire": "./src/workspace-environment-wire.js",
     "./repository-reach-wire": "./src/repository-reach-wire.js",
     "./terminal-view": "./src/terminal-view.js",
     "./terminal-wire": "./src/terminal-wire.js",
