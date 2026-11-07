@@ -189,6 +189,8 @@ export const AGENT_ACT_KIND = {
   AGENTS_QUEUE: "agents.queue",
   AGENTS_STOP: "agents.stop",
   AGENTS_REWIND: "agents.rewind",
+  /** An agent on screen kept warm for the next message, said at once and then every minute while it stays there (`use-warm-agent.ts`). */
+  AGENTS_WARM: "agents.warm",
   AGENTS_ARCHIVE: "agents.archive",
   AGENTS_PIN: "agents.pin",
   /** The reader's own read mark of an agent with no task moved, kept on the account (`read-mark.ts`). */
@@ -865,6 +867,7 @@ export const PORT_ACT_USE = {
   AGENTS_QUEUE: ACT_USE.WRITE,
   AGENTS_STOP: ACT_USE.WRITE,
   AGENTS_REWIND: ACT_USE.WRITE,
+  AGENTS_WARM: ACT_USE.WRITE,
   AGENTS_ARCHIVE: ACT_USE.WRITE,
   AGENTS_PIN: ACT_USE.WRITE,
   AGENTS_MARK_READ: ACT_USE.WRITE,

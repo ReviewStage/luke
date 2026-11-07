@@ -53,6 +53,7 @@ import {
   agentTranscriptKeySchema,
   agentTranscriptOlderAnswerSchema,
   agentTranscriptOlderParamsSchema,
+  agentWarmAnswerViewSchema,
   agentWorkspaceListParamsSchema,
   chaptersProviderAnswerViewSchema,
   chaptersProviderWriteParamsSchema,
@@ -281,6 +282,14 @@ export const AGENT_ACTS = declaredActs({
     door: ACT.REMOTE_WORK,
     unanswered: AGENT_UNANSWERED,
     byHand: true,
+  }),
+  AGENTS_WARM: hostAct({
+    input: agentStopParamsSchema,
+    output: agentWarmAnswerViewSchema,
+    refusal: "Could not keep the agent warm on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+    unanswered: AGENT_UNANSWERED,
   }),
   AGENTS_ARCHIVE: hostAct({
     input: agentArchiveParamsSchema,

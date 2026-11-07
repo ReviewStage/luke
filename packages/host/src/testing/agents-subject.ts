@@ -576,6 +576,7 @@ function fakeService() {
         asked.push(`rewind:${agentId}:${messageId}`);
         return { agent: AGENT };
       }),
+    warm: () => Effect.succeed({ warm: true as const }),
     delete: (agentId) =>
       Effect.map(changeGate, () => {
         asked.push(`delete:${agentId}`);
