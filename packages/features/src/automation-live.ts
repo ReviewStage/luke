@@ -16,9 +16,19 @@ import {
   automationTargetKindSchema,
   automationTriggerSchema,
 } from "./automation-wire.js";
-import { sealedLiveQuerySchema } from "./live-wire.js";
-import { automationWebhookPath } from "./service-paths.js";
-import { countedNumber } from "./service-wire.js";
+import { refuses } from "./contract/base.js";
+import {
+  LIVE_MODE,
+  LIVE_PARAM,
+  type LiveReadAnswer,
+  liveRead,
+  liveRows,
+  ORDER,
+  orderedLiveRows,
+} from "./live-read.js";
+import { LIVE_READ, LIVE_USER_QUERY } from "./live-wire.js";
+import { automationWebhookPath, HOSTED_SERVICE_PATH } from "./service-paths.js";
+import { countedNumber, HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
  * automation-live.ts -- a workspace's automations and runs, and one automation's runs, as the host follows them over the service's held poll: the statements the service answers, the rows they deliver, and the list and the histories as the held reads answer them, built from the rows at an instant.
@@ -30,30 +40,6 @@ import { countedNumber } from "./service-wire.js";
  * its caller posts to on the service the reader reaches, as the held read's
  * client answers it. The rows come in no order, so the reader orders.
  */
-
-/** A workspace's automations sealed for following: the address, and one statement. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
-export const automationsLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({ automations: sealedLiveQuerySchema }),
-});
-
-export type AutomationsLiveAnswer = typeof automationsLiveAnswerSchema.Type;
-
-/** An automation's runs sealed for following: the address, and one statement. The service answers `not-found` for an automation the account does not read. */
-export const automationRunsLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({ runs: sealedLiveQuerySchema }),
-});
-
-export type AutomationRunsLiveAnswer = typeof automationRunsLiveAnswerSchema.Type;
-
-/** A workspace's runs sealed for following: the address, and one statement. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
-export const automationWorkspaceRunsLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({ runs: sealedLiveQuerySchema }),
-});
-
-export type AutomationWorkspaceRunsLiveAnswer = typeof automationWorkspaceRunsLiveAnswerSchema.Type;
 
 /** The agent a run started as its row delivers it, and what its status is read from; null throughout where it started none, or it is gone. */
 const runAgentFields = {
@@ -81,6 +67,12 @@ const runLiveRowSchema = EffectSchema.Struct({
   settledAt: EffectSchema.NullOr(countedNumber),
   ...runAgentFields,
 });
+
+/** Latest fired first, and by id among those fired at one instant, as the held history orders runs. */
+const LATEST_FIRED = [
+  ["firedAt", ORDER.DESC],
+  ["id", ORDER.DESC],
+] as const;
 
 /** One automation as its row delivers it, its newest run's columns beside it, null where it has run none. */
 const automationLiveRowSchema = EffectSchema.Struct({
@@ -114,32 +106,80 @@ const automationLiveRowSchema = EffectSchema.Struct({
   ...runAgentFields,
 });
 
-/** A workspace's automations as Realtime delivers them, decoded at the boundary before anything reads them. */
-export const automationsLiveRowsSchema = EffectSchema.Struct({
-  automations: EffectSchema.Array(automationLiveRowSchema),
-});
-
-export type AutomationsLiveRows = typeof automationsLiveRowsSchema.Type;
-
-/** An automation's runs as Realtime delivers them, decoded at the boundary before anything reads them. */
-export const automationRunsLiveRowsSchema = EffectSchema.Struct({
-  runs: EffectSchema.Array(runLiveRowSchema),
-});
-
-export type AutomationRunsLiveRows = typeof automationRunsLiveRowsSchema.Type;
-
-/** A workspace's runs as Realtime delivers them, each with the automation it is a run of, decoded at the boundary before anything reads them. */
-export const automationWorkspaceRunsLiveRowsSchema = EffectSchema.Struct({
-  runs: EffectSchema.Array(
-    EffectSchema.Struct({
-      ...runLiveRowSchema.fields,
-      automationId: EffectSchema.String,
-      automationName: EffectSchema.String,
+/**
+ * A workspace's automations as its Automations page follows them: one part,
+ * every automation of the workspace under `?workspaceId=` the account may
+ * read, each with its newest run, newest made first. The service refuses an
+ * empty workspace as `invalid-request`, and answers `unavailable` where its
+ * deployment's Realtime is misconfigured.
+ */
+export const AUTOMATIONS_READ = liveRead({
+  name: LIVE_READ.AUTOMATIONS,
+  path: HOSTED_SERVICE_PATH.LIVE_AUTOMATIONS,
+  params: { workspaceId: LIVE_PARAM.TEXT, [LIVE_USER_QUERY]: LIVE_PARAM.USER },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    automations: liveRows({
+      row: automationLiveRowSchema,
+      key: "id",
+      order: [
+        ["createdAt", ORDER.DESC],
+        ["id", ORDER.DESC],
+      ],
     }),
-  ),
+  },
 });
 
-export type AutomationWorkspaceRunsLiveRows = typeof automationWorkspaceRunsLiveRowsSchema.Type;
+/**
+ * A workspace's runs as its Runs tab follows them: one part, the newest
+ * runs of every automation of the workspace under `?workspaceId=` the
+ * account may read, each with the automation it is a run of, latest fired
+ * first, on the terms the automations are.
+ */
+export const AUTOMATION_WORKSPACE_RUNS_READ = liveRead({
+  name: LIVE_READ.AUTOMATION_WORKSPACE_RUNS,
+  path: HOSTED_SERVICE_PATH.LIVE_AUTOMATION_WORKSPACE_RUNS,
+  params: { workspaceId: LIVE_PARAM.TEXT, [LIVE_USER_QUERY]: LIVE_PARAM.USER },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    runs: liveRows({
+      row: EffectSchema.Struct({
+        ...runLiveRowSchema.fields,
+        automationId: EffectSchema.String,
+        automationName: EffectSchema.String,
+      }),
+      key: "id",
+      order: LATEST_FIRED,
+    }),
+  },
+});
+
+/**
+ * One automation's runs as its history follows them: one part, the newest
+ * runs of the automation under `?id=`, latest fired first, woken on the
+ * topic of the workspace it stands in, which the service reads it by. The
+ * service answers `not-found` for an automation the account does not read.
+ */
+export const AUTOMATION_RUNS_READ = liveRead({
+  name: LIVE_READ.AUTOMATION_RUNS,
+  path: HOSTED_SERVICE_PATH.LIVE_AUTOMATION_RUNS,
+  params: {
+    id: LIVE_PARAM.ID,
+    workspaceId: LIVE_PARAM.SERVED,
+    [LIVE_USER_QUERY]: LIVE_PARAM.USER,
+  },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: { runs: liveRows({ row: runLiveRowSchema, key: "id", order: LATEST_FIRED }) },
+  refuses: refuses(HOSTED_API_ERROR.NOT_FOUND),
+});
+
+export type AutomationRunsLiveAnswer = LiveReadAnswer<typeof AUTOMATION_RUNS_READ>;
+
+export type AutomationsLiveRows = typeof AUTOMATIONS_READ.rows.Type;
+
+export type AutomationRunsLiveRows = typeof AUTOMATION_RUNS_READ.rows.Type;
+
+export type AutomationWorkspaceRunsLiveRows = typeof AUTOMATION_WORKSPACE_RUNS_READ.rows.Type;
 
 type RunAgentRow = {
   readonly [Key in keyof typeof runAgentFields]: (typeof runAgentFields)[Key]["Type"];
@@ -201,15 +241,6 @@ function clockEdgeOf(row: RunAgentRow, now: number): number | undefined {
 function earliest(edges: readonly (number | undefined)[]): number | undefined {
   const standing = edges.filter((edge): edge is number => edge !== undefined);
   return standing.length === 0 ? undefined : Math.min(...standing);
-}
-
-/** Latest fired first, and by id among those fired at one instant, as the held history orders runs. */
-function latestFired(
-  a: { readonly id: string; readonly firedAt: number },
-  b: { readonly id: string; readonly firedAt: number },
-): number {
-  if (a.firedAt !== b.firedAt) return b.firedAt - a.firedAt;
-  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
 /**
@@ -275,46 +306,36 @@ export function automationsOfLiveRows(
   now: number,
   serviceBaseUrl: string,
 ): readonly AutomationSummary[] {
-  return rows.automations
-    .toSorted((a, b) =>
-      a.createdAt !== b.createdAt
-        ? b.createdAt - a.createdAt
-        : a.id < b.id
-          ? 1
-          : a.id > b.id
-            ? -1
-            : 0,
-    )
-    .map((row) =>
-      withWebhookUrl(serviceBaseUrl, {
-        id: row.id,
-        planId: row.taskId,
-        planName: row.taskName,
-        ...(row.organizationId === null ? undefined : { workspaceId: row.organizationId }),
-        name: row.name,
-        enabled: row.enabled,
-        pausedReason: null,
-        trigger: row.trigger,
-        action: row.action,
-        guards: row.guards,
-        nextRunAt: row.nextRunAt,
-        lastRun: lastRunOf(row, now),
-        createdAt: row.createdAt,
-        scope: row.scope,
-        repositories:
-          row.repositories.length === 0 && row.taskRepository !== null
-            ? [row.taskRepository]
-            : row.repositories,
-        target:
-          row.targetKind === AUTOMATION_TARGET.SAME_AGENT
-            ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: row.targetAgentId }
-            : { kind: AUTOMATION_TARGET.NEW_AGENT },
-        archiveSuccessful: row.archiveSuccessful,
-        slackDelivery: row.slackDelivery,
-        mine: row.mine,
-        creatorId: row.userId,
-      }),
-    );
+  return orderedLiveRows(AUTOMATIONS_READ.parts.automations, rows.automations).map((row) =>
+    withWebhookUrl(serviceBaseUrl, {
+      id: row.id,
+      planId: row.taskId,
+      planName: row.taskName,
+      ...(row.organizationId === null ? undefined : { workspaceId: row.organizationId }),
+      name: row.name,
+      enabled: row.enabled,
+      pausedReason: null,
+      trigger: row.trigger,
+      action: row.action,
+      guards: row.guards,
+      nextRunAt: row.nextRunAt,
+      lastRun: lastRunOf(row, now),
+      createdAt: row.createdAt,
+      scope: row.scope,
+      repositories:
+        row.repositories.length === 0 && row.taskRepository !== null
+          ? [row.taskRepository]
+          : row.repositories,
+      target:
+        row.targetKind === AUTOMATION_TARGET.SAME_AGENT
+          ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: row.targetAgentId }
+          : { kind: AUTOMATION_TARGET.NEW_AGENT },
+      archiveSuccessful: row.archiveSuccessful,
+      slackDelivery: row.slackDelivery,
+      mine: row.mine,
+      creatorId: row.userId,
+    }),
+  );
 }
 
 /** An automation's runs as the held history answers them, as the live rows stand at `now`: latest fired first, an agent's status said on the latest run it took. */
@@ -322,7 +343,7 @@ export function automationRunsOfLiveRows(
   rows: AutomationRunsLiveRows,
   now: number,
 ): readonly AutomationRunSummary[] {
-  const runs = rows.runs.toSorted(latestFired);
+  const runs = orderedLiveRows(AUTOMATION_RUNS_READ.parts.runs, rows.runs);
   const handedOn = handedOnRuns(runs);
   return runs.map((row) => ({
     id: row.id,
@@ -340,7 +361,7 @@ export function automationWorkspaceRunsOfLiveRows(
   rows: AutomationWorkspaceRunsLiveRows,
   now: number,
 ): readonly AutomationWorkspaceRun[] {
-  const runs = rows.runs.toSorted(latestFired);
+  const runs = orderedLiveRows(AUTOMATION_WORKSPACE_RUNS_READ.parts.runs, rows.runs);
   const handedOn = handedOnRuns(runs);
   return runs.map((row) => ({
     id: row.id,
