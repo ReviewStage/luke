@@ -82,16 +82,17 @@ exec /usr/bin/gh "$@"
 EOF
 
 # `docker` with its daemon started first where none runs, detached as root in a session of its own so
-# it outlives the command that asked, and waited on until it answers; the CLI's plugins, `compose`
-# among them, all run through it.
+# it outlives the command that asked, and waited on until it answers on every call, since a call
+# beside the one that started it may find it running before it answers; the CLI's plugins,
+# `compose` among them, all run through it.
 COPY --chmod=0755 <<'EOF' /usr/local/bin/docker
 #!/usr/bin/env bash
 if ! pgrep -x dockerd > /dev/null; then
   sudo -n sh -c 'setsid -f dockerd >> /var/log/dockerd.log 2>&1 < /dev/null'
-  if ! timeout 30 sh -c 'until /usr/bin/docker info > /dev/null 2>&1; do sleep 0.2; done'; then
-    echo "docker: the daemon did not start; its log is /var/log/dockerd.log" >&2
-    exit 1
-  fi
+fi
+if ! timeout 30 sh -c 'until /usr/bin/docker info > /dev/null 2>&1; do sleep 0.2; done'; then
+  echo "docker: the daemon did not start; its log is /var/log/dockerd.log" >&2
+  exit 1
 fi
 exec /usr/bin/docker "$@"
 EOF
