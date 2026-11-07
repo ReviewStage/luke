@@ -227,10 +227,10 @@ export const SANDBOX_NAME_BEFORE_RENAME = "luke-agent-";
 /** The runner as the image carries it (`apps/web/agent-image/Dockerfile`), which each launch overwrites with the deploy's. */
 const RUNNER_SCRIPT = `${RUNNER_DIRECTORY}/agent-runner.mjs`;
 
-/** Where a launch uploads the deploy's runner as the sandbox's default user, which its readying moves over `RUNNER_SCRIPT`. */
+/** Where a launch uploads the deploy's runner as the sandbox's default user, which its readying copies over `RUNNER_SCRIPT`. */
 const RUNNER_UPLOAD = "/tmp/agent-runner.mjs";
 
-/** The uploaded runner's mode, before its readying makes it root's and read-only. */
+/** The uploaded runner's mode; the copy its readying makes is root's and read-only. */
 const RUNNER_UPLOAD_MODE = 0o644;
 
 /**
@@ -285,10 +285,11 @@ const RESTORE_PLAN_UNREAD = "the restored checkout's commit identity could not b
 
 /**
  * The launch's readying, run by bash as root through `sudo`, waited on before the runner starts: the
- * deploy's runner the launch uploaded moved over the one the sandbox's disk
- * holds, made root's and read-only as the image makes it, so a sandbox
- * created from a base snapshot or resumed on an older runner runs the
- * deploy's; the member's installed skills, where the sandbox's opening uploaded them,
+ * deploy's runner the launch uploaded copied over the one the sandbox's disk
+ * holds, root's and read-only as the image makes it, so a sandbox created
+ * from a base snapshot or resumed on an older runner runs the deploy's, and
+ * the upload removed (copied rather than moved, so an upload a readying cut
+ * short leaves stays the default user's, which the next launch overwrites); the member's installed skills, where the sandbox's opening uploaded them,
  * moved where only root writes and every user reads (`native-skills.ts`),
  * each checkout marked safe for git and shared with `agent`'s group, the
  * agent's own and those of the repositories it works in beside it at the
@@ -304,7 +305,7 @@ function readyScript(extraCheckouts: readonly string[]): string {
   return [
     "set -euo pipefail",
     LINK_TOOLS_DIRECTORY,
-    `chown root:root ${RUNNER_UPLOAD} && chmod 0444 ${RUNNER_UPLOAD} && mv -f ${RUNNER_UPLOAD} ${RUNNER_SCRIPT}`,
+    `install -o root -g root -m 0444 ${RUNNER_UPLOAD} ${RUNNER_SCRIPT} && rm -f ${RUNNER_UPLOAD}`,
     `if [ -d ${NATIVE_SKILLS_PATH.UPLOAD} ]; then rm -rf ${NATIVE_SKILLS_PATH.INSTALLED} && mkdir -p $(dirname ${NATIVE_SKILLS_PATH.INSTALLED}) && mv ${NATIVE_SKILLS_PATH.UPLOAD} ${NATIVE_SKILLS_PATH.INSTALLED} && chown -R root:root ${NATIVE_SKILLS_PATH.INSTALLED} && chmod -R u=rwX,go=rX ${NATIVE_SKILLS_PATH.INSTALLED}; fi`,
     ...[CODER.CHECKOUT_PATH, ...extraCheckouts].flatMap(sharedCheckout),
     `install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0755 ${SHARED_FILES_DIRECTORY}`,
