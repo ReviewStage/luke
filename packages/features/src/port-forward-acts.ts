@@ -9,6 +9,10 @@
  * service's tunnel (`sandbox-tunnel-wire.ts`). The acts carry ids and port
  * numbers alone; no byte a connection carries ever enters an act, app
  * state, or a trace.
+ *
+ * While an agent is forwarded, one of its ports may also be shared by a
+ * public link (`listening-ports-wire.ts`), which the host reads back from
+ * the service and keeps beside the forwarded ports.
  */
 
 import { Schema as EffectSchema } from "effect";
@@ -29,6 +33,12 @@ export const portForwardSetParamsSchema = EffectSchema.Struct({
   on: EffectSchema.Boolean,
 });
 
+/** One of the forwarded agent's ports shared by a public link, or the shared one closed with none. */
+export const portShareSetParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  port: EffectSchema.NullOr(EffectSchema.Int),
+});
+
 /** One port forwarded: the sandbox's, the local one it is listened on where it has one, and how it stands. */
 const forwardedPortSchema = EffectSchema.Struct({
   port: EffectSchema.Int,
@@ -38,13 +48,17 @@ const forwardedPortSchema = EffectSchema.Struct({
 
 /**
  * An agent's forwarding as it stands: whether it is on, whether its sandbox
- * was running at the last look, and its forwarded ports, the lowest first;
- * off, not running, and none for any agent but the one forwarded.
+ * was running at the last look, its forwarded ports, the lowest first, and
+ * the port shared by public link where one is; off, not running, and none
+ * for any agent but the one forwarded.
  */
 export const portForwardingAnswerSchema = EffectSchema.Struct({
   on: EffectSchema.Boolean,
   running: EffectSchema.Boolean,
   ports: EffectSchema.Array(forwardedPortSchema),
+  shared: EffectSchema.optional(
+    EffectSchema.Struct({ port: EffectSchema.Int, url: EffectSchema.String }),
+  ),
 });
 
 export type PortForwardingAnswer = typeof portForwardingAnswerSchema.Type;

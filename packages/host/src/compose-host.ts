@@ -446,7 +446,10 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       : {
           ...unavailableConcern(HOST_PLATFORM_CONCERN.PORT_FORWARDS),
           // Note that a host without the port forwards refuses its set in the act's own sentence, as the platform's refusal of its kind was.
-          acts: { PORT_FORWARD_SET: () => Effect.fail(new ActRefused({})) },
+          acts: {
+            PORT_FORWARD_SET: () => Effect.fail(new ActRefused({})),
+            PORT_SHARE_SET: () => Effect.fail(new ActRefused({})),
+          },
           reset: Effect.void,
         };
 
