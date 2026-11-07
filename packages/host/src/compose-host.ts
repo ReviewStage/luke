@@ -516,6 +516,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,
+      settleHeld: agents.letGoHeldCloses,
     });
     const concerns = {
       [HOST_CONCERN.SETTINGS]: settings,
