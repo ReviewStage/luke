@@ -165,7 +165,7 @@ import {
 } from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import { sentryRunnerTrace } from "../../observability/sentry.js";
+import { agentSpanAttributes, sentryRunnerTrace } from "../../observability/sentry.js";
 import {
   AgentMachine,
   type AgentMachineService,
@@ -1024,7 +1024,13 @@ export const runnerSessions = <
       }).pipe(
         Effect.withSpan(LAUNCH_SPAN, {
           attributes: {
-            harness: harness.runtime,
+            ...agentSpanAttributes({
+              agentId: agent.id,
+              userId: agent.userId,
+              workspaceId: agent.organizationId,
+              repository: agent.repository,
+              harness: harness.runtime,
+            }),
             machine: place.running.machine,
             ...(path === undefined ? undefined : { path }),
           },

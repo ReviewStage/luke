@@ -11,6 +11,7 @@ import { fixtureToken } from "../testing/vercel-sandbox-fake.js";
 import {
   BASE_SNAPSHOT,
   BASE_STATE,
+  BASE_WANTED,
   type BaseSnapshotOf,
   baseSnapshotName,
   fillBaseSnapshot,
@@ -70,7 +71,14 @@ function opener(api: VercelSandboxApi) {
 
 /** The base snapshot filled for the repository given, on the image given, in place of the snapshot named where one is. */
 const filled = (api: VercelSandboxApi, image = IMAGE, replacing?: string) =>
-  fillBaseSnapshot(api, RELAY, image, CREDENTIAL, opener(api), replacing);
+  fillBaseSnapshot(
+    api,
+    RELAY,
+    image,
+    CREDENTIAL,
+    opener(api),
+    replacing === undefined ? undefined : { snapshotId: replacing, reason: BASE_WANTED.LAPSED },
+  );
 
 /** Whether a run the fake took was the install. */
 const isInstall = (args: readonly string[]) => args.some((arg) => arg.includes("pnpm install"));

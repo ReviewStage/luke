@@ -89,6 +89,7 @@ import {
   repositoryNotReachable,
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
+import { agentSpansAnnotated } from "../../observability/sentry.js";
 import {
   ModelCatalog,
   ModelChoiceRefused,
@@ -1035,6 +1036,13 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { agent, created, txid } = started.value;
+  yield* agentSpansAnnotated({
+    agentId: agent.id,
+    userId: agent.userId,
+    workspaceId: agent.organizationId,
+    repository: agent.repository,
+    harness: runtime.runtime,
+  });
   if (!created) return { agent, created };
   // A blank agent opens no session: its first words open one as they reach it (`steer.ts`).
   const handed = brief.prompt ?? brief.descriptionSnapshot;
