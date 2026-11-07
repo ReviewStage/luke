@@ -6,10 +6,10 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { type SideBundles, sideBundles } from "../bundle-loader.js";
+import type { SideBundles } from "../bundle-loader.js";
 import type { FolderListing } from "../file-tree/contract.js";
-import { onRegistry } from "../testing/copy-feedback.js";
-import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { landedBundles, onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { FileTreePane } from "./file-tree-pane.js";
 
@@ -55,6 +55,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** The words of every line the host says, alerts, notes and waits alike. */
@@ -115,7 +116,7 @@ test("a crumb's tree says its root is read, says why it could not be with Retry,
 
 test("a tree bundle that failed to load says so with Retry, which imports it again and draws the tree", async () => {
   let online = false;
-  const unloaded = sideBundles({
+  const unloaded = standInBundles({
     fileTree: () =>
       online
         ? import("../file-tree/index.js").then((e) => e.fileTree)

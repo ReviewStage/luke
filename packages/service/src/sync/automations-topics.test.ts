@@ -40,15 +40,15 @@ import {
   TURN_TRIGGER,
 } from "../core.js";
 import {
-  automationRunsLive,
-  automationsLive,
-  automationWorkspaceRunsLive,
-} from "./live-queries.js";
+  automationRunsRead,
+  automationsRead,
+  automationWorkspaceRunsRead,
+} from "../live/reads/automations.js";
 import type { LiveParams, LiveQuery } from "./live-query.js";
 
 /**
- * A workspace's automations and runs (`automationsLive`,
- * `automationWorkspaceRunsLive`, `automationRunsLive`) on the migrated
+ * A workspace's automations and runs (`automationsRead`,
+ * `automationWorkspaceRunsRead`, `automationRunsRead`) on the migrated
  * capture: each write that moves them, through its real writer, notifies
  * the workspace's topic, which all three reads are woken on, so a
  * teammate's window hears the owner's write within a coalesce window rather
@@ -118,9 +118,9 @@ type Followed = readonly [LiveQuery<string, string, readonly SyncTopic[]>, LiveP
 const teammateReads = (world: AutomationWorld): readonly Followed[] => {
   const workspace = { userId: world.teammate, workspaceId: world.workspaceId };
   return [
-    [automationsLive, workspace],
-    [automationWorkspaceRunsLive, workspace],
-    [automationRunsLive, { ...workspace, automationId: world.automationId }],
+    [automationsRead, workspace],
+    [automationWorkspaceRunsRead, workspace],
+    [automationRunsRead, { ...workspace, id: world.automationId }],
   ];
 };
 

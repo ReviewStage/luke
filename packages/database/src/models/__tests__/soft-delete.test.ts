@@ -5,7 +5,6 @@ import { eq, inArray } from "drizzle-orm";
 import { DateTime, Effect } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { sessionSandboxCleanup } from "../../schemas/session-sandbox.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, planOf, plansOf } from "../../testing/index.js";
@@ -16,7 +15,7 @@ import {
 } from "../soft-delete.js";
 
 /**
- * soft-delete.test.ts -- a conversation stamped deleted with every one delegated from it, and the purge seven days on queueing each one's sandbox, a worker's beside its agent's.
+ * soft-delete.test.ts -- a conversation stamped deleted with every one delegated from it, and the purge seven days on taking each one, a worker's beside its agent's.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -44,7 +43,7 @@ const openConversation = (userId: string, parentConversationId?: string) =>
 
 it.layer(getTestDB())("the soft delete", (it) => {
   it.effect(
-    "an agent's conversation is stamped with its workers' and theirs, a sibling stands, and the purge seven days on queues every stamped one's sandbox",
+    "an agent's conversation is stamped with its workers' and theirs, a sibling stands, and the purge seven days on takes every stamped one",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -69,22 +68,7 @@ it.layer(getTestDB())("the soft delete", (it) => {
         const purged = yield* purgeClearedConversations(
           new Date(stampedAt.getTime() + CLEARED_CONVERSATION_RETENTION_MS),
         );
-        const queued = yield* db
-          .select({ sessionId: sessionSandboxCleanup.sessionId })
-          .from(sessionSandboxCleanup)
-          .where(
-            inArray(sessionSandboxCleanup.sessionId, [
-              `session-${agent}`,
-              `session-${worker}`,
-              `session-${nested}`,
-              `session-${sibling}`,
-            ]),
-          );
         assert.equal(purged, 3);
-        assert.deepEqual(
-          new Set(queued.map((row) => row.sessionId)),
-          new Set([`session-${agent}`, `session-${worker}`, `session-${nested}`]),
-        );
         const left = yield* db
           .select({ id: conversations.id })
           .from(conversations)

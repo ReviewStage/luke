@@ -8,6 +8,10 @@
  * and a body is declared `detailed`, so the body is read whole as its own
  * schema; every output is its wire schema flipped
  * (`packages/service/src/orpc/base.ts`).
+ *
+ * The member's writes and an item's home each declare their own refusals
+ * (`declaredProcedure`); the three held reads still declare every refusal
+ * (`hostedProcedure`).
  */
 
 import { openapi } from "@orpc/openapi";
@@ -32,7 +36,15 @@ import {
   inboxStartRequestSchema,
 } from "../inbox-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
+import {
+  bodyCap,
+  declaredProcedure,
+  exactBodyInput,
+  exactInput,
+  hostedProcedure,
+  refuses,
+} from "./base.js";
 
 /** A nod is a revision and a key, so a few hundred bytes hold it. */
 const NOD_BODY_BYTES = 1_024;
@@ -62,6 +74,55 @@ const READ_ALL_BODY_BYTES = 1_024;
 
 /** A reminder is one instant or none, so a few hundred bytes hold it. */
 const REMIND_BODY_BYTES = 1_024;
+
+/**
+ * What a member's words on a thread refuse, an answer, a close, a message,
+ * or a new thread, each handed to the item's agent as a message through the
+ * one steer path (`coder-host/steer.ts`'s `steerAgentWritten`): the item or
+ * its agent not found or not the caller's to write to, its session ended for
+ * good, and every refusal a message to an agent answers
+ * (`contract/messages.ts`'s), words past the bound and GitHub unanswered
+ * among them, which the steer never answers here but the client has always
+ * read as its own. A nod on an item holding an ask open, or a message that
+ * answers none, is an invalid request.
+ */
+const THREAD_REFUSALS = [
+  HOSTED_API_ERROR.NOT_FOUND,
+  HOSTED_API_ERROR.NOT_PERMITTED,
+  HOSTED_API_ERROR.MESSAGE_TOO_LONG,
+  HOSTED_API_ERROR.AGENT_NOT_READY,
+  HOSTED_API_ERROR.AGENT_RETIRED,
+  HOSTED_API_ERROR.DEVICE_REMOVED,
+  HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+  HOSTED_API_ERROR.GITHUB_UNANSWERED,
+  HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE,
+  HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT,
+  HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE,
+  HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED,
+  HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE,
+  HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING,
+  HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE,
+  HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
+] as const;
+
+/** A message on a thread, or a new one. */
+const threadProcedure = declaredProcedure.errors(refuses(...THREAD_REFUSALS));
+
+/** An answer or a close, each taken once under its idempotency key, which refuses a key already written under (`writeReceiptMiddleware`). */
+const settleProcedure = declaredProcedure.errors(
+  refuses(...THREAD_REFUSALS, HOSTED_API_ERROR.ALREADY_WRITTEN),
+);
+
+/** An item's home, read by its id, which refuses one not found: one the account may not read, or an id that is no UUID. */
+const homeProcedure = declaredProcedure.errors(refuses(HOSTED_API_ERROR.NOT_FOUND));
+
+/** One item's read state or reminder written, under its idempotency key: the item not found, or a key already written under. */
+const readStateProcedure = declaredProcedure.errors(
+  refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.ALREADY_WRITTEN),
+);
+
+/** Every item marked read, under its idempotency key: a key already written under. */
+const readAllProcedure = declaredProcedure.errors(refuses(HOSTED_API_ERROR.ALREADY_WRITTEN));
 
 /** The public paths that name a task, an agent, or an item by its id. */
 const INBOX_PROCEDURE_PATH = {
@@ -105,11 +166,11 @@ export const inboxContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: INBOX_PROCEDURE_PATH.AGENT }))
     .input(pastCursorSchema)
     .output(EffectSchema.flip(inboxAnswerSchema)),
-  home: hostedProcedure
+  home: homeProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: INBOX_PROCEDURE_PATH.ITEM }))
     .input(pathIdSchema)
     .output(EffectSchema.flip(inboxItemHomeSchema)),
-  answer: hostedProcedure
+  answer: settleProcedure
     .meta(bodyCap(NOD_BODY_BYTES))
     .meta(
       openapi({
@@ -120,7 +181,7 @@ export const inboxContract = {
     )
     .input(exactBodyInput(pathIdSchema, inboxAcknowledgeRequestSchema))
     .output(EffectSchema.flip(inboxAnsweredSchema)),
-  close: hostedProcedure
+  close: settleProcedure
     .meta(bodyCap(CLOSE_BODY_BYTES))
     .meta(
       openapi({
@@ -131,7 +192,7 @@ export const inboxContract = {
     )
     .input(exactBodyInput(pathIdSchema, inboxCloseRequestSchema))
     .output(EffectSchema.flip(inboxAnsweredSchema)),
-  message: hostedProcedure
+  message: threadProcedure
     .meta(bodyCap(MESSAGE_BODY_BYTES))
     .meta(
       openapi({
@@ -142,20 +203,20 @@ export const inboxContract = {
     )
     .input(exactBodyInput(pathIdSchema, inboxMessageRequestSchema))
     .output(EffectSchema.flip(inboxMessagedSchema)),
-  start: hostedProcedure
+  start: threadProcedure
     .meta(bodyCap(START_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.INBOX }))
     .input(exactInput(inboxStartRequestSchema))
     .output(EffectSchema.flip(inboxMessagedSchema)),
-  markItemRead: hostedProcedure
+  markItemRead: readStateProcedure
     .meta(openapi({ method: HTTP_METHOD.PUT, path: INBOX_PROCEDURE_PATH.ITEM_READ }))
     .input(pathIdSchema)
     .output(EffectSchema.flip(inboxReadStateSchema)),
-  markItemUnread: hostedProcedure
+  markItemUnread: readStateProcedure
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: INBOX_PROCEDURE_PATH.ITEM_READ }))
     .input(pathIdSchema)
     .output(EffectSchema.flip(inboxReadStateSchema)),
-  remindItem: hostedProcedure
+  remindItem: readStateProcedure
     .meta(bodyCap(REMIND_BODY_BYTES))
     .meta(
       openapi({
@@ -167,7 +228,7 @@ export const inboxContract = {
     .input(exactBodyInput(pathIdSchema, inboxRemindRequestSchema))
     .output(EffectSchema.flip(inboxReadStateSchema)),
   /** `remindItem` under the path a desktop built before the rename still calls; goes once the releases after it are out. */
-  snoozeItem: hostedProcedure
+  snoozeItem: readStateProcedure
     .meta(bodyCap(REMIND_BODY_BYTES))
     .meta(
       openapi({
@@ -178,7 +239,7 @@ export const inboxContract = {
     )
     .input(exactBodyInput(pathIdSchema, inboxRemindRequestSchema))
     .output(EffectSchema.flip(inboxReadStateSchema)),
-  markAllRead: hostedProcedure
+  markAllRead: readAllProcedure
     .meta(bodyCap(READ_ALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.INBOX_READ }))
     .input(exactInput(inboxReadAllRequestSchema))

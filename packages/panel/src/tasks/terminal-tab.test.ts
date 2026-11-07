@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ORPCError } from "@orpc/client";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import {
   TERMINAL_PORT_CHANNEL,
   TERMINAL_REFUSAL,
@@ -31,7 +32,8 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { handHostReads } from "../testing/app-state.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { onTerminals, windowTerminals } from "../testing/terminals.js";
@@ -444,28 +446,65 @@ test("a resume whose snapshot is gone says the sandbox shut down and how to star
   );
 });
 
-test("an agent that has not opened its sandbox yet shows the waiting bar, and the tab asks again a few seconds on", async () => {
+/** The task list as the host lays it, the tab's agent's sandbox open or not. */
+function listedWithSandbox(open: boolean): TasksView {
+  return {
+    ...IDLE_TASKS_VIEW,
+    listStatus: TASKS_READ.READY,
+    taskAgents: [{ ...AGENT, workspaceId: "workspace-1", repository: null, sandboxOpen: open }],
+  };
+}
+
+test("an agent that has not opened its sandbox yet shows the waiting bar, and the tab asks again as the task list says it opened", async () => {
   main.createRefused = TERMINAL_REFUSAL.AGENT_NOT_READY;
-  vi.useFakeTimers();
-  const tab = await mount(true, false);
+  const { deliverTasks } = handHostReads({});
+  deliverTasks(listedWithSandbox(false));
+  const tab = await mount();
   assert.equal(tab.standing(), "· waiting for sandbox");
   assert.equal(tab.bar(), "Waiting for the agent to open its sandbox…");
   assert.equal(tab.action(), null);
   main.createRefused = undefined;
-  await act(async () => vi.advanceTimersByTimeAsync(5_000));
-  await settle();
-  assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.create", "terminal.attach"]);
+
+  deliverTasks(listedWithSandbox(true));
+
+  // The list's delivery lands on the Query client's own batch, then the shell it asks for, then the attach to it.
+  await vi.waitFor(() =>
+    assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.create", "terminal.attach"]),
+  );
 });
 
-test("a tab hidden while it waits on the agent to open its sandbox asks nothing more until shown", async () => {
+test("a shell its connection says is starting attaches again as the sandbox opens, its port before let go", async () => {
+  const { deliverTasks } = handHostReads({});
+  deliverTasks(listedWithSandbox(false));
+  const tab = await mount();
+  const port = main.post(MADE);
+  port.say({ type: "state", state: "starting" });
+
+  deliverTasks(listedWithSandbox(true));
+
+  // The list's delivery lands on the Query client's own batch, then the attach it asks for.
+  await vi.waitFor(() =>
+    assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.attach", "terminal.attach"]),
+  );
+  assert.equal(port.closed(), true);
+});
+
+test("a tab hidden while it waits on the agent to open its sandbox asks nothing more until shown, though the list says it opened", async () => {
   main.createRefused = TERMINAL_REFUSAL.AGENT_NOT_READY;
-  vi.useFakeTimers();
-  const tab = await mount(true, false);
+  const { deliverTasks } = handHostReads({});
+  deliverTasks(listedWithSandbox(false));
+  const tab = await mount();
   main.createRefused = undefined;
   await tab.render(false);
-  await act(async () => vi.advanceTimersByTimeAsync(5_000));
-  await settle();
+
+  deliverTasks(listedWithSandbox(true));
+  await settleQueries(settle);
+
   assert.deepEqual(tab.kinds(), ["terminal.create"]);
+  await tab.render(true);
+  await vi.waitFor(() =>
+    assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.create", "terminal.attach"]),
+  );
 });
 
 /** Ends the bar's reveal, as the browser does once its delay has run; a DOM without animation events is heard through React's webkit-prefixed name for it. */

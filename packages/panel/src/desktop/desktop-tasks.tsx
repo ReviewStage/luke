@@ -574,8 +574,8 @@ function DescriptionDocument({
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
   const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
     lines === undefined
-      ? tasks.sidePanel.onPreviewFile({ path })
-      : tasks.sidePanel.onPreviewFile(
+      ? tasks.sidePanel.onOpenFile({ path })
+      : tasks.sidePanel.onOpenFile(
           { path, startLine: lines.startLine, endLine: lines.endLine },
           lines.commit,
         );
@@ -596,18 +596,8 @@ function DescriptionDocument({
     mainTabs.onChoose(opened);
     setFocus(COLUMN.MAIN);
   };
-  // An agent's tab is in this column, but an archived agent's, never drawn, opens on its own page
-  // instead, where it is read and brought back, a panel filling the window over it giving way and
-  // the keys handed to the page, as a tab of this column opens.
-  const openAgentColumn = (agent: string) => {
-    if (agents.archived?.some((each) => each.id === agent) !== true) {
-      openColumnTab(agentTab(agent));
-      return;
-    }
-    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-    tasks.agentView.onOpen(agent);
-    setFocus(COLUMN.MAIN);
-  };
+  // An agent's tab is in this column, an archived agent's among them, which stands once it is opened.
+  const openAgentColumn = (agent: string) => openColumnTab(agentTab(agent));
   // The description stands in the column's Overview, so a row that opens it chooses that tab.
   const openOverview = () => openColumnTab(MAIN_TAB.OVERVIEW);
   // The task's details go back to the agent's tab they were opened over, or the agents' last, or
@@ -673,7 +663,7 @@ function DescriptionDocument({
         );
       }
       case TOOL_TARGET.PAGE:
-        return sidePanel.onPreview(pageTab(target.page));
+        return sidePanel.onOpen(pageTab(target.page));
       case TOOL_TARGET.TASK:
         // A call that named this very task opens its plan in the column, as one on its own plan does.
         if (target.agent === undefined && target.task === taskId) return openOverview();
@@ -684,7 +674,7 @@ function DescriptionDocument({
   // panel, where every subagent stands; where the worker stands seeds its glyph.
   const openDelegation = (agent: string, callId: string, task: string, status: AgentStatus) => {
     views.onWorkerStatus(callId, status);
-    sidePanel.onPreview(subagentTab(callId, { agent, task }));
+    sidePanel.onOpen(subagentTab(callId, { agent, task }));
   };
   // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
   // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
@@ -739,7 +729,7 @@ function DescriptionDocument({
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
   // A page of another task, a subtask's among them, opens beside this one, read on its own task, so the reader stays here.
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
-    sidePanel.onPreview(pageTab(page), place),
+    sidePanel.onOpen(pageTab(page), place),
   );
   const openAgent = useSteadyDoor(openAgentColumn);
   const openAgentTab = useSteadyDoor(openColumnTab);
@@ -994,11 +984,7 @@ function DescriptionDocument({
           room === SHELL_ROOM.NARROW
             ? {
                 archived: (
-                  <ArchivedAgents
-                    agents={agents}
-                    shown={tasks.shown}
-                    onOpen={tasks.agentView.onOpen}
-                  />
+                  <ArchivedAgents agents={agents} shown={tasks.shown} onOpen={openAgentColumn} />
                 ),
                 onOpenInbox: () => {
                   if (openedId !== undefined) tasks.onShowInbox({ taskId: openedId });

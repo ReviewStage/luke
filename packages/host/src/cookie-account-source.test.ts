@@ -1098,7 +1098,11 @@ const composedTab = (
       readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
       confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
     });
-    yield* account.link({ startCapabilities: Effect.void, stopCapabilities: Effect.void });
+    yield* account.link({
+      startCapabilities: Effect.void,
+      stopCapabilities: Effect.void,
+      settleHeld: Effect.void,
+    });
     yield* account.lifetime;
     yield* settings.lifetime;
     return { settings, account };

@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@repo/wire/testing";
 import { Effect, Fiber } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import { TestClock } from "effect/testing";
 import { accountBearer, CALL_FAULT } from "./account-call.js";
 import { HostedAgentClient } from "./agent-client.js";
 import { AGENT_CALL_FAILURE } from "./agent-view.js";
 import { AGENT_STATUS, LOCAL_AGENT_REFUSAL } from "./agent-wire.js";
-import { FAILURE_FACT } from "./failure-facts.js";
+import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
 import { INBOX_REPLY } from "./inbox-wire.js";
+import { WRITE_UNTAKEN, writeUntakenOf } from "./keyed-write.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
 import {
   PROVIDER_KEY_KIND,
@@ -19,7 +21,7 @@ import {
 import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "./pull-request-chapters-view.js";
 import { PULL_REQUEST_CHAPTERS_STATE } from "./pull-request-chapters-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
-import { HOSTED_API_ERROR } from "./service-wire.js";
+import { HOSTED_API_ERROR, IDEMPOTENCY_KEY } from "./service-wire.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -81,6 +83,32 @@ it.effect("starts an agent with the request as sent", () =>
     assert.deepEqual(started, { agent: AGENT });
     assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), request);
   }),
+);
+
+it.effect(
+  "a Start and a choice the catalog refuses as an invalid request read as a choice the service does not offer now",
+  () =>
+    Effect.gen(function* () {
+      const refusing = fakeCloudApi({
+        [`POST /api/plans/${TASK_ID}/agents`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_REQUEST }),
+          status: HTTP_STATUS.BAD_REQUEST,
+        },
+        [`PATCH /api/agents/${AGENT_ID}`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_REQUEST }),
+          status: HTTP_STATUS.BAD_REQUEST,
+        },
+      });
+
+      const started = yield* Effect.provide(
+        client().start(TASK_ID, { idempotencyKey: "press-1", ...CHOICE }),
+        refusing.layer,
+      );
+      const chosen = yield* Effect.provide(client().choose(AGENT_ID, CHOICE), refusing.layer);
+
+      assert.deepEqual(started, { failure: AGENT_CALL_FAILURE.INVALID_CHOICE });
+      assert.deepEqual(chosen, { failure: AGENT_CALL_FAILURE.INVALID_CHOICE });
+    }),
 );
 
 it.effect(
@@ -433,6 +461,78 @@ it.effect(
       assert.deepEqual(missing, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
       assert.deepEqual(malformed, { failure: AGENT_CALL_FAILURE.UNANSWERED });
       assert.equal(api.requests().length, 4, "nothing is sent for a workspace that is no id");
+    }),
+);
+
+/** An inbox item a keyed write names. */
+const KEYED_ITEM_ID = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
+
+/** One keyed inbox write: what it is, the route it travels, and its retry under the key it carries again. */
+interface KeyedInboxWrite {
+  readonly write: string;
+  readonly route: string;
+  readonly retried: (key: string) => Effect.Effect<object, never, HttpClient.HttpClient>;
+}
+
+/** One retry of each keyed inbox write. */
+const KEYED_INBOX_WRITES: readonly KeyedInboxWrite[] = [
+  {
+    write: "an answer",
+    route: `POST /api/inbox/${KEYED_ITEM_ID}`,
+    retried: (key: string) =>
+      client().answerInbox(
+        KEYED_ITEM_ID,
+        { revision: 1, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" },
+        key,
+      ),
+  },
+  {
+    write: "a close",
+    route: `POST /api/inbox/${KEYED_ITEM_ID}/close`,
+    retried: (key: string) =>
+      client().closeInbox(KEYED_ITEM_ID, { revision: 1, clientKey: "close-1" }, key),
+  },
+  {
+    write: "an item marked read",
+    route: `PUT /api/inbox/${KEYED_ITEM_ID}/read`,
+    retried: (key: string) => client().markInboxItemRead(KEYED_ITEM_ID, key),
+  },
+  {
+    write: "an item marked unread",
+    route: `DELETE /api/inbox/${KEYED_ITEM_ID}/read`,
+    retried: (key: string) => client().markInboxItemUnread(KEYED_ITEM_ID, key),
+  },
+  {
+    write: "a reminder",
+    route: `PUT /api/inbox/${KEYED_ITEM_ID}/remind`,
+    retried: (key: string) => client().remindInboxItem(KEYED_ITEM_ID, null, key),
+  },
+  {
+    write: "every item marked read",
+    route: "PUT /api/inbox/read",
+    retried: (key: string) => client().markInboxRead({}, key),
+  },
+];
+
+it.effect.each(KEYED_INBOX_WRITES)(
+  "$write retried under its key after its answer was lost, answered already written, keeps its optimistic change",
+  ({ route, retried }) =>
+    Effect.gen(function* () {
+      const landedBefore = fakeCloudApi({
+        [route]: {
+          answer: () => ({ error: HOSTED_API_ERROR.ALREADY_WRITTEN }),
+          status: HTTP_STATUS.CONFLICT,
+        },
+      });
+
+      const answer = yield* Effect.provide(retried("key-1"), landedBefore.layer);
+
+      // The host keeps what it drew for a keyed write that is taken already, and takes back one refused (`keyed-write.ts`).
+      assert.equal(
+        writeUntakenOf("cause" in answer ? (answer.cause as FailureFacts) : undefined),
+        WRITE_UNTAKEN.ALREADY_WRITTEN,
+      );
+      assert.equal(landedBefore.requests()[0]?.headers.get(IDEMPOTENCY_KEY.HEADER), "key-1");
     }),
 );
 

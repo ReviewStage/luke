@@ -11,19 +11,14 @@
  * on; the analytics person is asked to be erased, since nothing after the
  * delete would still name it; and what the delete leaves to settle is read,
  * the integration grants among it, since an added account's subject is no id
- * the account still names after it. After the delete: the account's
- * sandboxes are queued (`account-store.ts`), a settling that fails logged
- * since the account is already gone, and every grant is revoked at Vercel
- * Connect, as a Disconnect revokes one, a revoke that fails logged by its
- * word. A deleted workspace's agents' conversations are stamped by its own
- * delete's hooks (`workspace-deletion.ts`).
+ * the account still names after it. After the delete, every grant is
+ * revoked at Vercel Connect, as a Disconnect revokes one, a revoke that fails
+ * logged by its word. A sandbox left behind expires on Vercel's own schedule
+ * (`CODER.SANDBOX_SNAPSHOTS`), and a deleted workspace's agents'
+ * conversations are stamped by its own delete's hooks
+ * (`workspace-deletion.ts`).
  */
 
-import {
-  type AccountDeletionReach,
-  readAccountDeletionReach,
-  settleAccountDeletion,
-} from "@repo/database/models/account-store";
 import { standingSessionsOf } from "@repo/database/models/recorded-session";
 import { Effect, Redacted } from "effect";
 import type { HttpClient } from "effect/http";
@@ -63,7 +58,6 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
 
 /** What the deletion read before Better Auth deleted the account, which it settles after. */
 export interface AccountDeletionPending {
-  readonly reach: AccountDeletionReach;
   readonly grants: readonly IntegrationConnectionRow[];
 }
 
@@ -74,19 +68,13 @@ export const beforeAccountDeletion = /* @__PURE__ */ Effect.fn("web/beforeAccoun
     yield* retireSessions(retiring, yield* standingSessionsOf(userId));
     yield* forgetAnalytics(userId);
     const grants = yield* readIntegrationConnections(userId);
-    const reach = yield* readAccountDeletionReach(userId);
-    return { reach, grants } satisfies AccountDeletionPending;
+    return { grants } satisfies AccountDeletionPending;
   },
 );
 
 /** What the deletion settles once Better Auth has deleted the account. */
 export const afterAccountDeletion = /* @__PURE__ */ Effect.fn("web/afterAccountDeletion")(
   function* (userId: string, pending: AccountDeletionPending) {
-    yield* settleAccountDeletion(pending.reach).pipe(
-      Effect.catch((failure) =>
-        Effect.logError("The account's deletion left its sandboxes unqueued", failure),
-      ),
-    );
     yield* revokeIntegrationGrants(userId, pending.grants);
   },
 );

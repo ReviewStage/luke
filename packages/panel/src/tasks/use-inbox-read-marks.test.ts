@@ -84,12 +84,12 @@ function marks() {
   const sent: Sent[] = [];
   /** One write held until the test answers it, with the value it answers when it does not fail. */
   const sending = <Value>(words: string, value: Value) =>
-    new Promise<Value | { failure: typeof AGENT_CALL_FAILURE.NOT_FOUND }>((resolve) => {
+    new Promise<Value | { failure: typeof AGENT_CALL_FAILURE.UNANSWERED }>((resolve) => {
       sent.push({
         words,
         answer: async (failed = false) => {
           await act(async () => {
-            resolve(failed ? { failure: AGENT_CALL_FAILURE.NOT_FOUND } : value);
+            resolve(failed ? { failure: AGENT_CALL_FAILURE.UNANSWERED } : value);
             for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
           });
         },

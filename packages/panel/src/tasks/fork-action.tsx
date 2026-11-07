@@ -137,8 +137,8 @@ export function agentForkDoors(input: {
   onOpenTarget: ((target: ToolTarget) => void) | undefined;
 }): ForkDoors {
   const { agent, control, onFork, onContinue, cards, onOpenTarget } = input;
-  const standing = new Set(control.agents?.map((each) => each.id));
   const listed = [...(control.agents ?? []), ...(control.archived ?? [])];
+  const listedIds = new Set(listed.map((each) => each.id));
   const forks = new Map(forksOf(listed, agent.id));
   // An agent's page lists that agent alone, so the forks its own summary names stand beside the list's.
   const named = agent.continuedBy ?? [];
@@ -146,10 +146,12 @@ export function agentForkDoors(input: {
     if (each.messageId === undefined || listed.some((one) => one.id === each.agentId)) continue;
     forks.set(each.messageId, [...(forks.get(each.messageId) ?? []), each.agentId]);
   }
-  // An agent with no task opens on its own page, listed or not; on a task, an unlisted one is archived.
-  const opens = (agentId: string) => standing.has(agentId) || agent.planId === null;
-  // Note that an agent with no task is forked and continued as a task's is, its draft on its own page.
-  const drafts = control.onUnarchive === undefined;
+  // An agent with no task opens on its own page, listed or not; on a task, a listed one opens its
+  // tab, an archived one's among them.
+  const opens = (agentId: string) => listedIds.has(agentId) || agent.planId === null;
+  // Note that an agent with no task is forked and continued as a task's is, its draft on its own page,
+  // and that an archived one, on its page or in its task's tab, opens no draft.
+  const drafts = control.onUnarchive === undefined && agent.archivedAt === undefined;
   // Note that a local agent has no sandbox snapshot to fork from, so it offers no fork, and
   // that a pilot task's agents fork to none, since a fork is an agent of the developer's own.
   const forkable =
@@ -177,7 +179,7 @@ export function agentForkDoors(input: {
             agentId,
             listed.find((each) => each.id === agentId),
             cards,
-            // An archived agent of a task is named alone, since no tab of the task draws it.
+            // An agent of a task its list does not hold is named alone, with no tab to open.
             opens(agentId) ? open : undefined,
             named.find((each) => each.agentId === agentId)?.title ?? null,
           )}

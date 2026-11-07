@@ -1,9 +1,7 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords } from "@repo/features/words";
 import { ERROR_STATE_PLACEMENT, ErrorState, Fill, ScrollArea, SpinnerRegion } from "@repo/ui";
-import { Cause } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSideBundles } from "../bundle-loader.js";
@@ -297,9 +295,9 @@ export function WholeFile({
   findable?: boolean | undefined;
 }): React.JSX.Element {
   const { diffView } = useSideBundles();
-  const loaded = useAtomValue(diffView);
-  const retry = useAtomRefresh(diffView);
-  const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
+  const loaded = useQuery(diffView);
+  const retry = () => void loaded.refetch();
+  const module = loaded.data;
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<FileViewHandle | undefined>(undefined);
   const look = useDiffLook(true);
@@ -363,12 +361,12 @@ export function WholeFile({
     };
   }
 
-  if (AsyncResult.isFailure(loaded)) {
+  if (loaded.isError) {
     return (
       <ErrorState
         failure={failureShown({
           surface: FAILURE_SURFACE.FILE_READ,
-          cause: Cause.squash(loaded.cause),
+          cause: loaded.error,
         })}
         placement={ERROR_STATE_PLACEMENT.CENTERED}
         onRetry={retry}

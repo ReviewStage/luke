@@ -32,6 +32,7 @@
     "packages/host/src/client/app-state-store.ts",
     "packages/host/src/update-service.ts",
     "packages/service/src/accounts/deletion-hooks.ts",
+    "packages/service/src/automations/automation-run-consumer.ts",
     "packages/service/src/member-mcp/server.ts"
   ],
   "rawAsyncPrimitives": [

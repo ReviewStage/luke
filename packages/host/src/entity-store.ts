@@ -40,7 +40,7 @@
  * the file at a sign-out.
  */
 
-import { automationsLiveRowsSchema } from "@repo/features/automation-live";
+import { AUTOMATIONS_READ } from "@repo/features/automation-live";
 import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import {
   agentSectionEntrySchema,
@@ -123,7 +123,7 @@ const keptRowsSchema = Schema.Struct({
       invitations: WORKSPACE_INVITATIONS_READ.rows.fields.invitations,
     }),
   ),
-  [KEPT_READ.AUTOMATIONS]: Schema.Record(Schema.String, automationsLiveRowsSchema),
+  [KEPT_READ.AUTOMATIONS]: Schema.Record(Schema.String, AUTOMATIONS_READ.rows),
 });
 
 /** Each kept read's rows, as a read hands them to the store and takes them back. */

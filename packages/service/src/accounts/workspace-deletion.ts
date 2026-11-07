@@ -6,8 +6,9 @@
  * the account that ran it rather than the workspace, so it outlasts the
  * agent: before the delete the conversations of every agent of the
  * workspace are read, and after it they are stamped deleted, as a deleted
- * task's are, so the purge takes them seven days on and queues their
- * sandboxes (`soft-delete.ts`). Nothing is stamped before the delete,
+ * task's are, so the purge takes them seven days on (`soft-delete.ts`),
+ * by when their sandboxes' snapshots have expired too. Nothing is stamped
+ * before the delete,
  * because a delete refused after that would leave a standing workspace's
  * agents with their transcripts gone.
  */

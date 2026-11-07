@@ -90,6 +90,7 @@ const desktopAccount = (input: {
   readonly capabilities?: {
     readonly startCapabilities: Effect.Effect<void>;
     readonly stopCapabilities: Effect.Effect<void>;
+    readonly settleHeld?: Effect.Effect<void>;
   };
 }) =>
   Effect.gen(function* () {
@@ -129,9 +130,12 @@ const desktopAccount = (input: {
       );
     }
     const account = yield* Effect.provide(composeAccount({ settings }), machine);
-    yield* account.link(
-      input.capabilities ?? { startCapabilities: Effect.void, stopCapabilities: Effect.void },
-    );
+    yield* account.link({
+      startCapabilities: Effect.void,
+      stopCapabilities: Effect.void,
+      settleHeld: Effect.void,
+      ...input.capabilities,
+    });
     yield* account.lifetime;
     return account;
   });
@@ -366,6 +370,56 @@ it.effect("an admin's access reaches the windows once read, and a sign-out takes
   ),
 );
 
+it.effect(
+  "a sign-out settles what the account holds to send while its own credential still stands, before the session ends",
+  () =>
+    Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("account-settle-");
+      const kernel = hostKernelOver({
+        stateRoot,
+        runMode: runModeFor({ capture: false, fixture: false }),
+        accountBaseUrl: ACCOUNT_BASE_URL,
+        now: () => 0,
+        createId: () => "id",
+        report: () => undefined,
+        emit: () => undefined,
+      });
+      /** The token a call settled on the way out would carry, read as it was settled. */
+      const settledUnder: (string | undefined)[] = [];
+      let read: () => Effect.Effect<string | undefined> = () => Effect.succeed(undefined);
+      const account = yield* desktopAccount({
+        kernel,
+        machine: Layer.succeed(AppIdentity, {
+          appVersion: "0.0.0-test",
+          packaged: false,
+          platform: PRODUCT_PLATFORM.DESKTOP,
+        }),
+        consent: grantingConsent,
+        signedIn: true,
+        capabilities: {
+          startCapabilities: Effect.void,
+          stopCapabilities: Effect.void,
+          settleHeld: Effect.flatMap(
+            Effect.suspend(() => read()),
+            (token) => Effect.sync(() => void settledUnder.push(token)),
+          ),
+        },
+      });
+      read = account.token.readAccessToken;
+
+      yield* Effect.orDie(account.acts.ACCOUNT_SIGN_OUT(undefined));
+      assert.deepEqual(settledUnder, ["access-1"]);
+      assert.equal(account.snapshot().status, ACCOUNT_STATUS.SIGNED_OUT);
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, async (input, init) => {
+        const request = new Request(input, init);
+        if (request.url.startsWith(`${ACCOUNT_BASE_URL}/`)) return jsonResponse({});
+        throw new Error(`this test reaches no network: ${request.url}`);
+      }),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    ),
+);
+
 /** The browser tab's service, on the tab's own origin, as Better Auth and our routes answer it. */
 const TAB_ORIGIN = "https://app.example.test";
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
@@ -484,7 +538,11 @@ const browserAccount = (service: TabService) =>
       readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
       confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
     });
-    yield* account.link({ startCapabilities: Effect.void, stopCapabilities: Effect.void });
+    yield* account.link({
+      startCapabilities: Effect.void,
+      stopCapabilities: Effect.void,
+      settleHeld: Effect.void,
+    });
     const launched = yield* Effect.forkScoped(account.lifetime);
     yield* settings.lifetime;
     return { account, settings, events, departures, launched };

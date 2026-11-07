@@ -1,0 +1,7 @@
+-- Expand step of dropping the queue of sessions whose sandboxes the scheduled sweep deleted,
+-- "session_sandbox_cleanup": the modules no longer declare it, and nothing this deployment runs reads or writes
+-- it, since an agent's sandbox now persists only through its snapshots, which Vercel expires seven days after
+-- last use. This migration takes no lock and changes nothing.
+-- Note that the table itself stays one deployment longer, because a build migrates while the deployment before it
+-- still serves, queues sessions into it, and sweeps it every minute; a later release's migration drops it
+-- (apps/web/server/README.md, "Dropping a column ... takes two deployments").

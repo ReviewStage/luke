@@ -202,7 +202,7 @@ export function openPullRequestsHere(
     // Only what a link writes, which a place handed rather than written never is.
     if (address.href === undefined) return false;
     const routed = route(address, here);
-    if (routed.kind !== ROUTE.PREVIEW) return false;
+    if (routed.kind !== ROUTE.BESIDE) return false;
     const { thing } = routed;
     if (thing.kind === THING.PAGE && thing.place !== undefined) {
       openPage(thing.pageId, thing.place);

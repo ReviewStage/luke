@@ -28,13 +28,11 @@ import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
-import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
-import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js";
 
 /**
- * What the account group reads and writes of an account: what its erasure
- * settles beside Better Auth's own delete, the cross-device snapshot behind `/api/account/preferences`, which is the
+ * What the account group reads and writes of an account: the cross-device
+ * snapshot behind `/api/account/preferences`, which is the
  * settings preferences, the coding agents' default model, effort, and
  * context window, the model the account's Generate chapters runs on, and
  * the experiments the account turned on. Every function here is an effect over the ambient `SqlClient`
@@ -90,49 +88,6 @@ export interface AccountPreferencesWrite {
 
 /** What an account seam answers: an effect over the ambient client, composed into the request that made it. */
 export type AccountSeamEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
-
-/**
- * What an account's deletion keeps of its own beside Better Auth's
- * `deleteUser` (`auth-policy.ts`'s `accountDeletion`), which deletes the user
- * row and the workspaces the account is the only member of, every dependent
- * row cascading with them. The runtime session each of the account's
- * conversations ran in, a deleted task's too, outlasts those rows, so it is
- * read before the delete and queued for its sandbox's deletion after it,
- * since nothing after the delete names it. A deleted workspace's agents'
- * conversations are its own delete's to stamp (`auth-policy.ts`'s
- * `workspaceDeletion`).
- */
-export interface AccountDeletionReach {
-  readonly sessionIds: readonly string[];
-}
-
-const findAccountSessions = SqlSchema.findAll({
-  Request: Schema.String,
-  Result: Schema.Struct({ runtimeSessionId: Schema.NullOr(Schema.String) }),
-  execute: (userId) =>
-    Database.use((db) =>
-      db
-        .select({ runtimeSessionId: conversations.runtimeSessionId })
-        .from(conversations)
-        .where(eq(conversations.userId, userId)),
-    ),
-});
-
-/** What the account's deletion settles once Better Auth has deleted it, read while its rows stand. */
-export function readAccountDeletionReach(
-  userId: string,
-): Effect.Effect<AccountDeletionReach, StoreFailure, DatabaseServices> {
-  return Effect.map(findAccountSessions(userId), (sessions) => ({
-    sessionIds: sessionsOf(sessions),
-  }));
-}
-
-/** Settles what the deletion read: each session is queued for its sandbox's deletion. */
-export function settleAccountDeletion(
-  reach: AccountDeletionReach,
-): Effect.Effect<void, StoreFailure, DatabaseServices> {
-  return queueSessionSandboxes(reach.sessionIds);
-}
 
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
 const PREFERENCE_COLUMNS = {

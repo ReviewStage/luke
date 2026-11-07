@@ -198,7 +198,7 @@ const subjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /** The workspace the agent's chapters are kept under, once a token minted for its repository confirms the workspace still reaches it; none for an agent with no repository. */
-const keptUnder = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const keptUnder = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: Agent,
 ): Effect.fn.Return<Option.Option<ChaptersOf>, HostedRefusal, ChaptersServices> {
@@ -318,7 +318,7 @@ function generatorOf(keys: readonly OwnKey[]): ChaptersGenerator {
 }
 
 /** What the member's Generate stands on: nothing to run on where they saved no API key. */
-const generatorFor = (userId: string) => Effect.map(ownKeysFor(userId), generatorOf);
+export const generatorFor = (userId: string) => Effect.map(ownKeysFor(userId), generatorOf);
 
 /** The model a Generate tells chapters on, and what it stands on as the answer names it. */
 interface GenerateOn {
@@ -340,14 +340,15 @@ const modelOf = (seams: PullRequestChaptersProcedureSeams, userId: string) =>
 
 /**
  * What a reader of an agent's pull request's chapters is admitted to, as
- * the agent's read and its live read (`live-procedures.ts`) admit one: the
+ * the agent's read and its live read (`live/reads/pull-request-chapters.ts`,
+ * through `keptUnder` and `generatorFor`) admit one: the
  * workspace and repository the chapters are kept under, once a token minted
  * for the repository confirms the workspace still reaches it, none for an
  * agent with no repository; and what the reader's Generate stands on, on
  * keys of their own: what it would run on and what it may, none where they
  * can generate no chapters.
  */
-export const agentChaptersAdmission = /* @__PURE__ */ Effect.fnUntraced(function* (
+const agentChaptersAdmission = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: Agent,
 ) {

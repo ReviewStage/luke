@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { noDatabase } from "@repo/database/testing/no-database";
 import { Effect, Exit, Redacted } from "effect";
-import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import {
@@ -13,8 +12,6 @@ import {
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
-/** What the sweep over the queued sessions' sandboxes answers. */
-const SANDBOXED: SessionSandboxSweepOutcome = { deleted: 4, pending: 1 };
 /** What the sweep over the running native sandboxes answers. */
 const NATIVE: NativeSandboxSweepOutcome = { lost: 1 };
 
@@ -35,11 +32,8 @@ interface Recorded {
   abandoned: number[];
   deviceLeases: number[];
   deviceWarmRunners: number[];
-  sandboxed: number[];
   native: number[];
   wakeups: number[];
-  automated: number[];
-  pictures: number[];
   syncLog: number[];
 }
 
@@ -49,11 +43,8 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     abandoned: [],
     deviceLeases: [],
     deviceWarmRunners: [],
-    sandboxed: [],
     native: [],
     wakeups: [],
-    automated: [],
-    pictures: [],
     syncLog: [],
   };
   const options: MaintenanceSweepOptions = {
@@ -80,11 +71,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.deviceWarmRunners.push(now);
         return { retired: 1, left: 0, busy: 0, failed: 0 };
       }),
-    sweepSandboxes: (now) =>
-      Effect.sync(() => {
-        recorded.sandboxed.push(now);
-        return SANDBOXED;
-      }),
     sweepNativeSandboxes: (now) =>
       Effect.sync(() => {
         recorded.native.push(now);
@@ -94,16 +80,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.wakeups.push(now);
         return { delivered: 1, failed: 0 };
-      }),
-    sweepAutomations: (now) =>
-      Effect.sync(() => {
-        recorded.automated.push(now);
-        return { fired: 1, started: 1, skipped: 0, failed: 0 };
-      }),
-    purgeUnsavedPictures: (now) =>
-      Effect.sync(() => {
-        recorded.pictures.push(now);
-        return 4;
       }),
     sweepAgentQueues: () => Effect.succeed(0),
     pruneSyncLog: (now) =>
@@ -135,11 +111,8 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       abandoned: [],
       deviceLeases: [],
       deviceWarmRunners: [],
-      sandboxed: [],
       native: [],
       wakeups: [],
-      automated: [],
-      pictures: [],
       syncLog: [],
     });
   }),
@@ -160,11 +133,8 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       abandoned: [],
       deviceLeases: [],
       deviceWarmRunners: [],
-      sandboxed: [],
       native: [],
       wakeups: [],
-      automated: [],
-      pictures: [],
       syncLog: [],
     });
     assert.deepEqual(missing.recorded, {
@@ -172,18 +142,15 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       abandoned: [],
       deviceLeases: [],
       deviceWarmRunners: [],
-      sandboxed: [],
       native: [],
       wakeups: [],
-      automated: [],
-      pictures: [],
       syncLog: [],
     });
   }),
 );
 
 it.effect(
-  "an authorized sweep runs every sweep at one instant, the unsaved pictures, and the sync log among them, and answers what each did",
+  "an authorized sweep runs every sweep at one instant, the sync log among them, and answers what each did",
   () =>
     Effect.gen(function* () {
       const { options, recorded } = sweepOptions();
@@ -192,8 +159,6 @@ it.effect(
       assert.equal(answer.status, 200);
       assert.deepEqual(answer.body.nativeSandboxes, NATIVE);
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
-      assert.deepEqual(answer.body.sandboxes, SANDBOXED);
-      assert.equal(answer.body.purgedPictures, 4);
       assert.equal(answer.body.syncLog, 5);
       const [instant] = recorded.purged;
       assert.ok(instant !== undefined);
@@ -202,11 +167,8 @@ it.effect(
         abandoned: [instant],
         deviceLeases: [instant],
         deviceWarmRunners: [instant],
-        sandboxed: [instant],
         native: [instant],
         wakeups: [instant],
-        automated: [instant],
-        pictures: [instant],
         syncLog: [instant],
       });
     }),
@@ -219,7 +181,7 @@ it.effect(
       const checkIns: string[] = [];
       const { options, recorded } = sweepOptions({
         sweepAbandonedTurns: () => Effect.fail(new Error("a turn's row could not be read")),
-        sweepAutomations: () => Effect.die(new Error("an automation's row could not be read")),
+        sweepNativeWakeups: () => Effect.die(new Error("a wakeup's row could not be read")),
         // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
         monitor: {
           run: (run) =>
@@ -235,9 +197,7 @@ it.effect(
       assert.equal(answer.status, 500);
       assert.deepEqual(checkIns, ["error"]);
       assert.deepEqual(answer.body.abandoned, SWEEP_FAILED);
-      assert.deepEqual(answer.body.automations, SWEEP_FAILED);
-      assert.deepEqual(answer.body.sandboxes, SANDBOXED);
+      assert.deepEqual(answer.body.nativeWakeups, SWEEP_FAILED);
       assert.equal(recorded.syncLog.length, 1);
-      assert.equal(recorded.pictures.length, 1);
     }),
 );

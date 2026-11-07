@@ -42,7 +42,7 @@ import { type CountNoun, foldedCount } from "./sidebar-fold.js";
 import { useRefusalHeard } from "./use-refusal-heard.js";
 
 /**
- * agent-archive.tsx -- a coding agent's Archive, asked first while a teammate's agent still works, and the task's archived agents, each a row with its Unarchive: listed under Archived in the tab bar's History (`agent-history.tsx`), and folded under Archived at the foot of a phone's Overview agents.
+ * agent-archive.tsx -- a coding agent's Archive, asked first while a teammate's agent still works, and the task's archived agents, each a row with its Unarchive, folded under Archived at the foot of a phone's Overview agents; the tab bar's History lists them as it lists a closed agent (`agent-history.tsx`).
  *
  * Archive stands in an agent's tab menu, and for an agent with no task in its page's ⋯ and its
  * sidebar row's menu, whose Unarchive stands in its place once archived
@@ -60,7 +60,7 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * dialog stands until the answer to say a refusal, the agent leaves its tab
  * and the sidebar's card and marks for History's Archived, while its
  * transcript and its pull request are kept, ⌘K still finds it, saying it is
- * archived and opening its own page, and a toast offers Undo
+ * archived and opening its tab again, and a toast offers Undo
  * (`use-agents.ts`).
  *
  * The archived agents are folded away behind the header every group of the
@@ -68,7 +68,7 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * chevron while hovered or reached from the keyboard, and folded, the count
  * after its name, the rows unrolling as they fade in and fading out as it
  * folds.
- * Unfolded, and in History, each archived agent is a muted row in the summary's shape, a failed one's mark at
+ * Unfolded, each archived agent is a muted row in the summary's shape, a failed one's mark at
  * its end as a standing row's, whose Unarchive stands in the mark's place
  * while it is hovered or reached from the keyboard, as the sidebar task
  * rows' Pin and Archive do, a ⋯ beside it: at rest they take no room, the name running the
@@ -78,8 +78,7 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * long press offering both. The
  * row hangs the agent's card beside it as a standing row does, saying it
  * was archived and when (`agent-ref.tsx`), and a press opens the agent's
- * own page, since its tab is gone, where its transcript is read and
- * Unarchive brings it back. It draws nothing while no agent is archived, and
+ * tab again, where its transcript is read and Unarchive brings it back. It draws nothing while no agent is archived, and
  * starts folded, then stands as the reader left it, kept on this Mac.
  */
 
@@ -213,8 +212,8 @@ export function useAgentArchive(
 /** What an archived agent's row is, naming its ⋯ and menu "Archived agent actions". */
 const ARCHIVED_THING = "Archived agent";
 
-/** One archived agent: its glyph and name, muted, hanging its card, opening its own page on a press, its Unarchive and its ⋯ at its end, and its right-click, long press, and the menu key opening the ⋯'s menu. */
-export function ArchivedAgentRow({
+/** One archived agent: its glyph and name, muted, hanging its card, opening its tab on a press, its Unarchive and its ⋯ at its end, and its right-click, long press, and the menu key opening the ⋯'s menu. */
+function ArchivedAgentRow({
   agent,
   agents,
   shown,
@@ -227,7 +226,8 @@ export function ArchivedAgentRow({
 }): React.JSX.Element {
   const press = useArchivePress(agents);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
-  // The agent's menu over the doors a row has: an archived agent's Copy link, Unarchive, and Permanently delete.
+  // The agent's menu over the doors a row has: an archived agent's Copy link, Unarchive, and Permanently delete,
+  // and no Rename, since the row draws no name's field.
   const actions = useAgentActions(agent, agents, {
     label: subject.name,
     shown,
@@ -249,7 +249,12 @@ export function ArchivedAgentRow({
           muted
           hint={{ Hint: RowHint, label: subject.name }}
           onPress={() => onOpen(agent.id)}
-          menu={rowMenu(ARCHIVED_THING, agentMenuGroups(rowDoors(actions.doors)), shown, true)}
+          menu={rowMenu(
+            ARCHIVED_THING,
+            agentMenuGroups({ ...rowDoors(actions.doors), onRename: undefined }),
+            shown,
+            true,
+          )}
           more={!coarse}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
@@ -282,7 +287,7 @@ export function ArchivedAgents({
   agents: AgentsControl;
   /** Whether the summary is on screen: off it, an archived row's menu stands over nothing. */
   shown: boolean;
-  /** Opens an archived agent's own page, where its transcript is read and it is brought back. */
+  /** Opens an archived agent's tab, where its transcript is read and it is brought back. */
   onOpen: (agentId: string) => void;
 }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useKept(KEPT.UNFOLDED, false);

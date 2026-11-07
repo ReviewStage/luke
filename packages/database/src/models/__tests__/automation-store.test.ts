@@ -17,27 +17,24 @@ import { DateTime, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
-import { automation, automationRun } from "../../schemas/automation.js";
-import { getTestDB, plansOf } from "../../testing/index.js";
+import { getTestDB } from "../../testing/index.js";
 import {
   automationRunsSince,
+  automationRunToAct,
   claimAutomationRun,
-  claimDueAutomations,
   createAutomation,
   deleteAutomation,
-  expireQueuedAutomationRuns,
   githubAutomationsOn,
   integrationAutomationsOn,
   listAutomationRuns,
   listAutomations,
   type NewAutomation,
   ownFailedAutomationRuns,
-  queuedAutomationRuns,
   readAutomation,
   readWebhookAutomation,
   recordAutomationRun,
+  scheduledAutomations,
   settleAutomationRun,
-  strandedAutomationRuns,
   subjectRunStartedSince,
   updateAutomation,
 } from "../automation-store.js";
@@ -46,8 +43,7 @@ import {
  * An account's automations and their runs, over a real dialect: made only
  * on a task the account reaches, read and changed by that account alone
  * while it still reaches the task, one run per firing however often it is
- * claimed, a run settled once, and a schedule claimed once when due, its
- * backlog moved on rather than run.
+ * recorded, and a run settled once.
  *
  * Synthetic accounts, workspaces, and tasks throughout.
  */
@@ -90,7 +86,7 @@ const nightly = (organizationId: string): NewAutomation => ({
 
 it.layer(getTestDB())("the automation store", (it) => {
   it.effect(
-    "a webhook automation reads for a call while its owner is a member of its workspace, and its run keeps the body for the sweep alone",
+    "a webhook automation reads for a call while its owner is a member of its workspace, and its run keeps the body for its delivery alone",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -113,15 +109,14 @@ it.layer(getTestDB())("the automation store", (it) => {
 
         const read = yield* readWebhookAutomation(hooked.id);
         const scheduled = yield* readWebhookAutomation(existing.id);
+        const key = randomUUID();
         yield* recordAutomationRun(hooked, {
-          dedupeKey: randomUUID(),
+          dedupeKey: key,
           firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: 5 },
           payload: "hello",
           firedAt: new Date(),
         });
-        const queued = (yield* queuedAutomationRuns(new Date(0), 100)).filter(
-          (run) => run.automationId === hooked.id,
-        );
+        const queued = yield* automationRunToAct(hooked.id, key);
         const db = yield* Database;
         yield* db.delete(member).where(eq(member.userId, owner));
         const departed = yield* readWebhookAutomation(hooked.id);
@@ -132,8 +127,8 @@ it.layer(getTestDB())("the automation store", (it) => {
         );
         assert.ok(Option.isNone(scheduled), "an automation that is no webhook reads as none");
         assert.deepEqual(
-          queued.map((run) => run.payload),
-          ["hello"],
+          Option.map(queued, (run) => run.payload),
+          Option.some("hello"),
         );
         assert.ok(Option.isNone(departed), "a departed owner's webhook reads as none");
       }),
@@ -322,85 +317,34 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "the schedules due are claimed once, each moved on to its next instant, one missed by more than the grace is moved on without a run, a webhook's is not claimed, and a leaver's is claimed to fail as its run starts",
+    "the scheduled automations are read from the first page, paused ones among them and no other trigger's, and a page after an id starts past it",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const workspaceId = yield* openWorkspace(owner);
-        const now = new Date("2026-10-15T09:05:00Z");
-        const next = new Date("2026-10-16T09:00:00Z");
-        const make = (nextRunAt: Date) =>
-          Effect.map(
-            createAutomation(owner, { ...nightly(workspaceId), nextRunAt }),
-            Option.getOrThrow,
-          );
-        const due = yield* make(new Date("2026-10-15T09:00:00Z"));
-        const stale = yield* make(new Date("2026-10-15T06:00:00Z"));
-        const later = yield* make(new Date("2026-10-15T10:00:00Z"));
-        const paused = yield* make(new Date("2026-10-15T09:00:00Z"));
-        yield* updateAutomation(owner, paused.id, { enabled: false });
-        const hooked = yield* make(new Date("2026-10-15T09:00:00Z"));
-        yield* updateAutomation(owner, hooked.id, {
-          trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-        });
-        yield* Database.use((db) =>
-          db
-            .update(automation)
-            .set({ nextRunAt: new Date("2026-10-15T09:00:00Z") })
-            .where(eq(automation.id, hooked.id)),
+        const scheduled = Option.getOrThrow(yield* createAutomation(owner, nightly(workspaceId)));
+        const paused = Option.getOrThrow(
+          yield* updateAutomation(
+            owner,
+            Option.getOrThrow(yield* createAutomation(owner, nightly(workspaceId))).id,
+            { enabled: false },
+          ),
         );
-        const leaver = yield* openAccount;
-        const left = Option.getOrThrow(
-          yield* createAutomation(leaver, {
-            ...nightly(yield* openWorkspace(leaver)),
-            nextRunAt: new Date("2026-10-15T09:00:00Z"),
+        const hooked = Option.getOrThrow(
+          yield* createAutomation(owner, {
+            ...nightly(workspaceId),
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+            nextRunAt: null,
+            webhookSecretHash: "cd".repeat(32),
           }),
         );
-        yield* Database.use((db) => db.delete(member).where(eq(member.userId, leaver)));
-        const claim = {
-          now,
-          limit: 10,
-          graceMs: 60 * 60_000,
-          nextAfter: () => next,
-        };
 
-        const first = yield* claimDueAutomations(claim);
-        const second = yield* claimDueAutomations(claim);
+        const read = (yield* scheduledAutomations(null, 1000)).map((row) => row.id);
+        const after = (yield* scheduledAutomations(scheduled.id, 1000)).map((row) => row.id);
 
-        assert.deepEqual(
-          first
-            .filter((each) => each.automation.userId === owner)
-            .map((each) => [each.automation.id, each.run.firing]),
-          [[due.id, { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: due.nextRunAt?.getTime() }]],
-        );
-        assert.deepEqual(second, [], "a claim after finds nothing left due");
-        const nextOf = (id: string) =>
-          Effect.map(readAutomation(owner, id), (read) => Option.getOrThrow(read).nextRunAt);
-        assert.deepEqual(yield* nextOf(due.id), next);
-        assert.deepEqual(yield* nextOf(stale.id), next, "the stale one is moved on");
-        assert.deepEqual(yield* listAutomationRuns(owner, stale.id), [], "and runs nothing");
-        assert.deepEqual(yield* nextOf(later.id), later.nextRunAt);
-        assert.deepEqual(yield* nextOf(paused.id), paused.nextRunAt);
-        const [webhookRuns, leaverRuns] = yield* Effect.all([
-          listAutomationRuns(owner, hooked.id),
-          Database.use((db) =>
-            db
-              .select({ id: automationRun.id })
-              .from(automationRun)
-              .where(eq(automationRun.automationId, left.id)),
-          ),
-        ]);
-        assert.deepEqual(webhookRuns, [], "a due instant left on a webhook fires nothing");
-        assert.equal(
-          leaverRuns.length,
-          1,
-          "a schedule whose owner left still fires, so its run fails and says why",
-        );
-
-        // A second claim that read the row at its old instant records no second run.
-        yield* updateAutomation(owner, due.id, { nextRunAt: due.nextRunAt });
-        assert.deepEqual(yield* claimDueAutomations(claim), []);
-        assert.equal((yield* listAutomationRuns(owner, due.id)).length, 1);
+        assert.ok(read.includes(scheduled.id) && read.includes(paused.id));
+        assert.ok(!read.includes(hooked.id), "a webhook automation keeps no schedule");
+        assert.ok(!after.includes(scheduled.id), "a page after an id starts past it");
       }),
   );
 
@@ -694,34 +638,6 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
           Option.map(yield* readAutomation(owner, id), (read) => read.name),
           Option.some("Nightly flaky-test sweep"),
         );
-      }),
-  );
-});
-
-it.layer(getTestDB())("the automation sweep's reads", (it) => {
-  const at = new Date("2026-10-20T12:00:00Z");
-
-  it.effect(
-    "the sweep finds the queued runs to start and to expire through the index of their status",
-    () =>
-      Effect.gen(function* () {
-        const [queued] = yield* plansOf(queuedAutomationRuns(at, 10));
-        const [expired] = yield* plansOf(
-          expireQueuedAutomationRuns(at, AUTOMATION_RUN_REASON.UNAVAILABLE),
-        );
-
-        assert.match(queued?.plan ?? "", /automation_run_status_fired/);
-        assert.match(expired?.plan ?? "", /automation_run_status_fired/);
-      }),
-  );
-
-  it.effect(
-    "the sweep finds the claimed runs no agent was recorded for through their own index",
-    () =>
-      Effect.gen(function* () {
-        const [stranded] = yield* plansOf(strandedAutomationRuns(at, 10));
-
-        assert.match(stranded?.plan ?? "", /automation_run_unrecorded_settled/);
       }),
   );
 });

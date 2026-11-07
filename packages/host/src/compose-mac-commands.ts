@@ -27,7 +27,9 @@ import {
   FiberSet,
   Option,
   Schedule,
+  type Scope,
   Stream,
+  SubscriptionRef,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
@@ -80,17 +82,22 @@ import type { RunMode } from "./run-mode.js";
  * A live read writes nothing, so the Mac says it listens for its kinds
  * itself, every `LISTENING_EVERY`, well inside the service's freshness
  * window: the one timer that remains, because presence is a fact about this
- * process that no row change can carry. Each beat reads the gate first, so
- * the setting switched off, a sign-out, or a run that sends nothing ends the
- * follow and the beats, the agents' calls are told no Mac listens, and every
- * command still running is stopped, its process group killed. Every read
- * names the account the follow started for, so one the service signs out
- * ends the follow. Quitting closes the scope, which kills every command
- * still running with its process group.
+ * process that no row change can carry.
+ *
+ * The gate is a value that changes rather than one read again on a timer:
+ * the account it stands open for, worked out afresh each time a setting or
+ * the account changes (`MacCommandsDependencies.changed`). The setting
+ * switched off, a sign-out, or another account signing in ends the follow
+ * and the beats at once, the agents' calls are told no Mac listens, and
+ * every command still running is stopped, its process group killed; a gate
+ * shut waits for it to open, reading nothing. Every read names the account
+ * the follow started for, so one the service signs out ends the follow.
+ * Quitting closes the scope, which kills every command still running with
+ * its process group.
  */
 
-/** How long the follow rests while the gate is shut, or after a turn that died. */
-const IDLE = Duration.seconds(5);
+/** How long the follow rests after a turn that died, before it tries again. */
+const DIED_REST = Duration.seconds(5);
 /** How often a Mac following its commands says it listens: a third of the service's forty-five-second freshness window. */
 const LISTENING_EVERY = Duration.seconds(15);
 /**
@@ -119,8 +126,15 @@ export interface MacCommandsDependencies {
   account: Pick<AccountComposer, "capabilitiesActive">;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
-  /** How Settings lets agents run commands on this Mac, read as each follow begins, on every beat, and as each claimed command is about to run. */
+  /** How Settings lets agents run commands on this Mac, read as the gate is worked out and as each claimed command is about to run. */
   mode: Effect.Effect<MacCommandMode>;
+  /**
+   * Subscribes, for as long as the subscriber's scope stands, to every
+   * change that may move the gate: a setting written, or the account
+   * signed in, out, or switched. What each carries is not read: the gate is
+   * worked out afresh from `mode`, `account`, and `accountId` on each.
+   */
+  changed: Effect.Effect<Stream.Stream<unknown>, never, Scope.Scope>;
   /** Writes the setting to Always allow, answering whether the write landed: the prompt's Allow all commands, which also runs the command asked. */
   allowAlways: Effect.Effect<boolean>;
   client: MacCommandClient;
@@ -311,15 +325,40 @@ export function composeMacCommands(
         account.capabilitiesActive(),
     );
 
+    /** The gate as last worked out: the account the Mac takes commands for, none while it is shut. */
+    const gate = yield* SubscriptionRef.make<string | undefined>(undefined);
+    const gateFor = Effect.map(gateOpen, (open) => (open ? dependencies.accountId() : undefined));
+    /** How many times the gate has moved: shut, opened, or opened for another account. */
+    let moves = 0;
+    const gateMoved = Effect.flatMap(gateFor, (userId) =>
+      Effect.map(SubscriptionRef.getAndSet(gate, userId), (was) => {
+        if (was !== userId) moves += 1;
+      }),
+    );
+    /** Waits until the gate stands open, for whichever account. */
+    const opened = SubscriptionRef.changes(gate).pipe(
+      Stream.filter((userId) => userId !== undefined),
+      Stream.runHead,
+    );
+    /** Waits until the gate no longer stands open for `userId`: shut, or open for another account. */
+    const left = (userId: string) =>
+      SubscriptionRef.changes(gate).pipe(
+        Stream.filter((now) => now !== userId),
+        Stream.runHead,
+      );
+
     /**
      * One command heard of, claimed by its id and, once granted, run on a
      * fiber of its own; with the gate shut since, answered as not run
      * instead. A claim the service did not answer is asked again a few times
      * (`CLAIM_RETRY`), since the rows that named it may not change again to
      * say so. Note that the claim and its answer are uninterruptible and run
-     * on the concern's own set rather than the follow's fiber, because a
-     * command the service granted is this Mac's alone to answer, and a follow
-     * ended mid-claim would otherwise leave its call waiting out its time.
+     * on a set of the concern's own (`claims`), never cleared, rather than the
+     * follow's fiber or the set of commands running, because a command the
+     * service granted is this Mac's alone to answer, a follow ended mid-claim
+     * would otherwise leave its call waiting out its time, and a clear of the
+     * commands running would wait out the claim, holding up the next
+     * account's follow past its own commands' claim window.
      */
     const claimed = (running: FiberSet.FiberSet, userId: string, command: MacCommandRead) =>
       Effect.gen(function* () {
@@ -334,7 +373,7 @@ export function composeMacCommands(
         // A claim refused, or never answered, runs nothing: the command is another Mac's, or its call has given up.
         if ("failure" in answer) return;
         const { command: granted } = answer;
-        if (!(yield* gateOpen)) {
+        if (!(yield* gateOpen) || dependencies.accountId() !== userId) {
           yield* asked(client.settle(granted.id, SWITCHED_OFF));
           return;
         }
@@ -353,27 +392,31 @@ export function composeMacCommands(
 
     /**
      * That this Mac listens for its kinds, said every `LISTENING_EVERY` for
-     * as long as the gate stands and the account signed in is the one the
-     * follow is for; it returns once either changes, which ends the follow.
+     * as long as the follow stands, which ends as the gate leaves its
+     * account.
      */
-    const presence = (userId: string) =>
-      Effect.gen(function* () {
-        while ((yield* gateOpen) && dependencies.accountId() === userId) {
-          yield* asked(client.listening(RUNS));
-          yield* Effect.sleep(LISTENING_EVERY);
-        }
-      });
+    const presence = Effect.gen(function* () {
+      for (;;) {
+        yield* asked(client.listening(RUNS));
+        yield* Effect.sleep(LISTENING_EVERY);
+      }
+    });
 
     /**
      * The unclaimed commands followed (`live-follow.ts`, which polls the
-     * service, held) until the gate shuts or
-     * the session signs out, each new one claimed by its id, the earliest
-     * queued first (`claimed`). A command is claimed once per follow, and
-     * forgotten once it leaves the rows, so the ids this keeps are only those
-     * still waiting. A follow ends where the gate shuts, the session signs
-     * out, or the account signed in changes.
+     * service, held) until the gate leaves the account or the session signs
+     * out, each new one claimed by its id, the earliest queued first
+     * (`claimed`). A command is claimed once per follow, and forgotten once
+     * it leaves the rows, so the ids this keeps are only those still
+     * waiting. A follow ends where the gate shuts, the session signs out, or
+     * the account signed in changes.
      */
-    const followed = (running: FiberSet.FiberSet, userId: string, first: MacCommandsLiveAnswer) =>
+    const followed = (
+      running: FiberSet.FiberSet,
+      claims: FiberSet.FiberSet,
+      userId: string,
+      first: MacCommandsLiveAnswer,
+    ) =>
       Effect.suspend(() => {
         let tried = new Set<string>();
         const claimNew = (commands: readonly MacCommandRead[]) =>
@@ -381,7 +424,7 @@ export function composeMacCommands(
             const fresh = commands.filter((command) => !tried.has(command.id));
             tried = new Set(commands.map((command) => command.id));
             for (const command of fresh) {
-              yield* FiberSet.run(running, claimed(running, userId, command));
+              yield* FiberSet.run(claims, claimed(running, userId, command));
             }
           });
         const rows = decodedLiveRows(
@@ -390,41 +433,57 @@ export function composeMacCommands(
           MAC_COMMANDS_READ.rows,
         );
         const following = Stream.runForEach(rows, (read) => claimNew(macCommandsOfLiveRows(read)));
-        return Effect.raceFirst(following, presence(userId)).pipe(
+        const follow = Effect.raceFirst(following, presence).pipe(
           Effect.catch(() => waitOrRegained(LIVE_RESTART)),
         );
+        return Effect.raceFirst(follow, Effect.asVoid(left(userId)));
       });
 
+    /** How many times the gate had moved when the running set was last cleared. */
+    let clearedAt = 0;
+
     /**
-     * One turn of the loop: the commands followed until the gate shuts, the
-     * read asked again after a pause, or as soon as the service answers
-     * again, where it did not answer it or signed the session out; with the gate shut, every command still
-     * running stopped (its process group killed as its scope closes) and a
-     * rest. Every turn begins by letting go of the asks of any account but
-     * the one signed in, since a follow ends as the account changes.
+     * One turn of the loop: the commands followed until the gate leaves the
+     * account, the read asked again after a pause, or as soon as the service
+     * answers again, where it did not answer it or signed the session out;
+     * with the gate moved since the commands running were claimed, every
+     * one of them stopped (its process group killed as its scope closes),
+     * though it opened again for the same account; with it shut, a wait for
+     * it to open.
+     * Every turn begins by letting go of the asks of any account but the one
+     * signed in, since a follow ends as the account changes.
      */
-    const turn = (running: FiberSet.FiberSet) =>
+    const turn = (running: FiberSet.FiberSet, claims: FiberSet.FiberSet) =>
       Effect.gen(function* () {
         yield* withdrawOtherAccounts;
-        if (!(yield* gateOpen)) {
+        if (moves !== clearedAt) {
+          clearedAt = moves;
           yield* FiberSet.clear(running);
-          return yield* Effect.sleep(IDLE);
+          // Note that the clear waits out any claim under way, during which the gate may have moved again, so the next turn starts from where it stands now.
+          if (moves !== clearedAt) return;
         }
         // The account the follow starts for, which every read names, so one under another's session is refused as signed out.
-        const userId = dependencies.accountId();
-        if (userId === undefined) return yield* Effect.sleep(IDLE);
+        const userId = yield* SubscriptionRef.get(gate);
+        if (userId === undefined) return yield* Effect.asVoid(opened);
         const sealed = yield* seal(userId, false);
-        if ("failure" in sealed) return yield* waitOrRegained(LIVE_RESTART);
-        yield* followed(running, userId, sealed);
+        if ("failure" in sealed) {
+          return yield* Effect.raceFirst(waitOrRegained(LIVE_RESTART), Effect.asVoid(left(userId)));
+        }
+        yield* followed(running, claims, userId, sealed);
       });
 
     const lifetime = Effect.gen(function* () {
       const running = yield* FiberSet.make();
-      // A turn that died is reported and the reads rest before the next, as a shut gate does.
-      const guarded = Effect.catchDefect(turn(running), () =>
+      const claims = yield* FiberSet.make();
+      // Note that the changes are subscribed to before the gate is first worked out, so one that lands meanwhile is heard rather than lost.
+      const changes = yield* dependencies.changed;
+      yield* gateMoved;
+      yield* Effect.forkScoped(Stream.runForEach(changes, () => gateMoved));
+      // A turn that died is reported and the reads rest before the next.
+      const guarded = Effect.catchDefect(turn(running, claims), () =>
         Effect.andThen(
           Effect.sync(() => report("the Mac command read failed")),
-          Effect.sleep(IDLE),
+          Effect.sleep(DIED_REST),
         ),
       );
       yield* Effect.forkScoped(Effect.forever(guarded));

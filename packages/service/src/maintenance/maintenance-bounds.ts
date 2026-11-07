@@ -14,11 +14,14 @@ export const MAINTENANCE_SWEEP_PATH = "/api/maintenance/sweep";
 /** The rotation's rewrap of every stored provider key (`provider-key-rewrap.ts`), asked by hand under the same secret. */
 export const MAINTENANCE_PROVIDER_KEYS_REWRAP_PATH = "/api/maintenance/provider-keys-rewrap";
 
+/** The one-off keeping of every scheduled automation's Vercel schedule (`automation-schedules-backfill.ts`), asked by hand under the same secret. */
+export const MAINTENANCE_AUTOMATION_SCHEDULES_PATH = "/api/maintenance/automation-schedules";
+
 export const CRON_ENVIRONMENT = {
   /**
    * Vercel sends this as the bearer on every scheduled call once it is set.
-   * It guards the maintenance routes alone, the sweep and the rewrap asked by
-   * hand.
+   * It guards the maintenance routes alone, the sweep and the rewrap and the
+   * schedules' backfill asked by hand.
    */
   CRON_SECRET: "CRON_SECRET",
 } as const;
