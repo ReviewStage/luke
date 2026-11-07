@@ -35,6 +35,9 @@ export function windowRouter(
 ): TestWindowRouter {
   // Note that its routes read the test's own client, the one the window draws with, as a root hands its window's.
   const router = createPanelRouter(history, testQueryClientNow());
+  // Note that the router reads where its history stands as the history moves, as its provider has it read, so a
+  // navigation from what a test draws under no provider counts from where the window stands.
+  history.subscribe(() => router.updateLatestLocation());
   let entries: readonly string[] = [history.location.href];
   let at = 0;
   const clamp = (to: number) => Math.min(Math.max(to, 0), entries.length - 1);

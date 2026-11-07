@@ -76,9 +76,10 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   type PanelSpan,
 } from "../panel-spans.js";
-import { usePlaceBinding } from "../places/place-binding.js";
+import { PLACE_BINDING, usePlaceArrivals, usePlaceBinding } from "../places/place-binding.js";
 import { useWindowPlace } from "../places/routed-places.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { useTaskRoute } from "../task-route.js";
 import {
   FAKE_ANSWER,
   type FakeActPort,
@@ -328,16 +329,6 @@ function mount(
       room,
       tasks,
     });
-    // Home and the task bound follow each other, as the window's root keeps them.
-    const place = useWindowPlace().place;
-    usePlaceBinding({
-      known: true,
-      place,
-      bound: tasks.boundFor,
-      onUnbind: tasks.onUnbindTask,
-      onToBound: () => windowHistory?.onLeaveRouted(),
-      onToUnbound: home.onOpen,
-    });
     return null;
   }
   /** An act-port kind's answer as the test gives it, recorded, or a rejection where it gives none. */
@@ -387,6 +378,7 @@ function mount(
       onClose: leaveRouted,
     });
     restand = setHeld;
+    const here = useWindowPlace();
     control = useTasksTab({
       tasks: held.tasks,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
@@ -421,6 +413,24 @@ function mount(
         onStay: () => undefined,
       }),
       homeView,
+      taskView: useTaskRoute(),
+      place: here.place,
+      arrivals: usePlaceArrivals(),
+    });
+    // The place standing and the task bound follow each other, as the window's root keeps them; with no history beside
+    // the tab, the task bound's own place stands by its own door rather than as its step is written.
+    const tasks = control;
+    usePlaceBinding({
+      known: true,
+      place: here.place,
+      task: tasks.taskView.taskId,
+      page: here.place?.binding === PLACE_BINDING.TASK ? undefined : here.href,
+      bound: tasks.boundFor,
+      onUnbind: tasks.onUnbindTask,
+      onSelect: tasks.onArriveTask,
+      onToBound: () =>
+        windowHistory === undefined ? control?.onStandTask() : windowHistory.onLeaveRouted(),
+      onToUnbound: homeView.onOpen,
     });
     return held.history
       ? createElement(WindowHistoryProbe, {
@@ -461,6 +471,8 @@ function mount(
       assert.ok(control);
       return control;
     },
+    /** The router arriving at `address`, as a browser's own move lands it. */
+    arrive: (address: string) => act(() => held.history.push(address)),
     /** The window's history, where the tab was mounted with one. */
     history: () => windowHistory ?? assert.fail("the window's history stands"),
     stand: (patch: Partial<Standing>) => {
@@ -1227,7 +1239,11 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   const tab = mount(
     {
       shown: true,
-      tasks: withAgents([RUNNING_AGENT, { ...RUNNING_AGENT, id: LISTED, planId: OTHER_TASK_ID }]),
+      // Note that the window holds the account's workspaces before any link opens, which a task's own address names.
+      tasks: {
+        ...withAgents([RUNNING_AGENT, { ...RUNNING_AGENT, id: LISTED, planId: OTHER_TASK_ID }]),
+        workspaces: [ACME],
+      },
     },
     {
       [ACT_KIND.AGENTS_PAGE]: (payload) => {
@@ -1285,6 +1301,8 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   // A link opened at once, to the open task's own agent, wins over an earlier read answering late.
   open({ kind: LINK_PLACE.AGENT, agentId: SLOW });
   open({ kind: LINK_PLACE.AGENT, agentId: AGENT_ID });
+  // Note that the open task's own place, arrived on while another task is still asked for, asks for the open task.
+  await settle();
   const told = tab.told.length;
   answerSlow();
   await settle();
@@ -2176,6 +2194,96 @@ test("a start refused after the Board was opened leaves the Board standing rathe
 
   assert.equal(tab.control().boardView.open, true);
   assert.equal(tab.control().agentView.agentId, undefined);
+});
+
+/** New task's agent start, its words handed, as the card presses it. */
+function handedStart() {
+  return {
+    idempotencyKey: AGENT_KEY,
+    prompt: "Sweep the tests.",
+    attachments: [],
+    choice: undefined,
+    disabledServers: [],
+  };
+}
+
+test.each([
+  [
+    "a task's open",
+    ACT_KIND.TASKS_SELECT,
+    (tab: ReturnType<typeof mount>): void => tab.control().onSelect("alerts"),
+  ],
+  [
+    "New task's agent start",
+    ACT_KIND.TASKS_START,
+    (tab: ReturnType<typeof mount>): void =>
+      void tab.control().newTask.start("", "acme/web", undefined, { handed: handedStart() }),
+  ],
+] as const)(
+  "%s pressed on the Inbox and refused after the Board was opened leaves the Board standing rather than the Inbox",
+  async (_door, kind, press) => {
+    const refusals: Array<() => void> = [];
+    const tab = mount(
+      { shown: true, tasks: TWO_WORKSPACES },
+      {
+        [kind]: () =>
+          new Promise((_resolve, reject) => refusals.push(() => reject(new Error("Refused.")))),
+      },
+    );
+    act(() => tab.control().inboxView.onOpen());
+    act(() => press(tab));
+    act(() => tab.control().boardView.onOpen());
+    await act(async () => {
+      await vi.waitFor(() => assert.ok(refusals.length > 0));
+      refusals[0]?.();
+    });
+    await settle();
+
+    assert.deepEqual(
+      { board: tab.control().boardView.open, inbox: tab.control().inboxView.open },
+      { board: true, inbox: false },
+    );
+  },
+);
+
+test("a start refused while the Inbox item it was pressed over was still being found by its address leaves it to be found, rather than holding it unopened", async () => {
+  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+  const homes: Array<() => void> = [];
+  const refusals: Array<() => void> = [];
+  const tab = mount(
+    { shown: true, tasks: TWO_WORKSPACES },
+    {
+      [ACT_KIND.AGENTS_INBOX_ITEM_HOME]: () =>
+        new Promise((resolve) => {
+          homes.push(() =>
+            resolve({ agentId: AGENT_ID, planId: "notes", workspaceId: PERSONAL.id }),
+          );
+        }),
+      [ACT_KIND.TASKS_START]: () =>
+        new Promise((_resolve, reject) => refusals.push(() => reject(new Error("Refused.")))),
+    },
+  );
+  tab.arrive(`/personal/inbox/${itemId}`);
+  await vi.waitFor(() => assert.ok(homes.length > 0));
+  act(() => {
+    void tab.control().newTask.start("", "acme/web", undefined, { handed: handedStart() });
+  });
+  await act(async () => {
+    await vi.waitFor(() => assert.ok(refusals.length > 0));
+    refusals[0]?.();
+  });
+  await settle();
+  await act(async () => {
+    for (const answer of homes) answer();
+  });
+  await settle();
+
+  assert.deepEqual(tab.control().inboxView.chosen, {
+    taskId: "notes",
+    itemAgentId: AGENT_ID,
+    itemId,
+    opened: true,
+  });
 });
 
 test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", async () => {
