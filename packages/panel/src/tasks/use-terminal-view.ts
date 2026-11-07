@@ -1,21 +1,14 @@
-import { useAtomMount, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   TERMINAL_STATE,
   type TerminalAction,
   type TerminalState,
 } from "@repo/features/terminal-model";
-import { Duration, Effect, Option } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { forkEffect } from "@repo/ui";
+import { useQuery } from "@tanstack/react-query";
+import { Store, useSelector } from "@tanstack/react-store";
+import { Duration, Effect } from "effect";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { useSideBundles } from "../bundle-loader.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import type { TerminalFind } from "../terminal/contract.js";
 import type { TerminalSession } from "./terminal-session.js";
 import { useOpenLink } from "./use-open-link.js";
@@ -48,14 +41,11 @@ export interface TerminalView {
   readonly onAction: (action: TerminalAction) => void;
 }
 
-/** Hears nothing, for a tab that holds no terminal yet. */
-const HEARS_NOTHING = () => () => undefined;
-
 /** Where a tab with no terminal yet stands. */
-const NO_TERMINAL: TerminalState = { kind: TERMINAL_STATE.CONNECTING };
+const NO_TERMINAL = new Store<TerminalState>({ kind: TERMINAL_STATE.CONNECTING });
 
 /** Says the session's tab is shown every minute it stands in a page visible and focused. */
-function sayingShown(session: TerminalSession): Effect.Effect<never> {
+function sayingShown(session: TerminalSession): Effect.Effect<void> {
   const say = Effect.sync(() => {
     if (document.visibilityState === "visible" && document.hasFocus()) session.sayShown();
   });
@@ -69,13 +59,10 @@ export function useTerminalView(
   const openLink = useOpenLink();
   // Note that the module itself is held, not the result around it, which is a new value each render.
   const { terminal } = useSideBundles();
-  const loaded = useAtomValue(terminal);
-  const retryBundle = useAtomRefresh(terminal);
-  const module = Option.getOrUndefined(AsyncResult.value(loaded));
-  const state = useSyncExternalStore(
-    session?.subscribe ?? HEARS_NOTHING,
-    () => session?.state ?? NO_TERMINAL,
-  );
+  const loaded = useQuery(terminal);
+  const retryBundle = () => void loaded.refetch();
+  const module = loaded.data;
+  const state = useSelector(session?.states ?? NO_TERMINAL);
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const [find, setFind] = useState<TerminalFind | undefined>(undefined);
 
@@ -93,19 +80,17 @@ export function useTerminalView(
     return () => session.hide();
   }, [session, shown, module, element]);
 
-  // Note that the beat is an atom on the renderer's runtime, so it ends with the tab hidden or let go.
-  const beat = useMemo(
-    () =>
-      rendererRuntime.atom(session === undefined || !shown ? Effect.never : sayingShown(session)),
-    [session, shown],
-  );
-  useAtomMount(beat);
+  // Note that the beat is the tab's own fiber, so it ends with the tab hidden or let go.
+  useEffect(() => {
+    if (session === undefined || !shown) return;
+    return forkEffect(sayingShown(session));
+  }, [session, shown]);
 
   const onAction = useCallback((action: TerminalAction) => session?.act(action), [session]);
 
   return {
     state,
-    failed: AsyncResult.isFailure(loaded),
+    failed: loaded.isError,
     retryBundle,
     find,
     screen: setElement,

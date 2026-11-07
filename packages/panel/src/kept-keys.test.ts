@@ -16,7 +16,6 @@ import {
 } from "./desktop/folded-groups.js";
 import { SIDEBAR_WIDTH, useSidebarCollapse } from "./desktop/sidebar-collapse.js";
 import { useTaskListView } from "./desktop/task-list-view.js";
-import { useSummaryPin } from "./desktop/task-summary.js";
 import { useConversationFilters } from "./tasks/conversation-filters.js";
 
 /**
@@ -213,16 +212,6 @@ test("the chosen workspace is read from the id it was kept as", () => {
   expect(chosen.now().chosen?.id).toBe("w2");
   act(() => chosen.now().choose("w1"));
   expect(kept("app.chosenWorkspace")).toBe('"w1"');
-});
-
-test("the summary is pinned unless it was kept unpinned", () => {
-  expect(draw(() => useSummaryPin(false)).now().pinned).toBe(true);
-  act(() => root?.unmount());
-  keep("app.summary-pinned", "false");
-  const pin = draw(() => useSummaryPin(false));
-  expect(pin.now().pinned).toBe(false);
-  act(() => pin.now().onToggle());
-  expect(kept("app.summary-pinned")).toBe("true");
 });
 
 test("the conversation's filters and folds are read from the one record, and every other conversation draws a change at once", () => {

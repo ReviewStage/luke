@@ -36,19 +36,28 @@
  * with none, while one running is let finish. App-server exiting, or the service
  * refusing the events, ends it as `failed`.
  *
- * Tokens. App-server takes its token from a command, Codex's provider
- * `auth`: the runner's own bundle as `codex-token` (`codex-token.ts`). In
- * the cloud's sandbox it answers the placeholder the service minted for the
- * launch (`RUNNER_ENV.CODEX_TOKEN`), and the sandbox's firewall sets the
- * plan's token in its place on OpenAI's API, renewed by the service, so no
- * token enters the sandbox; on a host it asks the service at the config's
- * `tokenUrl` under the runner's bearer. A plan connected through Codex's
- * own device-code login has a token only Codex's ChatGPT backend accepts,
- * so where the launch's environment names that backend
- * (`RUNNER_ENV.CODEX_PLAN_BACKEND`) the provider sends there, naming the
- * workspace the plan pays from as Codex's ChatGPT sign-in does
- * (`CHATGPT_BACKEND_PROVIDER`), its token from the same command and, in a
- * sandbox, swapped in at the firewall on that host. Codex keeps
+ * Tokens. In the cloud's sandbox the runner signs app-server in on the
+ * plan with host-supplied ChatGPT tokens, OpenAI's documented mode for a
+ * host that owns the sign-in (https://learn.chatgpt.com/docs/app-server,
+ * `chatgptAuthTokens`): as the process starts it asks the service at the
+ * config's `tokenUrl`, under the runner's bearer, for the plan's access
+ * token and the workspace it pays from, and hands them to
+ * `account/login/start`; Codex's own OpenAI provider then sends them to
+ * Codex's ChatGPT backend as its built-in ChatGPT sign-in does. When a
+ * request gets a 401, app-server asks the runner for fresh ones
+ * (`account/chatgptAuthTokens/refresh`), which it asks the service for in
+ * turn, and retries the request, so a turn outlives any one token. The
+ * sign-in that renews the token stays with the service; only the access
+ * token enters the sandbox, held by app-server and in no environment.
+ *
+ * On a host app-server takes its token from a command, Codex's provider
+ * `auth`: the runner's own bundle as `codex-token` (`codex-token.ts`), which
+ * asks the service at the config's `tokenUrl` under the runner's bearer. A
+ * plan connected through Codex's own device-code login has a token only
+ * Codex's ChatGPT backend accepts, so where the launch's environment names
+ * that backend (`RUNNER_ENV.CODEX_PLAN_BACKEND`) the provider sends there,
+ * naming the workspace the plan pays from as Codex's ChatGPT sign-in does
+ * (`CHATGPT_BACKEND_PROVIDER`), its token from the same command. Codex keeps
  * what the command printed for the refresh interval, and runs it again past
  * that and after a 401, so a turn outlives any one token, and no token sits
  * in app-server's environment; what the command prints reaches app-server
@@ -95,15 +104,18 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { Duration, Effect, Exit, Option, Queue, Schema, Scope, Stream } from "effect";
+import * as HttpClient from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
 import {
   type AppServer,
   AppServerError,
   type AppServerListener,
+  AppServerRequestFailed,
   spawnAppServer,
 } from "./app-server.js";
 import { CODEX_BUNDLED_MODELS_JSON } from "./codex-protocol/bundled-models.js";
 import type {
+  ChatgptAuthTokensRefreshResponse,
   SandboxPolicy,
   ThreadStartParams,
   TurnStatus,
@@ -115,6 +127,7 @@ import {
   type RolloutMirror,
   restoreRollouts,
 } from "./codex-rollout.js";
+import { askPlanTokens, type CodexTokenFailed } from "./codex-token.js";
 import {
   installedSkillsPath,
   type LaunchContext,
@@ -219,6 +232,8 @@ const CLIENT_INFO = {
 const METHOD = {
   INITIALIZE: "initialize",
   INITIALIZED: "initialized",
+  ACCOUNT_LOGIN_START: "account/login/start",
+  CHATGPT_AUTH_TOKENS_REFRESH: "account/chatgptAuthTokens/refresh",
   SKILLS_EXTRA_ROOTS_SET: "skills/extraRoots/set",
   THREAD_START: "thread/start",
   THREAD_RESUME: "thread/resume",
@@ -425,7 +440,9 @@ const API_KEY_PROVIDER = {
 
 /** Which credential a launch's app-server runs on. */
 const CODEX_AUTH = {
-  /** The account's ChatGPT plan, its token asked of the service through the runner's token command. */
+  /** The account's ChatGPT plan in the cloud's sandbox, app-server signed in on host-supplied tokens the runner asks the service for. */
+  CHATGPT_TOKENS: "chatgpt_tokens",
+  /** The account's ChatGPT plan on a host, its token asked of the service through the runner's token command. */
   TOKEN_COMMAND: "token_command",
   /** The account's OpenAI API key, in the launch's environment. */
   API_KEY: "api_key",
@@ -439,6 +456,11 @@ type CodexAuth = (
       readonly backend: CodexPlanBackend;
       /** The workspace the plan pays from, where its starter named one (`RUNNER_ENV.CHATGPT_ACCOUNT_ID`). */
       readonly chatgptAccountId: string | undefined;
+    }
+  | {
+      readonly kind: typeof CODEX_AUTH.CHATGPT_TOKENS;
+      /** Where the plan's tokens are asked for: the service's token route. */
+      readonly tokenUrl: string;
     }
   | { readonly kind: typeof CODEX_AUTH.API_KEY }
 ) & {
@@ -467,12 +489,14 @@ function backendHeaders(auth: CodexAuth): string | undefined {
 
 /**
  * How our provider is handed its token: from the runner's token command
- * on the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API
+ * on a host's plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API
  * key; its own name; where it sends its requests, Codex's ChatGPT backend
  * with the headers it reads there for a device-code plan's token, OpenAI's
- * API for every other; and the catalog the launch wrote for it.
+ * API for every other; none on host-supplied tokens, which Codex's own
+ * OpenAI provider sends.
  */
 function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
+  if (auth.kind === CODEX_AUTH.CHATGPT_TOKENS) return [];
   const named =
     auth.kind === CODEX_AUTH.API_KEY
       ? { ...API_KEY_PROVIDER, BASE_URL: CHATGPT_PROVIDER.BASE_URL }
@@ -502,6 +526,12 @@ function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
     [`${provider}.wire_api`, toml("responses")],
     [`${provider}.requires_openai_auth`, "false"],
     [`${provider}.supports_websockets`, "false"],
+  ];
+}
+
+/** What every launch turns on beside its provider: the fast tier, the Ultrafast one on an API key, and the catalog the launch wrote. */
+function featureOverrides(auth: CodexAuth): (readonly [string, string])[] {
+  return [
     // A fast version runs on the `fast` tier, which the documented feature turns on, on the plan and an API key alike
     // (https://learn.chatgpt.com/docs/agent-configuration/speed). On an API key alone an Ultrafast one runs on the
     // `ultrafast` tier, which its own feature turns on and our catalog lists.
@@ -544,10 +574,11 @@ function appServerArgs(config: CodexConfig, auth: CodexAuth): string[] {
     });
   const excluded = [
     RUNNER_ENV.BEARER,
-    auth.kind === CODEX_AUTH.API_KEY ? RUNNER_ENV.OPENAI_API_KEY : RUNNER_ENV.CODEX_TOKEN,
+    ...(auth.kind === CODEX_AUTH.API_KEY ? [RUNNER_ENV.OPENAI_API_KEY] : []),
   ];
   const overrides: (readonly [string, string])[] = [
     ...providerOverrides(auth),
+    ...featureOverrides(auth),
     [`${mcp}.url`, toml(config.mcpUrl)],
     [`${mcp}.bearer_token_env_var`, toml(RUNNER_ENV.BEARER)],
     [`${mcp}.default_tools_approval_mode`, toml("approve")],
@@ -652,9 +683,37 @@ interface ThreadSeen {
   threadId: string | undefined;
 }
 
-/** What app-server reports, posted in order and turned into the controller's signals. */
-function listenerFor(seen: ThreadSeen): AppServerListener {
+/**
+ * The plan's tokens as Codex's sign-in on host-supplied tokens takes them,
+ * the service's answer passed on as it came. Codex is told no plan type,
+ * which it takes as optional.
+ */
+const planTokens = (
+  tokenUrl: string,
+  bearer: LaunchContext<CodexConfig>["bearer"],
+): Effect.Effect<ChatgptAuthTokensRefreshResponse, CodexTokenFailed, HttpClient.HttpClient> =>
+  Effect.map(
+    askPlanTokens(tokenUrl, bearer),
+    // SAFETY: the workspace goes to app-server as the service named it; where it named none, app-server refuses the request.
+    (answer) => ({ ...answer, chatgptPlanType: null }) as ChatgptAuthTokensRefreshResponse,
+  );
+
+/**
+ * What app-server reports, posted in order and turned into the controller's
+ * signals; and on host-supplied tokens, its ask for fresh ones after a 401,
+ * answered with the service's (`refresh`).
+ */
+function listenerFor(
+  seen: ThreadSeen,
+  refresh: Effect.Effect<ChatgptAuthTokensRefreshResponse, CodexTokenFailed> | undefined,
+): AppServerListener {
   return {
+    onRequest: (method) =>
+      method === METHOD.CHATGPT_AUTH_TOKENS_REFRESH && refresh !== undefined
+        ? refresh.pipe(
+            Effect.mapError((failure) => new AppServerRequestFailed({ detail: failure.detail })),
+          )
+        : undefined,
     onNotification: (notification) =>
       Effect.gen(function* () {
         yield* seen.context.sink.emit(notification);
@@ -693,8 +752,15 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   threadId: string | undefined,
   fork: boolean,
 ) {
-  const { config, env } = launch.context;
+  const { config, env, bearer } = launch.context;
+  const { auth } = launch;
   const serverScope = yield* Scope.make();
+  const client = yield* HttpClient.HttpClient;
+  // Note that the tokens are asked for on the launch's own client, since app-server's ask is answered on the reader's fiber.
+  const tokens =
+    auth.kind === CODEX_AUTH.CHATGPT_TOKENS
+      ? planTokens(auth.tokenUrl, bearer).pipe(Effect.provideService(HttpClient.HttpClient, client))
+      : undefined;
   // Note that the listener reads the thread's id from here, because a new
   // thread's notifications arrive before `thread/start` answers.
   const seen: ThreadSeen = {
@@ -716,11 +782,28 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
       },
       inRunnerGroup: runsOnHost(env),
     },
-    listenerFor(seen),
+    listenerFor(seen, tokens),
   ).pipe(Scope.provide(serverScope));
   const opened = Effect.gen(function* () {
-    yield* server.request(METHOD.INITIALIZE, { clientInfo: CLIENT_INFO, capabilities: null });
+    // Note that the sign-in on host-supplied tokens is experimental, which app-server serves only to a client that opted in.
+    yield* server.request(METHOD.INITIALIZE, {
+      clientInfo: CLIENT_INFO,
+      capabilities:
+        tokens === undefined ? null : { experimentalApi: true, requestAttestation: false },
+    });
     yield* server.notify(METHOD.INITIALIZED);
+    if (tokens !== undefined) {
+      const signedIn = yield* tokens.pipe(
+        Effect.mapError(
+          (failure) =>
+            new AppServerError({ method: METHOD.ACCOUNT_LOGIN_START, detail: failure.detail }),
+        ),
+      );
+      yield* server.request(METHOD.ACCOUNT_LOGIN_START, {
+        type: "chatgptAuthTokens",
+        ...signedIn,
+      });
+    }
     // The member's installed skills, beside the checkout's `.agents/skills`, before the thread lists them.
     const skills = installedSkillsPath(config.installedSkills, INSTALLED_SKILLS.SKILLS);
     if (skills !== undefined) {
@@ -1038,9 +1121,10 @@ function planBackendOf(context: LaunchContext<CodexConfig>): CodexPlanBackend | 
 
 /**
  * The credential a launch's app-server runs on, with the catalog written for
- * it: the account's API key where the environment holds it, and the plan's
- * token command otherwise, on the backend given, where the runner knows its
- * own bundle; none where it does not.
+ * it: the account's API key where the environment holds it; otherwise the
+ * plan, in the cloud's sandbox on host-supplied tokens, and on a host through
+ * its token command, on the backend given, where the runner knows its own
+ * bundle, and none where it does not.
  */
 const authOf = Effect.fn("agent-runner/codexAuthOf")(function* (
   context: LaunchContext<CodexConfig>,
@@ -1048,6 +1132,13 @@ const authOf = Effect.fn("agent-runner/codexAuthOf")(function* (
 ) {
   if (onApiKey(context)) {
     return { kind: CODEX_AUTH.API_KEY, catalog: yield* catalogFile(ultrafastCatalog()) } as const;
+  }
+  if (!runsOnHost(context.env)) {
+    return {
+      kind: CODEX_AUTH.CHATGPT_TOKENS,
+      tokenUrl: context.config.tokenUrl,
+      catalog: yield* catalogFile(planCatalog()),
+    } as const;
   }
   if (context.self === undefined) return undefined;
   const chatgptAccountId = context.env[RUNNER_ENV.CHATGPT_ACCOUNT_ID];

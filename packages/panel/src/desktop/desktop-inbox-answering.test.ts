@@ -23,7 +23,7 @@ import { Effect, Schema } from "effect";
 import { act } from "react";
 import { beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
-import { sideBundles } from "../bundle-loader.js";
+
 import { descriptionEditor } from "../description-editor/index.js";
 import {
   type AnyAct,
@@ -104,6 +104,7 @@ import {
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
+import { standInBundles } from "../testing/side-bundles.js";
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -261,7 +262,7 @@ test("an item gone from under its open box, as a teammate's delete takes it, let
 test("an answer box whose editor bundle could not be loaded says so beside Retry, and Retry mounts the editor once the bundle lands", async () => {
   // Note that the chunk fails the first time it is asked for and lands the next, as a connection that dropped for a moment does.
   let failed = false;
-  const bundles = sideBundles({
+  const bundles = standInBundles({
     descriptionEditor: () => {
       if (failed) return Promise.resolve(descriptionEditor);
       failed = true;
@@ -755,7 +756,7 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
   );
 });
 
-test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
+test("on To do, the chosen row stands once the Inbox is come back to, gray, though its item was answered while it was hidden", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   window.localStorage.removeItem(WHOSE_KEY);
   const { page } = mount([], { chosen: ON_EXPIRY });
@@ -772,14 +773,15 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }, { items: [answered] });
   await settle();
   // Note that the push reaches the hidden Inbox's read one notify tick later, which lands before it is shown again.
-  await vi.waitFor(() => assert.deepEqual(listed(page), ["*Alert at 80%?"]));
+  await vi.waitFor(() => assert.equal(rowMuted(page, "Expire after 7 days?"), true));
   act(() => world.setInboxOpen(true));
   await settle();
   assert.deepEqual(
     listed(page),
-    ["*Alert at 80%?"],
-    "the item answered while the Inbox was hidden no longer needs you, so it has no row",
+    ["▸ Expire after 7 days?", "*Alert at 80%?"],
+    "the item still chosen keeps its row where it stood",
   );
+  assert.equal(rowMuted(page, "Expire after 7 days?"), true, "drawn gray");
 });
 
 test("on To do, an answered item a link or Back chooses stands its row, gray, until another is chosen", async () => {

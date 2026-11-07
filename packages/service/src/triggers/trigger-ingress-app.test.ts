@@ -3,15 +3,12 @@ import { createHmac, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import {
-  createAutomation,
-  listAutomationRuns,
-  queuedAutomationRuns,
-} from "@repo/database/models/automation-store";
+import { createAutomation, listAutomationRuns } from "@repo/database/models/automation-store";
 import {
   activeInstallationWorkspace,
   linkIntegrationInstallation,
 } from "@repo/database/models/integration-installation-store";
+import { automationRun } from "@repo/database/schemas/automation";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { HOSTED_API_ERROR } from "@repo/features";
 import {
@@ -23,6 +20,7 @@ import {
 } from "@repo/features/automation-wire";
 import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
 import type { WireBoundaryInput } from "@repo/wire";
+import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -154,14 +152,18 @@ const sentryAutomation = (
     Option.getOrThrow,
   );
 
+/** The automation's runs as their delivery reads them, each firing beside the body it keeps. */
 const queuedOf = (automationId: string) =>
-  Effect.map(queuedAutomationRuns(new Date(0), 100), (runs) =>
-    runs.filter((run) => run.automationId === automationId),
+  Database.use((db) =>
+    db
+      .select({ firing: automationRun.firing, payload: automationRun.payload })
+      .from(automationRun)
+      .where(eq(automationRun.automationId, automationId)),
   );
 
 it.layer(getTestDB())("the trigger ingress", (it) => {
   it.effect(
-    "a signed alert queues one run per matching automation of the workspace, with the issue and summary, and Sentry's redelivery queues none",
+    "a signed alert queues one run per matching automation of the workspace, with the issue and summary, and Sentry's redelivery records none",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId, installation } = yield* openWorkspace;
@@ -193,7 +195,7 @@ it.layer(getTestDB())("the trigger ingress", (it) => {
           [first, again],
           [
             { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 1 } },
-            { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 0 } },
+            { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 1 } },
           ],
         );
         const [run, ...rest] = yield* queuedOf(matching.id);

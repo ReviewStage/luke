@@ -1,7 +1,4 @@
-import {
-  taskCommentsLiveRowsSchema,
-  threadsOfLiveRows,
-} from "@repo/features/description-comment-live";
+import { TASK_COMMENTS_READ, threadsOfLiveRows } from "@repo/features/description-comment-live";
 import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import { COMMENT_SUBJECT, type TasksCommentsFollow } from "@repo/features/tasks-view";
@@ -85,7 +82,7 @@ export interface DescriptionCommentReadsDependencies {
   readonly tell: (held: AppDescriptionComments) => void;
 }
 
-const decodeRows = Schema.decodeUnknownOption(taskCommentsLiveRowsSchema);
+const decodeRows = Schema.decodeUnknownOption(TASK_COMMENTS_READ.rows);
 
 /**
  * The held lifetime over every subject's follow (`heldSlice`), told whole on

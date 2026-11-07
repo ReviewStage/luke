@@ -20,6 +20,7 @@ import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "@repo/features/pull-request-chapters-view";
+import { SENTRY_SEND_SPAN } from "@repo/features/sentry-tracing";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { ListedPullRequest, TaskMode } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -47,7 +48,7 @@ import {
   type Unreached,
   unreachedAs,
 } from "../act.js";
-import { actMutation } from "../act-mutations.js";
+import { actMutation, sendMutation } from "../act-mutations.js";
 import {
   DRAFT_PLACE,
   type Draft,
@@ -833,11 +834,13 @@ export function useAgents(input: {
   // Note that the reads below stay on `act` until they move to queries; every write is a mutation.
   const queryClient = useQueryClient();
   const { mutateAsync: sendStart, isPending: starting } = useMutation(
-    actMutation(ACT_KIND.AGENTS_START),
+    sendMutation(ACT_KIND.AGENTS_START, () => SENTRY_SEND_SPAN.AGENT_START),
   );
   const { mutateAsync: sendStop } = useMutation(actMutation(ACT_KIND.AGENTS_STOP));
   const { mutateAsync: sendRewind } = useMutation(actMutation(ACT_KIND.AGENTS_REWIND));
-  const { mutateAsync: sendMessage } = useMutation(actMutation(ACT_KIND.AGENTS_MESSAGE));
+  const { mutateAsync: sendMessage } = useMutation(
+    sendMutation(ACT_KIND.AGENTS_MESSAGE, () => SENTRY_SEND_SPAN.AGENT_SEND),
+  );
   const { mutateAsync: sendChoice } = useMutation(actMutation(ACT_KIND.AGENTS_CHOOSE));
   const { mutateAsync: sendServers } = useMutation(actMutation(ACT_KIND.AGENTS_SERVERS));
   const { mutateAsync: sendArchive } = useMutation(actMutation(ROW_WRITE.AGENT_ARCHIVE.kind));

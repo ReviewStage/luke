@@ -12,9 +12,10 @@
  * carried, so a bearer the plugin did not sign is never read past to the
  * cookie beside it.
  *
- * Every procedure's log lines carry the trace id of the caller's
- * `traceparent`, through Sentry's tracer as the deployment runs it, even
- * where the caller did not sample the call.
+ * Every procedure's span and log lines carry the trace id and sampling of the
+ * caller's `sentry-trace`, or of its `traceparent` where it sent none,
+ * through Sentry's tracer as the deployment runs it, every request traced,
+ * even where the caller did not sample the call.
  *
  * Synthetic accounts, bearers, and sessions throughout.
  */
@@ -34,8 +35,8 @@ import { HTTP_METHOD } from "@repo/wire";
 import { Cause, Context, Effect, Layer, Logger, Option, References, Schema } from "effect";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import type { SessionUserIdResolver, UserIdResolver } from "../http/http-effect.js";
-import { sentryReportingLayer } from "../observability/sentry.js";
 import type { WebServices } from "../runtime.js";
+import { recordingSentry } from "../testing/sentry-transport.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { bearerOnlyMiddleware, type HostedContext, hosted, sessionMiddleware } from "./base.js";
 import { hostedFetch } from "./handler.js";
@@ -236,37 +237,61 @@ it.effect(
     }),
 );
 
-it.effect("a procedure's log lines carry the trace id of the caller's unsampled traceparent", () =>
-  Effect.gen(function* () {
-    const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
-    const annotations: Array<Readonly<Record<string, unknown>>> = [];
-    const recorded = Logger.make(({ fiber }) => {
-      annotations.push(fiber.getRef(References.CurrentLogAnnotations));
-    });
-    const router = {
-      account: {
-        providerKeys: hosted.account.providerKeys.effect(function* () {
-          yield* Effect.logInfo("asked for the provider keys");
-          return { keys: [] };
-        }),
-      },
-    };
-    // SAFETY: the procedure yields no service, so the tracer and the logger stand in for the web runtime's.
-    const services = (yield* Effect.context().pipe(
-      Effect.provide(Layer.merge(sentryReportingLayer, Logger.layer([recorded]))),
-    )) as Context.Context<WebServices>;
-    const response = yield* Effect.promise(() =>
-      hostedFetch(router)(
-        new Request(`${ORIGIN}${HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS}`, {
-          headers: { traceparent: `00-${traceId}-00f067aa0ba902b7-00` },
-        }),
-        services,
-      ),
-    );
-    assert.equal(response.status, HOSTED_HTTP_STATUS.OK);
-    assert.deepEqual(
-      annotations.map((line) => line.traceId),
-      [traceId],
-    );
-  }),
+/** A caller's trace, as `traceparent` alone or as Sentry's `sentry-trace` beside one naming another trace and sampling. */
+const CALLER_TRACES = [
+  {
+    carried: "an unsampled traceparent",
+    headers: { traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00" },
+    traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+    sampled: false,
+  },
+  {
+    carried: "an unsampled sentry-trace beside a sampled traceparent",
+    headers: {
+      "sentry-trace": "771a43a4192642f0b136d5159a501700-b7ad6b7169203331-0",
+      baggage: "sentry-trace_id=771a43a4192642f0b136d5159a501700,sentry-sampled=false",
+      traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    },
+    traceId: "771a43a4192642f0b136d5159a501700",
+    sampled: false,
+  },
+] as const;
+
+it.effect.each(CALLER_TRACES)(
+  "a procedure's span and log lines continue the caller's trace and sampling from $carried",
+  ({ headers, traceId, sampled }) =>
+    Effect.gen(function* () {
+      const annotations: Array<Readonly<Record<string, unknown>>> = [];
+      const spans: Array<{ readonly traceId: string; readonly sampled: boolean }> = [];
+      const recorded = Logger.make(({ fiber }) => {
+        annotations.push(fiber.getRef(References.CurrentLogAnnotations));
+      });
+      const router = {
+        account: {
+          providerKeys: hosted.account.providerKeys.effect(function* () {
+            const span = yield* Effect.orDie(Effect.currentSpan);
+            spans.push({ traceId: span.traceId, sampled: span.sampled });
+            yield* Effect.logInfo("asked for the provider keys");
+            return { keys: [] };
+          }),
+        },
+      };
+      const sentry = recordingSentry();
+      // SAFETY: the procedure yields no service, so the tracer and the logger stand in for the web runtime's.
+      const services = (yield* Effect.context().pipe(
+        Effect.provide(Layer.merge(sentry.layer, Logger.layer([recorded]))),
+      )) as Context.Context<WebServices>;
+      const response = yield* Effect.promise(() =>
+        hostedFetch(router)(
+          new Request(`${ORIGIN}${HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS}`, { headers }),
+          services,
+        ),
+      );
+      assert.equal(response.status, HOSTED_HTTP_STATUS.OK);
+      assert.deepEqual(spans, [{ traceId, sampled }]);
+      assert.deepEqual(
+        annotations.map((line) => line.traceId),
+        [traceId],
+      );
+    }),
 );

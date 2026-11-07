@@ -19,12 +19,7 @@ import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import {
-  agentsControl,
-  tasksControl,
-  tellingTranscripts,
-  UNPINNED_SUMMARY,
-} from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
@@ -101,17 +96,7 @@ const ROW = {
   agents: {
     total: 1,
     working: 0,
-    agents: [
-      {
-        id: AGENT.id,
-        title: AGENT.title,
-        model: AGENT.model,
-        effort: AGENT.effort,
-        status: AGENT.status,
-      },
-    ],
     pullRequestTotal: 0,
-    pullRequests: [],
   },
 };
 
@@ -148,7 +133,6 @@ function mount(tasks: TasksControl) {
         onRegistry(
           AtomRegistry.make(),
           createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             tasks: next,
           }),

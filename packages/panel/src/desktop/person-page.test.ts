@@ -21,7 +21,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@repo/features/inbox-wire";
-import { TASK_STATUS, type TaskAgentLine, type TaskSummary } from "@repo/features/task-wire";
+import { TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -125,30 +125,40 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: "user-sam", name: "Sam Ortiz", email: "sam@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
+/** One of a task's agents as the test names it, which last moved `at`. */
+interface AgentLine {
+  readonly id: string;
+  readonly title: string;
+  readonly status: ListedAgent["status"];
+  readonly at: number;
+  readonly startedBy: typeof CHARLES;
+}
+
 function agent(
   n: number,
   title: string,
   startedBy: typeof CHARLES,
-  status: TaskAgentLine["status"],
+  status: AgentLine["status"],
   ago: number,
-): TaskAgentLine {
+): AgentLine {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     title,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
     status,
     at: NOW - ago,
     startedBy,
   };
 }
 
+/** Each task's agents, by the task's id, which the list follows live. */
+const LINES = new Map<string, readonly AgentLine[]>();
+
 function task(
   n: number,
   name: string,
   createdBy: typeof CHARLES,
   ago: number,
-  agents: readonly TaskAgentLine[] = [],
+  agents: readonly AgentLine[] = [],
   assignee?: typeof CHARLES,
 ): TaskSummary {
   const summary: TaskSummary = {
@@ -162,25 +172,25 @@ function task(
     createdBy,
     ...(assignee === undefined ? undefined : { assignee }),
   };
+  LINES.set(summary.id, agents);
   if (agents.length === 0) return summary;
-  return {
-    ...summary,
-    agents: {
-      total: agents.length,
-      working: 0,
-      agents,
-      pullRequestTotal: 0,
-      pullRequests: [],
-    },
-  };
+  return { ...summary, agents: { total: agents.length, working: 0, pullRequestTotal: 0 } };
 }
 
-/** Every agent the tasks' rows name, as the list follows them live, which the page lists them from. */
+/** Every agent of the tasks, as the list follows them live, which the page lists them from: since its run began while it works, since its newest turn ended once it has. */
 function followedOf(tasks: readonly TaskSummary[]): readonly ListedAgent[] {
   return tasks.flatMap((summary) =>
-    (summary.agents?.agents ?? []).map(({ at, ...line }) =>
+    (LINES.get(summary.id) ?? []).map(({ at, ...line }) =>
       listedAgent(
-        { ...line, planId: summary.id, createdAt: at ?? NOW, turnId: null },
+        {
+          ...line,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planId: summary.id,
+          createdAt: at,
+          turnId: null,
+          ...(line.status === AGENT_STATUS.RUNNING ? { runStartedAt: at } : { settledAt: at }),
+        },
         { workspaceId: ACME.id },
       ),
     ),
@@ -274,8 +284,8 @@ beforeEach(() => {
         agent: {
           id: agentId,
           planId: CACHE.id,
-          model: CACHE_KEYS.model,
-          effort: CACHE_KEYS.effort,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
           title: CACHE_KEYS.title,
           createdAt: 1,
           status: AGENT_STATUS.COMPLETED,

@@ -21,6 +21,7 @@ import {
 } from "./hosted-link.js";
 import { MODEL_PROVIDER } from "./models-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
+import { SentSendTrace } from "./sentry-tracing.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const BASE_URL = "https://app.test";
@@ -204,6 +205,87 @@ it.effect("a procedure is unanswered at the deadline its ask names, and not befo
   }),
 );
 
+it.effect("a body that arrives past what is left of the deadline is let go at the deadline", () =>
+  Effect.gen(function* () {
+    let answer: (response: Response) => void = () => undefined;
+    let bodyAsked = false;
+    // Note that the body is pulled only once the link reads it, so the test knows its deadline is armed, and its cancel never settles, so the deadline must not wait on it.
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull: () => {
+          bodyAsked = true;
+          return new Promise<void>(() => undefined);
+        },
+        cancel: () => new Promise<void>(() => undefined),
+      },
+      { highWaterMark: 0 },
+    );
+    const slow = recordingHttpClient(
+      () =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
+        }),
+    );
+
+    const asked = yield* Effect.forkChild(
+      Effect.flip(Effect.provide(askModels(account(["token-1"])), slow.layer)),
+    );
+    yield* untilAsked(slow.requests);
+    yield* TestClock.adjust("8 seconds");
+    answer(new Response(body, { status: HTTP_STATUS.OK }));
+    while (!bodyAsked) yield* Effect.yieldNow;
+    yield* TestClock.adjust("1 second");
+    assert.equal(asked.pollUnsafe(), undefined, "still reading short of the deadline");
+    yield* TestClock.adjust("1 second");
+    for (let step = 0; step < 100 && asked.pollUnsafe() === undefined; step++) {
+      yield* Effect.yieldNow;
+    }
+    assert.notEqual(asked.pollUnsafe(), undefined, "let go at the one deadline");
+    const failure = yield* Fiber.join(asked);
+    assert.deepEqual(
+      failure,
+      new HostedUnanswered({
+        unread: "body-unread",
+        status: HTTP_STATUS.OK,
+        traceId: traceOf(failure),
+      }),
+    );
+  }),
+);
+
+it.effect("a 401's renewal and retry share the one deadline rather than starting a fresh one", () =>
+  Effect.gen(function* () {
+    let refuse: (response: Response) => void = () => undefined;
+    const recording = recordingHttpClient((request) =>
+      request.authorization === "Bearer stale"
+        ? new Promise<Response>((resolve) => {
+            refuse = resolve;
+          })
+        : new Promise<Response>(() => undefined),
+    );
+
+    const asked = yield* Effect.forkChild(
+      Effect.flip(Effect.provide(askModels(account(["stale", "fresh"])), recording.layer)),
+    );
+    yield* untilAsked(recording.requests);
+    yield* TestClock.adjust("4 seconds");
+    refuse(invalidToken());
+    while (recording.requests.length < 2) yield* Effect.yieldNow;
+    yield* TestClock.adjust("5 seconds");
+    assert.equal(asked.pollUnsafe(), undefined, "still waiting short of the one deadline");
+    yield* TestClock.adjust("1 second");
+    const failure = yield* Fiber.join(asked);
+    assert.deepEqual(
+      failure,
+      new HostedUnanswered({
+        fault: CALL_FAULT.NETWORK,
+        errorName: "TimeoutError",
+        traceId: traceOf(failure),
+      }),
+    );
+  }),
+);
+
 it.effect("a repository out of reach reaches the caller with why", () =>
   Effect.gen(function* () {
     const unreached = { reason: REPOSITORY_UNREACHED.GONE, repository: "Acme/Relay" };
@@ -277,5 +359,34 @@ it.effect(
       );
       assert.equal(traceId, traceOf(failure), "the server continues the trace the report names");
       assert.equal(flags, "00", "an ask past the sample rate is sent unsampled, not untraced");
+    }),
+);
+
+it.effect(
+  "an ask a press began sends the press's trace as Sentry's headers, sampled as the press was",
+  () =>
+    Effect.gen(function* () {
+      const pressed = {
+        sentryTrace: "771a43a4192642f0b136d5159a501700-b7ad6b7169203331-1",
+        baggage: "sentry-trace_id=771a43a4192642f0b136d5159a501700,sentry-sampled=true",
+      };
+      const recording = recordingHttpClient(
+        () => new Response("", { status: HTTP_STATUS.SERVER_ERROR }),
+      );
+
+      const failure = yield* Effect.flip(
+        Effect.provide(askModels(account(["token-1"])), recording.layer).pipe(
+          Effect.provideService(Random.Random, drawing(0.99)),
+          Effect.provideService(SentSendTrace, pressed),
+        ),
+      );
+
+      const headers = recording.requests[0]?.headers;
+      assert.equal(headers?.get("sentry-trace"), pressed.sentryTrace);
+      assert.equal(headers?.get("baggage"), pressed.baggage);
+      const [, traceId, , flags] = (headers?.get("traceparent") ?? "").split("-");
+      assert.equal(traceId, "771a43a4192642f0b136d5159a501700");
+      assert.equal(failure.traceId, traceId, "the report names the press's trace");
+      assert.equal(flags, "01", "the press's sampling stands over the draw's");
     }),
 );

@@ -1,7 +1,7 @@
 import {
+  INSTALLED_SKILLS_READ,
   type InstalledSkillLiveRow,
   type InstalledSkillsLiveAnswer,
-  installedSkillsLiveRowsSchema,
   installedSkillsOfLiveRows,
 } from "@repo/features/installed-skill-live";
 import type { InstalledSkillSummary } from "@repo/features/installed-skill-route-wire";
@@ -161,7 +161,7 @@ function followSkills(
           },
         },
         first,
-        installedSkillsLiveRowsSchema,
+        INSTALLED_SKILLS_READ.rows,
         (rows) =>
           Effect.andThen(
             skills.answer(rows.skills),

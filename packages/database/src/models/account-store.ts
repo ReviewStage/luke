@@ -1,12 +1,13 @@
 import { storedAgentChoice } from "@repo/features/account-preferences-live";
 import { contextWindowSchema } from "@repo/features/agent-wire";
 import {
-  CHAPTERS_MODEL_LIST,
-  type ChaptersModelId,
+  CHAPTERS_PICK_LIST,
+  type ChaptersPick,
   chaptersModelFrom,
+  chaptersProviderOf,
 } from "@repo/features/chapters-model-choice";
 import { LINK_OPEN_LIST, type LinkOpen } from "@repo/features/link-open";
-import type { ModelChoice } from "@repo/features/models-wire";
+import type { ModelChoice, ModelProvider } from "@repo/features/models-wire";
 import {
   type AccountPreferences,
   AGENT_ENTER_LIST,
@@ -23,14 +24,11 @@ import {
 import { WireValueSchema } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
-import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
-import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
-import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, the
@@ -50,7 +48,7 @@ export interface AccountPreferencesRow {
   /** What a click on Start runs on; none until the account chooses, which the service answers with the fallback its credentials pay for. */
   agent: ModelChoice | undefined;
   /** What a Generate chapters the account presses runs on; Haiku until the account chooses, and for a stored value no build lists any more. */
-  chaptersModel: ChaptersModelId;
+  chaptersModel: ChaptersPick;
   /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
   experiments: ExperimentChoices;
   /**
@@ -84,7 +82,7 @@ export interface AccountPreferencesWrite {
   setupFinished?: boolean;
   setupPlace?: string;
   agent?: ModelChoice;
-  chaptersModel?: ChaptersModelId;
+  chaptersModel?: ChaptersPick;
   experiments?: ExperimentChoices;
 }
 
@@ -106,46 +104,14 @@ const deleteUserRow = SqlSchema.void({
   execute: (userId) => Database.use((db) => db.delete(user).where(eq(user.id, userId))),
 });
 
-const lockUserRow = SqlSchema.void({
-  Request: Schema.String,
-  execute: (userId) =>
-    Database.use((db) =>
-      db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update"),
-    ),
-});
-
-const findAccountSessions = SqlSchema.findAll({
-  Request: Schema.String,
-  Result: Schema.Struct({ runtimeSessionId: Schema.NullOr(Schema.String) }),
-  execute: (userId) =>
-    Database.use((db) =>
-      db
-        .select({ runtimeSessionId: conversations.runtimeSessionId })
-        .from(conversations)
-        .where(eq(conversations.userId, userId))
-        .for("update"),
-    ),
-});
-
 /**
- * Erases the user row; every dependent row cascades with it. The runtime session
- * each of the account's conversations ran in, a deleted task's too, is
- * queued for its sandbox's deletion in the same transaction, since nothing
- * after it names them. The user's row is locked first, so a conversation
- * opened meanwhile waits on it and finds no account, and every conversation
- * of the account is locked as its session is read, so a session claimed
- * meanwhile waits and finds no row to claim, rather than landing unqueued.
+ * Erases the user row; every dependent row cascades with it. The sandboxes
+ * the account's sessions ran in are not deleted here: the account's delete
+ * retires its standing sessions first (`account-procedures.ts`), and what is
+ * left expires on Vercel's own schedule (`CODER.SANDBOX_SNAPSHOTS`).
  */
 export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure, DatabaseServices> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        yield* lockUserRow(userId);
-        yield* queueSessionSandboxes(sessionsOf(yield* findAccountSessions(userId)));
-        yield* deleteUserRow(userId);
-      }),
-    ),
-  );
+  return deleteUserRow(userId);
 }
 
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
@@ -216,31 +182,6 @@ const findPreference = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The account's preferences row written for its live read: the coding
- * agents' default as its three columns stand, the chapters model, and
- * whether our Slack bot writes the account, each as stored, null where
- * never chosen, which the reader reads as the snapshot does
- * (`@repo/features/account-preferences-live`). No row for an account that
- * stored none. None where a value cannot be carried.
- */
-export function accountPreferencesLiveStatement(userId: string): Option.Option<LiveStatement> {
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection({
-          agentModel: accountPreference.agentModel,
-          agentEffort: accountPreference.agentEffort,
-          agentContextWindow: accountPreference.agentContextWindow,
-          chaptersModel: accountPreference.chaptersModel,
-          slackNotifications: accountPreference.slackNotifications,
-        }),
-      )
-      .from(accountPreference)
-      .where(eq(accountPreference.userId, userId)),
-  );
-}
-
 /** One account's stored snapshot, or nothing for an account that has stored none. */
 export function readAccountPreferences(
   userId: string,
@@ -263,6 +204,15 @@ export function accountExperimentOn(
   return Effect.map(
     readAccountPreferences(userId),
     (row) => row !== undefined && experimentOn(row.experiments, experiment),
+  );
+}
+
+/** Whose API key the account's chapters run on first where it saved both: the provider of the model it last picked, Anthropic's where it picked none. */
+export function accountChaptersProvider(
+  userId: string,
+): Effect.Effect<ModelProvider, StoreFailure, DatabaseServices> {
+  return Effect.map(readAccountPreferences(userId), (row) =>
+    chaptersProviderOf(chaptersModelFrom(row?.chaptersModel)),
   );
 }
 
@@ -324,7 +274,7 @@ const PreferenceWriteSchema = Schema.Struct({
       contextWindow: Schema.optionalKey(contextWindowSchema),
     }),
   ),
-  chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_MODEL_LIST)),
+  chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_PICK_LIST)),
   experiments: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
   /** The instant the shared preferences part was written, where the write carries it. */
   updatedAt: Schema.optionalKey(Schema.Date),

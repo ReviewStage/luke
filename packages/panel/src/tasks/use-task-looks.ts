@@ -1,4 +1,3 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import { READ_MARK, type ReadMark, readsUnread } from "@repo/features/read-mark";
 import {
@@ -10,7 +9,7 @@ import {
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Atom } from "effect/reactivity";
+import { createStore, useSelector } from "@tanstack/react-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actMutation, pressMutation } from "../act-mutations.js";
 import { appStateQuery, memoizedSelect } from "../use-app-state.js";
@@ -72,7 +71,7 @@ const NOTHING_CHANGED: ReadonlySet<string> = new Set();
 export const NO_LOOKS: TaskLooks = { changed: NOTHING_CHANGED, dismiss: () => undefined };
 
 /** The task the developer is looking at now: open, so every save that lands on it is seen. */
-const watchedAtom = Atom.make<string | undefined>(undefined);
+const watchedStore = createStore<string | undefined>(undefined);
 
 /** No marks by hand, before the first document arrives. */
 const NONE_MARKED: ReadonlySet<string> = new Set();
@@ -184,7 +183,6 @@ export function useTaskLooks(
   row?: Pick<TaskSummary, "readThrough" | "agents">,
 ): TaskLooks {
   const [visit, setVisit] = useState(() => revisited(undefined, task, readerId, row?.readThrough));
-  const watch = useAtomSet(watchedAtom);
   let current = visit;
   if (visit.taskId !== task?.id || visit.readerId !== readerId) {
     current = revisited(visit, task, readerId, row?.readThrough);
@@ -201,13 +199,13 @@ export function useTaskLooks(
 
   useEffect(() => {
     if (taskId === undefined) return;
-    watch(taskId);
+    watchedStore.setState(() => taskId);
     lookAtTask(taskId, READ_MARK.READ);
     return () => {
-      watch(undefined);
+      watchedStore.setState(() => undefined);
       lookAtTask(taskId, READ_MARK.SEEN);
     };
-  }, [taskId, watch, lookAtTask]);
+  }, [taskId, lookAtTask]);
 
   // Note that the agents' activity the plan opened with is read by the look opening it, so only a move during the stay is a look of its own.
   const seenActivity = useRef<{ taskId: string; activityAt: number | undefined } | undefined>(
@@ -271,7 +269,7 @@ export function useAgentLook(agent: Pick<TasklessAgent, "id" | "activityAt"> | u
  * frames never wear a developer's marks.
  */
 export function useUnreadTasks({ staged }: { staged: boolean }): (task: TaskSummary) => boolean {
-  const watched = useAtomValue(watchedAtom);
+  const watched = useSelector(watchedStore);
   return (task) => {
     if (staged) return false;
     if (task.markedUnread === true) return true;
@@ -311,7 +309,7 @@ function useMarkTask(): ReadMarks["mark"] {
 /** The marks by hand, which every menu offering Mark as unread or Mark as read writes through. */
 export function useReadMarks(): ReadMarks {
   const marked = useQuery({ ...appStateQuery, select: selectMarkedUnreadIds }).data ?? NONE_MARKED;
-  const watched = useAtomValue(watchedAtom);
+  const watched = useSelector(watchedStore);
   const mark = useMarkTask();
   return { watched, markedUnread: (taskId) => marked.has(taskId), mark };
 }

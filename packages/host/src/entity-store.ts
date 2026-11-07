@@ -40,7 +40,7 @@
  * the file at a sign-out.
  */
 
-import { automationsLiveRowsSchema } from "@repo/features/automation-live";
+import { AUTOMATIONS_READ } from "@repo/features/automation-live";
 import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import {
   agentSectionEntrySchema,
@@ -48,10 +48,7 @@ import {
   taskSectionSchema,
 } from "@repo/features/task-section-wire";
 import { repositoryPinSchema } from "@repo/features/task-wire";
-import {
-  workspaceInvitationsLiveRowsSchema,
-  workspaceMembersLiveRowsSchema,
-} from "@repo/features/workspace-live";
+import { WORKSPACE_INVITATIONS_READ, WORKSPACE_MEMBERS_READ } from "@repo/features/workspace-live";
 import { workspaceSchema } from "@repo/features/workspace-wire";
 import type { QueuedEntry } from "@repo/sync";
 import {
@@ -118,15 +115,15 @@ const keptRowsSchema = Schema.Struct({
     pins: Schema.Array(repositoryPinSchema),
   }),
   [KEPT_READ.WORKSPACES]: Schema.Array(workspaceSchema),
-  [KEPT_READ.MEMBERS]: Schema.Record(Schema.String, workspaceMembersLiveRowsSchema),
+  [KEPT_READ.MEMBERS]: Schema.Record(Schema.String, WORKSPACE_MEMBERS_READ.rows),
   [KEPT_READ.INVITATIONS]: Schema.Record(
     Schema.String,
     Schema.Struct({
       origin: Schema.String,
-      invitations: workspaceInvitationsLiveRowsSchema.fields.invitations,
+      invitations: WORKSPACE_INVITATIONS_READ.rows.fields.invitations,
     }),
   ),
-  [KEPT_READ.AUTOMATIONS]: Schema.Record(Schema.String, automationsLiveRowsSchema),
+  [KEPT_READ.AUTOMATIONS]: Schema.Record(Schema.String, AUTOMATIONS_READ.rows),
 });
 
 /** Each kept read's rows, as a read hands them to the store and takes them back. */

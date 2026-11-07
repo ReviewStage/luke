@@ -9,8 +9,8 @@ const URL = "https://github.com/acme/relay/pull/42";
 
 test("a link to a pull request a listed task's agent opened names that task and agent, however its address is spelled", () => {
   const tasks = [
-    { id: OTHER },
-    { id: TASK, agents: { pullRequests: [{ url: URL, agentId: AGENT }] } },
+    { taskId: OTHER, pullRequests: [] },
+    { taskId: TASK, pullRequests: [{ url: URL, agentId: AGENT }] },
   ];
   assert.deepEqual(listedPullRequestOf(`${URL}/#issuecomment-1`, tasks), {
     taskId: TASK,
@@ -20,7 +20,7 @@ test("a link to a pull request a listed task's agent opened names that task and 
 });
 
 test("a pull request named without its agent, as a service before it sends one, is not found", () => {
-  const tasks = [{ id: TASK, agents: { pullRequests: [{ url: URL }] } }];
+  const tasks = [{ taskId: TASK, pullRequests: [{ url: URL }] }];
   assert.equal(listedPullRequestOf(URL, tasks), undefined);
 });
 

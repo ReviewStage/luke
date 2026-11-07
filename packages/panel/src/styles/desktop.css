@@ -1186,10 +1186,8 @@ body,
 
 /* Over a File tab the bar stands just under the file's own bar
    (`tasks.css`), whose controls it would otherwise cover: that bar's
-   buttons, its padding, and its hairline. The side panel holds its tab in
-   `.side-panel-keeps`, which lays nothing out but stands between the scope
-   and the tab, so the tab is looked for there too. */
-.find-scope:has(> .file-view, > .side-panel-keeps > .file-view) > .find-bar {
+   buttons, its padding, and its hairline. */
+.find-scope:has(> .file-view) > .find-bar {
   top: calc(var(--ui-control-height) + 2 * var(--ui-tight-gap) + 1px + var(--ui-space-8));
 }
 
@@ -1267,101 +1265,6 @@ body,
    line with the toolbar's first crumb. */
 .agent-page > .ui-pane-bar {
   padding-inline: calc(var(--column-inset) + var(--ui-list-inset));
-}
-
-/* The plan's summary (`task-summary.tsx`) ----------------------------------- */
-
-/* What the column shows, beside the plan's summary: under the toolbar, which
-   spans the column. The room the summary takes is said once here. */
-.desktop-task-main {
-  --summary-width: 240px;
-  /* The rail stands its controls a column's inset in from its edges, so at
-     the window's right edge its glyphs stand on one line with the side
-     panel's toggle above it, as far in from that edge, and beside an open
-     panel on one line with the toolbar's last button, as far in from the
-     panel's. */
-  --summary-rail-width: calc(var(--ui-control-height) + 2 * var(--column-inset));
-}
-
-.task-summary[data-mode="rail"] > .task-summary-chevron {
-  align-self: center;
-  margin-bottom: calc(var(--ui-list-gap) - var(--ui-focus-ring-reach));
-}
-
-.task-summary[data-mode="rail"] .task-summary-rows {
-  align-items: center;
-  gap: var(--ui-list-gap);
-}
-
-/* The pinned summary's chevron and the card's stand on the rail's own, and
-   show while the pointer is on the summary, and the pinned one while the keys
-   are in it too. The pinned one stands where the rail's does, over the
-   area's corner as far in as the body's padding, and stays there as the
-   summary scrolls: it takes no room of its own, so the first heading stands
-   level with it, and stands on the summary's ground, so a row scrolled under
-   it never shows through. The card's is in from the card's outer edges as
-   far as the rail's padding, less the card's border. */
-.task-summary[data-mode="column"] > .task-summary-chevron,
-.task-summary-collapse {
-  opacity: 0;
-  transition:
-    opacity var(--ui-duration-hover) var(--ui-motion-exit),
-    background-color var(--ui-duration-hover) var(--ui-motion-exit),
-    color var(--ui-duration-hover) var(--ui-motion-exit);
-}
-
-.task-summary[data-mode="column"] > .task-summary-chevron {
-  --ui-button-ground: var(--ui-color-ground);
-  position: absolute;
-  z-index: 1;
-  top: var(--column-inset);
-  right: var(--column-inset);
-  border-radius: var(--ui-control-radius);
-  background-color: var(--ui-button-ground);
-}
-
-/* Each chevron's box is its button alone, which carries its look. */
-.task-summary-chevron,
-.task-summary-collapse {
-  display: flex;
-}
-
-.task-summary-collapse {
-  position: absolute;
-  /* The card's own border, 1px, stands between its outer edge and this. */
-  top: calc(var(--column-inset) - 1px);
-  right: calc(var(--column-inset) - 1px);
-}
-
-.task-summary[data-mode="column"]:has(:focus-visible) > .task-summary-chevron,
-.task-summary-collapse:has(:focus-visible) {
-  opacity: 1;
-}
-
-@media (hover: hover) {
-  .task-summary[data-mode="column"]:hover > .task-summary-chevron,
-  .task-summary-card:hover .task-summary-collapse {
-    opacity: 1;
-  }
-}
-
-/* A screen with no hover shows both chevrons at rest, since no pointer rests
-   on the summary to bring them and each still takes a press. */
-@media (hover: none) {
-  .task-summary[data-mode="column"] > .task-summary-chevron,
-  .task-summary-collapse {
-    opacity: 1;
-  }
-}
-
-/* The first heading stands level with the chevron, so its fold's hover ends
-   short of the chevron rather than running under it. */
-.task-summary[data-mode="column"]
-  .task-summary-body
-  > .task-summary-section:first-of-type
-  .ui-group-header-head,
-.task-summary-card-body > .task-summary-section:first-of-type .ui-group-header-head {
-  margin-right: calc(var(--ui-control-height) + var(--ui-tight-gap));
 }
 
 /* Full screen, the panel covers the document as well as its own room. */

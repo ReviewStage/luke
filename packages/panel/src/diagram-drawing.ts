@@ -1,4 +1,3 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { drawnDark, onDrawnThemeChange } from "@repo/ui/appearance";
 import {
   DIAGRAM_APPEARANCE,
@@ -7,9 +6,9 @@ import {
   type DiagramDrawing,
   type DiagramModule,
 } from "@repo/ui/diagram-contract";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
-import { useEffect, useReducer, useSyncExternalStore } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { createStore, useSelector } from "@tanstack/react-store";
+import { useEffect, useSyncExternalStore } from "react";
 import { useSideBundles } from "./bundle-loader.js";
 
 /**
@@ -41,11 +40,14 @@ const BODY_TITLE = /^[ \t]*(?:\w+[ \t]+)?title[ \t]+(.+?)[ \t]*$/mu;
 /** A line of Mermaid code that names nothing of the diagram: blank or a comment. */
 const SILENT_LINE = /^\s*(?:%%.*)?\s*$/u;
 
-/** What a drawer of no code reads in the bundle's place, so a surface that may draw a diagram imports Mermaid only once it does. */
-const NO_BUNDLE = Atom.make(AsyncResult.initial<DiagramModule, Error>());
-
-/** Each drawing the window holds, by appearance and then by code, oldest first. */
-const drawn = new Map<DiagramAppearance, Map<string, DiagramDrawing>>();
+/**
+ * Each drawing the window holds, by appearance and then by code, oldest
+ * first; a drawing landing writes a new map, so each figure waiting on it
+ * draws again.
+ */
+const drawnStore = createStore<ReadonlyMap<DiagramAppearance, ReadonlyMap<string, DiagramDrawing>>>(
+  new Map(),
+);
 
 /** Each draw still running, by appearance and then by code, which a second figure of the same code joins. */
 const drawing = new Map<DiagramAppearance, Map<string, Promise<DiagramDrawing>>>();
@@ -55,17 +57,19 @@ export function heldDrawing(
   appearance: DiagramAppearance,
   code: string,
 ): DiagramDrawing | undefined {
-  return drawn.get(appearance)?.get(code);
+  return drawnStore.state.get(appearance)?.get(code);
 }
 
 /** A drawing kept, as the newest, the oldest past the bound let go. */
 function keep(appearance: DiagramAppearance, code: string, answer: DiagramDrawing): void {
-  const held = drawn.get(appearance) ?? new Map<string, DiagramDrawing>();
-  held.delete(code);
-  held.set(code, answer);
-  const oldest = held.keys().next();
-  if (held.size > HELD_PICTURES && oldest.done !== true) held.delete(oldest.value);
-  drawn.set(appearance, held);
+  drawnStore.setState((now) => {
+    const held = new Map(now.get(appearance));
+    held.delete(code);
+    held.set(code, answer);
+    const oldest = held.keys().next();
+    if (held.size > HELD_PICTURES && oldest.done !== true) held.delete(oldest.value);
+    return new Map(now).set(appearance, held);
+  });
 }
 
 /** A code drawn in an appearance, joining the draw already running for it; a draw that fails is a refusal. */
@@ -119,25 +123,20 @@ export function useDrawing(
   appearance: DiagramAppearance,
 ): { readonly drawing: DiagramDrawing | undefined; readonly retry: (() => void) | undefined } {
   const { diagram } = useSideBundles();
-  const bundleRead = code === undefined ? NO_BUNDLE : diagram;
-  const bundle = useAtomValue(bundleRead);
-  const retryBundle = useAtomRefresh(bundleRead);
-  const held = code === undefined ? undefined : heldDrawing(appearance, code);
-  const [, landed] = useReducer((count: number) => count + 1, 0);
+  // Note that a drawer of no code reads nothing, so a surface that may draw a diagram imports Mermaid only once it does.
+  const bundle = useQuery({ ...diagram, enabled: code !== undefined });
+  const retryBundle = () => void bundle.refetch();
+  const module = bundle.data;
+  const held = useSelector(drawnStore, (now) =>
+    code === undefined ? undefined : now.get(appearance)?.get(code),
+  );
   useEffect(() => {
-    if (code === undefined || held !== undefined || !AsyncResult.isSuccess(bundle))
-      return undefined;
-    let standing = true;
-    void drawnBy(bundle.value, appearance, code).then(() => {
-      if (standing) landed();
-    });
-    return () => {
-      standing = false;
-    };
-  }, [held, bundle, appearance, code]);
+    if (code === undefined || held !== undefined || module === undefined) return;
+    void drawnBy(module, appearance, code);
+  }, [held, module, appearance, code]);
   if (code === undefined) return { drawing: undefined, retry: undefined };
   if (held !== undefined) return { drawing: held, retry: undefined };
-  return AsyncResult.isFailure(bundle)
+  return bundle.isError
     ? { drawing: { kind: DIAGRAM_DRAWING.REFUSED }, retry: retryBundle }
     : { drawing: undefined, retry: undefined };
 }

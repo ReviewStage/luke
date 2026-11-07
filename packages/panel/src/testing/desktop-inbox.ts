@@ -58,9 +58,9 @@ import { NO_HOLDER_INBOXES, UNREAD } from "@repo/host/app-state";
 import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@repo/host/contract";
 import { STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
 import type { TaskMark } from "@repo/ui/tasks-model";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment, useMemo, useState } from "react";
+import { act, createElement, Fragment, useEffect, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, assert, beforeEach, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
@@ -74,6 +74,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
 import { ToastHost } from "../toast.js";
+import { appStateQuery, selectTasks } from "../use-app-state.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -129,22 +130,8 @@ export const BILLING: TaskSummary = {
   createdAt: 1,
   updatedAt: 2,
   repository: "acme/relay",
-  // The sidebar's list names the task's agent, as the service sums a task's agents up.
-  agents: {
-    total: 1,
-    working: 1,
-    agents: [
-      {
-        id: AGENT.id,
-        title: AGENT.title,
-        model: AGENT.model,
-        effort: AGENT.effort,
-        status: AGENT.status,
-      },
-    ],
-    pullRequestTotal: 0,
-    pullRequests: [],
-  },
+  // The sidebar's list counts the task's agent, as the service sums a task's agents up.
+  agents: { total: 1, working: 1, pullRequestTotal: 0 },
 };
 export const INVITES: TaskSummary = {
   id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
@@ -831,6 +818,17 @@ export function mount(
         ].map((agent) => listedAgent(agent, { workspaceId: ACME.id, repository: "acme/relay" })),
       [listedAgents, tasklessAgents],
     );
+    // Note that the agents on a task are laid on the document too, over whatever else it holds of the list, as the host lays the list it follows, which an item's agent is read from (`useTaskAgent`).
+    const followed = world.agentListHeld ? undefined : liveAgents;
+    const onTasks = useMemo(() => followed?.filter((agent) => agent.planId !== null), [followed]);
+    // Note that the list is laid only once the window read its own document, since the test's Query client may still hold an earlier test's.
+    const held = useQuery({ ...appStateQuery, select: selectTasks });
+    const heldList = held.isFetchedAfterMount ? held.data : undefined;
+    useEffect(() => {
+      if (heldList === undefined || heldList.taskAgents === onTasks) return;
+      const { taskAgents: _held, ...rest } = heldList;
+      reads.deliverTasks(onTasks === undefined ? rest : { ...rest, taskAgents: onTasks });
+    }, [heldList, onTasks]);
     const control = tasksControl({
       ...(readerKnown ? { me: READER.userId } : {}),
       workspace: world.listedWorkspace,
@@ -840,7 +838,7 @@ export function mount(
       listRead,
       sidePanel: sidePanel ?? {
         ...tasksControl().sidePanel,
-        onPreview: (tab) => {
+        onOpen: (tab) => {
           if (typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.TRANSCRIPT) {
             asked.previewedAgents.push(tab.transcript);
           }

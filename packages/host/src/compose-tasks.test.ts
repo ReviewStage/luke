@@ -12,7 +12,7 @@ import {
   WORKSPACE_CALL_FAILURE,
   type WorkspaceCallResult,
 } from "@repo/features";
-import { BROWSER_TABS_PLACE, browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_TABS_PLACE } from "@repo/features/agent-browser-tab-wire";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_MACHINE,
@@ -20,6 +20,8 @@ import {
   PULL_REQUEST_STATE,
   type TasklessAgent,
 } from "@repo/features/agent-wire";
+import { AGENT_BROWSER_TABS_READ, TASK_BROWSER_TABS_READ } from "@repo/features/browser-tabs-live";
+import { TASK_COMMENTS_READ } from "@repo/features/description-comment-live";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -34,10 +36,14 @@ import type { GitHubConnection } from "@repo/features/github-connection-wire";
 import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
 import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
 import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
-import { PAGE_OWNER, PAGE_SHOWER, type PageVersion, pagePlaceId } from "@repo/features/page-wire";
+import { PAGE_OWNER, PAGE_SHOWER, type PageVersion } from "@repo/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
+import { SIDEBAR_READ } from "@repo/features/sidebar-live";
 import type { SlackListedChannel, WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
+import { TASK_HISTORY_READ } from "@repo/features/task-history-live";
+import { AGENT_PAGES_READ, TASK_PAGES_READ } from "@repo/features/task-pages-live";
+import { TASK_RECORD_READ } from "@repo/features/task-record-live";
 import {
   TASK_SECTION_WRITE,
   type TaskSection,
@@ -82,8 +88,16 @@ import {
   type TasksWriteSectionParams,
   tasksViewSchema,
 } from "@repo/features/tasks-view";
-import type { WorkspaceIntegrations } from "@repo/features/workspace-integrations-live";
+import {
+  WORKSPACE_INTEGRATIONS_READ,
+  type WorkspaceIntegrations,
+} from "@repo/features/workspace-integrations-live";
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
+import {
+  WORKSPACE_INVITATIONS_READ,
+  WORKSPACE_MEMBERS_READ,
+  WORKSPACES_READ,
+} from "@repo/features/workspace-live";
 import {
   WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
@@ -380,6 +394,9 @@ type CommentPart = "threads" | "entries" | "files";
 /** A live read the service answers not found, as one the account does not reach. */
 const NOT_FOUND_LIVE = { failure: TASK_CALL_FAILURE.NOT_FOUND } as const;
 
+/** A live read the service did not answer. */
+const UNANSWERED_LIVE = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+
 /** The origin a workspace's invitations are answered with, which each accept link is built on. */
 const INVITATIONS_ORIGIN = "https://app.test";
 
@@ -542,6 +559,26 @@ function fakeService(tasks: Task[]): FakeService {
     poll: boolean | undefined,
     after: string | undefined,
   ) => (poll === true ? read.poll(after) : Effect.succeed(read.first()));
+  /** The fake's live read of the declared read named, for the task, agent, or page its params name, first asked or polled past `after`; none where the service holds none. */
+  const liveOf = (
+    name: string,
+    params: { readonly id: string; readonly page?: string },
+    poll: boolean,
+    after: string | undefined,
+  ) => {
+    const ask = <Part extends string, Refused extends { readonly failure: string }>(
+      read: PolledLive<Part, Refused> | undefined,
+    ) => (read === undefined ? undefined : asked(read, poll, after));
+    if (name === TASK_COMMENTS_READ.name)
+      return ask(service.commentLives[params.page ?? params.id]);
+    if (name === TASK_HISTORY_READ.name) return ask(service.historyLives[params.id]);
+    if (name === TASK_RECORD_READ.name) return ask(service.recordLives[params.id]);
+    if (name === TASK_PAGES_READ.name || name === AGENT_PAGES_READ.name)
+      return ask(service.pageLives[params.id]);
+    if (name === TASK_BROWSER_TABS_READ.name || name === AGENT_BROWSER_TABS_READ.name)
+      return ask(service.browserTabLives[params.id]);
+    return undefined;
+  };
   const service: FakeService = {
     tasks,
     threads: {},
@@ -549,13 +586,6 @@ function fakeService(tasks: Task[]): FakeService {
     commentAnswer: undefined,
     commentGate: undefined,
     commentLives: {},
-    commentsLive: (subject, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<TasksClient["commentsLive"]> => {
-        const read = service.commentLives[subject.pageId ?? subject.taskId];
-        return read === undefined
-          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
-          : called(asked(read, poll, after));
-      }),
     // The service starts the thread as asked, the member its writer, and holds it on the description.
     startComment: (planId, start) =>
       Effect.sync(() => {
@@ -731,26 +761,24 @@ function fakeService(tasks: Task[]): FakeService {
         Effect.suspend(() => {
           const read = service.connection;
           return Effect.map(service.githubGate, () =>
-            read === undefined
-              ? { ok: false as const, failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED }
-              : { ok: true as const, answer: read },
+            read === undefined ? { failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED } : read,
           );
         }),
       connect: () =>
         Effect.sync(() => {
           const url = `https://vespin.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
           service.connectPages.push(url);
-          return { ok: true as const, answer: { url } };
+          return { url };
         }),
       // The service unlinks the session's GitHub and answers the connection as it then stands.
       disconnect: () =>
         Effect.sync(() => {
           service.reads.push("github-disconnect");
           if (service.notPermitted) {
-            return { ok: false as const, failure: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED };
+            return { failure: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED };
           }
           service.connection = { connected: false, login: null };
-          return { ok: true as const, answer: service.connection };
+          return service.connection;
         }),
     },
     // The service answers an admin read with what it read, and stars any account.
@@ -770,44 +798,63 @@ function fakeService(tasks: Task[]): FakeService {
     workspaces: {
       tokenRepositories: () => Effect.succeed(UNANSWERED_WORKSPACE),
       setTokenRepository: () => Effect.succeed(service.tokenRepositorySet ?? UNANSWERED_WORKSPACE),
-      // A workspace's invitations are read for an owner or an admin alone, as the service reads them; a poll is not counted among the reads.
-      invitationsLive: (workspaceId, _userId, poll, after) =>
-        Effect.suspend((): ReturnType<TasksClient["workspaces"]["invitationsLive"]> => {
-          if (poll !== true) service.reads.push(`invitations-live:${workspaceId}`);
-          if (service.notPermitted) return Effect.succeed(NOT_PERMITTED_WORKSPACE);
-          return Effect.map(asked(live.invitations, poll, after), (answer) => ({
-            ok: true as const,
-            answer: { ...answer, origin: INVITATIONS_ORIGIN },
-          }));
-        }),
-      // A workspace's people are read for a member alone, as the service reads them; a poll is not counted among the reads.
-      peopleLive: (workspaceId, _userId, poll, after) =>
-        Effect.suspend((): ReturnType<TasksClient["workspaces"]["peopleLive"]> => {
-          if (poll !== true) service.reads.push(`people-live:${workspaceId}`);
-          if (service.workspacesFail) return Effect.succeed(UNANSWERED_WORKSPACE);
-          return service.members[workspaceId] === undefined
-            ? Effect.succeed({ ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
-            : Effect.map(asked(live.people, poll, after), (answer) =>
-                "failure" in answer
-                  ? ({ ok: false, failure: answer.failure } as const)
-                  : ({ ok: true, answer } as const),
+      environment: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      putVariable: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      deleteVariable: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      // Each workspace read as the service answers it; a poll is not counted among the reads.
+      // SAFETY: each declared read answers its own script's rows, as its declaration's answer.
+      liveRead: ((
+        read: { readonly name: string },
+        params: { readonly workspaceId?: string },
+        poll?: { readonly after?: string | undefined },
+      ) =>
+        Effect.suspend((): Effect.Effect<unknown> => {
+          const polled = poll !== undefined;
+          const after = poll?.after;
+          const workspaceId = params.workspaceId ?? "";
+          switch (read.name) {
+            // A workspace's invitations are read for an owner or an admin alone, as the service reads them.
+            case WORKSPACE_INVITATIONS_READ.name:
+              if (!polled) service.reads.push(`invitations-live:${workspaceId}`);
+              if (service.notPermitted) {
+                return Effect.succeed({ failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+              }
+              return Effect.map(asked(live.invitations, polled, after), (answer) => ({
+                ...answer,
+                origin: INVITATIONS_ORIGIN,
+              }));
+            // A workspace's people are read for a member alone, as the service reads them.
+            case WORKSPACE_MEMBERS_READ.name:
+              if (!polled) service.reads.push(`people-live:${workspaceId}`);
+              if (service.workspacesFail) {
+                return Effect.succeed({ failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+              }
+              return service.members[workspaceId] === undefined
+                ? Effect.succeed({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND })
+                : asked(live.people, polled, after);
+            // The workspaces as the store holds them, each poll held until they move.
+            case WORKSPACES_READ.name:
+              if (!polled) service.reads.push("workspaces-live");
+              if (service.workspacesFail) {
+                return Effect.succeed({ failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+              }
+              if (service.workspacesSignedOut) return Effect.succeed(LIVE_SIGNED_OUT);
+              // Note that a poll held until the workspaces moved reads the session again as it answers.
+              return Effect.map(asked(live.workspaces, polled, after), (answer) =>
+                service.workspacesSignedOut ? LIVE_SIGNED_OUT : answer,
               );
-        }),
-      // The workspaces as the store holds them, each poll held until they move; a poll is not counted among the reads.
-      live: (_userId, poll, after) =>
-        Effect.suspend((): ReturnType<TasksClient["workspaces"]["live"]> => {
-          if (poll !== true) service.reads.push("workspaces-live");
-          if (service.workspacesFail) return Effect.succeed(UNANSWERED_WORKSPACE);
-          if (service.workspacesSignedOut) {
-            return Effect.succeed({ ok: false, failure: LIVE_SIGNED_OUT.failure } as const);
+            // A workspace's integrations are read for a member alone, with both integrations held by the deployment.
+            case WORKSPACE_INTEGRATIONS_READ.name:
+              if (!polled) service.reads.push(`integrations-live:${workspaceId}`);
+              return Effect.map(asked(live.integrations, polled, after), (answer) => ({
+                ...answer,
+                sentryConfigured: true,
+                slackConfigured: true,
+              }));
+            default:
+              return assert.fail(`no script answers the live read ${read.name}`);
           }
-          // Note that a poll held until the workspaces moved reads the session again as it answers.
-          return Effect.map(asked(live.workspaces, poll, after), (answer) =>
-            service.workspacesSignedOut
-              ? ({ ok: false, failure: LIVE_SIGNED_OUT.failure } as const)
-              : ({ ok: true, answer } as const),
-          );
-        }),
+        })) as TasksClient["workspaces"]["liveRead"],
       create: (name) =>
         Effect.sync(() => {
           service.reads.push(`create:${name}`);
@@ -867,15 +914,6 @@ function fakeService(tasks: Task[]): FakeService {
             each.id === workspaceId ? now : each,
           );
           return { ok: true, answer: now } as const;
-        }),
-      // A workspace's integrations are read for a member alone, as the service reads them, with both integrations held by the deployment; a poll is not counted among the reads.
-      integrationsLive: (workspaceId, _userId, poll, after) =>
-        Effect.suspend((): ReturnType<TasksClient["workspaces"]["integrationsLive"]> => {
-          if (poll !== true) service.reads.push(`integrations-live:${workspaceId}`);
-          return Effect.map(asked(live.integrations, poll, after), (answer) => ({
-            ok: true as const,
-            answer: { ...answer, sentryConfigured: true, slackConfigured: true },
-          }));
         }),
       sentryInstall: () => Effect.succeed(UNANSWERED_WORKSPACE),
       sentryDisconnect: (workspaceId, installationId) =>
@@ -983,15 +1021,6 @@ function fakeService(tasks: Task[]): FakeService {
           return { ok: true, answer: workspaceId } as const;
         }),
     },
-    // The sidebar as the service holds it; a poll is not counted among the reads.
-    sidebarLive: (_userId, poll, after) =>
-      Effect.suspend(() => {
-        if (poll !== true) service.reads.push("sidebar-live");
-        return Effect.map(asked(live.sidebar, poll, after), (answer) => ({
-          ok: true as const,
-          answer,
-        }));
-      }),
     // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
     pinRepository: (repository, pinned) =>
       Effect.andThen(
@@ -1074,34 +1103,23 @@ function fakeService(tasks: Task[]): FakeService {
     readRepositoryIssue: (place, number) =>
       Effect.sync(() => service.issues[place.workspaceId]?.[place.repository]?.get(number)),
     openBrowserTab: () => Effect.succeed({ failure: BROWSER_TAB_OPEN_FAILURE.UNANSWERED }),
-    historyLive: (taskId, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<TasksClient["historyLive"]> => {
-        const read = service.historyLives[taskId];
-        return read === undefined
-          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
-          : called(asked(read, poll, after));
-      }),
-    browserTabsLive: (place, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<TasksClient["browserTabsLive"]> => {
-        const read = service.browserTabLives[browserTabsPlaceId(place)];
-        return read === undefined
-          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
-          : called(asked(read, poll, after));
-      }),
-    pagesLive: (place, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<TasksClient["pagesLive"]> => {
-        const read = service.pageLives[pagePlaceId(place)];
-        return read === undefined
-          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
-          : called(asked(read, poll, after));
-      }),
-    recordLive: (taskId, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<TasksClient["recordLive"]> => {
-        const read = service.recordLives[taskId];
-        return read === undefined
-          ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND } as const)
-          : called(asked(read, poll, after));
-      }),
+    // A declared live read answers as its follow asks it: first, or polled past `after`; the sidebar as the service holds it, a poll not counted among the reads; the record of a task with none is not found, every other read unanswered.
+    liveRead: ((
+      read: { readonly name: string },
+      params: { readonly id: string; readonly page?: string },
+      poll?: { readonly after?: string | undefined },
+    ) =>
+      Effect.suspend((): Effect.Effect<unknown> => {
+        if (read.name === SIDEBAR_READ.name) {
+          if (poll === undefined) service.reads.push("sidebar-live");
+          return asked(live.sidebar, poll !== undefined, poll?.after);
+        }
+        const followed = liveOf(read.name, params, poll !== undefined, poll?.after);
+        if (followed !== undefined) return followed;
+        return Effect.succeed(
+          read.name === TASK_RECORD_READ.name ? NOT_FOUND_LIVE : UNANSWERED_LIVE,
+        );
+      })) as TasksClient["liveRead"],
     // Note that a poll past a sync id is not counted among the list's reads, as each is held until its rows move.
     listLive: (_userId, sync) =>
       Effect.suspend(() => {
@@ -1649,8 +1667,8 @@ it.effect(
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       service.live.list.refuse({ failure: TASK_CALL_FAILURE.UNANSWERED });
       service.workspacesFail = true;
-      service.sidebarLive = () =>
-        Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const);
+      service.liveRead = (() =>
+        Effect.succeed({ failure: TASK_CALL_FAILURE.UNANSWERED })) as TasksClient["liveRead"];
       const asked: (string | undefined)[] = [];
       const { listLive } = service;
       service.listLive = (userId, sync) => {
@@ -4988,13 +5006,13 @@ it.effect(
       const pages = polledLive<"pages", typeof NOT_FOUND_LIVE>(["pages"]);
       pages.refuse(NOT_FOUND_LIVE);
       service.pageLives[INVITES] = pages;
-      const { pagesLive } = service;
+      const { liveRead } = service;
       let seals = 0;
-      service.pagesLive = (...asked) =>
+      service.liveRead = ((...asked: Parameters<TasksClient["liveRead"]>) =>
         Effect.suspend(() => {
-          seals += 1;
-          return pagesLive(...asked);
-        });
+          if (asked[0].name === TASK_PAGES_READ.name) seals += 1;
+          return liveRead(...asked);
+        })) as TasksClient["liveRead"];
       const { call, pushed } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.TASKS_PAGES_FOLLOW, { taskId: INVITES });
@@ -5554,7 +5572,7 @@ it.effect(
       const drawn = last()?.tasks[0];
       assert.equal(drawn?.name, "Teammate invitations, live");
       assert.deepEqual(
-        [drawn?.agents?.working, drawn?.agents?.agents.map((line) => line.status)],
+        [drawn?.agents?.working, last()?.taskAgents?.map((each) => each.status)],
         [1, [AGENT_STATUS.STARTING]],
       );
       assert.deepEqual(
@@ -5567,9 +5585,8 @@ it.effect(
       yield* TestClock.adjust(Duration.minutes(5));
       yield* settled;
 
-      const ended = last()?.tasks[0]?.agents;
       assert.deepEqual(
-        [ended?.working, ended?.agents.map((line) => line.status)],
+        [last()?.tasks[0]?.agents?.working, last()?.taskAgents?.map((each) => each.status)],
         [0, [AGENT_STATUS.FAILED]],
       );
     }),
@@ -5604,20 +5621,20 @@ it.effect(
       });
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live", "the list is drawn live");
       assert.deepEqual(
-        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        last()?.taskAgents?.map((each) => each.status),
         [AGENT_STATUS.RUNNING],
       );
       yield* TestClock.adjust(Duration.minutes(3));
       yield* settled;
       assert.deepEqual(
-        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        last()?.taskAgents?.map((each) => each.status),
         [AGENT_STATUS.RUNNING],
         "inside the line's grace",
       );
       yield* TestClock.adjust(Duration.minutes(2));
       yield* settled;
       assert.deepEqual(
-        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        last()?.taskAgents?.map((each) => each.status),
         [AGENT_STATUS.FAILED],
         "the line's grace ran out with no row moving",
       );

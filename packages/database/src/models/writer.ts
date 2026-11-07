@@ -56,7 +56,7 @@ import {
   type UIMessage,
   type UITools,
 } from "ai";
-import { and, asc, eq, gt, isNotNull, isNull, notExists, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, lt, notExists, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   Cause,
@@ -73,13 +73,14 @@ import {
 } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
-import { conversations, messages, turns } from "../schemas/storage.js";
+import { conversations, messages, turnlessUserLine, turns } from "../schemas/storage.js";
 import {
   CONVERSATION_KIND,
   MESSAGE_SENDER,
   type MessageSender,
   messageSenderSchema,
 } from "../storage-vocabulary.js";
+import { TURN_ABANDON } from "./abandoned-turns.js";
 import { type HandedFile, lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
@@ -1947,6 +1948,10 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   const clientId = sentLineId(line.clientKey);
   yield* deleteWithdrawnLine({ conversationId: context.target.conversationId, clientId });
+  yield* deleteStaleWithdrawnLines({
+    conversationId: context.target.conversationId,
+    before: new Date(context.now.getTime() - TURN_ABANDON.AGENT_AFTER_MS),
+  });
   // A line already under the key is the send a lost answer was for: the runtime has it, and hears nothing again.
   const standing = yield* messageByClientId(context, clientId);
   if (Option.isSome(standing)) {
@@ -1976,8 +1981,8 @@ const claimLine = /* @__PURE__ */ Effect.fnUntraced(function* (
  * than deleted, because a runtime that took the line past the hand-over's
  * deadline, or before a record that failed, still hands it to a turn, which
  * takes this row with what carried it and who sent it (`takeAwaitingLine`);
- * the maintenance sweep deletes it once no turn can (`abandoned-turns.ts`'s
- * `purgeWithdrawnLines`).
+ * the conversation's next line deletes it once no turn can
+ * (`deleteStaleWithdrawnLines`).
  */
 const withdrawUntakenLine = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String, now: Schema.Date }),
@@ -2015,6 +2020,30 @@ const deleteWithdrawnLine = SqlSchema.void({
             eq(messages.clientId, clientId),
             isNull(messages.turnId),
             isNotNull(messages.withdrawnAt),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Deletes the conversation's withdrawn lines no turn took, withdrawn before
+ * the instant given. Note that the bound is a coding agent's turn bound,
+ * because the runtime hands a line it took to the turn under way or to one
+ * it opens at once, and a turn running past that bound is settled, so a
+ * line withdrawn longer ago is one no turn will ever take, which every read
+ * already leaves out.
+ */
+const deleteStaleWithdrawnLines = SqlSchema.void({
+  Request: Schema.Struct({ conversationId: Schema.String, before: Schema.Date }),
+  execute: ({ conversationId, before }) =>
+    Database.use((db) =>
+      db
+        .delete(messages)
+        .where(
+          and(
+            eq(messages.conversationId, conversationId),
+            turnlessUserLine(messages),
+            lt(messages.withdrawnAt, before),
           ),
         ),
     ),

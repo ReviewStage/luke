@@ -46,7 +46,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platfor
 import { handHostReads } from "./testing/app-state.js";
 import { onRegistry, settleQueries } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
-import { agentsControl, tasksControl } from "./testing/tasks-control.js";
+import { agentsControl, listedAgent, tasksControl } from "./testing/tasks-control.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
 import { useVersionHistoryRoute, type VersionHistoryRoute } from "./version-history-route.js";
 import {
@@ -785,7 +785,6 @@ test("with no workspace listed, a place in a workspace has no link, so it stands
   const none = { workspaces: [], workspace: undefined };
   const places: TasksControl[] = [
     tasksControl({ ...none, inboxView: { ...tasksControl().inboxView, open: true } }),
-    tasksControl({ ...none, agentView: { ...tasksControl().agentView, agentId: "agent-1" } }),
   ];
   const addresses: string[] = [];
   for (const tasks of places) {
@@ -881,9 +880,9 @@ function onTabs(input: {
 const namedAsShown = (tasks: TasksControl, place: RoutedPlace | undefined): StepTitle | undefined =>
   stepTitle(place, tasks);
 
-/** The task the window lists, under `name`, its row naming agent A under `agentTitle` where one is given. */
-function listedTask(name: string, agentTitle?: string): TaskSummary {
-  const task: TaskSummary = {
+/** The task the window lists, under `name`. */
+function listedTask(name: string): TaskSummary {
+  return {
     id: TASK_ID,
     workspaceId: "workspace",
     name,
@@ -891,16 +890,6 @@ function listedTask(name: string, agentTitle?: string): TaskSummary {
     updatedAt: 2,
     repository: "acme/relay",
   };
-  if (agentTitle === undefined) return task;
-  const line = {
-    id: AGENT_A.agent,
-    title: agentTitle,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    status: AGENT_STATUS.COMPLETED,
-  };
-  const agents = { total: 1, working: 0, agents: [line], pullRequestTotal: 0, pullRequests: [] };
-  return { ...task, agents };
 }
 
 /** Agent A as the open task's agents read it, under `title`. */
@@ -929,13 +918,18 @@ test("Back's list names a task and its agent's tab by the names they go by now, 
     namedAsShown,
   );
   press();
-  window.stand(tasksControl({ tasks: [listedTask("Auth rewrite", "Token renewal")] }));
+  window.stand(
+    tasksControl({
+      tasks: [listedTask("Auth rewrite")],
+      liveAgents: [listedAgent(openAgent("Token renewal"))],
+    }),
+  );
   assert.deepEqual(window.history().steps.back[0]?.title, {
     label: "Auth rewrite",
     detail: "Token renewal",
   });
 
-  // The task's row no longer names the agent: its tab keeps the name it had.
+  // The list followed live no longer holds the agent: its tab keeps the name it had.
   window.stand(tasksControl({ tasks: [listedTask("Auth rewrite")] }));
   assert.deepEqual(window.history().steps.back[0]?.title, {
     label: "Auth rewrite",
@@ -958,7 +952,12 @@ test("Back's list names a renamed agent's tab by its name now beside a page's ta
     namedAsShown,
   );
   press();
-  window.stand(tasksControl({ tasks: [listedTask("Auth refactor", "Token renewal")] }));
+  window.stand(
+    tasksControl({
+      tasks: [listedTask("Auth refactor")],
+      liveAgents: [listedAgent(openAgent("Token renewal"))],
+    }),
+  );
   assert.deepEqual(window.history().steps.back[0]?.title, {
     label: "Auth refactor",
     detail: "Token renewal · Notes",

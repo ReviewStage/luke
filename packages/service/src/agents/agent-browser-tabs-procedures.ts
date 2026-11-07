@@ -20,8 +20,10 @@
  * `connectRestoring`, which resumes a stopped sandbox and reopens its kept
  * tabs; and the tab is kept with the member as its opener and taken over
  * for them at once, so the agent does not act on it until they hand it
- * back. An agent that has opened no sandbox yet is refused as not ready,
- * and a browser that could not be reached as the upstream's refusal; the
+ * back. An agent that has opened no sandbox yet is refused as not ready, as
+ * is one whose sandbox is made again on an image Vercel still prepares,
+ * which opens after the answer rather than holding it past its client's
+ * deadline; a browser that could not be reached is the upstream's refusal; the
  * address is never logged, a failure only by its kind.
  *
  * Who reaches a tab is the rule a whole agent is read by: a member who sees
@@ -201,7 +203,8 @@ function openedPage(sessionId: string, conversationId: string, address: string) 
   ).pipe(
     Effect.catchTags({
       BrowserUnreachable: (unreachable) =>
-        unreachable.reason === BROWSER_UNREACHABLE.NOT_OPENED
+        unreachable.reason === BROWSER_UNREACHABLE.NOT_OPENED ||
+        unreachable.reason === BROWSER_UNREACHABLE.STARTING
           ? Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY)
           : Effect.andThen(
               Effect.logWarning(`a member's Browser tab did not open: ${unreachable.reason}`),

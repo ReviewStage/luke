@@ -24,7 +24,7 @@ import {
 } from "@repo/gateway";
 import { APP_SETTING_SCHEMA, experimentOn, MAC_COMMAND_MODE, NO_EXPERIMENTS } from "@repo/settings";
 import { entityPool } from "@repo/sync";
-import { Effect, Exit, Layer, Option, Scope } from "effect";
+import { Effect, Exit, Layer, Option, Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
@@ -57,6 +57,7 @@ import {
   type ThisMacHost,
 } from "./effect/seams.js";
 import { type EntityStore, forgetEntityStore, openEntityStore } from "./entity-store.js";
+import { ActRefused } from "./host-acts.js";
 import {
   HOST_CONCERN,
   HOST_PLATFORM_CONCERN,
@@ -196,14 +197,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
      * that may wait for the service is sent under a key of the host's own
      * minting and waits while the service does not answer: kept on disk
      * beside the lists where they are kept (`openEntities`), and in a
-     * browser tab for the tab's life alone. A fixture run keeps none
-     * waiting.
+     * browser tab for the tab's life alone, and sent again only as the
+     * account that asked it. A fixture run keeps none waiting.
      */
     const pool = yield* entityPool(
       kernel.runMode.requiresAccount
         ? {
             mintKey: kernel.createId,
             replayRefused: Effect.sync(() => offlineRefused.raise()),
+            holder: accountId,
           }
         : undefined,
     );
@@ -280,6 +282,18 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       const { automationId, ...agent } = taskless;
       return automationId === null ? agent : { ...agent, automationId };
     };
+    /** Waits until the task list says an agent's sandbox stands open, answering whether it waited: false at once where it already says so, or does not know. */
+    const sandboxOpened = (agentId: string) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          // Note that each drawing of the list is listened to before the list is read, so one drawn between the two is not missed.
+          const drawings = yield* tasks.pullRequestListings;
+          const closed = () => agentListed(agentId)?.sandboxOpen === false;
+          if (!closed()) return false;
+          yield* Stream.runHead(Stream.filter(drawings, () => !closed()));
+          return true;
+        }),
+      );
     const agents = yield* served(
       composeAgents({
         kernel,
@@ -336,6 +350,9 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
               Effect.orDie(settings.store.snapshot()),
               (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
             ),
+            changed: Effect.zipWith(settings.told, account.session.changes, (written, signed) =>
+              Stream.merge(written, signed),
+            ),
             allowAlways: Effect.map(
               settings.settingsWrite(
                 () =>
@@ -352,7 +369,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           }),
         )
-      : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
+      : {
+          ...unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS),
+          // Note that a host without the Mac commands holds no ask, so an answer finds none waiting and is answered all the same, as the Gateway's refusal of its method was.
+          acts: { MAC_COMMAND_ANSWER: () => Effect.void },
+        };
     const thisMacHost = platform.has(HOST_PLATFORM_CONCERN.THIS_MAC_HOST)
       ? yield* served(
           composeThisMacHost({
@@ -395,6 +416,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
                 credential: account.credential,
               }),
               openSocket,
+              sandboxOpened,
             }),
           )
         : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
@@ -421,7 +443,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             listen: yield* LoopbackListener,
           }),
         )
-      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.PORT_FORWARDS), reset: Effect.void };
+      : {
+          ...unavailableConcern(HOST_PLATFORM_CONCERN.PORT_FORWARDS),
+          // Note that a host without the port forwards refuses its set in the act's own sentence, as the platform's refusal of its kind was.
+          acts: { PORT_FORWARD_SET: () => Effect.fail(new ActRefused({})) },
+          reset: Effect.void,
+        };
 
     /**
      * The signed-in account's store opened where none stands: only where the
@@ -506,6 +533,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,
+      settleHeld: agents.letGoHeldCloses,
     });
     const concerns = {
       [HOST_CONCERN.SETTINGS]: settings,
@@ -587,6 +615,8 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         ...automations.acts,
         ...installedSkills.acts,
         ...integrations.acts,
+        ...macCommands.acts,
+        ...portForwards.acts,
         ...tasks.acts,
       },
       nodes: kernel.nodes,

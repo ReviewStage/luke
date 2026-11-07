@@ -15,7 +15,6 @@ import {
   type Automation,
   type AutomationRun,
   adoptAutomationAgent,
-  archivableRunAgents,
   createAutomation,
   deleteAutomation,
   listAutomationRuns,
@@ -27,7 +26,8 @@ import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store
 import { readMessageByClientId, sentLineStands } from "@repo/database/models/message-reads";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { createTask, readTask } from "@repo/database/models/task-store";
-import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
+import type { ConversationTarget } from "@repo/database/models/writer";
+import { agentTable } from "@repo/database/schemas/agent";
 import { automationRun, automation as automationTable } from "@repo/database/schemas/automation";
 import { turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
@@ -60,11 +60,9 @@ import { TASK_STATUS } from "@repo/features/task-wire";
 import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
-import { steerAgent } from "../agents/coder-host/steer.js";
-import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   type AgentSessions,
   SESSION_CANCEL_OUTCOME,
@@ -83,18 +81,18 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../testing/github-app-fake.js";
-import { executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
-import { sweepAutomations } from "./automation-sweep.js";
+import { consumeAutomationRunMessage } from "./automation-run-consumer.js";
+import { executeAutomationRun } from "./automation-runs.js";
+import { reconsiderRunArchive } from "./run-archive.js";
 
 /**
- * An automation's runs acted on, over a real dialect: a due schedule starts
- * one coding agent on the task's repository as the deployment acting for
- * the owner, handed the prompt as its task, and a sweep after it starts
- * nothing; a run past the concurrency guard or the daily cap is skipped and
- * starts nothing, as is a run queued before its automation was paused; one
- * automation's runs queued together are acted on one after another, so its
- * guards hold across them; a run left queued past the hour is settled as
- * missed; a run hands its agent only the switched-off servers its
+ * An automation's runs acted on, over a real dialect: a schedule's delivery
+ * starts one coding agent on the task's repository as the deployment acting
+ * for the owner, handed the prompt as its task, and the same occurrence
+ * delivered again starts nothing; a run past the concurrency guard or the
+ * daily cap is skipped and starts nothing, as is a firing delivered after
+ * its automation was paused; one automation's firings delivered together
+ * are decided one after another, so its guards hold across them; a run hands its agent only the switched-off servers its
  * automation's own prompt mentions, never a webhook body's or a GitHub
  * event's; and a failed start records its failure and pauses nothing, so
  * the next firing tries again. The harness
@@ -182,6 +180,9 @@ const services = Layer.mergeAll(
   ANALYTICS.layer,
 );
 
+/** A trigger no sweep fires, for a test that starts its runs by hand and must leave no schedule due for another test's sweep. */
+const UNSCHEDULED: AutomationTrigger = { kind: AUTOMATION_TRIGGER.WEBHOOK };
+
 /** An owner, a task on the repository of its workspace's installation (or none), and an automation on it due a minute ago, on a weekday schedule unless another trigger is named. */
 const openAutomation = (
   options: {
@@ -239,6 +240,17 @@ const runNow = (automation: Automation) =>
     }),
     Option.getOrThrow,
   );
+
+/** The occurrence of the automation's schedule due at `dueAt`, as Vercel Schedules publishes it. */
+const scheduleMessage = (automation: Automation, workspaceId: string, dueAt: number) => ({
+  scheduleId: "sch_relay",
+  executionId: `schx_${dueAt}`,
+  name: automation.id,
+  namespace: workspaceId,
+  scheduledAt: new Date(dueAt).toISOString(),
+  expression: "0 9 * * 1-5",
+  source: "dynamic",
+});
 
 /** The run's agent, its session having run one turn that ended as `status`. */
 const ranTurn = (owner: string, agentId: string, status: TurnStatus) =>
@@ -663,253 +675,54 @@ it.layer(getTestDB())("an automation's runs", (it) => {
       }),
   );
 
-  it.effect(
-    "a same-agent run left claimed after it opened a fresh agent is settled with that agent, which the automation keeps in place of the gone one",
-    () =>
-      Effect.gen(function* () {
-        const { owner, automation, workspaceId } = yield* openAutomation();
-        const archived = Option.getOrThrow(
-          yield* createAgent(owner, {
-            taskId: null,
-            organizationId: workspaceId,
-            idempotencyKey: randomUUID(),
-            model: SOL,
-            effort: "low",
-            descriptionSnapshot: null,
-            prompt: "Keep the flaky tests quarantined.",
-            repository: `${RELAY.owner}/${RELAY.name}`,
-            runtime: CONVERSATION_RUNTIME.CODEX,
-            payer: AGENT_PAYER.API_KEY,
-          }),
-        ).agent.id;
-        yield* archiveAgent(owner, archived, true);
-        const same = yield* toSameAgent(automation, archived);
-        const run = yield* runNow(same);
-        // The run claimed for the gone agent opened a fresh one under its key, and its function died there.
-        const fresh = Option.getOrThrow(
-          yield* createAgent(owner, {
-            taskId: null,
-            organizationId: workspaceId,
-            idempotencyKey: run.id,
-            model: SOL,
-            effort: "low",
-            descriptionSnapshot: null,
-            prompt: PROMPT,
-            repository: `${RELAY.owner}/${RELAY.name}`,
-            runtime: CONVERSATION_RUNTIME.CODEX,
-            payer: AGENT_PAYER.API_KEY,
-          }),
-        ).agent.id;
-        yield* ranTurn(owner, fresh, TURN_STATUS.RUNNING);
-        yield* Database.use((db) =>
-          db
-            .update(automationRun)
-            .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId: null, claimedAgentId: archived })
-            .where(eq(automationRun.id, run.id)),
-        );
+  it.effect("a run handed to a teammate's agent stands as a line under the teammate", () =>
+    Effect.gen(function* () {
+      const agentSessions = fakeAgentSessions();
+      const { automation, workspaceId } = yield* openAutomation();
+      const teammate = yield* openGithubUser();
+      yield* connectAgentApiKeys(teammate);
+      yield* joinWorkspace(workspaceId, teammate);
+      const made = yield* createAgent(teammate, {
+        taskId: null,
+        organizationId: workspaceId,
+        idempotencyKey: randomUUID(),
+        model: SOL,
+        effort: "low",
+        descriptionSnapshot: null,
+        prompt: "Keep the flaky tests quarantined.",
+        repository: `${RELAY.owner}/${RELAY.name}`,
+        runtime: CONVERSATION_RUNTIME.CODEX,
+        payer: AGENT_PAYER.API_KEY,
+      });
+      const theirs = Option.getOrThrow(made).agent;
+      yield* claimRuntimeSession(
+        { userId: teammate, conversationId: theirs.conversationId },
+        "wrun_theirs",
+        new Date("2026-10-15T12:00:00Z"),
+      );
+      // Its first turn ended, so it is no longer at work for the run to wait on.
+      yield* ranTurn(teammate, theirs.id, TURN_STATUS.SETTLED);
+      const same = yield* toSameAgent(automation, theirs.id);
+      const run = yield* runNow(same);
 
-        yield* recoverStrandedRun({
-          id: run.id,
-          automationId: automation.id,
-          userId: owner,
-          claimedAgentId: archived,
-        });
+      yield* executeAutomationRun(agentSessions.sessionsFor, run).pipe(Effect.provide(services));
 
-        assert.equal(
-          Option.getOrThrow(yield* readAutomationToRun(automation.id)).targetAgentId,
-          fresh,
-        );
-        const settled = (yield* listAutomationRuns(owner, automation.id)).find(
-          (each) => each.id === run.id,
-        );
-        assert.deepEqual(
-          [settled?.status, settled?.agentId, settled?.reason],
-          [AUTOMATION_RUN_STATUS.STARTED, fresh, AUTOMATION_RUN_REASON.AGENT_REPLACED],
-        );
-      }),
+      assert.ok(yield* sentLineStands(teammate, theirs.conversationId, sentLineId(run.id)));
+    }),
   );
 
   it.effect(
-    "a run handed to a teammate's agent stands as a line under the teammate, and left claimed it is settled with that agent still, even once its creator left",
-    () =>
-      Effect.gen(function* () {
-        const agentSessions = fakeAgentSessions();
-        const { owner, automation, workspaceId } = yield* openAutomation();
-        const teammate = yield* openGithubUser();
-        yield* connectAgentApiKeys(teammate);
-        yield* joinWorkspace(workspaceId, teammate);
-        const made = yield* createAgent(teammate, {
-          taskId: null,
-          organizationId: workspaceId,
-          idempotencyKey: randomUUID(),
-          model: SOL,
-          effort: "low",
-          descriptionSnapshot: null,
-          prompt: "Keep the flaky tests quarantined.",
-          repository: `${RELAY.owner}/${RELAY.name}`,
-          runtime: CONVERSATION_RUNTIME.CODEX,
-          payer: AGENT_PAYER.API_KEY,
-        });
-        const theirs = Option.getOrThrow(made).agent;
-        yield* claimRuntimeSession(
-          { userId: teammate, conversationId: theirs.conversationId },
-          "wrun_theirs",
-          new Date("2026-10-15T12:00:00Z"),
-        );
-        // Its first turn ended, so it is no longer at work for the run to wait on.
-        yield* ranTurn(teammate, theirs.id, TURN_STATUS.SETTLED);
-        const same = yield* toSameAgent(automation, theirs.id);
-        const run = yield* runNow(same);
-        yield* executeAutomationRun(agentSessions.sessionsFor, run).pipe(Effect.provide(services));
-        assert.ok(yield* sentLineStands(teammate, theirs.conversationId, sentLineId(run.id)));
-        yield* Database.use((db) =>
-          db
-            .update(automationRun)
-            .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId: null })
-            .where(eq(automationRun.id, run.id)),
-        );
-
-        // The creator left after the line landed: it was still sent, and the run is still that agent's.
-        yield* leaveWorkspace(workspaceId, owner);
-        yield* recoverStrandedRun({
-          id: run.id,
-          automationId: automation.id,
-          userId: owner,
-          claimedAgentId: theirs.id,
-        });
-
-        // Read as the store holds it, since the creator who left reads none of the automation's runs.
-        const [settled] = yield* Database.use((db) =>
-          db
-            .select({ status: automationRun.status, agentId: automationRun.agentId })
-            .from(automationRun)
-            .where(eq(automationRun.id, run.id)),
-        );
-        assert.deepEqual(
-          [settled?.status, settled?.agentId],
-          [AUTOMATION_RUN_STATUS.STARTED, theirs.id],
-        );
-      }),
-  );
-
-  it.effect(
-    "a same-agent run left claimed is settled with the agent it was claimed for where that agent holds its line, whatever the automation hands runs to since, and failed as unavailable otherwise, a line under its key in any other agent's conversation counting for nothing",
-    () =>
-      Effect.gen(function* () {
-        const agentSessions = fakeAgentSessions();
-        const { owner, automation, workspaceId } = yield* openAutomation({
-          guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 5 },
-        });
-        const first = yield* startedNow(agentSessions, automation);
-        const agent = Option.getOrThrow(yield* readAgent(owner, first));
-        yield* claimRuntimeSession(
-          { userId: owner, conversationId: agent.conversationId },
-          "wrun_same",
-          new Date("2026-10-15T12:00:00Z"),
-        );
-        const same = yield* toSameAgent(automation, first);
-        const delivered = yield* runNow(same);
-        yield* executeAutomationRun(agentSessions.sessionsFor, delivered).pipe(
-          Effect.provide(services),
-        );
-        const lost = yield* runNow(same);
-        // The automation turned to another agent of the workspace since: the run is still its claim's.
-        const made = yield* createAgent(owner, {
-          taskId: null,
-          organizationId: workspaceId,
-          idempotencyKey: randomUUID(),
-          model: SOL,
-          effort: "low",
-          descriptionSnapshot: null,
-          prompt: "Watch the nightly build.",
-          repository: `${RELAY.owner}/${RELAY.name}`,
-          runtime: CONVERSATION_RUNTIME.CODEX,
-          payer: AGENT_PAYER.API_KEY,
-        });
-        const other = Option.getOrThrow(made).agent.id;
-        yield* toSameAgent(automation, other);
-        // Both left as a function that died after its claim would leave them.
-        yield* Database.use((db) =>
-          db
-            .update(automationRun)
-            .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId: null })
-            .where(inArray(automationRun.id, [delivered.id, lost.id])),
-        );
-
-        // A line under the lost run's key planted in the other agent, as anyone who read the run's id
-        // could send there, is no recovery of the run: it was claimed for the first agent.
-        const otherAgent = Option.getOrThrow(yield* readAgent(owner, other));
-        yield* claimRuntimeSession(
-          { userId: owner, conversationId: otherAgent.conversationId },
-          "wrun_other",
-          new Date("2026-10-15T12:00:00Z"),
-        );
-        yield* steerAgent(
-          yield* agentSessions.sessionsFor(owner),
-          storeWriter({ tools: CODER_TOOL_SET }),
-          owner,
-          otherAgent,
-          {
-            text: "Not the run.",
-            clientKey: lost.id,
-            sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
-          },
-        ).pipe(Effect.provide(services));
-        for (const run of [delivered, lost]) {
-          yield* recoverStrandedRun({
-            id: run.id,
-            automationId: automation.id,
-            userId: owner,
-            claimedAgentId: first,
-          });
-        }
-
-        const runs = new Map(
-          (yield* listAutomationRuns(owner, automation.id)).map((run) => [run.id, run]),
-        );
-        assert.deepEqual(
-          [runs.get(delivered.id)?.agentId, runs.get(delivered.id)?.status],
-          [first, AUTOMATION_RUN_STATUS.STARTED],
-        );
-        assert.deepEqual(
-          [runs.get(lost.id)?.status, runs.get(lost.id)?.reason],
-          [AUTOMATION_RUN_STATUS.FAILED, AUTOMATION_RUN_REASON.UNAVAILABLE],
-        );
-      }),
-  );
-
-  it.effect(
-    "a run whose agent's starter left the workspace takes no place in the archive's read, so a later run's agent is read in its stead",
-    () =>
-      Effect.gen(function* () {
-        const agentSessions = fakeAgentSessions();
-        const departing = yield* openAutomation({ archiveSuccessful: true });
-        const staying = yield* openAutomation({ archiveSuccessful: true });
-        const orphaned = yield* startedNow(agentSessions, departing.automation);
-        const standing = yield* startedNow(agentSessions, staying.automation);
-        yield* leaveWorkspace(departing.workspaceId, departing.owner);
-
-        const read = yield* archivableRunAgents(new Date(departing.now - 86_400_000), 1);
-
-        assert.deepEqual(
-          read.map((agent) => agent.agentId),
-          [standing],
-        );
-        assert.notEqual(standing, orphaned);
-      }),
-  );
-
-  it.effect(
-    "an automation that archives its successful runs archives a run's agent once its turn settled well, once, and leaves standing one that failed, one brought back by hand, one waiting on the inbox until its question closes, one whose pull request is open until it merges, and every agent of an automation that does not",
+    "an automation that archives its successful runs archives a run's agent once its turn settled well, once, and leaves standing one that failed, one brought back by hand, one whose starter left, one waiting on the inbox until its question closes, one whose pull request is open until it merges, and every agent of an automation that does not",
     () =>
       Effect.gen(function* () {
         const agentSessions = fakeAgentSessions();
         const archiving = yield* openAutomation({
           archiveSuccessful: true,
           guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 5 },
+          trigger: UNSCHEDULED,
         });
-        const keeping = yield* openAutomation();
-        const departing = yield* openAutomation({ archiveSuccessful: true });
+        const keeping = yield* openAutomation({ trigger: UNSCHEDULED });
+        const departing = yield* openAutomation({ archiveSuccessful: true, trigger: UNSCHEDULED });
         const succeeded = yield* startedNow(agentSessions, archiving.automation);
         const failed = yield* startedNow(agentSessions, archiving.automation);
         const asking = yield* startedNow(agentSessions, archiving.automation);
@@ -922,7 +735,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         yield* ranTurn(archiving.owner, publishing, TURN_STATUS.SETTLED);
         yield* ranTurn(keeping.owner, kept, TURN_STATUS.SETTLED);
         yield* ranTurn(departing.owner, orphaned, TURN_STATUS.SETTLED);
-        // Its starter gone from the workspace, the agent is no one's to archive, so it is not counted archived.
+        // Its starter gone from the workspace, the agent is no one's to archive.
         yield* leaveWorkspace(departing.workspaceId, departing.owner);
         const question = yield* postInboxThread(
           { userId: archiving.owner, taskId: null, agentId: asking },
@@ -947,13 +760,16 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           });
         yield* published(PULL_REQUEST_STATE.OPEN);
 
-        const swept = yield* sweepAutomations(agentSessions.sessionsFor, archiving.now).pipe(
-          Effect.provide(services),
-        );
+        const reconsidered = () =>
+          Effect.forEach(
+            [succeeded, failed, asking, publishing, kept, orphaned],
+            reconsiderRunArchive,
+            { discard: true },
+          );
+        yield* reconsidered();
 
         const archived = (owner: string, id: string) =>
           Effect.map(readAgent(owner, id), (read) => Option.getOrThrow(read).archivedAt !== null);
-        assert.equal(swept.archived, 1);
         assert.deepEqual(
           [
             yield* archived(archiving.owner, succeeded),
@@ -961,8 +777,15 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             yield* archived(archiving.owner, asking),
             yield* archived(archiving.owner, publishing),
             yield* archived(keeping.owner, kept),
+            // Note that the starter who left reads their agent no more, so its row is read directly.
+            (yield* Database.use((db) =>
+              db
+                .select({ archivedAt: agentTable.archivedAt })
+                .from(agentTable)
+                .where(eq(agentTable.id, orphaned)),
+            ))[0]?.archivedAt !== null,
           ],
-          [true, false, false, false, false],
+          [true, false, false, false, false, false],
         );
 
         // Brought back by hand, the agent stays; its question closed and its pull request merged later, the asking and publishing ones go.
@@ -973,11 +796,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           "which-queue",
           "Settled it.",
         );
-        const later = yield* sweepAutomations(
-          agentSessions.sessionsFor,
-          archiving.now + 3 * 86_400_000,
-        ).pipe(Effect.provide(services));
-        assert.equal(later.archived, 2);
+        yield* reconsidered();
         assert.deepEqual(
           [
             yield* archived(archiving.owner, succeeded),
@@ -995,8 +814,9 @@ it.layer(getTestDB())("an automation's runs", (it) => {
     () =>
       Effect.gen(function* () {
         const agentSessions = fakeAgentSessions();
-        const { owner, automation, now, workspaceId } = yield* openAutomation({
+        const { owner, automation, workspaceId } = yield* openAutomation({
           archiveSuccessful: true,
+          trigger: UNSCHEDULED,
         });
         const lead = yield* startedNow(agentSessions, automation);
         const made = yield* createAgent(owner, {
@@ -1021,7 +841,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             Effect.map(readAgent(owner, id), (read) => Option.getOrThrow(read).archivedAt !== null),
           );
 
-        yield* sweepAutomations(agentSessions.sessionsFor, now).pipe(Effect.provide(services));
+        yield* reconsiderRunArchive(lead);
         const whileHelping = yield* archived();
         yield* Database.use((db) =>
           db
@@ -1029,9 +849,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             .set({ status: TURN_STATUS.SETTLED })
             .where(eq(turns.conversationId, helper.conversationId)),
         );
-        yield* sweepAutomations(agentSessions.sessionsFor, now + 60_000).pipe(
-          Effect.provide(services),
-        );
+        yield* reconsiderRunArchive(helper.id);
 
         assert.deepEqual(whileHelping, [false, false]);
         assert.deepEqual(yield* archived(), [true, true]);
@@ -1039,21 +857,20 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "a due schedule starts one coding agent as the deployment acting for its owner, handed the prompt as its task, and a sweep after it starts nothing",
+    "a schedule's delivery starts one coding agent as the deployment acting for its owner, handed the prompt as its task, and the same occurrence delivered again starts nothing",
     () =>
       Effect.gen(function* () {
         const { owner, automation, now, workspaceId } = yield* openAutomation();
         const agentSessions = fakeAgentSessions();
+        const occurrence = scheduleMessage(automation, workspaceId, now);
 
-        const first = yield* sweepAutomations(agentSessions.sessionsFor, now).pipe(
+        yield* consumeAutomationRunMessage(agentSessions.sessionsFor, occurrence).pipe(
           Effect.provide(services),
         );
-        const second = yield* sweepAutomations(agentSessions.sessionsFor, now).pipe(
+        yield* consumeAutomationRunMessage(agentSessions.sessionsFor, occurrence).pipe(
           Effect.provide(services),
         );
 
-        assert.ok(first.fired >= 1 && first.started >= 1);
-        assert.equal(second.started, 0, "a sweep after starts nothing");
         const runs = yield* listAutomationRuns(owner, automation.id);
         assert.equal(runs.length, 1, "one run for the one due instant");
         const [run] = runs;
@@ -1232,35 +1049,23 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "a scheduled run queued before its automation was paused starts nothing, and one still queued hours on is settled as missed",
+    "a schedule's occurrence delivered after its automation was paused records its run skipped and starts nothing",
     () =>
       Effect.gen(function* () {
-        const { owner, automation, now } = yield* openAutomation();
+        const { owner, automation, now, workspaceId } = yield* openAutomation();
         const agentSessions = fakeAgentSessions();
-        const queuedThenPaused = Option.getOrThrow(
-          yield* recordAutomationRun(automation, {
-            dedupeKey: "due-1",
-            firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: now - 120_000 },
-            firedAt: new Date(now - 60_000),
-          }),
-        );
-        const stale = Option.getOrThrow(
-          yield* recordAutomationRun(automation, {
-            dedupeKey: "due-0",
-            firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: now - 3 * 60 * 60_000 },
-            firedAt: new Date(now - 3 * 60 * 60_000),
-          }),
-        );
         yield* updateAutomation(owner, automation.id, { enabled: false, nextRunAt: null });
 
-        yield* sweepAutomations(agentSessions.sessionsFor, now).pipe(Effect.provide(services));
+        yield* consumeAutomationRunMessage(
+          agentSessions.sessionsFor,
+          scheduleMessage(automation, workspaceId, now),
+        ).pipe(Effect.provide(services));
 
-        const runs = new Map(
-          (yield* listAutomationRuns(owner, automation.id)).map((run) => [run.id, run]),
+        const runs = yield* listAutomationRuns(owner, automation.id);
+        assert.deepEqual(
+          runs.map((run) => [run.status, run.reason]),
+          [[AUTOMATION_RUN_STATUS.SKIPPED, AUTOMATION_RUN_REASON.PAUSED]],
         );
-        assert.equal(runs.get(queuedThenPaused.id)?.reason, AUTOMATION_RUN_REASON.PAUSED);
-        assert.equal(runs.get(stale.id)?.status, AUTOMATION_RUN_STATUS.FAILED);
-        assert.equal(runs.get(stale.id)?.reason, AUTOMATION_RUN_REASON.MISSED);
         assert.deepEqual(
           agentSessions.opened.filter((each) => each.account === owner),
           [],
@@ -1269,7 +1074,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "one automation's runs queued together are acted on one after another, so the concurrency guard holds across them",
+    "one automation's firings delivered together are decided one after another, so the concurrency guard holds across them",
     () =>
       Effect.gen(function* () {
         const { owner, automation, now } = yield* openAutomation({
@@ -1277,15 +1082,18 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         });
         const agentSessions = fakeAgentSessions();
         yield* updateAutomation(owner, automation.id, { nextRunAt: null });
-        for (const key of ["a", "b", "c"]) {
-          yield* recordAutomationRun(automation, {
-            dedupeKey: key,
-            firing: { kind: AUTOMATION_FIRING.MANUAL },
-            firedAt: new Date(now),
-          });
-        }
 
-        yield* sweepAutomations(agentSessions.sessionsFor, now).pipe(Effect.provide(services));
+        yield* Effect.forEach(
+          ["a", "b", "c"],
+          (key) =>
+            consumeAutomationRunMessage(agentSessions.sessionsFor, {
+              automationId: automation.id,
+              dedupeKey: key,
+              firing: { kind: AUTOMATION_FIRING.MANUAL },
+              firedAt: now,
+            }).pipe(Effect.provide(services)),
+          { concurrency: "unbounded" },
+        );
 
         const runs = yield* listAutomationRuns(owner, automation.id);
         assert.deepEqual(runs.map((run) => [run.status, run.reason]).sort(), [
@@ -1354,63 +1162,6 @@ it.layer(getTestDB())("an automation's runs", (it) => {
       }),
   );
 
-  it.effect(
-    "a run claimed and left without its agent is settled as the agent its key made where its session ran, or failed where none did",
-    () =>
-      Effect.gen(function* () {
-        const { owner, automation } = yield* openAutomation();
-        const agentSessions = fakeAgentSessions();
-        const started = yield* runNow(automation);
-        const outcome = yield* executeAutomationRun(agentSessions.sessionsFor, started).pipe(
-          Effect.provide(services),
-        );
-        // Its session ran a turn, as its harness opening it does.
-        const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
-        const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
-        yield* Database.use((db) =>
-          db.insert(turns).values({
-            userId: owner,
-            conversationId: agent.conversationId,
-            origin: TURN_ORIGIN.TYPED,
-            status: TURN_STATUS.RUNNING,
-          }),
-        );
-        const unopened = yield* runNow(automation);
-        yield* executeAutomationRun(agentSessions.sessionsFor, unopened).pipe(
-          Effect.provide(services),
-        );
-        const orphan = yield* runNow(automation);
-        // Both left as a function that died after its claim would leave them.
-        yield* Database.use((db) =>
-          db
-            .update(automationRun)
-            .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId: null })
-            .where(eq(automationRun.automationId, automation.id)),
-        );
-
-        for (const run of [started, unopened, orphan]) {
-          yield* recoverStrandedRun({
-            id: run.id,
-            automationId: automation.id,
-            userId: owner,
-            claimedAgentId: null,
-          });
-        }
-
-        const runs = new Map(
-          (yield* listAutomationRuns(owner, automation.id)).map((run) => [run.id, run]),
-        );
-        assert.equal(runs.get(started.id)?.status, AUTOMATION_RUN_STATUS.STARTED);
-        assert.notEqual(runs.get(started.id)?.agentId, null, "its agent is found by its key");
-        assert.equal(
-          runs.get(unopened.id)?.status,
-          AUTOMATION_RUN_STATUS.FAILED,
-          "an agent made but never opened is no start",
-        );
-        assert.equal(runs.get(orphan.id)?.status, AUTOMATION_RUN_STATUS.FAILED);
-        assert.equal(runs.get(orphan.id)?.reason, AUTOMATION_RUN_REASON.UNAVAILABLE);
-      }),
-  );
   it.effect(
     "a GitHub firing hands the agent the event's repository, number, address, branch, and title, every one fenced as the event's own text",
     () =>

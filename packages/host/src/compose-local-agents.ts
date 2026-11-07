@@ -49,6 +49,7 @@ import {
   Scope,
   Semaphore,
   Stream,
+  SubscriptionRef,
 } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -204,10 +205,25 @@ import { forgetOwnedAgent, keepOwnedAgent, ownedAgents } from "./local-agent-sta
  * folder alone (`local-agent-requests.ts`). The service refusing the
  * host's version shuts the gate: the reads end, and every runner is
  * stopped, as the quit stops them.
+ *
+ * The gate is a value that changes rather than one read again on a timer
+ * (`LocalAgentsDependencies.switchedOn`): a gate shut waits for it to
+ * open, asking the service nothing, and the follow and its beats end the
+ * moment it shuts. A turn that died, or whose register the service did not
+ * take, is tried again after `RETRY`, longer each time it fails in a row.
  */
 
-/** How long the follow rests while the gate is shut, and how often an open gate is read again. */
-const IDLE = Duration.seconds(5);
+/** How soon a turn that died, or whose register failed, is tried again: from `FIRST`, twice as long each time, never longer than `LONGEST`. */
+const RETRY_AFTER = {
+  FIRST: Duration.seconds(5),
+  LONGEST: Duration.minutes(5),
+} as const;
+
+const RETRY = Schedule.exponential(RETRY_AFTER.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, RETRY_AFTER.LONGEST)),
+  ),
+);
 /** How long a device whose setup failed waits before it tries again. */
 const SETUP_RETRY = Duration.minutes(1);
 /** How often a device following its agents beats, which the service's and the window's presence reads are derived from (`DEVICE_BEAT`). */
@@ -216,8 +232,6 @@ const BEAT_EVERY = Duration.millis(DEVICE_BEAT.EVERY_MS);
 const BEAT_DEADLINE = Duration.seconds(5);
 /** How a held read the service did not answer is asked again. */
 const REREAD = Duration.seconds(2);
-/** How a line's claim the service did not answer is asked again, well inside its own claim window. */
-const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 /** How long a runner's process group has to end after SIGTERM before the group is sent SIGKILL. */
 const KILL_GRACE = Duration.seconds(3);
 /** How long making an agent's repository may take, a first clone of a large one or a wait on another launch's clone included, before its launch is given up. */
@@ -284,8 +298,8 @@ export interface LocalAgentsDependencies {
   kernel: Pick<HostKernel, "stateRoot" | "createId">;
   /** The device id the host enrolled under. */
   deviceId: string;
-  /** Whether the device may ask the service now, shut while the service refuses it, read every `IDLE` while the gate is open. */
-  switchedOn: Effect.Effect<boolean>;
+  /** Whether the device may ask the service, as it stands now and each time it changes: shut while the service refuses it. */
+  switchedOn: Stream.Stream<boolean>;
   client: LocalAgentClient;
   /** The host's update of itself, where it runs from an account install's releases; none where it takes no notice of a newer release. */
   update?: LocalAgentsUpdate | undefined;
@@ -384,8 +398,15 @@ export function composeLocalAgents(
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
       Effect.provideContext(call, services);
 
-    /** Whether this device runs local agents now: a home folder, and its switch on. */
-    const gateOpen = Effect.map(switchedOn, (on) => on && Option.isSome(home));
+    /** Whether this device runs local agents, as `switchedOn` last said; shut until it first says. */
+    const gate = yield* SubscriptionRef.make(false);
+    /** Waits until the gate stands as `open` says, at once where it already does. */
+    const gateStands = (open: boolean) =>
+      SubscriptionRef.changes(gate).pipe(
+        Stream.filter((now) => now === open),
+        Stream.runHead,
+        Effect.asVoid,
+      );
 
     /** A beat, saying where the host's update stands while one is under way. */
     const beat = Effect.flatMap(
@@ -407,12 +428,9 @@ export function composeLocalAgents(
     const presence = (beaten: Effect.Effect<unknown> = timedBeat(beat)) =>
       Effect.scoped(
         Effect.gen(function* () {
-          if (!(yield* gateOpen)) return;
+          if (!(yield* SubscriptionRef.get(gate))) return;
           yield* Effect.forkScoped(Effect.repeat(beaten, Schedule.fixed(BEAT_EVERY)));
-          for (;;) {
-            yield* Effect.sleep(IDLE);
-            if (!(yield* gateOpen)) return;
-          }
+          yield* gateStands(false);
         }),
       );
 
@@ -497,6 +515,17 @@ export function composeLocalAgents(
     );
 
     // -- the follow --------------------------------------------------
+
+    /**
+     * The token each line's claim carries, by the line's id, minted at its
+     * first claim and kept until a claim of it is answered, so the claim
+     * asked again after its answer was lost is the same claim, which the
+     * service answers again rather than refusing as taken. Note that it
+     * outlives a follow, because a gate that shuts between a lost answer and
+     * its re-ask would otherwise leave a launch the service granted that no
+     * later follow asks for.
+     */
+    const claimTokens = new Map<string, string>();
 
     /** Everything one open gate runs, on the device it registered, from its home folder. */
     const follow = (folder: string, shellVariables: Readonly<Record<string, string>>) =>
@@ -1072,25 +1101,16 @@ export function composeLocalAgents(
           });
 
         /**
-         * The token each line's claim carries, by the line's id, minted at its
-         * first claim and kept until a claim of it is answered, so the claim
-         * asked again after its answer was lost is the same claim, which the
-         * service answers again rather than refusing as taken.
+         * One line claimed by its id under its token, asked once; refused, or
+         * nothing where unanswered. Note that an unanswered claim keeps its
+         * token, so `linesFollowed` asks it again before its next read rather
+         * than this holding `claiming` through repeats of its own.
          */
-        const claimTokens = new Map<string, string>();
-
-        /** One line claimed by its id under its token, asked again a few times where unanswered; refused, or nothing where never answered. */
         const claimedLine = (id: string) =>
           Effect.gen(function* () {
             const token = claimTokens.get(id) ?? kernel.createId();
             claimTokens.set(id, token);
-            const answer = yield* asked(client.claimLine(deviceId, id, token)).pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced(CLAIM_RETRY.every),
-                times: CLAIM_RETRY.times,
-                until: (answered) => answered !== undefined,
-              }),
-            );
+            const answer = yield* asked(client.claimLine(deviceId, id, token));
             if (answer !== undefined) claimTokens.delete(id);
             return answer;
           });
@@ -1101,8 +1121,9 @@ export function composeLocalAgents(
          * hand-over are uninterruptible, because a line the service granted
          * is this Mac's alone to deliver, and its token is let go of in the
          * same step, so no line is handed over twice. Both hold `claiming`,
-         * so a beat never settles a launch whose claim is unanswered; none is
-         * asked once the device has paused its claims to switch releases.
+         * and a beat leaves a line whose token is kept, so it never settles a
+         * launch whose claim is unanswered; none is asked once the device has
+         * paused its claims to switch releases.
          */
         const lineTaken = (id: string) =>
           Effect.uninterruptible(
@@ -1121,8 +1142,9 @@ export function composeLocalAgents(
          * The lines read and claimed in the service's order, each handed to
          * its agent's mailbox. A claim never answered ends the batch there,
          * so a later line of the same agent is never delivered before it, and
-         * is asked again under its token before the next read, since the
-         * service lists no line once claimed and the claim may have landed.
+         * is asked again under its token after `REREAD`, before the next read,
+         * since the service lists no line once claimed and the claim may have
+         * landed.
          */
         const linesFollowed = Effect.forever(
           Effect.gen(function* () {
@@ -1133,7 +1155,7 @@ export function composeLocalAgents(
             const lines = yield* asked(client.lines(deviceId));
             if (lines === undefined) return yield* Effect.sleep(REREAD);
             for (const line of lines) {
-              if (!(yield* lineTaken(line.id))) return;
+              if (!(yield* lineTaken(line.id))) return yield* Effect.sleep(REREAD);
             }
           }),
         );
@@ -1201,10 +1223,14 @@ export function composeLocalAgents(
             const unknown = [...open].filter((id) => !heard.knew.has(id));
             if (unknown.length === 0) return;
             // Note that these are settled holding `claiming`, so none is one whose claim is under way, and each is read again first.
+            // Note too that a line whose claim's answer was lost keeps its token until it is asked again, so it is left for that claim to deliver.
             yield* claiming.withPermit(
               Effect.forEach(
                 unknown,
-                (id) => (starting.has(id) || runningLaunches().has(id) ? Effect.void : settle(id)),
+                (id) =>
+                  starting.has(id) || runningLaunches().has(id) || claimTokens.has(id)
+                    ? Effect.void
+                    : settle(id),
                 { discard: true },
               ),
             );
@@ -1263,20 +1289,7 @@ export function composeLocalAgents(
         yield* Effect.raceFirst(presence(told), Effect.provideContext(reconciling, services));
       });
 
-    /**
-     * One turn of the loop: with the gate shut, a rest; with it open, the
-     * device registered, the turn of every agent this machine made let go
-     * of, and its agents followed until the gate shuts, when the follow's
-     * scope closes and every runner it started is stopped with its group.
-     */
-    const turn = Effect.gen(function* () {
-      if (!(yield* gateOpen) || Option.isNone(home)) {
-        return yield* Effect.sleep(IDLE);
-      }
-      yield* openTurn(home.value);
-    });
-
-    /** An open gate's turn, from its home folder: the device readied and registered, the turns the run before left let go of, and its agents followed. */
+    /** An open gate's turn, from its home folder: the device readied and registered, the turns the run before left let go of, and its agents followed; false where its register was not taken. */
     const openTurn = (folder: string) =>
       Effect.gen(function* () {
         const { tools } = platform;
@@ -1294,11 +1307,9 @@ export function composeLocalAgents(
             ...setup,
           });
         // Note that the device registers as ready only once it has what its agents run on, so Start never takes one that cannot run an agent.
-        if (!(yield* readyForOpening(registered))) {
-          return yield* Effect.sleep(IDLE);
-        }
+        if (!(yield* readyForOpening(registered))) return true;
         const shellVariables = yield* shellEnvironment;
-        if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
+        if (!(yield* asked(registered({})))) return false;
         // Note that the device beats from its register on while it lets go of what the run before left, so a restart on a busy box never reads as away; the follow's own beats take over as it starts.
         yield* Effect.scoped(
           Effect.gen(function* () {
@@ -1310,17 +1321,36 @@ export function composeLocalAgents(
           }),
         );
         yield* Effect.scoped(follow(folder, shellVariables));
+        return true;
       });
 
+    /**
+     * One turn of the loop: a wait for the gate to open; then the device
+     * registered, the turn of every agent this machine made let go of, and
+     * its agents followed until the gate shuts, when the follow's scope
+     * closes and every runner it started is stopped with its group. It
+     * answers whether it went as it should: false where the service did not
+     * take its register. A device that names no home folder never opens.
+     */
+    const turn = Option.match(home, {
+      onNone: () => Effect.never,
+      onSome: (folder) => Effect.andThen(gateStands(true), openTurn(folder)),
+    });
+
     const lifetime = Effect.gen(function* () {
-      // A turn that died is reported and the follow rests before the next, as a shut gate does.
+      yield* Effect.forkScoped(
+        Stream.runForEach(switchedOn, (on) => SubscriptionRef.set(gate, on)),
+      );
+      // A turn that died is reported and, as one whose register failed, tried again after `RETRY`; one that went as it should starts the backoff afresh.
       const guarded = Effect.catchDefect(Effect.provideContext(turn, services), () =>
-        Effect.andThen(
+        Effect.as(
           Effect.sync(() => report("the local agents' follow failed")),
-          Effect.sleep(IDLE),
+          false,
         ),
       );
-      yield* Effect.forkScoped(Effect.forever(guarded));
+      yield* Effect.forkScoped(
+        Effect.forever(Effect.repeat(guarded, { schedule: RETRY, until: (went) => went })),
+      );
     });
 
     // Note that the follower answers nothing itself: the panel asks This Mac's vespin-host (`compose-this-mac-host.ts`).

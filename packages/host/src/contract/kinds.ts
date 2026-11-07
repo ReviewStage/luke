@@ -122,7 +122,7 @@ export const AGENT_ACT_KIND = {
    * The models a coding agent may run on as the account is offered them,
    * and its devices, held for the window while it holds the stream open and
    * a while after among those let go lately, asked again as a window comes
-   * forward, as the provider keys move, and every `MODEL_CATALOG_TTL`: what
+   * forward and as the provider keys move: what
    * it holds reaches the panel on app state (`LIVE_READ.MODELS`), so the
    * stream carries nothing.
    */
@@ -131,6 +131,8 @@ export const AGENT_ACT_KIND = {
   AGENTS_MODELS_RETRY: "agents.modelsRetry",
   /** The default drawn over the account's preferences at once and written; the panel draws it from app state (`LIVE_READ.ACCOUNT_PREFERENCES`). */
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
+  /** Whose API key chapters run on, drawn over the account's preferences at once and written; the panel draws it from app state (`LIVE_READ.ACCOUNT_PREFERENCES`). */
+  AGENTS_CHAPTERS_PROVIDER_WRITE: "agents.chaptersProviderWrite",
   /** The account's preferences row, which the host holds for the session and the panel reads on app state, read again at once, as Try again asks. */
   AGENTS_PREFERENCES_RETRY: "agents.preferencesRetry",
   /**
@@ -567,7 +569,7 @@ export const MAC_SHELL_ACT_KIND = {
  * allowed once, allowed always, which also writes Settings › This Mac to
  * Always allow, or denied. Answered by the host, which holds the ask.
  */
-export const MAC_COMMAND_ACT_KIND = {
+const MAC_COMMAND_ACT_KIND = {
   MAC_COMMAND_ANSWER: "macCommands.answer",
 } as const;
 
@@ -575,10 +577,10 @@ export const MAC_COMMAND_ACT_KIND = {
  * A coding agent's cloud ports forwarded to this Mac's localhost
  * (`@repo/features/port-forward-acts`), for one agent at a time: its
  * forwarding turned on or off, how it stands kept in app state
- * (`portForwarding`), answered by the platform shell, whose host listens on the Mac's loopback. What a forwarded
+ * (`portForwarding`), answered by the host, which listens on the Mac's loopback. What a forwarded
  * connection carries never travels on an act.
  */
-export const PORT_FORWARD_ACT_KIND = {
+const PORT_FORWARD_ACT_KIND = {
   PORT_FORWARD_SET: "portForward.set",
 } as const;
 
@@ -697,6 +699,10 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: "workspace.tokenRepositoriesFollow",
   WORKSPACE_TOKEN_REPOSITORIES_RETRY: "workspace.tokenRepositoriesRetry",
   WORKSPACE_TOKEN_REPOSITORY_SET: "workspace.tokenRepositorySet",
+  /** A workspace's environment variables by name, read once as Settings › Environment opens and again after each write; no answer carries a value. */
+  WORKSPACE_ENVIRONMENT_LIST: "workspace.environmentList",
+  WORKSPACE_ENVIRONMENT_PUT: "workspace.environmentPut",
+  WORKSPACE_ENVIRONMENT_DELETE: "workspace.environmentDelete",
 } as const;
 
 /**
@@ -830,6 +836,7 @@ export const PORT_ACT_USE = {
   AGENTS_MODELS_FOLLOW: ACT_USE.READ,
   AGENTS_MODELS_RETRY: ACT_USE.READ,
   AGENTS_DEFAULT_WRITE: ACT_USE.WRITE,
+  AGENTS_CHAPTERS_PROVIDER_WRITE: ACT_USE.WRITE,
   AGENTS_PREFERENCES_RETRY: ACT_USE.READ,
   HOSTS_FOLLOW: ACT_USE.READ,
   HOSTS_RETRY: ACT_USE.READ,
@@ -1047,6 +1054,9 @@ export const PORT_ACT_USE = {
   WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: ACT_USE.READ,
   WORKSPACE_TOKEN_REPOSITORIES_RETRY: ACT_USE.READ,
   WORKSPACE_TOKEN_REPOSITORY_SET: ACT_USE.WRITE,
+  WORKSPACE_ENVIRONMENT_LIST: ACT_USE.FETCH,
+  WORKSPACE_ENVIRONMENT_PUT: ACT_USE.WRITE,
+  WORKSPACE_ENVIRONMENT_DELETE: ACT_USE.WRITE,
 } as const satisfies Record<keyof typeof PORT_ACT_KIND, ActUse>;
 
 /**
@@ -1059,7 +1069,6 @@ export const PLATFORM_PORT_ACT_KIND = {
   ...CLI_ACT_KIND,
   ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
-  ...PORT_FORWARD_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,

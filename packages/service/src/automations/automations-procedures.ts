@@ -15,8 +15,8 @@ import {
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import { AUTOMATION_RUNS_HELD } from "../live/reads/automations.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { AUTOMATION_RUNS_READ } from "./automation-live.js";
 import {
   changeAutomationAs,
   createAutomationAs,
@@ -159,7 +159,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       const automation = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
       if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const runs = yield* hostedStoreOrUnavailable(
-        listAutomationRuns(userId, id, AUTOMATION_RUNS_READ),
+        listAutomationRuns(userId, id, AUTOMATION_RUNS_HELD),
       );
       return { runs: yield* runSummaries(userId, runs) };
     }),

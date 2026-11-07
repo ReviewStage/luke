@@ -1,6 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { sealedLiveQuerySchema } from "./live-wire.js";
-import { pageVersionNumberSchema } from "./page-wire.js";
+import { refuses } from "./contract/base.js";
 import {
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_ENTRY,
@@ -12,7 +11,19 @@ import {
   type DescriptionCommentThread,
   descriptionCommentActorSchema,
 } from "./description-comment-wire.js";
-import { countedNumber } from "./service-wire.js";
+import {
+  LIVE_MODE,
+  LIVE_PARAM,
+  type LiveRowOf,
+  liveRead,
+  liveRows,
+  ORDER,
+  orderedLiveRows,
+} from "./live-read.js";
+import { LIVE_USER_QUERY } from "./live-wire.js";
+import { pageVersionNumberSchema } from "./page-wire.js";
+import { HOSTED_SERVICE_PATH } from "./service-paths.js";
+import { countedNumber, HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
  * description-comment-live.ts -- one subject of a task's comments, its description's own threads or one page's, followed over the service's held poll: the statements the service answers, the rows they deliver, and the threads as the held read answers them.
@@ -29,80 +40,94 @@ import { countedNumber } from "./service-wire.js";
  * a file its place on its comment.
  */
 
-/** One subject of a task's comments sealed for following: the address, and its threads, entries, and files, one statement each. The service answers `not-found` for a task the account does not reach. */
-export const taskCommentsLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({
-    threads: sealedLiveQuerySchema,
-    entries: sealedLiveQuerySchema,
-    files: sealedLiveQuerySchema,
-  }),
-});
-
-export type TaskCommentsLiveAnswer = typeof taskCommentsLiveAnswerSchema.Type;
-
 /** One thread as its row delivers it: its anchor null once its words were deleted and on a page, and its page, version, and element null on the description. */
-const threadLiveRowSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  scope: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_SCOPE)),
-  quote: EffectSchema.String,
-  anchorFrom: EffectSchema.NullOr(countedNumber),
-  anchorTo: EffectSchema.NullOr(countedNumber),
-  section: EffectSchema.String,
-  pageId: EffectSchema.NullOr(EffectSchema.String),
-  pageVersion: EffectSchema.NullOr(pageVersionNumberSchema),
-  pageElement: EffectSchema.NullOr(EffectSchema.String),
-  status: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_STATUS)),
-  revision: countedNumber,
-  createdAt: countedNumber,
-  updatedAt: countedNumber,
+const THREADS = liveRows({
+  row: EffectSchema.Struct({
+    id: EffectSchema.String,
+    scope: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_SCOPE)),
+    quote: EffectSchema.String,
+    anchorFrom: EffectSchema.NullOr(countedNumber),
+    anchorTo: EffectSchema.NullOr(countedNumber),
+    section: EffectSchema.String,
+    pageId: EffectSchema.NullOr(EffectSchema.String),
+    pageVersion: EffectSchema.NullOr(pageVersionNumberSchema),
+    pageElement: EffectSchema.NullOr(EffectSchema.String),
+    status: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_STATUS)),
+    revision: countedNumber,
+    createdAt: countedNumber,
+    updatedAt: countedNumber,
+  }),
+  key: "id",
+  order: [
+    ["createdAt", ORDER.ASC],
+    ["id", ORDER.ASC],
+  ],
 });
 
 /** One entry as its row delivers it, with its place in its thread and its member's name as their account holds it now, null once the account is gone. */
-const entryLiveRowSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  threadId: EffectSchema.String,
-  seq: countedNumber,
-  kind: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_ENTRY)),
-  actor: descriptionCommentActorSchema,
-  userId: EffectSchema.NullOr(EffectSchema.String),
-  userName: EffectSchema.NullOr(EffectSchema.String),
-  agentId: EffectSchema.NullOr(EffectSchema.String),
-  words: EffectSchema.NullOr(EffectSchema.String),
-  askedActor: EffectSchema.NullOr(descriptionCommentActorSchema),
-  askedAgentId: EffectSchema.NullOr(EffectSchema.String),
-  createdAt: countedNumber,
-  editedAt: EffectSchema.NullOr(countedNumber),
+const ENTRIES = liveRows({
+  row: EffectSchema.Struct({
+    id: EffectSchema.String,
+    threadId: EffectSchema.String,
+    seq: countedNumber,
+    kind: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_ENTRY)),
+    actor: descriptionCommentActorSchema,
+    userId: EffectSchema.NullOr(EffectSchema.String),
+    userName: EffectSchema.NullOr(EffectSchema.String),
+    agentId: EffectSchema.NullOr(EffectSchema.String),
+    words: EffectSchema.NullOr(EffectSchema.String),
+    askedActor: EffectSchema.NullOr(descriptionCommentActorSchema),
+    askedAgentId: EffectSchema.NullOr(EffectSchema.String),
+    createdAt: countedNumber,
+    editedAt: EffectSchema.NullOr(countedNumber),
+  }),
+  key: "id",
+  order: [
+    ["threadId", ORDER.ASC],
+    ["seq", ORDER.ASC],
+  ],
 });
 
 /** One file a comment carries as its row delivers it, with its place on the comment, null for none kept, which Postgres orders last. */
-const fileLiveRowSchema = EffectSchema.Struct({
-  attachmentId: EffectSchema.String,
-  entryId: EffectSchema.String,
-  name: EffectSchema.String,
-  mediaType: EffectSchema.String,
-  position: EffectSchema.NullOr(countedNumber),
+const FILES = liveRows({
+  row: EffectSchema.Struct({
+    attachmentId: EffectSchema.String,
+    entryId: EffectSchema.String,
+    name: EffectSchema.String,
+    mediaType: EffectSchema.String,
+    position: EffectSchema.NullOr(countedNumber),
+  }),
+  key: "attachmentId",
+  order: [
+    ["entryId", ORDER.ASC],
+    ["position", ORDER.ASC],
+  ],
+});
+
+/**
+ * One subject of a task's comments, by the task its query names under
+ * `?id=` and the page under `&page=`, its description's own threads where it
+ * names none: its threads, their entries, and their files, one statement
+ * each. The service answers `not-found` for a task the account does not
+ * reach.
+ */
+export const TASK_COMMENTS_READ = liveRead({
+  name: "taskComments",
+  path: HOSTED_SERVICE_PATH.LIVE_TASK_COMMENTS,
+  params: { id: LIVE_PARAM.ID, page: LIVE_PARAM.OPTIONAL_ID, [LIVE_USER_QUERY]: LIVE_PARAM.USER },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: { threads: THREADS, entries: ENTRIES, files: FILES },
+  refuses: refuses(HOSTED_API_ERROR.NOT_FOUND),
 });
 
 /** One subject's threads, entries, and files as Realtime delivers them: none for a task the account no longer reaches. */
-export const taskCommentsLiveRowsSchema = EffectSchema.Struct({
-  threads: EffectSchema.Array(threadLiveRowSchema),
-  entries: EffectSchema.Array(entryLiveRowSchema),
-  files: EffectSchema.Array(fileLiveRowSchema),
-});
+type TaskCommentsLiveRows = typeof TASK_COMMENTS_READ.rows.Type;
 
-type TaskCommentsLiveRows = typeof taskCommentsLiveRowsSchema.Type;
+type ThreadLiveRow = LiveRowOf<typeof THREADS>;
 
-type ThreadLiveRow = TaskCommentsLiveRows["threads"][number];
+type EntryLiveRow = LiveRowOf<typeof ENTRIES>;
 
-type EntryLiveRow = TaskCommentsLiveRows["entries"][number];
-
-type FileLiveRow = TaskCommentsLiveRows["files"][number];
-
-/** Two ids compared as Postgres orders them. */
-function byId(one: string, other: string): number {
-  return one < other ? -1 : one > other ? 1 : 0;
-}
+type FileLiveRow = LiveRowOf<typeof FILES>;
 
 /** Each row under the key `keyOf` reads, in the order they came. */
 function groupedBy<Row>(rows: readonly Row[], keyOf: (row: Row) => string): Map<string, Row[]> {
@@ -131,15 +156,13 @@ function entryOf(row: EntryLiveRow, files: readonly FileLiveRow[]): DescriptionC
     row.actor === DESCRIPTION_COMMENT_ACTOR.MEMBER && row.userId !== null && row.userName !== null
       ? { by: { userId: row.userId, name: row.userName } }
       : undefined;
-  const carried = files
-    .toSorted((one, other) => (one.position ?? Infinity) - (other.position ?? Infinity))
-    .map(
-      (file): DescriptionCommentFile => ({
-        attachmentId: file.attachmentId,
-        name: file.name,
-        mediaType: file.mediaType,
-      }),
-    );
+  const carried = files.map(
+    (file): DescriptionCommentFile => ({
+      attachmentId: file.attachmentId,
+      name: file.name,
+      mediaType: file.mediaType,
+    }),
+  );
   const asked = askedOf(row);
   return {
     id: row.id,
@@ -180,9 +203,7 @@ function threadOf(
     ...page,
     section: row.section,
     status: row.status,
-    entries: entries
-      .toSorted((one, other) => one.seq - other.seq)
-      .map((entry) => entryOf(entry, filesOf.get(entry.id) ?? [])),
+    entries: entries.map((entry) => entryOf(entry, filesOf.get(entry.id) ?? [])),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     revision: row.revision,
@@ -191,9 +212,10 @@ function threadOf(
 
 /** The subject's threads as the held read answers them, from their rows: the oldest started first, then by id, each with its entries and their files. */
 export function threadsOfLiveRows(rows: TaskCommentsLiveRows): readonly DescriptionCommentThread[] {
-  const entriesOf = groupedBy(rows.entries, (entry) => entry.threadId);
-  const filesOf = groupedBy(rows.files, (file) => file.entryId);
-  return rows.threads
-    .toSorted((one, other) => one.createdAt - other.createdAt || byId(one.id, other.id))
-    .map((row) => threadOf(row, entriesOf.get(row.id) ?? [], filesOf));
+  // Note that each group keeps the order its rows stand in, so an entry's place in its thread and a file's on its comment hold within it.
+  const entriesOf = groupedBy(orderedLiveRows(ENTRIES, rows.entries), (entry) => entry.threadId);
+  const filesOf = groupedBy(orderedLiveRows(FILES, rows.files), (file) => file.entryId);
+  return orderedLiveRows(THREADS, rows.threads).map((row) =>
+    threadOf(row, entriesOf.get(row.id) ?? [], filesOf),
+  );
 }

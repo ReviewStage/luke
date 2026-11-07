@@ -45,6 +45,34 @@ const NODE_LAUNCHER = {
   shouldAddHelpers: true,
 } as const;
 
+/** The queue trigger Vercel's own Node builder writes for a `queue/v2beta` consumer (`@vercel/build-utils`'s `QueueTriggerEvent`). */
+const QUEUE_TRIGGER_TYPE = "queue/v2beta";
+
+interface QueueTrigger {
+  readonly type: typeof QUEUE_TRIGGER_TYPE;
+  readonly topic: string;
+  readonly consumer: string;
+}
+
+/**
+ * The consumer group a function's trigger names, from its public path, as
+ * Vercel's builder names a `queue/v2beta` consumer from its file: `_`, `/`,
+ * and `.` escaped as `__`, `_S`, and `_D`, any other character outside
+ * letters, digits, and `-` as `_` and its hex code, so no two paths share a
+ * group.
+ */
+function consumerNameOf(path: string): string {
+  let name = "";
+  for (const character of path) {
+    if (character === "_") name += "__";
+    else if (character === "/") name += "_S";
+    else if (character === ".") name += "_D";
+    else if (/[A-Za-z0-9-]/u.test(character)) name += character;
+    else name += `_${(character.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(2, "0")}`;
+  }
+  return name;
+}
+
 /** A function written by hand rather than bundled from `server/routes/`. */
 interface HandWrittenFunction {
   /** The module, relative to the web app; plain ESM the launcher runs as it stands. */
@@ -66,6 +94,8 @@ export interface EmittedFunction {
   readonly maxDuration: number | undefined;
   /** Files the function reads beside its entry, by name, such as the runner it uploads to a sandbox. */
   readonly files?: readonly { readonly name: string; readonly contents: Uint8Array }[];
+  /** The queue topic the function consumes, where the queue alone invokes it; its trigger goes in its configuration. */
+  readonly queueTopic?: string | undefined;
 }
 
 interface FunctionConfig {
@@ -74,6 +104,7 @@ interface FunctionConfig {
   readonly launcherType: typeof NODE_LAUNCHER.launcherType;
   readonly shouldAddHelpers: typeof NODE_LAUNCHER.shouldAddHelpers;
   readonly maxDuration?: number;
+  readonly experimentalTriggers?: readonly QueueTrigger[];
 }
 
 /** The `.func` directory of a function under the output root. */
@@ -94,15 +125,27 @@ export function functionEntryPath(outputDirectory: string, path: string): string
   return join(functionDirectory(outputDirectory, path), FUNCTION_ENTRY);
 }
 
-/** The configuration a function is deployed with; a duration is written only where the plan gave one. */
-function functionConfig(maxDuration: number | undefined): FunctionConfig {
+/**
+ * The configuration a function is deployed with; a duration is written only
+ * where the plan gave one, and a queue trigger only on a consumer. Note
+ * that the trigger is written here rather than in `vercel.json`'s
+ * `functions`, because a Build Output tree is deployed as it stands and
+ * Vercel reads a function's trigger from its `.vc-config.json`.
+ */
+function functionConfig(fn: EmittedFunction): FunctionConfig {
   const config: FunctionConfig = {
     runtime: FUNCTION_RUNTIME,
     handler: FUNCTION_ENTRY,
     ...NODE_LAUNCHER,
+    ...(fn.maxDuration === undefined ? undefined : { maxDuration: fn.maxDuration }),
   };
-  if (maxDuration === undefined) return config;
-  return { ...config, maxDuration };
+  if (fn.queueTopic === undefined) return config;
+  const trigger: QueueTrigger = {
+    type: QUEUE_TRIGGER_TYPE,
+    topic: fn.queueTopic,
+    consumer: consumerNameOf(fn.path),
+  };
+  return { ...config, experimentalTriggers: [trigger] };
 }
 
 interface BuildOutputInput {
@@ -133,7 +176,7 @@ export async function emitBuildOutput(input: BuildOutputInput): Promise<readonly
     for (const file of fn.files ?? []) await writeFile(join(directory, file.name), file.contents);
     await writeFile(
       functionConfigPath(input.outputDirectory, fn.path),
-      `${JSON.stringify(functionConfig(fn.maxDuration), null, 2)}\n`,
+      `${JSON.stringify(functionConfig(fn), null, 2)}\n`,
     );
     const alias = functionDirectory(input.outputDirectory, functionAliasPath(fn.path));
     await mkdir(dirname(alias), { recursive: true });

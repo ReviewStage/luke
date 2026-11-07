@@ -6,10 +6,11 @@ import { LIVE_POLL } from "./live-wire.js";
  * An `OpenAPILink` over `hostedContract` whose transport is `accountCall`'s
  * `send`, so everything that call owns stays its own: the credential read
  * fresh for every attempt, the one renew-and-retry of a 401 while the
- * holder stands, the no-credential fault, the deadline, and the ambient
- * `HttpClient` a test fakes with `fakeCloudApi`. The answer's body is read
- * whole within a deadline of its own before oRPC reads it, so a body that
- * stalls after its headers is let go rather than awaited forever. Wrapped in
+ * holder stands, the no-credential fault, and the ambient `HttpClient` a
+ * test fakes with `fakeCloudApi`. The answer's body is read whole before
+ * oRPC reads it, and the one deadline covers the call whole, its headers and
+ * its body together, so a body that stalls after its headers is let go when
+ * the call's deadline ends rather than awaited past it. Wrapped in
  * `createEffectClient`, so a procedure is a lazy Effect.
  *
  * The link reads the wire as the service writes it (`contract/errors.ts`):
@@ -46,21 +47,42 @@ import type {
 import { createEffectClient, type EffectClient } from "@orpc/experimental-effect";
 import { OpenAPILink } from "@orpc/openapi/fetch";
 import { HTTP_METHOD, type HttpMethod, type UnparsedWireValue } from "@repo/wire";
-import { Cause, type Context, Data, Duration, Effect, Exit, Random, Result, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  type Context,
+  Data,
+  Duration,
+  Effect,
+  Exit,
+  Random,
+  Result,
+  Schema,
+  Tracer,
+} from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
+  type AccountCallEffects,
   accountCall,
-  type CALL_FAULT,
+  CALL_FAULT,
+  type CallAnswer,
   type CallCredential,
   type CallRequest,
   callAnswered,
+  DEADLINE_ERROR_NAME,
   sendInSession,
 } from "./account-call.js";
+import { MAC_PRESENCE } from "./agent-wire.js";
 import { HOSTED_REFUSAL_DATA, refusalCarriesData } from "./contract/errors.js";
 import { hostedContract } from "./contract/index.js";
 import { outputWireSchema, refusalDeclared } from "./contract/output-schema.js";
 import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
-import { SENTRY_TRACES_SAMPLE_RATE } from "./sentry-tracing.js";
+import {
+  SENTRY_TRACES_SAMPLE_RATE,
+  type SendTrace,
+  SentSendTrace,
+  sendTraceHeaders,
+} from "./sentry-tracing.js";
 import {
   type HostedApiError,
   hostedErrorSchema,
@@ -72,8 +94,9 @@ import {
  * The deadlines a procedure is asked under, by how long its answer may
  * take: the usual one, a held read the service keeps open for as long as it
  * waits on the next change (or a dictated clip the model hears through), a
- * message to an agent, which waits on the agent's conversation and on its
- * session taking the words before it answers, and a Start, which may copy another
+ * read of the account's devices' beats, which must land or fail inside a
+ * poll, a message to an agent, which waits on the agent's conversation and on
+ * its session taking the words before it answers, and a Start, which may copy another
  * agent's work before it answers.
  */
 export const HOSTED_DEADLINE = {
@@ -83,6 +106,7 @@ export const HOSTED_DEADLINE = {
   START: "start",
   CHAPTERS: "chapters",
   BROWSER_OPEN: "browser-open",
+  PRESENCE: "presence",
 } as const;
 
 export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLINE];
@@ -98,7 +122,8 @@ export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLI
  * Generate of a pull request's chapters outlasts the function it runs in
  * (`@repo/service/chapters/chapters-function`'s 240 seconds), and a Browser
  * tab opened in an agent's browser outlasts its sandbox's resume (a minute)
- * and its bridge's bound (twenty seconds, `agent-browser.ts`).
+ * and its bridge's bound (twenty seconds, `agent-browser.ts`), and a read
+ * of the devices' beats is `MAC_PRESENCE.READ_TIMEOUT_MS`.
  */
 const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.HELD]: 35_000,
@@ -106,6 +131,7 @@ const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.START]: 120_000,
   [HOSTED_DEADLINE.CHAPTERS]: 250_000,
   [HOSTED_DEADLINE.BROWSER_OPEN]: 120_000,
+  [HOSTED_DEADLINE.PRESENCE]: MAC_PRESENCE.READ_TIMEOUT_MS,
 } as const satisfies Record<Exclude<HostedDeadline, typeof HOSTED_DEADLINE.USUAL>, number>;
 
 /** The span a hosted ask runs under, whose trace every attempt it sends carries. */
@@ -114,14 +140,30 @@ const HOSTED_ASK_SPAN = "hosted.ask";
 /** The code the link's own error names an error the service declares no refusal for under, its status and oRPC code kept beneath. */
 const UNDECLARED_CODE = "UNDECLARED";
 
+/** The monotonic clock's nanoseconds in a millisecond, which a budget is counted in. */
+const NANOS_PER_MILLI = 1_000_000;
+
 /** The content type the link names a JSON body with, which the account call writes itself. */
 const CONTENT_TYPE_HEADER = "content-type";
 
-/** What one ask hands the link: the caller's own services to run the call on, its deadline, and the idempotency key it is sent under, where it has one. */
+/** What one ask hands the link: the caller's own services to run the call on, its deadline, the idempotency key it is sent under, where it has one, and the send's trace, where a press began it. */
 interface HostedLinkContext {
   readonly services: Context.Context<HttpClient.HttpClient>;
   readonly deadline: HostedDeadline;
   readonly idempotencyKey?: string;
+  readonly trace?: SendTrace;
+}
+
+/** Sentry's `sentry-trace`: the trace's id, the span's, and the sampling decision, which a send's span always made. */
+const SENTRY_TRACE_PATTERN = /^([0-9a-f]{32})-([0-9a-f]{16})-([01])$/;
+
+/** The span a send's trace names, as the parent its ask continues; none where it does not parse. */
+function sendParent(trace: SendTrace): Tracer.ExternalSpan | undefined {
+  const named = SENTRY_TRACE_PATTERN.exec(trace.sentryTrace.trim());
+  if (named === null) return undefined;
+  const [, traceId, spanId, sampled] = named;
+  if (traceId === undefined || spanId === undefined) return undefined;
+  return Tracer.externalSpan({ traceId, spanId, sampled: sampled === "1" });
 }
 
 /** The refusals that carry fields beside their slug. */
@@ -319,11 +361,8 @@ function textOf(reader: ReadableStreamDefaultReader<Uint8Array>): Effect.Effect<
 
 /**
  * A response's body read whole within the deadline, so the link reads it
- * from memory; nothing, its stream canceled so its connection is let go,
- * where it has not ended by then or could not be read.
- * Note that the account call's own deadline ends with the headers, and a
- * renewal can spend all of it before an answer that did arrive is read, so
- * the body is given one deadline more of its own rather than what is left.
+ * from memory; nothing, its stream's cancel started so its connection is let
+ * go, where it has not ended by then or could not be read.
  */
 export function textWithin(
   response: Response,
@@ -335,9 +374,52 @@ export function textWithin(
     Effect.catch(() => Effect.succeed(undefined)),
     Effect.timeoutOrElse({
       duration: deadline,
-      orElse: () => Effect.as(Effect.ignore(Effect.tryPromise(() => reader.cancel())), undefined),
+      // Note that the cancel is started rather than awaited, because a stream whose cancel never settles would otherwise hold the call past its deadline.
+      orElse: () =>
+        Effect.as(
+          Effect.forkDetach(Effect.ignore(Effect.tryPromise(() => reader.cancel()))),
+          undefined,
+        ),
     }),
   );
+}
+
+/**
+ * The request sent and its answer's body read, within one budget for the
+ * whole call: the headers, and a 401's renewal and retry among them, are
+ * bounded by it, and the body is given only what is left of it. Note that a
+ * renewal shares the budget rather than getting a fresh one, because the
+ * deadline is what a caller bounds its own wait by, and a call that could
+ * run past it would have every caller stack a timeout of its own on top; a
+ * renewal that spends the budget ends the call as the deadline, as a slow
+ * first attempt does.
+ */
+function readWhole(
+  send: AccountCallEffects["send"],
+  request: CallRequest,
+  budgetMs: number,
+): Effect.Effect<
+  { readonly answer: CallAnswer; readonly text?: string | undefined },
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.gen(function* () {
+    // Note that the time spent is read off the monotonic clock, so a wall clock set back or forward moves no budget.
+    const startedAt = yield* Clock.monotonicTimeNanos;
+    const answer = yield* send(request).pipe(
+      Effect.timeoutOrElse({
+        duration: Duration.millis(budgetMs),
+        orElse: () =>
+          Effect.succeed<CallAnswer>({ fault: CALL_FAULT.NETWORK, errorName: DEADLINE_ERROR_NAME }),
+      }),
+    );
+    if (!callAnswered(answer)) return { answer };
+    // The body gets what the headers left of the budget, never a deadline of its own.
+    const spentMs = Number((yield* Clock.monotonicTimeNanos) - startedAt) / NANOS_PER_MILLI;
+    const leftMs = Math.max(0, budgetMs - spentMs);
+    const text = yield* textWithin(answer.response, Duration.millis(leftMs));
+    return { answer, text };
+  });
 }
 
 /**
@@ -362,17 +444,26 @@ async function sent(
   });
   const send = options.inSession === true ? sendInSession(call, options.credential) : call.send;
   const request = callRequest(url, init);
-  const { idempotencyKey } = context;
+  const { idempotencyKey, trace } = context;
   const keyed: CallRequest =
-    idempotencyKey === undefined
+    idempotencyKey === undefined && trace === undefined
       ? request
-      : { ...request, headers: { ...request.headers, [IDEMPOTENCY_KEY.HEADER]: idempotencyKey } };
+      : {
+          ...request,
+          headers: {
+            ...request.headers,
+            ...(idempotencyKey === undefined
+              ? undefined
+              : { [IDEMPOTENCY_KEY.HEADER]: idempotencyKey }),
+            ...(trace === undefined ? undefined : sendTraceHeaders(trace)),
+          },
+        };
   const exit = await Effect.runPromiseExitWith(context.services)(
-    send(keyed),
+    readWhole(send, keyed, call.requestTimeoutMs),
     init.signal ? { signal: init.signal } : undefined,
   );
   if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
-  const answer = exit.value;
+  const { answer, text } = exit.value;
   if (!callAnswered(answer)) {
     throw new HostedUnanswered({
       fault: answer.fault,
@@ -380,10 +471,6 @@ async function sent(
     });
   }
   const { response } = answer;
-  const text = await Effect.runPromiseWith(context.services)(
-    textWithin(response, Duration.millis(call.requestTimeoutMs)),
-    init.signal ? { signal: init.signal } : undefined,
-  );
   if (text === undefined) {
     throw new HostedUnanswered({ unread: HOSTED_UNREAD.BODY, status: response.status });
   }
@@ -470,6 +557,12 @@ function traced(failed: HostedFailure, traceId: string): HostedFailure {
  * service's traces are, so the flag it sends says whether to trace it. A
  * write sent under an idempotency key carries it on every attempt, the
  * renewed one after a 401 among them (`IDEMPOTENCY_KEY`).
+ *
+ * A send the developer pressed is asked under its press's trace
+ * (`SentSendTrace`): the ask is a span of that trace, sampled as the press
+ * was rather than by a coin of its own, and every attempt carries the trace
+ * as Sentry's `sentry-trace` and `baggage`, which the service continues
+ * before `traceparent`, so its spans sit under the press's span.
  */
 export function askHosted<Input, Output>(
   procedure: HostedProcedure<Input, Output>,
@@ -478,7 +571,10 @@ export function askHosted<Input, Output>(
   idempotencyKey?: string,
 ): Effect.Effect<Output, HostedFailure, HttpClient.HttpClient> {
   return Effect.gen(function* () {
-    const sampled = (yield* Random.next) < SENTRY_TRACES_SAMPLE_RATE;
+    const sent = yield* SentSendTrace;
+    const parent = sent === undefined ? undefined : sendParent(sent);
+    const trace = parent === undefined ? undefined : sent;
+    const sampled = parent?.sampled ?? (yield* Random.next) < SENTRY_TRACES_SAMPLE_RATE;
     const asked = Effect.gen(function* () {
       const span = yield* Effect.orDie(Effect.currentSpan);
       const services = yield* Effect.context<HttpClient.HttpClient>();
@@ -488,12 +584,17 @@ export function askHosted<Input, Output>(
             services,
             deadline,
             ...(idempotencyKey === undefined ? undefined : { idempotencyKey }),
+            ...(trace === undefined ? undefined : { trace }),
           },
         }),
         (error) => traced(hostedFailureOf(error), span.traceId),
       );
     });
-    return yield* Effect.withSpan(asked, HOSTED_ASK_SPAN, { kind: "client", sampled });
+    return yield* Effect.withSpan(asked, HOSTED_ASK_SPAN, {
+      kind: "client",
+      sampled,
+      ...(parent === undefined ? undefined : { parent }),
+    });
   });
 }
 

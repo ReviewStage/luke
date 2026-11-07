@@ -1,5 +1,7 @@
 import { type ContractedRouter, onError, type Router } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/message-port";
+import { SentSendTrace, sendTraceOf } from "@repo/features/sentry-tracing";
+import { Context } from "effect";
 import {
   type actContract,
   HOST_ACTS,
@@ -32,10 +34,6 @@ import {
   type IntegrationProceduresDependencies,
   integrationProcedures,
 } from "./integration-procedures.js";
-import {
-  type MacCommandProceduresDependencies,
-  macCommandProcedures,
-} from "./mac-command-procedures.js";
 import { pushProcedures, type WindowPushes } from "./push-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
@@ -60,7 +58,6 @@ export { browserLiveProcedures } from "./browser-live-procedures.js";
 export { declaredActProcedures, declaredAnswer } from "./declared-acts.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
 export { type MacShell, macShellProcedures } from "./mac-shell-procedures.js";
-export { portForwardProcedures } from "./port-forward-procedures.js";
 export { pushProcedures, WindowPushes } from "./push-procedures.js";
 export type {
   ClientSettingSideEffects,
@@ -117,7 +114,6 @@ export interface ActPortDependencies {
   readonly chapters: ChaptersProceduresDependencies;
   readonly installedSkills: InstalledSkillProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
-  readonly macCommands: MacCommandProceduresDependencies;
   /** What main pushes each window, which the push stream reads. */
   readonly pushes: WindowPushes;
   readonly settings: SettingsProceduresDependencies;
@@ -134,6 +130,10 @@ export interface ActPortDependencies {
  * does not draw. That failure is logged here, in main, before it is replaced.
  * The host's procedures sit beside the platform's own, and together they
  * answer every kind of the contract.
+ *
+ * A call a window sent for a press carries the press's trace as Sentry's
+ * own headers, which are set as the call's `SentSendTrace`, so a hosted ask
+ * it makes continues that trace (`@repo/features/hosted-link`).
  */
 export function createActPortHandler<Sender>(
   dependencies: ActPortDependencies,
@@ -150,7 +150,6 @@ export function createActPortHandler<Sender>(
     ...chaptersProcedures(dependencies.chapters),
     ...installedSkillProcedures(dependencies.installedSkills),
     ...integrationProcedures(dependencies.integrations),
-    ...macCommandProcedures(dependencies.macCommands),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
     ...workspaceProcedures(dependencies.workspaces, dependencies.acts),
@@ -164,6 +163,12 @@ export function actPortHandlerOf<Sender>(
 ): ActPortHandler<Sender> {
   return new RPCHandler<ActPortContext<Sender>>(router, {
     interceptors: [
+      ({ next, request, context, ...options }) => {
+        const trace = sendTraceOf(request.headers);
+        if (trace === undefined) return next();
+        const services = Context.add(context["effect/context"], SentSendTrace, trace);
+        return next({ ...options, request, context: { ...context, "effect/context": services } });
+      },
       async ({ next, procedure }) => {
         try {
           return await next();

@@ -44,6 +44,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useQuery } from "@tanstack/react-query";
+import { useParams } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -408,6 +409,18 @@ function AgentMentions({
   return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
 }
 
+/** The page of the agent its route's address names (`panel-router.tsx`), keyed by it, so another agent's page is a page of its own, holding nothing of the last. */
+export function AgentRoutePage({
+  tasks,
+  away,
+}: {
+  tasks: TasksControl;
+  away?: TaskHeadBack | undefined;
+}): React.JSX.Element {
+  const { agentId } = useParams({ from: "/places/$workspace/agent/$agentId" });
+  return <DesktopAgentPage key={agentId} tasks={tasks} agentId={agentId} away={away} />;
+}
+
 /** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */
 export function DesktopAgentPage({
   tasks,
@@ -574,7 +587,7 @@ export function DesktopAgentPage({
   // Note that the three openers handed to the transcript stand while what they read does, because every link and chip in it is drawn again with each new one.
   // A page of a task, or of another agent, opens beside the agent, read on its own place.
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
-    sidePanel.onPreview(pageTab(page), place),
+    sidePanel.onOpen(pageTab(page), place),
   );
   const { pullRequests, agentIds, heldIds } = control;
   const openHere = useMemo(
@@ -646,8 +659,8 @@ export function DesktopAgentPage({
   // A file a mention names opens in the panel beside the agent, its lines at the commit the mention pins them to.
   const openMentionedFile = useSteadyDoor((path: string, lines: MentionLines | undefined) =>
     lines === undefined
-      ? sidePanel.onPreviewFile({ path }, undefined, fileReads)
-      : sidePanel.onPreviewFile(
+      ? sidePanel.onOpenFile({ path }, undefined, fileReads)
+      : sidePanel.onOpenFile(
           { path, startLine: lines.startLine, endLine: lines.endLine },
           lines.commit,
           fileReads,
@@ -656,7 +669,7 @@ export function DesktopAgentPage({
   // A skill's file opens where a file the agent names does: in the panel beside it.
   const openSkill = (skill: { readonly path: string }) => {
     if (fileReads === undefined) return;
-    sidePanel.onPreviewFile({ path: skill.path }, undefined, fileReads);
+    sidePanel.onOpenFile({ path: skill.path }, undefined, fileReads);
   };
   // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
   const changesPeople = useChangesPeople(agentId);

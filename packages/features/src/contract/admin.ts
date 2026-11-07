@@ -1,8 +1,9 @@
 /**
  * admin.ts -- the admin dashboard's reads and its one star write, as one resource (`admin-wire.ts`).
  *
- * Every procedure declares the dashboard's own refusals beside the hosted
- * ones, since the gate answers in the dashboard's vocabulary. Each read takes
+ * Every procedure declares the dashboard's own refusals beside those any
+ * procedure may answer (`declaredProcedure`), since the gate and each
+ * handler answer in the dashboard's vocabulary and nothing else. Each read takes
  * its query as its input, every parameter optional text: which values a
  * parameter may carry is the handler's to say, with the refusal the page
  * words for it (`invalid-window`, `invalid-search`, ...), as the old group
@@ -23,7 +24,7 @@ import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { ADMIN_ERROR, ADMIN_QUERY, ADMIN_ROUTE_PATH, type AdminError } from "../admin-wire.js";
-import { hostedProcedure } from "./base.js";
+import { declaredProcedure } from "./base.js";
 
 /** Every refusal an admin procedure may answer, the slug its code. */
 const ADMIN_ERRORS = {
@@ -41,7 +42,7 @@ const ADMIN_ERRORS = {
   [ADMIN_ERROR.UNAVAILABLE]: {},
 } as const satisfies Record<AdminError, ErrorMapItem>;
 
-const adminProcedure = hostedProcedure.errors(ADMIN_ERRORS);
+const adminProcedure = declaredProcedure.errors(ADMIN_ERRORS);
 
 /** One query parameter: absent, or one value as text. */
 const parameter = EffectSchema.optionalKey(EffectSchema.String);

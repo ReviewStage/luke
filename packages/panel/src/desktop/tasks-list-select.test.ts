@@ -28,6 +28,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import {
   ADMIN_AWAY,
+  AGENT_AWAY,
   AUTOMATIONS_AWAY,
   BOARD_AWAY,
   INBOX_AWAY,
@@ -225,6 +226,7 @@ async function mountPage(held?: TasksPageHeld): Promise<{
       adminView: ADMIN_AWAY,
       boardView: BOARD_AWAY,
       personView: PERSON_AWAY,
+      agentView: AGENT_AWAY,
       automationsView: AUTOMATIONS_AWAY,
       versionHistoryView: VERSION_HISTORY_AWAY,
       inboxView: INBOX_AWAY,

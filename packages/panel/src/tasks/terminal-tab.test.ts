@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ORPCError } from "@orpc/client";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import {
   TERMINAL_PORT_CHANNEL,
   TERMINAL_REFUSAL,
@@ -31,9 +32,11 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { handHostReads } from "../testing/app-state.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { fittedTerminalBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
+import { onTerminals, windowTerminals } from "../testing/terminals.js";
 import type { HeldShell } from "./terminal-held.js";
 import { TerminalTab } from "./terminal-tab.js";
 import { useEndTerminalTab } from "./use-terminal-session.js";
@@ -243,7 +246,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Each registry lets its terminals go, as a window's does as it closes.
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
@@ -259,17 +261,19 @@ async function settle(): Promise<void> {
 }
 
 /** The tab mounted, shown or not, with what it draws, and the door that ends it as its × does. */
-async function mount(shown = true) {
+async function mount(shown = true, still = true) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
-  // Note that the working agent's mark never steps here, because it steps on a beat forever, and a
-  // test that runs every fake timer out would never finish.
-  serveEffectsOn(Context.make(Clock.Clock, STILL_CLOCK));
+  // Note that the working agent's mark never steps here unless a case moves the clock itself
+  // (`still` off), because it steps on a beat forever, and a test that runs every fake timer out would
+  // never finish.
+  serveEffectsOn(still ? Context.make(Clock.Clock, STILL_CLOCK) : Context.empty());
   const registry = AtomRegistry.make();
   registries.push(registry);
+  const terminals = windowTerminals();
   let closed = 0;
   let end: ((tab: TerminalStripTab) => void) | undefined;
   const Ender = () => {
@@ -290,7 +294,10 @@ async function mount(shown = true) {
       root.render(
         onRegistry(
           registry,
-          onSideBundles(FITTED, createElement(Fragment, null, tab, createElement(Ender))),
+          onTerminals(
+            terminals,
+            onSideBundles(FITTED, createElement(Fragment, null, tab, createElement(Ender))),
+          ),
         ),
       ),
     );
@@ -439,17 +446,65 @@ test("a resume whose snapshot is gone says the sandbox shut down and how to star
   );
 });
 
-test("an agent that has not opened its sandbox yet shows the waiting bar, and the tab asks again a few seconds on", async () => {
+/** The task list as the host lays it, the tab's agent's sandbox open or not. */
+function listedWithSandbox(open: boolean): TasksView {
+  return {
+    ...IDLE_TASKS_VIEW,
+    listStatus: TASKS_READ.READY,
+    taskAgents: [{ ...AGENT, workspaceId: "workspace-1", repository: null, sandboxOpen: open }],
+  };
+}
+
+test("an agent that has not opened its sandbox yet shows the waiting bar, and the tab asks again as the task list says it opened", async () => {
   main.createRefused = TERMINAL_REFUSAL.AGENT_NOT_READY;
-  vi.useFakeTimers();
+  const { deliverTasks } = handHostReads({});
+  deliverTasks(listedWithSandbox(false));
   const tab = await mount();
   assert.equal(tab.standing(), "· waiting for sandbox");
   assert.equal(tab.bar(), "Waiting for the agent to open its sandbox…");
   assert.equal(tab.action(), null);
   main.createRefused = undefined;
-  await act(async () => vi.advanceTimersByTimeAsync(5_000));
-  await settle();
-  assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.create", "terminal.attach"]);
+
+  deliverTasks(listedWithSandbox(true));
+
+  // The list's delivery lands on the Query client's own batch, then the shell it asks for, then the attach to it.
+  await vi.waitFor(() =>
+    assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.create", "terminal.attach"]),
+  );
+});
+
+test("a shell its connection says is starting attaches again as the sandbox opens, its port before let go", async () => {
+  const { deliverTasks } = handHostReads({});
+  deliverTasks(listedWithSandbox(false));
+  const tab = await mount();
+  const port = main.post(MADE);
+  port.say({ type: "state", state: "starting" });
+
+  deliverTasks(listedWithSandbox(true));
+
+  // The list's delivery lands on the Query client's own batch, then the attach it asks for.
+  await vi.waitFor(() =>
+    assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.attach", "terminal.attach"]),
+  );
+  assert.equal(port.closed(), true);
+});
+
+test("a tab hidden while it waits on the agent to open its sandbox asks nothing more until shown, though the list says it opened", async () => {
+  main.createRefused = TERMINAL_REFUSAL.AGENT_NOT_READY;
+  const { deliverTasks } = handHostReads({});
+  deliverTasks(listedWithSandbox(false));
+  const tab = await mount();
+  main.createRefused = undefined;
+  await tab.render(false);
+
+  deliverTasks(listedWithSandbox(true));
+  await settleQueries(settle);
+
+  assert.deepEqual(tab.kinds(), ["terminal.create"]);
+  await tab.render(true);
+  await vi.waitFor(() =>
+    assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.create", "terminal.attach"]),
+  );
 });
 
 /** Ends the bar's reveal, as the browser does once its delay has run; a DOM without animation events is heard through React's webkit-prefixed name for it. */
@@ -496,7 +551,7 @@ test("a connection the host ended says so in the bar, and any key reconnects to 
 test("a tab says on its shell's port each minute that it is shown, only while shown in a window in use", async () => {
   vi.useFakeTimers();
   const focused = vi.spyOn(document, "hasFocus").mockReturnValue(true);
-  const tab = await mount();
+  const tab = await mount(true, false);
   const port = main.post(MADE);
   port.say({ type: "state", state: "attached" });
   const shown = () => port.posted.filter((message) => message.type === "shown").length;

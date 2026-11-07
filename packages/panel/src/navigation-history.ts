@@ -23,7 +23,7 @@
  * the tab's own. The router's history names only the entry standing, so the
  * trail of steps around it is kept here beside it (`WindowTrail`).
  *
- * Settings, Admin, the Board, a person's page, and a version history are the router's places
+ * Settings, Admin, the Board, a person's page, an agent's own page, and a version history are the router's places
  * (`panel-router.tsx`): the router writes their entries as it navigates
  * there, and the trail follows each write as a routed step
  * (`PLACE_KIND.ROUTED`), which holds only its address, stands where the
@@ -150,8 +150,7 @@ export const MOUSE_BUTTON = {
 const PLACE_KIND = {
   TASK: "plan",
   HOME: "home",
-  AGENT: "agent",
-  /** A place the router says the window stands on, Settings, Admin, a workspace's Board, a person's page, the Automations pages, a task's version history, or the Inbox, which its route draws and its own history moves (`ROUTED_PLACE`). */
+  /** A place the router says the window stands on, Settings, Admin, a workspace's Board, a person's page, an agent's own page, the Automations pages, a task's version history, or the Inbox, which its route draws and its own history moves (`ROUTED_PLACE`). */
   ROUTED: "routed",
 } as const;
 
@@ -181,16 +180,10 @@ type Place =
     }
   | { readonly kind: typeof PLACE_KIND.HOME }
   | {
-      readonly kind: typeof PLACE_KIND.AGENT;
-      readonly agentId: string;
-      /** The side panel beside the page, as a task's step holds it. */
-      readonly side?: SideStep;
-    }
-  | {
       readonly kind: typeof PLACE_KIND.ROUTED;
       /** The address the router stood on, which its entry is held at, and which alone tells one routed step from another. */
       readonly address: string;
-      /** The side panel beside an Inbox item standing, as a task's step holds it, saved in the entry's state beside its address; none on any other routed place. */
+      /** The side panel beside an Inbox item or an agent's own page standing, as a task's step holds it, saved in the entry's state beside its address; none on any other routed place. */
       readonly side?: SideStep;
     };
 
@@ -336,14 +329,13 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
   return sameTab(one.tab, other.tab);
 }
 
-/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the home page, the Inbox on any plan, the same agent's page, or a routed place at the same address. */
+/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the home page, or a routed place at the same address. */
 function samePage(one: Place, other: Place): boolean {
   if (one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.ROUTED && other.kind === PLACE_KIND.ROUTED) {
     return one.address === other.address;
   }
   if ("taskId" in one && "taskId" in other) return one.taskId === other.taskId;
-  if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
   return true;
 }
 
@@ -372,9 +364,7 @@ function sideOf(place: Place): SideStep {
   if (place.kind === PLACE_KIND.TASK) {
     return place.panel === undefined ? place.side : openPanelTab(place.panel);
   }
-  return place.kind === PLACE_KIND.ROUTED || place.kind === PLACE_KIND.AGENT
-    ? place.side
-    : undefined;
+  return place.kind === PLACE_KIND.ROUTED ? place.side : undefined;
 }
 
 /** Whether two places of one page show one side panel, or either one not yet known, which fills in the step it stands in. */
@@ -438,17 +428,10 @@ function tabSurface(taskId: string, tab: SidePanelTab | MainTab, side: boolean):
  * drawn on screen shows one. A task's column and its side panel each show
  * one, the column's held back while the task's agents are unread
  * (`columnKnown`), since the plan it would name may be an agent's tab still on
- * its way, and a narrow room's side panel, open, covers the column whole. The
- * Inbox's and an agent page's side panel is `beside`, wide rooms alone.
+ * its way, and a narrow room's side panel, open, covers the column whole.
  */
-function surfacesOf(
-  place: Place | undefined,
-  columnKnown: boolean,
-  beside: OpenSurface | undefined,
-): OpenSurface[] {
+function surfacesOf(place: Place | undefined, columnKnown: boolean): OpenSurface[] {
   if (place === undefined) return [];
-  const withSide = (surfaces: OpenSurface[]) =>
-    beside === undefined ? surfaces : [...surfaces, beside];
   switch (place.kind) {
     case PLACE_KIND.TASK: {
       const side = place.side ?? openPanelTab(place.panel);
@@ -459,8 +442,6 @@ function surfacesOf(
         : [];
       return [...column, ...sideSurface];
     }
-    case PLACE_KIND.AGENT:
-      return withSide([{ surface: PRODUCT_SURFACE.AGENT, of: place.agentId }]);
     case PLACE_KIND.HOME:
       return [{ surface: PRODUCT_SURFACE.HOME }];
     case PLACE_KIND.ROUTED:
@@ -480,10 +461,7 @@ function samePlace(one: Place, other: Place): boolean {
       sameSide(one.side, other.side)
     );
   }
-  if (
-    (one.kind === PLACE_KIND.AGENT && other.kind === PLACE_KIND.AGENT) ||
-    (one.kind === PLACE_KIND.ROUTED && other.kind === PLACE_KIND.ROUTED)
-  ) {
+  if (one.kind === PLACE_KIND.ROUTED && other.kind === PLACE_KIND.ROUTED) {
     return sameSide(one.side, other.side);
   }
   return true;
@@ -711,8 +689,6 @@ function pageOf(place: Place): HistoryPage {
   switch (place.kind) {
     case PLACE_KIND.TASK:
       return { kind: place.kind, of: place.taskId };
-    case PLACE_KIND.AGENT:
-      return { kind: place.kind, of: place.agentId };
     case PLACE_KIND.ROUTED:
       return { kind: place.kind, of: place.address };
     default:
@@ -1505,6 +1481,7 @@ export function useWindowHistory(input: {
     | "mainTabs"
     | "activeTaskId"
     | "agents"
+    | "liveAgents"
     | "pages"
     | "workspaces"
   >;
@@ -1566,14 +1543,13 @@ export function useWindowHistory(input: {
     // A workspace's address naming none of the reader's is no place of theirs to come back to, so it is no step, and the tab keeps its address.
     if (!known || unknownWorkspace) return undefined;
     if (routedAddress !== undefined) {
-      // Note that an Inbox item's step holds the side panel beside it, as a task's does, which no address says.
-      const side = inboxOpen && inboxChosen !== undefined ? sideHeld : undefined;
+      // Note that an Inbox item's step and an agent page's hold the side panel beside them, as a task's does, which no address says.
+      const besideItem = inboxOpen && inboxChosen !== undefined;
+      const side = besideItem || pageAgent !== undefined ? sideHeld : undefined;
       return side === undefined
         ? { kind: PLACE_KIND.ROUTED, address: routedAddress }
         : { kind: PLACE_KIND.ROUTED, address: routedAddress, side };
     }
-    if (pageAgent !== undefined)
-      return { kind: PLACE_KIND.AGENT, agentId: pageAgent, side: sideHeld };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return {
       kind: PLACE_KIND.TASK,
@@ -1616,12 +1592,15 @@ export function useWindowHistory(input: {
         sideTab === undefined || boundFor === undefined
           ? undefined
           : tabSurface(boundFor, sideTab, true);
-      // Note that the side panel beside an Inbox item counts as it does beside an agent's page.
-      const inboxBeside =
-        routed?.place === ROUTED_PLACE.INBOX && beside !== undefined ? [beside] : [];
+      // Note that the side panel beside an Inbox item or an agent's page counts as it does beside a task, wide rooms alone.
+      const besideRouted =
+        (routed?.place === ROUTED_PLACE.INBOX || routed?.place === ROUTED_PLACE.AGENT) &&
+        beside !== undefined
+          ? [beside]
+          : [];
       return untitled?.kind === PLACE_KIND.ROUTED && routed !== undefined
-        ? [...routed.place.surfaces(routed.params, routedHistory), ...inboxBeside]
-        : surfacesOf(untitled, columnKnown, beside);
+        ? [...routed.place.surfaces(routed.params, routedHistory), ...besideRouted]
+        : surfacesOf(untitled, columnKnown);
     }, [untitled, columnKnown, sideTab, boundFor, routed, routedHistory]),
     input.room,
   );
@@ -1670,22 +1649,15 @@ export function useWindowHistory(input: {
     if (to.kind === PLACE_KIND.ROUTED) {
       const matches = router.matchRoutes(pathOf(to.address));
       if (routedPlaceOf(matches)?.overThePlan !== true) return;
-      if (pageAgent !== undefined) tasks.agentView.onClose();
       if (unknownWorkspace) tasks.unknownWorkspace.onClose();
-      // An Inbox item's step stands the side panel beside it as it stood, on the item's own task or agent.
-      const params: Readonly<Record<string, string | undefined>> = matches.at(-1)?.params ?? {};
-      const { itemId } = params;
+      // An Inbox item's step and an agent page's stand the side panel beside them as it stood, on the item's own task or agent, or the page's agent.
+      const { itemId, agentId } = placeParamsOf(matches);
       const chosen = itemId === undefined ? undefined : inbox.choiceOf(itemId);
-      standSide(chosen === undefined ? undefined : choiceHolder(chosen), itemId, to.side);
+      // Note that the panel's stop is the item standing, or the page's agent, as `standSide` shuts it on the stop standing alone.
+      const holder = chosen === undefined ? agentId : choiceHolder(chosen);
+      standSide(holder, itemId ?? agentId, to.side);
       return;
     }
-    if (to.kind === PLACE_KIND.AGENT) {
-      tasks.agentView.onOpen(to.agentId);
-      standSide(to.agentId, to.agentId, to.side);
-      return;
-    }
-    // Every other place of the Plans tab is the plan's, which an agent's page stands over.
-    if (pageAgent !== undefined) tasks.agentView.onClose();
     if (to.kind === PLACE_KIND.TASK && boundFor !== to.taskId) tasks.onRestoreTask(to.taskId);
     if (to.kind === PLACE_KIND.TASK && to.column !== undefined) {
       tasks.mainTabs.onShow(to.taskId, to.column);
@@ -1791,10 +1763,7 @@ export function useWindowHistory(input: {
     panel: () => {
       const shut = () => tasks.sidePanel.onSetOpen(false);
       // Note that a phone's panel a link opened over an Inbox item or an agent's page steps back to it shut, where that is the step behind.
-      if (
-        (untitled?.kind === PLACE_KIND.ROUTED && inboxOpen) ||
-        untitled?.kind === PLACE_KIND.AGENT
-      ) {
+      if (untitled?.kind === PLACE_KIND.ROUTED && (inboxOpen || pageAgent !== undefined)) {
         if (!narrow || !backTo({ ...untitled, side: null })) shut();
         return;
       }

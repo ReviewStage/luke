@@ -3,7 +3,7 @@ import type {
   TasksWorkspaceTokenRepositoriesParams,
   WorkspacePeopleFollow,
 } from "@repo/features/tasks-view";
-import { Effect, MutableHashMap, Option, Stream } from "effect";
+import { Effect, MutableHashMap, Stream } from "effect";
 import { isGitHubAddress } from "../acts.js";
 import { WORKSPACE_ACT_KIND, WORKSPACE_ACTS } from "../contract/index.js";
 import type { HostActTable } from "../host-acts.js";
@@ -79,15 +79,14 @@ function isSentryAddress(url: string): boolean {
 
 /**
  * The hold one stream a window opens keeps on a workspace's read, held at
- * the host while any stream of it stands. Note that nothing is heard down
- * it, since the held read reaches the panel on app state.
+ * the host while any stream of it stands.
  */
 function workspaceHold(
   side: {
     readonly follow: (scope: WorkspacePeopleFollow) => Effect.Effect<void>;
     readonly unfollow: (scope: WorkspacePeopleFollow) => Effect.Effect<void>;
   },
-  open: OpenFollows<never>,
+  open: OpenFollows,
   scope: WorkspacePeopleFollow,
 ): Stream.Stream<never> {
   return followedStream(
@@ -95,8 +94,6 @@ function workspaceHold(
       keyOf: (held: WorkspacePeopleFollow) => held.workspaceId,
       follow: side.follow,
       unfollow: side.unfollow,
-      onChanged: () => () => undefined,
-      valueOf: () => Option.none<never>(),
     },
     open,
     scope,
@@ -112,13 +109,13 @@ export function workspaceProcedures(
 ) {
   const { host, openExternal } = dependencies;
   /** Every workspace whose people, token repositories, or invitations a window holds a stream open of, each so the host lets them go only with the last. */
-  const openPeople: OpenFollows<never> = MutableHashMap.empty();
-  const openTokenRepositories: OpenFollows<never> = MutableHashMap.empty();
+  const openPeople: OpenFollows = MutableHashMap.empty();
+  const openTokenRepositories: OpenFollows = MutableHashMap.empty();
   /** Every workspace whose integrations a window holds a stream open of, as its people are. */
-  const openIntegrations: OpenFollows<never> = MutableHashMap.empty();
+  const openIntegrations: OpenFollows = MutableHashMap.empty();
   /** Every workspace whose Slack channels a window holds a stream open of, as its people are. */
-  const openChannels: OpenFollows<never> = MutableHashMap.empty();
-  const openInvitations: OpenFollows<never> = MutableHashMap.empty();
+  const openChannels: OpenFollows = MutableHashMap.empty();
+  const openInvitations: OpenFollows = MutableHashMap.empty();
   return {
     // Note that the address the service answered opens only where it is
     // GitHub's, because it is the one address here the panel did not name.
@@ -167,14 +164,11 @@ export function workspaceProcedures(
       WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held integrations reach the panel on app state.
       const hold = followedStream(
         {
           keyOf: (held: TasksWorkspaceParams) => held.workspaceId,
           follow: host.workspaceIntegrationsFollow,
           unfollow: host.workspaceIntegrationsUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openIntegrations,
         input,
@@ -191,14 +185,11 @@ export function workspaceProcedures(
       WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held channels reach the panel on app state.
       const hold = followedStream(
         {
           keyOf: (held: TasksWorkspaceParams) => held.workspaceId,
           follow: host.workspaceSlackChannelsFollow,
           unfollow: host.workspaceSlackChannelsUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openChannels,
         input,
@@ -232,14 +223,11 @@ export function workspaceProcedures(
       WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held repositories reach the panel on app state.
       const hold = followedStream(
         {
           keyOf: (held: TasksWorkspaceTokenRepositoriesParams) => held.workspaceId,
           follow: host.workspaceTokenRepositoriesFollow,
           unfollow: host.workspaceTokenRepositoriesUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openTokenRepositories,
         input,

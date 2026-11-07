@@ -36,7 +36,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { taskCardOf } from "./task-card.js";
 
@@ -69,17 +69,7 @@ const SUMMARY: TaskSummary = {
   agents: {
     total: 1,
     working: 1,
-    agents: [
-      {
-        id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-        title: "Invite flow",
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        status: AGENT_STATUS.RUNNING,
-      },
-    ],
     pullRequestTotal: 0,
-    pullRequests: [],
   },
 };
 
@@ -202,7 +192,7 @@ async function mount(
         createElement(
           ChipCards,
           { value: chipCards },
-          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+          createElement(DesktopTasks, { looks: NO_LOOKS, tasks }),
         ),
       ),
     ),

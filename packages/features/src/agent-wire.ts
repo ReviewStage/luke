@@ -344,11 +344,12 @@ export const MAC_PRESENCE = {
   /** How often the host reads the beats of the account's devices while a window draws them: a third more than a beat, well inside `FRESH_MS` with the beat and the read's own latency. */
   POLL_MS: (DEVICE_BEAT.EVERY_MS * 4) / 3,
   /**
-   * How long one read of the beats may take before it counts as failed: past
-   * the hosted call's own ten-second deadline, so an answer that is merely
-   * slow still lands, and short enough that a wedged read (a body that never
-   * ends, a credential renewed and asked again) says unknown well inside a
-   * poll rather than letting every device age past `FRESH_MS` meanwhile.
+   * How long one read of the beats may take before it counts as failed, the
+   * read's whole deadline (`hosted-link.ts`'s `HOSTED_DEADLINE.PRESENCE`),
+   * its body and a credential renewed and asked again among it: past the
+   * usual ten seconds, so an answer that is merely slow still lands, and
+   * short enough that a wedged read says unknown well inside a poll rather
+   * than letting every device age past `FRESH_MS` meanwhile.
    */
   READ_TIMEOUT_MS: 12_000,
 } as const;
@@ -1181,6 +1182,15 @@ export const agentSummarySchema = EffectSchema.Struct({
    */
   stoppable: EffectSchema.optionalKey(EffectSchema.Literal(false)),
   /**
+   * Whether the agent's sandbox stands open: true once its conversation
+   * records the session its sandbox is tagged with, which is when its
+   * Terminal and Browser can reach it, false before. The task list carries
+   * it live, so a pane waiting on the sandbox connects as it flips. Absent
+   * from a read that does not name it, and from a service older than it,
+   * which a pane reads as not known.
+   */
+  sandboxOpen: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
    * What the agent was handed as its first message, so its tab draws a
    * description as the description's card, a task as the developer's own message, and,
    * for an agent started blank, its first line as any other line. Absent
@@ -1454,6 +1464,8 @@ export const listedAgentSchema = EffectSchema.Struct({
   ...agentSummarySchema.fields,
   workspaceId: agentPageSchema.fields.workspaceId,
   repository: agentPageSchema.fields.repository,
+  /** Epoch milliseconds its newest turn ended, which a settled agent's row says it last moved at; absent while that turn runs and before it has one. */
+  settledAt: EffectSchema.optionalKey(countedNumber),
 });
 
 export type ListedAgent = typeof listedAgentSchema.Type;

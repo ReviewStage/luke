@@ -9,6 +9,10 @@ import {
   type TasklessAgent,
   tasklessAgentSchema,
 } from "./agent-wire.js";
+import { githubContract } from "./contract/github.js";
+import { repositoryPinsContract } from "./contract/repository-pins.js";
+import { taskFilesContract } from "./contract/task-files.js";
+import { taskSectionsContract } from "./contract/task-sections.js";
 import { tasksContract } from "./contract/tasks.js";
 import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.js";
 import {
@@ -27,7 +31,7 @@ import {
   githubRepositoryFullNameSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
-import { failureSetOf } from "./hosted-failure.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
 import {
   pagePlaceSchema,
   pageVersionNumberSchema,
@@ -179,9 +183,10 @@ export const tasksViewSchema = EffectSchema.Struct({
    */
   taskAgents: EffectSchema.optionalKey(EffectSchema.Array(listedAgentSchema)),
   /**
-   * Every pull request of each plan that has one, uncapped, as its row names
-   * the first few: present only while the list is followed live, when the
-   * Tasks page's cards name each one rather than a count of the rest.
+   * Every pull request of each plan that has one, those still open first:
+   * present only while the list is followed live, when it is what every
+   * reader of a task's pull requests reads, its row's mark and chips and its
+   * card among them, the row itself only counting them.
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
   /**
@@ -404,6 +409,15 @@ const declaredTaskCalls = {
   block: tasksContract.block,
   parent: tasksContract.parent,
   relation: tasksContract.relation,
+  files: taskFilesContract,
+  sections: taskSectionsContract,
+  pins: repositoryPinsContract,
+  repositories: githubContract.repositories,
+  repositoryFile: githubContract.repositoryFile,
+  repositoryTree: githubContract.repositoryTree,
+  repositorySkills: githubContract.repositorySkills,
+  repositoryPullRequest: githubContract.repositoryPullRequest,
+  repositoryIssue: githubContract.repositoryIssue,
 };
 
 /** Every failure those procedures may end with, as the domain spells it. */
@@ -806,12 +820,11 @@ export const tasksPictureKeepParamsSchema = EffectSchema.Struct({
 
 export type TasksPictureKeepParams = typeof tasksPictureKeepParamsSchema.Type;
 
-/** Why a picture was not kept: the description holds its bound of pictures, or of videos, the plan is not the account's to write, or no answer. */
+/** Why a picture was not kept: the description holds its bound of pictures, or of videos, as the service answers in band, or how its procedure failed: the plan is not the account's to write, or no answer. */
 export const PICTURE_KEEP_FAILURE = {
   TOO_MANY: "too-many",
   TOO_MANY_VIDEOS: "too-many-videos",
-  NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
-  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
+  ...failureSetOf(taskFilesContract.keepPicture),
 } as const;
 
 /** A picture kept, as the editor hears it: the id its text names it by, or why it was not kept. */
@@ -1040,25 +1053,21 @@ export const tasksWorkspaceInvitationsAnswerSchema = EffectSchema.Union([
 export type TasksWorkspaceInvitationsAnswer = typeof tasksWorkspaceInvitationsAnswerSchema.Type;
 
 /** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
-export const tasksGitHubPageAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ url: EffectSchema.String }),
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
+export const tasksGitHubPageAnswerSchema = answerView(githubContract.connect);
 
 export type TasksGitHubPageAnswer = typeof tasksGitHubPageAnswerSchema.Type;
 
 /** Why the account's GitHub was not disconnected: no answer, or GitHub is its only way to sign in. */
-export const GITHUB_DISCONNECT_FAILURE = {
-  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
-  NOT_PERMITTED: "not-permitted",
-} as const;
+export const GITHUB_DISCONNECT_FAILURE = failureSetOf(githubContract.disconnect);
 
-/** A disconnect of the account's GitHub, as the window's process hears it: the connection as it then stands, or why it is not. */
+/**
+ * A disconnect of the account's GitHub, as the window's process hears it:
+ * the connection as it then stands, under `connection` as it shipped, or
+ * how the disconnect failed, as its procedure's answer spells it.
+ */
 export const tasksGitHubDisconnectAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ connection: githubConnectionSchema }),
-  EffectSchema.Struct({
-    failure: EffectSchema.Literals(Object.values(GITHUB_DISCONNECT_FAILURE)),
-  }),
+  answerView(githubContract.disconnect).members[1],
 ]);
 
 export type TasksGitHubDisconnectAnswer = typeof tasksGitHubDisconnectAnswerSchema.Type;

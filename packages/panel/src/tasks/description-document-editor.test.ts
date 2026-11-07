@@ -27,7 +27,7 @@ import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
-import { type SideBundles, sideBundles } from "../bundle-loader.js";
+import type { SideBundles } from "../bundle-loader.js";
 import {
   type DescriptionEditorModule,
   type DescriptionEditorPlacement,
@@ -48,12 +48,13 @@ import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
+import { landedBundles, onSideBundles, standInBundles } from "../testing/side-bundles.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { letGoOfWords, WordsOwner } from "../testing/words-owner.js";
 import { ToastHost } from "../toast.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
-import { useDescriptionWordsOwner, useDescriptionWordsUnsaved } from "./use-description-editing.js";
+import { useDescriptionWordsUnsaved } from "./use-description-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../description-editor/`),
@@ -155,6 +156,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  await letGoOfWords();
   releaseMotion();
   wordsLine = undefined;
   caretOn = undefined;
@@ -171,6 +173,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /**
@@ -222,12 +225,6 @@ function commentsOver(threads: readonly DescriptionCommentThread[]): Description
 /** What the window tells its shell of the descriptions' words, drawn beside the description as a shell would read it. */
 function UnsavedWords(): ReactElement {
   return createElement("output", { "data-unsaved-words": String(useDescriptionWordsUnsaved()) });
-}
-
-/** The descriptions' words told which account is signed in, as the window tells them. */
-function WordsOwner(): null {
-  useDescriptionWordsOwner();
-  return null;
 }
 
 /** Main's document handed again with the account signed in now naming its id, as a refresh hands it. */
@@ -912,7 +909,7 @@ test("an editor emptied of a description's words gives the keyboard back to its 
 test("an empty description pressed while the editor's bundle loads goes on saying to write it", async () => {
   const landed = bundles;
   const gate = Promise.withResolvers<DescriptionEditorModule>();
-  bundles = sideBundles({ descriptionEditor: () => gate.promise });
+  bundles = standInBundles({ descriptionEditor: () => gate.promise });
   try {
     const { container, render } = mount();
     render(EMPTY_TASK);
@@ -958,7 +955,7 @@ test("a press on the room while the editor's bundle loads is where the editor op
   layTextOut();
   const landed = bundles;
   const gate = Promise.withResolvers<DescriptionEditorModule>();
-  bundles = sideBundles({ descriptionEditor: () => gate.promise });
+  bundles = standInBundles({ descriptionEditor: () => gate.promise });
   try {
     const { container } = mount();
     const scroller = scrollerOf(container);
@@ -1154,6 +1151,21 @@ test("words a description was left with stay once the account signed in comes to
   await settle();
 
   assert.ok(toastStood, "the toast over them stands");
+  assert.equal(open().markdown, `${BODY}Mine.\n`, "the editor opens on the kept words");
+});
+
+test("words a description was left with stay once the window draws itself again as the same account", async () => {
+  const { container, render, unmount } = mount([{ failure: TASK_CALL_FAILURE.UNANSWERED }]);
+  const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  render(other);
+  await settle();
+
+  unmount();
+  mount();
+  await settle();
+
   assert.equal(open().markdown, `${BODY}Mine.\n`, "the editor opens on the kept words");
 });
 
@@ -1510,7 +1522,7 @@ test("a press on the room after a click while the editor's bundle loads opens th
   layTextOut();
   const landed = bundles;
   const gate = Promise.withResolvers<DescriptionEditorModule>();
-  bundles = sideBundles({ descriptionEditor: () => gate.promise });
+  bundles = standInBundles({ descriptionEditor: () => gate.promise });
   try {
     const { container } = mount();
     const scroller = scrollerOf(container);

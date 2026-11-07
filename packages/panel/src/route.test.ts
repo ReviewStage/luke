@@ -57,7 +57,7 @@ const WINDOW: Here = {
   kind: HERE.WINDOW,
   opensPlaces: true,
   listed: {
-    tasks: [{ id: TASK, agents: { pullRequests: [{ url: PR, agentId: AGENT }] } }],
+    tasks: [{ taskId: TASK, pullRequests: [{ url: PR, agentId: AGENT }] }],
     agents: [{ id: OTHER, pullRequest: { url: "https://github.com/acme/relay/pull/43" } }],
   },
 };
@@ -67,8 +67,8 @@ const STANDING: Here = { kind: HERE.TASKS_TAB, taskId: TASK };
 
 const NOTHING: Route = { kind: ROUTE.NOTHING };
 
-function preview(thing: Thing): Route {
-  return { kind: ROUTE.PREVIEW, thing };
+function beside(thing: Thing): Route {
+  return { kind: ROUTE.BESIDE, thing };
 }
 
 function go(link: ReadLink): Route {
@@ -80,13 +80,13 @@ it.each<[string, string, Here, Route]>([
     "an Inbox item: a pull request one of its agents opened, however its page is spelled, in that agent's Pull request tab",
     `${PR}#issuecomment-1`,
     ITEM,
-    preview({ kind: THING.PULL_REQUEST, agentId: AGENT }),
+    beside({ kind: THING.PULL_REQUEST, agentId: AGENT }),
   ],
   [
     "an Inbox item: another pull request of its repository, in any case, by its number in its first agent's tab",
     "https://github.com/Acme/Relay/pull/41/files",
     ITEM,
-    preview({ kind: THING.PULL_REQUEST, agentId: AGENT, number: 41 }),
+    beside({ kind: THING.PULL_REQUEST, agentId: AGENT, number: 41 }),
   ],
   [
     "an Inbox item: a pull request of another repository, the window's",
@@ -104,13 +104,13 @@ it.each<[string, string, Here, Route]>([
     "an Inbox item of an agent on no task: another pull request of its repository, by its number in its agent's tab",
     "https://github.com/acme/relay/pull/41",
     TASKLESS_ITEM,
-    preview({ kind: THING.PULL_REQUEST, agentId: AGENT, number: 41 }),
+    beside({ kind: THING.PULL_REQUEST, agentId: AGENT, number: 41 }),
   ],
   [
     "an Inbox item: a page under its agent's own pull request's, in that agent's own Pull request tab",
     `${PR}/files`,
     ITEM,
-    preview({ kind: THING.PULL_REQUEST, agentId: AGENT }),
+    beside({ kind: THING.PULL_REQUEST, agentId: AGENT }),
   ],
   [
     "an Inbox item: a long run of slashes, read at once as any address no pull request matches",
@@ -122,13 +122,13 @@ it.each<[string, string, Here, Route]>([
     "an Inbox item: a file of its repository, beside it",
     FILE,
     ITEM,
-    preview({ kind: THING.FILE, path: "src/invites.ts", lines: undefined }),
+    beside({ kind: THING.FILE, path: "src/invites.ts", lines: undefined }),
   ],
   [
     "an Inbox item: a file of another repository, beside it read from that repository",
     "https://github.com/acme/other/blob/HEAD/src/invites.ts",
     ITEM,
-    preview({
+    beside({
       kind: THING.FILE,
       path: "src/invites.ts",
       lines: undefined,
@@ -139,7 +139,7 @@ it.each<[string, string, Here, Route]>([
     "an Inbox item of an agent on no task: a file of its repository, beside it",
     FILE,
     TASKLESS_ITEM,
-    preview({ kind: THING.FILE, path: "src/invites.ts", lines: undefined }),
+    beside({ kind: THING.FILE, path: "src/invites.ts", lines: undefined }),
   ],
   [
     "an Inbox item not yet chosen: nothing beside it",
@@ -151,13 +151,13 @@ it.each<[string, string, Here, Route]>([
     "an Inbox item: its task's own page, beside it",
     `${APP}/plan/${TASK}/page/${PAGE}`,
     ITEM,
-    preview({ kind: THING.PAGE, pageId: PAGE }),
+    beside({ kind: THING.PAGE, pageId: PAGE }),
   ],
   [
     "an Inbox item: another task's page, a subtask's among them, beside it read on that task",
     `${APP}/plan/${OTHER}/page/${PAGE}`,
     ITEM,
-    preview({ kind: THING.PAGE, pageId: PAGE, place: { taskId: OTHER } }),
+    beside({ kind: THING.PAGE, pageId: PAGE, place: { taskId: OTHER } }),
   ],
   [
     "an Inbox item: a page under a task named by a number not found, the window's, which finds the task",
@@ -169,20 +169,20 @@ it.each<[string, string, Here, Route]>([
     "an Inbox item of an agent on no task: that agent's page, beside it",
     `${APP}/agent/${AGENT}/page/${PAGE}`,
     TASKLESS_ITEM,
-    preview({ kind: THING.PAGE, pageId: PAGE }),
+    beside({ kind: THING.PAGE, pageId: PAGE }),
   ],
   [
     "an Inbox item of an agent on no task: another agent's page, beside it read on that agent",
     `${APP}/agent/${OTHER}/page/${PAGE}`,
     TASKLESS_ITEM,
-    preview({ kind: THING.PAGE, pageId: PAGE, place: { agentId: OTHER } }),
+    beside({ kind: THING.PAGE, pageId: PAGE, place: { agentId: OTHER } }),
   ],
   ["an Inbox item: its task's plan, the window's", `${APP}/plan/${TASK}`, ITEM, NOTHING],
   [
     "an Inbox item: an agent of its task, its transcript beside it",
     `${APP}/plan/${TASK}/agent/${AGENT}`,
     ITEM,
-    preview({ kind: THING.TRANSCRIPT, agentId: AGENT }),
+    beside({ kind: THING.TRANSCRIPT, agentId: AGENT }),
   ],
   [
     "an Inbox item: an agent under another task, the window's",
@@ -204,13 +204,13 @@ it.each<[string, string, Here, Route]>([
     "an Inbox item: an archived agent's Changes, beside it",
     `${APP}/agent/${AGENT}/changes`,
     { ...ITEM, ...ARCHIVED },
-    preview({ kind: THING.CHANGES, agentId: AGENT }),
+    beside({ kind: THING.CHANGES, agentId: AGENT }),
   ],
   [
     "an Inbox item: a message of an agent of its task, its transcript beside it at the message",
     `${APP}/agent/${AGENT}/message/${MESSAGE}`,
     ITEM,
-    preview({ kind: THING.TRANSCRIPT, agentId: AGENT, messageId: MESSAGE }),
+    beside({ kind: THING.TRANSCRIPT, agentId: AGENT, messageId: MESSAGE }),
   ],
   [
     "an Inbox item: a message of an archived agent of its task, the window's",
@@ -228,7 +228,7 @@ it.each<[string, string, Here, Route]>([
     "an Inbox item: a review thread of an archived agent's pull request, beside it at the thread",
     `${APP}/agent/${AGENT}/changes/conversation/thread/${THREAD}`,
     { ...ITEM, ...ARCHIVED },
-    preview({ kind: THING.THREAD, agentId: AGENT, threadId: THREAD, view: "conversation" }),
+    beside({ kind: THING.THREAD, agentId: AGENT, threadId: THREAD, view: "conversation" }),
   ],
   [
     "an Inbox item: a review thread of an agent not of its task, the window's",
@@ -240,13 +240,13 @@ it.each<[string, string, Here, Route]>([
     "an Inbox item: another task's Inbox item, chosen in this Inbox",
     `${APP}/plan/${OTHER}/inbox/${INBOX_ITEM}`,
     ITEM,
-    preview({ kind: THING.INBOX_ITEM, itemId: INBOX_ITEM, taskId: OTHER, agentId: undefined }),
+    beside({ kind: THING.INBOX_ITEM, itemId: INBOX_ITEM, taskId: OTHER, agentId: undefined }),
   ],
   [
     "an Inbox item: an Inbox item an agent of its task posted, chosen in this Inbox under the task",
     `${APP}/agent/${AGENT}/inbox/${INBOX_ITEM}`,
     ITEM,
-    preview({ kind: THING.INBOX_ITEM, itemId: INBOX_ITEM, taskId: TASK, agentId: AGENT }),
+    beside({ kind: THING.INBOX_ITEM, itemId: INBOX_ITEM, taskId: TASK, agentId: AGENT }),
   ],
   [
     "an Inbox item: an Inbox item an agent it does not hold posted, the window's to find",
@@ -258,19 +258,19 @@ it.each<[string, string, Here, Route]>([
     "an Inbox item of an agent on no task: another item of that agent, chosen in this Inbox",
     `${APP}/agent/${AGENT}/inbox/${INBOX_ITEM}`,
     TASKLESS_ITEM,
-    preview({ kind: THING.INBOX_ITEM, itemId: INBOX_ITEM, taskId: undefined, agentId: AGENT }),
+    beside({ kind: THING.INBOX_ITEM, itemId: INBOX_ITEM, taskId: undefined, agentId: AGENT }),
   ],
   [
     "a task: a page under its agent's pull request's, in that agent's own Pull request tab",
     `${PR}/files`,
     ON_TASK,
-    preview({ kind: THING.PULL_REQUEST, agentId: AGENT }),
+    beside({ kind: THING.PULL_REQUEST, agentId: AGENT }),
   ],
   [
     "a task: another pull request of its repository, by its number in its first agent's tab",
     "https://github.com/acme/relay/pull/41",
     ON_TASK,
-    preview({ kind: THING.PULL_REQUEST, agentId: AGENT, number: 41 }),
+    beside({ kind: THING.PULL_REQUEST, agentId: AGENT, number: 41 }),
   ],
   [
     "a task: a pull request of another repository, the window's",
@@ -282,7 +282,7 @@ it.each<[string, string, Here, Route]>([
     "a task: an archived agent's pull request, merged or not, in its own Pull request tab",
     PR,
     { ...ON_TASK, ...ARCHIVED },
-    preview({ kind: THING.PULL_REQUEST, agentId: AGENT }),
+    beside({ kind: THING.PULL_REQUEST, agentId: AGENT }),
   ],
   [
     "a task: an app link, to its own page among them, the window's",
@@ -294,7 +294,7 @@ it.each<[string, string, Here, Route]>([
     "a task: another task's page, a subtask's among them, beside it read on that task",
     `${APP}/plan/${OTHER}/page/${PAGE}`,
     ON_TASK,
-    preview({ kind: THING.PAGE, pageId: PAGE, place: { taskId: OTHER } }),
+    beside({ kind: THING.PAGE, pageId: PAGE, place: { taskId: OTHER } }),
   ],
   [
     "a task: another task's agent, the window's, which opens it in the middle",
@@ -307,13 +307,13 @@ it.each<[string, string, Here, Route]>([
     "an agent's page: the pull request it opened, in its Pull request tab",
     PR,
     ON_AGENT,
-    preview({ kind: THING.PULL_REQUEST, agentId: AGENT }),
+    beside({ kind: THING.PULL_REQUEST, agentId: AGENT }),
   ],
   [
     "an agent's page: a task's page, beside it read on that task",
     `${APP}/plan/${TASK}/page/${PAGE}`,
     ON_AGENT,
-    preview({ kind: THING.PAGE, pageId: PAGE, place: { taskId: TASK } }),
+    beside({ kind: THING.PAGE, pageId: PAGE, place: { taskId: TASK } }),
   ],
   [
     "an agent's page: a page under a task named by a number not found, the window's, which finds the task",
@@ -325,7 +325,7 @@ it.each<[string, string, Here, Route]>([
     "an agent's page: another pull request of its repository, by its number",
     "https://github.com/acme/relay/pull/41",
     ON_AGENT,
-    preview({ kind: THING.PULL_REQUEST, agentId: AGENT, number: 41 }),
+    beside({ kind: THING.PULL_REQUEST, agentId: AGENT, number: 41 }),
   ],
   [
     "the window: an app link, to its place",
@@ -370,10 +370,10 @@ it.each<[string, string, Here, Route]>([
     { kind: ROUTE.EXTERNAL, href: `${APP}/agent/${AGENT}` },
   ],
   [
-    "the Tasks tab: a page of the task it shows, as the panel's preview",
+    "the Tasks tab: a page of the task it shows, in the panel beside it",
     `${APP}/plan/${TASK}/page/${PAGE}`,
     STANDING,
-    preview({ kind: THING.PAGE, pageId: PAGE }),
+    beside({ kind: THING.PAGE, pageId: PAGE }),
   ],
   [
     "the Tasks tab: another task's page, to that task",
@@ -409,16 +409,16 @@ it.each<[string, string, Here, Route]>([
     }),
   ],
   [
-    "the Tasks tab: a worker of the task it shows, as the panel's preview",
+    "the Tasks tab: a worker of the task it shows, in the panel beside it",
     `${APP}/plan/${TASK}/agent/${AGENT}/worker/${CALL}`,
     STANDING,
-    preview({ kind: THING.WORKER, agentId: AGENT, callId: CALL }),
+    beside({ kind: THING.WORKER, agentId: AGENT, callId: CALL }),
   ],
   [
-    "the Tasks tab: a review thread of the task it shows, its agent's Changes as the panel's preview",
+    "the Tasks tab: a review thread of the task it shows, its agent's Changes in the panel beside it",
     `${APP}/plan/${TASK}/agent/${AGENT}/changes/files/thread/${THREAD}`,
     STANDING,
-    preview({ kind: THING.CHANGES, agentId: AGENT }),
+    beside({ kind: THING.CHANGES, agentId: AGENT }),
   ],
   [
     "the Tasks tab with something over the task's plan: the task's own Changes, to the task",

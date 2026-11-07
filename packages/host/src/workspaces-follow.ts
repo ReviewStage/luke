@@ -1,11 +1,7 @@
+import { SIDEBAR_READ, type SidebarRows, sidebarRowsOfLive } from "@repo/features/sidebar-live";
 import {
-  type SidebarRows,
-  sidebarLiveRowsSchema,
-  sidebarRowsOfLive,
-} from "@repo/features/sidebar-live";
-import {
+  WORKSPACES_READ,
   type WorkspacesLiveAnswer,
-  workspacesLiveRowsSchema,
   workspacesOfLiveRows,
 } from "@repo/features/workspace-live";
 import type { Workspace } from "@repo/features/workspace-wire";
@@ -62,13 +58,13 @@ export function workspacesMoves(
   dependencies: LiveReadDependencies<WorkspacesLiveAnswer>,
   first: WorkspacesLiveAnswer,
 ): Stream.Stream<readonly Workspace[], LiveBroken> {
-  return liveMoves(dependencies, first, workspacesLiveRowsSchema, workspacesOfLiveRows);
+  return liveMoves(dependencies, first, WORKSPACES_READ.rows, workspacesOfLiveRows);
 }
 
 /** The sidebar read's parts: its sections, the tasks and the agents in them, and its pinned repositories. */
 type SidebarPart = "sections" | "entries" | "agentEntries" | "pins";
 
-const decodeSidebarRows = Schema.decodeUnknownOption(sidebarLiveRowsSchema);
+const decodeSidebarRows = Schema.decodeUnknownOption(SIDEBAR_READ.rows);
 
 /** An answer's rows decoded, every part's; none where it carries none inline, and failed where a row does not decode. */
 function sidebarRowsOf(read: SealedRead<SidebarPart>): Option.Option<SidebarRows> | "undecoded" {

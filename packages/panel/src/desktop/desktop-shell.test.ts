@@ -52,7 +52,7 @@ import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
-import { SHELL_AT, shellRouterEachTest } from "../testing/shell-router.js";
+import { agentAt, SHELL_AT, shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -964,7 +964,7 @@ function spokenName(item: HTMLElement): string {
   return heard.textContent ?? "";
 }
 
-test("on a phone the bar's Inbox and the task's sidebar row wear the count of what needs the reader, named in the sidebar's words, and none at zero", async () => {
+test("on a phone the bar's Inbox wears the count of what needs the reader, named in the sidebar's words, and none at zero", async () => {
   // Note that main lists the three questions it counts, as its read of the account does.
   const asks = ["q-1", "q-2", "q-3"].map((id) => ({ id, agentId: "a-1", title: id, postedAt: 0 }));
   const listed = {
@@ -984,19 +984,6 @@ test("on a phone the bar's Inbox and the task's sidebar row wear the count of wh
   const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 need you");
   assert.ok(inbox, "the bar's Inbox is named with its count");
   assert.match(inbox.textContent ?? "", /3/u, "the Inbox's count is drawn");
-  const taskRow = [...page.querySelectorAll<HTMLElement>("aside.desktop-sidebar li")].findLast(
-    (row) => row.textContent?.includes(DOCUMENT_NAME),
-  );
-  // Note that the row's end leaves its press's words while the row holds the keyboard, so the count is heard whether it stands or not.
-  const shown = taskRow ?? assert.fail("the task's sidebar row stands");
-  const keyed = shown.cloneNode(true);
-  assert.ok(keyed instanceof HTMLElement);
-  for (const end of keyed.querySelectorAll(".ui-list-row-meta")) end.remove();
-  assert.deepEqual(
-    [shown, keyed].map((row) => spokenName(row).match(/3 need you/gu)),
-    [["3 need you"], ["3 need you"]],
-    "the task's row is heard with its count once, its end shown or not",
-  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1375,6 +1362,7 @@ const PLACES = Object.values(PLACE);
 /** Where the router stands for a place it draws, Settings and a version history; none for a place the shell's props say. */
 function routedAt(place: Place): string | undefined {
   if (place === PLACE.SETTINGS) return SHELL_AT.SETTINGS;
+  if (place === PLACE.AGENT_PAGE) return agentAt("agent-page-1");
   return place === PLACE.VERSION_HISTORY ? SHELL_AT.VERSION_HISTORY : undefined;
 }
 

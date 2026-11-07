@@ -63,6 +63,7 @@ import {
 import {
   TASK_FILE_REFUSAL,
   TASK_TREE_ENTRY,
+  type TaskPullRequestLine,
   type TaskSummary,
   type TaskTreeEntry,
 } from "@repo/features/task-wire";
@@ -84,6 +85,7 @@ import {
   type AppStateSnapshot,
   type AppTranscript,
   type AppTranscripts,
+  type AppWorkspaceTools,
   OWN_PULL_REQUEST,
   OWN_TRANSCRIPT,
   RUN_PROFILE,
@@ -1064,30 +1066,18 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
     total: 1,
     working: 0,
     activityAt: STARTED_AT + 23 * MINUTE,
-    agents: [
-      {
-        id: agent.id,
-        title: agent.title,
-        model: agent.model,
-        effort: agent.effort,
-        status: agent.status,
-        at: STARTED_AT,
-      },
-    ],
     pullRequestTotal: 1,
-    pullRequests: [
-      {
-        number: PULL_REQUEST.number,
-        title: PULL_REQUEST.title,
-        state: PULL_REQUEST_STATE.OPEN,
-        checks: CHECK_SUMMARY.PASSING,
-        additions: ADDITIONS,
-        deletions: DELETIONS,
-        url: PULL_REQUEST.url,
-        agentId: agent.id,
-        queued: true,
-      },
-    ],
+  };
+  const pullRequest: TaskPullRequestLine = {
+    number: PULL_REQUEST.number,
+    title: PULL_REQUEST.title,
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: ADDITIONS,
+    deletions: DELETIONS,
+    url: PULL_REQUEST.url,
+    agentId: agent.id,
+    queued: true,
   };
   // Note that the agent works where its task does, as the task list carries its row.
   const task = open.tasks.find((each) => each.id === taskId);
@@ -1095,7 +1085,16 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
     ...open,
     tasks: open.tasks.map((each) => (each.id === taskId ? { ...each, agents } : each)),
     taskAgents: [
-      { ...agent, workspaceId: task?.workspaceId ?? "", repository: task?.repository ?? null },
+      {
+        ...agent,
+        workspaceId: task?.workspaceId ?? "",
+        repository: task?.repository ?? null,
+        settledAt: STARTED_AT,
+      },
+    ],
+    taskPullRequests: [
+      ...(open.taskPullRequests ?? []).filter((each) => each.taskId !== taskId),
+      { taskId, pullRequests: [pullRequest] },
     ],
   };
 }
@@ -1134,6 +1133,24 @@ function stagedTranscripts(held: AppTranscripts, transcript: AppTranscript): App
       [FIXTURE_AGENT_ID]: { ...held[FIXTURE_AGENT_ID], [OWN_TRANSCRIPT]: { rows: transcript } },
     };
     ofHeld.set(transcript, laid);
+  }
+  return laid;
+}
+
+/** Where the agent's `run_on_mac` stands, as the card its Runs on chip hangs reads it: its starter's Mac, listening. */
+const RUN_ON_MAC_HELD = {
+  rows: { runOnMac: { on: true, owner: { userId: "user-ada", name: "Ada Lovelace" } } },
+} as const;
+
+/** Main's held `run_on_mac` reads with the agent's own laid, one object for each of main's. */
+const STAGED_RUN_ON_MAC = new WeakMap<AppWorkspaceTools, AppWorkspaceTools>();
+
+/** Lays the agent's `run_on_mac` over main's held reads of it, one object for each of main's. */
+function stagedRunOnMac(held: AppWorkspaceTools): AppWorkspaceTools {
+  let laid = STAGED_RUN_ON_MAC.get(held);
+  if (laid === undefined) {
+    laid = { ...held, [FIXTURE_AGENT_ID]: RUN_ON_MAC_HELD };
+    STAGED_RUN_ON_MAC.set(held, laid);
   }
   return laid;
 }
@@ -1184,7 +1201,9 @@ const STAGED_PARTS = {
  * held as its Pull request tab's reads of them hold them
  * (`LIVE_READ.PULL_REQUEST_CHAPTERS`, `LIVE_READ.PULL_REQUEST` and its siblings),
  * and the agent's transcript as its tab's read of it holds it
- * (`LIVE_READ.TRANSCRIPT`), the long run's at the step it reached.
+ * (`LIVE_READ.TRANSCRIPT`), the long run's at the step it reached, and
+ * where its `run_on_mac` stands as its Runs on card reads it
+ * (`LIVE_READ.WORKSPACE_TOOLS`).
  * The same document, the very object, under any other profile.
  */
 export function agentAppState(state: AppStateSnapshot, taskId: string): AppStateSnapshot {
@@ -1214,6 +1233,7 @@ export function agentAppState(state: AppStateSnapshot, taskId: string): AppState
     [LIVE_READ.PAGES]: staged,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: chapters,
     [LIVE_READ.TRANSCRIPT]: stagedTranscripts(state[LIVE_READ.TRANSCRIPT], stagedTranscript(stage)),
+    [LIVE_READ.WORKSPACE_TOOLS]: stagedRunOnMac(state[LIVE_READ.WORKSPACE_TOOLS]),
     [LIVE_READ.PULL_REQUEST]: STAGED_PARTS[LIVE_READ.PULL_REQUEST](state[LIVE_READ.PULL_REQUEST]),
     [LIVE_READ.PULL_REQUEST_CHECKS]: STAGED_PARTS[LIVE_READ.PULL_REQUEST_CHECKS](
       state[LIVE_READ.PULL_REQUEST_CHECKS],

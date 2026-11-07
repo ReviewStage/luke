@@ -65,10 +65,10 @@ import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import {
+  heldTaskListAnswerSchema,
   TASK_LIST_ARCHIVED,
   TASK_STATUS,
   taskDeleteAnswerSchema,
-  taskListAnswerSchema,
 } from "@repo/features/task-wire";
 import { RUN_ON_MAC_OFF, workspaceToolsAnswerSchema } from "@repo/features/workspace-tools-wire";
 import { TURN_ORIGIN } from "@repo/wire";
@@ -1052,7 +1052,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
 
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, other)),
         );
@@ -1080,7 +1080,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
               yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
             );
             const tasks = readAnswer(
-              taskListAnswerSchema,
+              heldTaskListAnswerSchema,
               HOSTED_HTTP_STATUS.OK,
               yield* ask(request(TASKS, owner)),
             );
@@ -1258,7 +1258,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
 
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, owner, { archived: TASK_LIST_ARCHIVED.INCLUDE })),
         );
@@ -1285,7 +1285,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         const listed = (bearer: string, archived?: string) =>
           Effect.map(ask(request(TASKS, bearer, { archived })), (answered) =>
-            readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+            readAnswer(heldTaskListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
           );
         const page = readAnswer(
           agentPageAnswerSchema,
@@ -1339,7 +1339,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             ask(request(TASKS, bearer)),
             (answered) =>
               readAnswer(
-                taskListAnswerSchema,
+                heldTaskListAnswerSchema,
                 HOSTED_HTTP_STATUS.OK,
                 answered,
               ).planlessAgents?.find((each) => each.id === agent.id)?.pinnedAt,
@@ -1377,9 +1377,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const patch = (body: { pinned: boolean; position: string }) =>
           ask(request(AGENT, owner, { method: "PATCH", id: agent.id, body }));
         const listed = Effect.map(ask(request(TASKS, owner)), (answered) =>
-          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).planlessAgents?.find(
-            (each) => each.id === agent.id,
-          ),
+          readAnswer(
+            heldTaskListAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            answered,
+          ).planlessAgents?.find((each) => each.id === agent.id),
         );
 
         const placed = yield* patch({ pinned: true, position: "a1" });
@@ -1439,7 +1441,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an agent's run_on_mac standing reads for its starter, and as not found for a member who reaches the agent but not its task",
+    "an agent's run_on_mac standing names its starter's Mac for its starter, says nothing for an agent on a device, and reads as not found for a member who reaches the agent but not its task",
     () =>
       Effect.gen(function* () {
         const agentSessions = fakeAgentSessions();
@@ -1462,7 +1464,26 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         const teammate = yield* ask(request(AGENT_WORKSPACE_TOOLS, other, { id: agent.id }));
 
-        assert.deepEqual(read.runOnMac, { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY });
+        assert.deepEqual(read.runOnMac, {
+          on: false,
+          reason: RUN_ON_MAC_OFF.MAC_AWAY,
+          owner: { userId: owner, name: "Test User" },
+        });
+        // An agent on a device is offered no run_on_mac, so it is answered nothing.
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ machine: AGENT_MACHINE.DEVICE })
+            .where(eq(agentTable.id, agent.id)),
+        );
+        assert.deepEqual(
+          readAnswer(
+            workspaceToolsAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(AGENT_WORKSPACE_TOOLS, owner, { id: agent.id })),
+          ),
+          {},
+        );
         assert.deepEqual(
           teammate,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),

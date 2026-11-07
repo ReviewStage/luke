@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import type { AgentBrowserTab, BrowserTabsPlace } from "@repo/features/agent-browser-tab-wire";
 import { browserAddressOf, chordIsWindows } from "@repo/features/browser-acts";
 import {
@@ -24,6 +23,7 @@ import {
   FailureNote,
   FILL_ELEMENT,
   Fill,
+  forkEffect,
   IconButton,
   PaneBar,
   REMOTE_KEY_ACTION,
@@ -43,9 +43,8 @@ import {
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { useMutation } from "@tanstack/react-query";
+import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { Clock, Duration, Effect, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -67,13 +66,13 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
 import { failureShown } from "../failure-report.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
   type CloudBrowserFrame,
+  type CloudBrowserLive,
   type CloudBrowserView,
   type CloudBrowserViewport,
   cloudBrowserLive,
@@ -86,6 +85,7 @@ import {
   noteOpenedCloudTab,
 } from "./cloud-browser-tabs.js";
 import { FILE_VIEW_HISTORY_CLASS } from "./file-view.js";
+import { useSandboxOpen } from "./use-workspace-agents.js";
 
 /**
  * cloud-browser-pane.tsx -- one Browser tab in an agent's cloud browser, in the side panel: a bar with back, forward, reload, and the address, then Take over and Hand back, and the page drawn live on a canvas; or a draft of one, which opens nothing until its bar opens an address.
@@ -138,9 +138,6 @@ const TEXT_PIECE_CHARS = 4_096;
 
 /** The keys a Command chord edits text with on the page, sent there as Control. */
 const PAGE_EDIT_KEYS: ReadonlySet<string> = new Set(["a", "c", "x", "z"]);
-
-/** A view that never opens, for a pane not on screen. */
-const RESTING = Atom.make<AsyncResult.AsyncResult<CloudBrowserView>>(AsyncResult.initial());
 
 /** The mouse buttons, by a DOM event's `button`. */
 const BUTTON_OF = [
@@ -390,13 +387,33 @@ function agentLately(lastActedAt: number): Stream.Stream<boolean> {
   );
 }
 
-/** `agentLately` for a component: the words it draws go on the clock's own edge, so nothing else need redraw the bar. */
+/** What `agentLately` last said, and for which act. */
+interface Lately {
+  readonly lastActedAt: number;
+  readonly lately: boolean;
+}
+
+/**
+ * `agentLately` for a component: the words it draws go on `@repo/ui`'s
+ * edge, so nothing else need redraw the bar. Note that a reading for an
+ * older act is set aside, so a newer act is said from the render's time
+ * until its own reading lands.
+ */
 function useAgentLately(lastActedAt: number): boolean {
-  const atom = useMemo(() => rendererRuntime.atom(agentLately(lastActedAt)), [lastActedAt]);
-  return AsyncResult.getOrElse(
-    useAtomValue(atom),
-    () => Date.now() - lastActedAt < Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT),
+  const said = useCreateStore<Lately | undefined>(undefined);
+  useEffect(
+    () =>
+      forkEffect(
+        Stream.runForEach(agentLately(lastActedAt), (lately) =>
+          Effect.sync(() => said.setState(() => ({ lastActedAt, lately }))),
+        ),
+      ),
+    [lastActedAt, said],
   );
+  const reading = useSelector(said);
+  return reading?.lastActedAt === lastActedAt
+    ? reading.lately
+    : Date.now() - lastActedAt < Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT);
 }
 
 /** What the bar says of who has the tab: the member, another member, its agent lately, or nothing. */
@@ -567,7 +584,9 @@ export function CloudBrowserPane({
 
   // Note that the view stands only while someone can see it, because a socket left open in a hidden window holds its agent's sandbox.
   const visible = usePageVisible();
-  const watched = shown && visible;
+  // Note that no view opens while the task list says the agent's sandbox is not open, because the relay would only answer not opened; it opens as the list says it opened.
+  const sandboxWaited = useSandboxOpen(tab.agentId) === false;
+  const watched = shown && visible && !sandboxWaited;
   // A pane shown again opens a new view, since the one before closed as it was hidden, or as idle meanwhile.
   const live = useMemo(
     () =>
@@ -579,11 +598,20 @@ export function CloudBrowserPane({
       }),
     [tab.agentId, tab.id, onFrame, generation, watched],
   );
-  const views = useMemo(
-    () => (watched ? rendererRuntime.atom(live.views) : RESTING),
-    [live, watched],
-  );
-  const view = AsyncResult.getOrElse(useAtomValue(views), () => OPENING_VIEW);
+  // Note that a view is kept with the connection it came from, so a pane shown again opens anew.
+  const views = useCreateStore<
+    { readonly live: CloudBrowserLive; readonly view: CloudBrowserView } | undefined
+  >(undefined);
+  useEffect(() => {
+    if (!watched) return;
+    return forkEffect(
+      Stream.runForEach(live.views, (view) =>
+        Effect.sync(() => views.setState(() => ({ live, view }))),
+      ),
+    );
+  }, [live, watched, views]);
+  const reading = useSelector(views);
+  const view = watched && reading?.live === live ? reading.view : OPENING_VIEW;
   useLayoutEffect(() => {
     const element = body.current;
     if (element === null) return;

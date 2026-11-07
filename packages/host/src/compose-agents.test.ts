@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CALL_FAULT } from "@repo/features";
+import { CALL_FAULT, ServiceReach } from "@repo/features";
 import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
-import { agentDefaultOf } from "@repo/features/account-preferences-live";
+import { ACCOUNT_PREFERENCES_READ, agentDefaultOf } from "@repo/features/account-preferences-live";
+import { AGENT_ORIGIN_READ } from "@repo/features/agent-origin-live";
 import {
   AGENT_CALL_FAILURE,
   type AgentAgentAnswer,
@@ -49,6 +50,7 @@ import {
   type SealedLiveQueryWire,
   type TranscriptNowAnswer,
 } from "@repo/features/live-wire";
+import { WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import {
   AGENT_DEFAULT_CHOICE,
@@ -61,6 +63,7 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@repo/features/provider-key-wire";
+import { PULL_REQUEST_CHAPTERS_READ } from "@repo/features/pull-request-chapters-live";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import {
   PULL_REQUEST_ACTION,
@@ -76,7 +79,7 @@ import {
 import { type EntityPool, entityPool } from "@repo/sync";
 import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Deferred, Duration, Effect, Fiber } from "effect";
+import { Deferred, Duration, Effect, Fiber, SubscriptionRef } from "effect";
 import { TestClock } from "effect/testing";
 import {
   type AppAccountPreferences,
@@ -319,6 +322,8 @@ function fakeService() {
   let committedIn: { readonly txid?: string } = {};
   /** The item as the agent changed it first, which a close is answered not taken with; none takes every close. */
   let changedFirst: InboxItem | undefined;
+  /** What each close waits on once asked, before it is answered. */
+  let closesWait: Effect.Effect<void> = Effect.void;
   /** The transaction the service says wrote a sent message's row; none says none was written. */
   let sentTxid: string | undefined;
   /** What a rename, an archive, a change of model, or a switch of servers waits on before the service answers it; nothing from the start. */
@@ -354,30 +359,46 @@ function fakeService() {
         asked.push("models");
         return { models: offeredModels };
       }),
-    accountPreferencesLive: (_userId, poll, after) =>
-      Effect.suspend((): ReturnType<AgentClient["accountPreferencesLive"]> => {
-        if (poll !== true) asked.push("preferences-live");
-        return poll === true
-          ? live.preferences.poll(after)
-          : Effect.succeed(live.preferences.first());
-      }),
     writeDefault: (choice) =>
       Effect.sync(() => {
         asked.push(`default:${choice.model}:${choice.effort}`);
         return { choice };
       }),
-    // SAFETY: the hosts' read is the one live read the client is asked for by its declaration.
+    writeChaptersProvider: (provider) =>
+      Effect.sync(() => {
+        asked.push(`chapters-provider:${provider}`);
+        return { provider };
+      }),
+    // SAFETY: each declared read the client is asked for answers its own script's rows, as its declaration's answer.
     liveRead: ((
       read: { readonly name: string },
-      _params: unknown,
+      params: { readonly workspaceId?: string; readonly id?: string },
       poll?: { readonly after?: string | undefined },
-    ) => {
-      assert.equal(read.name, HOSTS_READ.name);
-      return Effect.map(
-        poll === undefined ? Effect.succeed(live.hosts.first()) : live.hosts.poll(poll.after),
-        (answer) => ({ ...answer, installScriptUrl: INSTALL_SCRIPT }),
-      );
-    }) as AgentClient["liveRead"],
+    ) =>
+      Effect.suspend((): Effect.Effect<unknown> => {
+        const answered = <Part extends string>(script: PolledLive<Part>) =>
+          poll === undefined ? Effect.succeed(script.first()) : script.poll(poll.after);
+        switch (read.name) {
+          case HOSTS_READ.name:
+            return Effect.map(answered(live.hosts), (answer) => ({
+              ...answer,
+              installScriptUrl: INSTALL_SCRIPT,
+            }));
+          case ACCOUNT_PREFERENCES_READ.name:
+            if (poll === undefined) asked.push("preferences-live");
+            return answered(live.preferences);
+          case AGENT_ORIGIN_READ.name:
+            if (poll === undefined) asked.push(`agent-origin-live:${params.id}`);
+            return answered(live.origin);
+          case WORKSPACE_MEMORIES_READ.name:
+            if (poll === undefined) asked.push(`memories-live:${params.workspaceId}`);
+            return answered(live.memories);
+          case PULL_REQUEST_CHAPTERS_READ.name:
+            return Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+          default:
+            return assert.fail(`no script answers the live read ${read.name}`);
+        }
+      })) as AgentClient["liveRead"],
     devicePresence: () =>
       Effect.suspend(() => {
         asked.push("presence");
@@ -553,11 +574,6 @@ function fakeService() {
         asked.push(`changes:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHANGES;
       }),
-    pullRequestChaptersLive: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    agentOriginLive: (agentId, _userId, poll, after) => {
-      if (poll !== true) asked.push(`agent-origin-live:${agentId}`);
-      return poll === true ? live.origin.poll(after) : Effect.succeed(live.origin.first());
-    },
     generateChapters: (agentId, number) =>
       Effect.sync(() => {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
@@ -639,11 +655,7 @@ function fakeService() {
         asked.push("remove-token");
         return { token: null };
       }),
-    workspaceMemoriesLive: (workspaceId, _userId, poll, after) =>
-      Effect.suspend((): ReturnType<AgentClient["workspaceMemoriesLive"]> => {
-        if (poll !== true) asked.push(`memories-live:${workspaceId}`);
-        return poll === true ? live.memories.poll(after) : Effect.succeed(live.memories.first());
-      }),
+
     forgetMemory: (forget) =>
       Effect.andThen(
         Effect.sync(() => {
@@ -765,13 +777,21 @@ function fakeService() {
     closeInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(`close:${itemId}:${request.revision}:${request.clientKey}`);
-        if (changedFirst !== undefined) return { item: changedFirst, taken: false };
-        return {
-          item: { ...ITEM, status: INBOX_STATUS.CLOSED, closedBy: { userId: "u1", name: "Dana" } },
-          taken: true,
-          ...committedIn,
-        };
-      }),
+      }).pipe(
+        Effect.andThen(Effect.suspend(() => closesWait)),
+        Effect.map(() => {
+          if (changedFirst !== undefined) return { item: changedFirst, taken: false };
+          return {
+            item: {
+              ...ITEM,
+              status: INBOX_STATUS.CLOSED,
+              closedBy: { userId: "u1", name: "Dana" },
+            },
+            taken: true,
+            ...committedIn,
+          };
+        }),
+      ),
     answerInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(`answer:${itemId}:${request.revision}:${request.reply}:${request.clientKey}`);
@@ -879,6 +899,10 @@ function fakeService() {
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
     },
+    /** What each close from now on waits on once asked, before it is answered. */
+    answerClosesAfter: (wait: Effect.Effect<void>) => {
+      closesWait = wait;
+    },
     /** Whether each Start from now on goes unanswered, as one sent offline does. */
     leaveStartsUnanswered: (unanswered: boolean) => {
       startsUnanswered = unanswered;
@@ -902,9 +926,9 @@ function fakeService() {
       keptKeys = keys;
       offeredModels = models;
     },
-    /** The service never answering how long ago the devices beat, from now on. */
-    hangPresence: () => {
-      presence = Effect.never;
+    /** Every read of how long ago the devices beat failing from now on, as one past its deadline does. */
+    failPresence: () => {
+      presence = Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
     },
   };
 }
@@ -1112,6 +1136,8 @@ function subject(
       /** The composer's row writes that may wait, as a relaunch lays its queue back by. */
       queueable: composer.queueable,
       flushHeldCloses: composer.flushHeldCloses,
+      letGoHeldCloses: composer.letGoHeldCloses,
+      answerClosesAfter: service.answerClosesAfter,
       transcripts,
       /** Each of `transcript`'s rows the host laid, in order. */
       held: (transcript?: { readonly agentId: string; readonly callId?: string }) =>
@@ -1125,7 +1151,7 @@ function subject(
       answerKeys: service.answerKeys,
       markKeys: service.markKeys,
       answerMarks: service.answerMarks,
-      hangPresence: service.hangPresence,
+      failPresence: service.failPresence,
       sealTranscript: service.sealTranscript,
       pageNow: service.pageNow,
       holdPages: service.holdPages,
@@ -1213,6 +1239,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
         effort: "xhigh",
       }),
       { choice: { model: "openai/gpt-6.1-sol", effort: "xhigh" } },
+    );
+    assert.deepEqual(
+      yield* acts.AGENTS_CHAPTERS_PROVIDER_WRITE({ provider: MODEL_PROVIDER.OPENAI }),
+      { provider: MODEL_PROVIDER.OPENAI },
     );
     assert.deepEqual(yield* acts.AGENTS_LIST({ taskId: TASK_ID }), {
       agents: [AGENT],
@@ -1446,6 +1476,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
 
     assert.deepEqual(asked, [
       "default:openai/gpt-6.1-sol:xhigh",
+      `chapters-provider:${MODEL_PROVIDER.OPENAI}`,
       `list:${TASK_ID}`,
       `list:${TASK_ID}:archived`,
       "workspace:workspace-1:acme/relay",
@@ -2136,34 +2167,39 @@ it.effect(
 );
 
 it.effect(
-  "a live read that gets no answer is asked again past the bound, and the transcript reads on once the service answers",
+  "a live read that gets no answer is asked again past the bound on a backoff, and the transcript reads on the moment the service answers again",
   () =>
     Effect.gen(function* () {
-      const { call, asked, held, sealTranscript, live } = yield* subject();
-      const seals = () => asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
-      sealTranscript(OFFLINE);
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
-      yield* settled;
-      yield* TestClock.adjust("2 minutes");
-      yield* settled;
-      assert.ok(seals() > 60, `read ${seals()} times`);
-      assert.deepEqual(
-        held().at(-1)?.failure,
-        OFFLINE,
-        "the read said it got no answer, never that it gave up",
-      );
+      const reach = yield* SubscriptionRef.make({ reachable: false, answeredAt: 0 });
+      yield* Effect.gen(function* () {
+        const { call, asked, held, sealTranscript, live } = yield* subject();
+        const seals = () => asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
+        sealTranscript(OFFLINE);
+        yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+        yield* settled;
+        yield* TestClock.adjust("2 minutes");
+        yield* settled;
+        // Note that the waits double from two seconds, asking at 0, 2, 6, 14, 30, and 62 seconds: past the bound of refusals, and nowhere near once a second.
+        assert.equal(seals(), 6);
+        assert.deepEqual(
+          held().at(-1)?.failure,
+          OFFLINE,
+          "the read said it got no answer, never that it gave up",
+        );
 
-      // Note that the read never gave up, so its next ask, a second on, finds the service answering.
-      sealTranscript(LIVE_ANSWERED);
-      yield* TestClock.adjust("1 second");
-      yield* settled;
-      transcriptRows(live, 2);
-      yield* settled;
-      assert.equal(held().at(-1)?.failure, undefined, "the failure is let go once it reads");
-      assert.ok(
-        asked.includes(`messages-now:${AGENT_ID}:1:0`),
-        "the page past the newest is read once the live read stands",
-      );
+        // Note that the read never gave up, so the service answering again asks at once, a minute short of its wait.
+        sealTranscript(LIVE_ANSWERED);
+        yield* SubscriptionRef.set(reach, { reachable: true, answeredAt: 1 });
+        yield* settled;
+        assert.equal(seals(), 7);
+        transcriptRows(live, 2);
+        yield* settled;
+        assert.equal(held().at(-1)?.failure, undefined, "the failure is let go once it reads");
+        assert.ok(
+          asked.includes(`messages-now:${AGENT_ID}:1:0`),
+          "the page past the newest is read once the live read stands",
+        );
+      }).pipe(Effect.provideService(ServiceReach, reach));
     }),
 );
 
@@ -2458,26 +2494,29 @@ it.effect(
 );
 
 it.effect(
-  "a transcript held again while the service answers no read at all stays followed, and reads on once the service is back",
+  "a transcript held again while the service answers no read at all stays followed, and reads on the moment the service is back",
   () =>
     Effect.gen(function* () {
-      const harness = yield* subject();
-      yield* followedOnce(harness);
-      const { held } = harness;
-      harness.pageNow({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-      harness.pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
-      yield* settled;
-      yield* TestClock.adjust("40 seconds");
-      yield* settled;
+      const reach = yield* SubscriptionRef.make({ reachable: false, answeredAt: 0 });
+      yield* Effect.gen(function* () {
+        const harness = yield* subject();
+        yield* followedOnce(harness);
+        const { held } = harness;
+        harness.pageNow({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+        harness.pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+        yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+        yield* settled;
+        yield* TestClock.adjust("40 seconds");
+        yield* settled;
 
-      const back = pageNow("3:0", { holds: false, text: "Back again." });
-      harness.pageNow(back);
-      harness.pageNewest(newestPage("3:0", "Back again.", "40"));
-      yield* TestClock.adjust("5 seconds");
-      yield* settled;
-      assert.equal(held().at(-1)?.failure, undefined);
-      assert.ok(JSON.stringify(held().at(-1)?.messages).includes("Back again."));
+        const back = pageNow("3:0", { holds: false, text: "Back again." });
+        harness.pageNow(back);
+        harness.pageNewest(newestPage("3:0", "Back again.", "40"));
+        yield* SubscriptionRef.set(reach, { reachable: true, answeredAt: 1 });
+        yield* settled;
+        assert.equal(held().at(-1)?.failure, undefined);
+        assert.ok(JSON.stringify(held().at(-1)?.messages).includes("Back again."));
+      }).pipe(Effect.provideService(ServiceReach, reach));
     }),
 );
 
@@ -3691,6 +3730,136 @@ it.effect(
     }),
 );
 
+/** A close of `ITEM` held for its Undo under `clientKey`, as a window asks it. */
+const heldClose = (clientKey: string) => ({
+  itemId: ITEM.id,
+  revision: ITEM.revision,
+  clientKey,
+  held: true,
+});
+
+it.effect(
+  "a close held for its Undo is sent under the account that held it as that account leaves, before it has left",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const { acts, asked, letGoHeldCloses } = yield* subject({ accountId: () => account });
+      /** Each close the service was asked, with the account signed in as it was asked. */
+      const closesUnder = () => asked.filter((each) => each.startsWith("close:"));
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+
+      yield* letGoHeldCloses;
+      assert.deepEqual(closesUnder(), [`close:${ITEM.id}:${ITEM.revision}:close-1`]);
+      account = "user-ben";
+      yield* Fiber.join(closing);
+      assert.equal(closesUnder().length, 1);
+    }),
+);
+
+it.effect(
+  "a held close still out as its account leaves is dropped once the bound has passed, its item standing open, and is never sent under the next account",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const { acts, asked, letGoHeldCloses, answerClosesAfter } = yield* subject({
+        accountId: () => account,
+      });
+      const closes = () => asked.filter((each) => each.startsWith("close:"));
+      answerClosesAfter(Effect.never);
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+
+      const leaving = yield* Effect.forkChild(letGoHeldCloses);
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* Fiber.join(leaving);
+      const answer = yield* Fiber.join(closing);
+      assert.ok("failure" in answer, "the close is not taken, so its item stands open");
+      account = "user-ben";
+      answerClosesAfter(Effect.void);
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* settled;
+      assert.deepEqual(closes(), [`close:${ITEM.id}:${ITEM.revision}:close-1`]);
+    }),
+);
+
+it.effect(
+  "a held close let go once another account is signed in is never sent, and its item stands open",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const { acts, asked } = yield* subject({ accountId: () => account });
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+
+      account = "user-ben";
+      yield* acts.AGENTS_INBOX_CLOSE_RELEASE({ clientKey: "close-1", send: true });
+      const answer = yield* Fiber.join(closing);
+      assert.ok("failure" in answer, "the close is not taken, so its item stands open");
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [],
+      );
+    }),
+);
+
+it.effect(
+  "a held close its window let go while it waited behind another write is never sent once another account is signed in",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
+      const { acts, asked, answerMarks } = yield* subject({ pool, accountId: () => account });
+      answerMarks(false);
+      yield* acts.AGENTS_INBOX_READ_STATE({ itemId: ITEM.id, unread: false });
+      yield* settled;
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+      yield* acts.AGENTS_INBOX_CLOSE_RELEASE({ clientKey: "close-1", send: true });
+
+      account = "user-ben";
+      answerMarks(true);
+      yield* pool.resend;
+      yield* settled;
+      yield* Fiber.join(closing);
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [],
+      );
+    }),
+);
+
+it.effect(
+  "a held close still waiting behind another write as its account leaves is never sent under the next account",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
+      const { acts, asked, answerMarks, letGoHeldCloses } = yield* subject({
+        pool,
+        accountId: () => account,
+      });
+      answerMarks(false);
+      yield* acts.AGENTS_INBOX_READ_STATE({ itemId: ITEM.id, unread: false });
+      yield* settled;
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+      yield* acts.AGENTS_INBOX_CLOSE_RELEASE({ clientKey: "close-1", send: true });
+
+      yield* letGoHeldCloses;
+      account = "user-ben";
+      answerMarks(true);
+      yield* pool.resend;
+      yield* settled;
+      yield* Fiber.join(closing);
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [],
+      );
+    }),
+);
+
 it.effect(
   "a rename, an archive, a change of model, and a switch of MCP servers each stand on the agent's row of the task list from the press, and a delete draws the agent gone before the service answers",
   () =>
@@ -3995,33 +4164,21 @@ it.effect(
     }),
 );
 
-it.effect(
-  "a read of the beats the service never answers counts as failed past its bound, the beats it answered before kept, stale",
-  () =>
-    Effect.gen(function* () {
-      const { call, answerPresence, hangPresence, beats } = yield* subject();
-      const device = "6d2c1b0a-9f8e-4d7c-8b6a-5e4d3c2b1a09";
-      answerPresence({ devices: [{ deviceId: device, ageMs: 5_000 }] });
-      yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW);
-      yield* settled;
+it.effect("a read of the beats that fails keeps the beats it answered before, stale", () =>
+  Effect.gen(function* () {
+    const { call, answerPresence, failPresence, beats } = yield* subject();
+    const device = "6d2c1b0a-9f8e-4d7c-8b6a-5e4d3c2b1a09";
+    answerPresence({ devices: [{ deviceId: device, ageMs: 5_000 }] });
+    yield* call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW);
+    yield* settled;
 
-      hangPresence();
-      yield* TestClock.adjust(Duration.seconds(20));
-      yield* settled;
-      yield* TestClock.adjust(Duration.seconds(11));
-      yield* settled;
-      assert.deepEqual(
-        beats().at(-1),
-        { "user-dana": { rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 0 } } },
-        "a read still within its bound has not failed",
-      );
-
-      yield* TestClock.adjust(Duration.seconds(1));
-      yield* settled;
-      assert.deepEqual(beats().at(-1), {
-        "user-dana": {
-          rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 32_000, stale: true },
-        },
-      });
-    }),
+    failPresence();
+    yield* TestClock.adjust(Duration.seconds(20));
+    yield* settled;
+    assert.deepEqual(beats().at(-1), {
+      "user-dana": {
+        rows: { beats: [{ deviceId: device, beatAt: -5_000 }], askedAt: 20_000, stale: true },
+      },
+    });
+  }),
 );

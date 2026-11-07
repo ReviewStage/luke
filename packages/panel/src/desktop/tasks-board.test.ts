@@ -911,32 +911,13 @@ test("a task from a service before priorities offers No priority on its card, an
   assert.deepEqual(sent, [["t-30", { priority: TASK_PRIORITY.HIGH }]]);
 });
 
-test("a card wears one icon for how its agents stand, an agent at work before the pull requests they opened", async () => {
+test("a card wears one icon for how its agents stand, one at work among them", async () => {
   const working: TaskSummary = {
     ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
     agents: {
       total: 2,
       working: 1,
-      agents: [],
       pullRequestTotal: 2,
-      pullRequests: [
-        {
-          number: 4101,
-          title: "First try",
-          state: "merged",
-          checks: "passing",
-          additions: 1,
-          deletions: 1,
-        },
-        {
-          number: 4120,
-          title: "Safari",
-          state: "open",
-          checks: "passing",
-          additions: 9,
-          deletions: 3,
-        },
-      ],
     },
   };
   const board = await mountBoard([working]);

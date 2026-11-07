@@ -6,7 +6,6 @@ import {
 } from "@repo/features/agent-view";
 import {
   type AgentOlderAnswer,
-  type AgentSummary,
   applyMessagesPage,
   type ListedAgent,
 } from "@repo/features/agent-wire";
@@ -23,8 +22,8 @@ import { NO_TASK_SECTIONS } from "@repo/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
+import type { AgentRoute } from "../agent-route.js";
 import type { AutomationsRoute } from "../automations-route.js";
-import type { SummaryPin } from "../desktop/task-summary.js";
 import type { InboxRoute } from "../inbox-route.js";
 import { descriptionEditMutation } from "../tasks/description-edit-mutation.js";
 import {
@@ -59,7 +58,7 @@ const LISTED_WORKSPACE_ID = "workspace-listed";
 
 /** An agent as the task list carries it: with the workspace and repository its own row names, a test's own where given, else one workspace and no repository. */
 export function listedAgent(
-  agent: AgentSummary,
+  agent: Omit<ListedAgent, "workspaceId" | "repository">,
   place: Partial<Pick<ListedAgent, "workspaceId" | "repository">> = {},
 ): ListedAgent {
   return {
@@ -228,14 +227,6 @@ export function tellingTranscripts(): TranscriptsTelling {
 export function waitingOf(item: InboxItem): AppInboxWaitingItem {
   return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
 }
-
-/** The task's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
-export const UNPINNED_SUMMARY: SummaryPin = {
-  pinned: false,
-  onToggle: ignore,
-  wide: true,
-  onMeasured: ignore,
-};
 
 /** A task whose version history is shut, its history still being read, no version chosen, every press ignored. */
 function versionHistoryControl(
@@ -458,6 +449,14 @@ export const PERSON_AWAY: PersonRoute = {
   onPreload: ignore,
 };
 
+/** An agent's page's route standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const AGENT_AWAY: AgentRoute = {
+  agentId: undefined,
+  workspace: undefined,
+  onOpen: ignore,
+  onClose: ignore,
+};
+
 /**
  * A signed-in Tasks tab on screen on Home with no tasks, every
  * press ignored, bound for whichever task it is given as open; the agents
@@ -551,7 +550,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onPullRequestView: () => undefined,
       strip: DRAWN_KINDS,
       tab: undefined,
-      preview: undefined,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       opened: 0,
       onToggle: ignore,
@@ -571,10 +569,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onUnpin: ignore,
       onRenamePins: ignore,
       onPlacePins: ignore,
+      onOpen: ignore,
       onOpenFile: ignore,
-      onPreview: ignore,
-      onPreviewFile: ignore,
-      onKeep: ignore,
       onBrowseFile: ignore,
       onFileHistory: ignore,
       onResize: ignore,

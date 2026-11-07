@@ -66,6 +66,12 @@ whether the provider accepts it. We never send a saved credential back to your
 device, log it, or include it in analytics, error reports, or screen
 recordings.
 
+A workspace's owners and admins can save environment variables for the
+workspace, which we store sealed the same way. Each of the workspace's cloud
+agents is handed them as environment variables in its sandbox as it starts a
+turn, so the agent can read them, and a value it reads or prints may reach its
+model and its transcript. Agents on your Mac are never handed them.
+
 ### Integrations and connected apps
 
 If you connect an integration (such as Linear, Notion, Sentry, Slack, Gmail,
@@ -244,13 +250,15 @@ affected users and relevant authorities as required by applicable law.
 
 We retain your data for as long as your account is active and as needed to
 provide the Service. Deleting a task deletes it at once with its history,
-pages, inbox items, and pictures; its agents' transcripts and sandboxes are
-removed seven days later. When you delete your account:
+pages, inbox items, and pictures; its agents' transcripts are removed seven
+days later, and their sandboxes and those sandboxes' snapshots expire and are
+removed seven days after they were last used. When you delete your account:
 
 - **Account data** (profile, sessions, OAuth tokens, saved credentials,
   preferences, and integration records) is deleted at once.
 - **Your tasks, descriptions, transcripts, and inbox items** are deleted at once, and
-  your agents' sandboxes shortly after.
+  your agents' sandboxes and their snapshots expire and are removed seven days
+  after they were last used.
 - **Workspaces you own**, and the memories, comments, and description text you left in
   them, stay with the workspace without your name.
 - **Usage data and screen recordings:** we ask PostHog to erase them; if it

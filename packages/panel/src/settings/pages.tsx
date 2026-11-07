@@ -8,7 +8,7 @@ import {
   type SettingsView,
 } from "@repo/settings/settings-views";
 import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon, ProductMark } from "@repo/ui";
-import { FlaskConicalIcon, GLYPH, InfoIcon } from "@repo/ui/icons";
+import { FlaskConicalIcon, GLYPH, InfoIcon, VariableIcon } from "@repo/ui/icons";
 import { settingsPageShown } from "./settings-rows.js";
 
 /** A page's name and glyph. */
@@ -29,6 +29,7 @@ interface SettingsPage {
 const SETTINGS_PAGE = {
   [SETTINGS_VIEW.ACCOUNT]: { title: "Account", icon: <GLYPH.PERSON /> },
   [SETTINGS_VIEW.WORKSPACE]: { title: "Workspace", icon: <GLYPH.PEOPLE /> },
+  [SETTINGS_VIEW.ENVIRONMENT]: { title: "Environment", icon: <VariableIcon /> },
   [SETTINGS_VIEW.AGENTS]: { title: "Agents", icon: <GLYPH.AGENT /> },
   [SETTINGS_VIEW.HOSTS]: { title: "Hosts", icon: <GLYPH.HOST /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },

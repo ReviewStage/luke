@@ -13,10 +13,15 @@
  * (`exactBodyInput`). The outputs are the wire schemas flipped
  * (`packages/service/src/orpc/base.ts`). Beside them, one part of a
  * transcript's message read whole, at once, for a part a page carried cut.
+ *
+ * Every procedure declares its own refusals (`declaredProcedure`): a read
+ * refuses an agent, a worker, or a part not found, and a message or a
+ * change of the queue refuses as the one steer path does
+ * (`MESSAGE_REFUSALS`).
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   AGENT_BOUNDS,
@@ -30,7 +35,8 @@ import {
   MAXIMUM_ATTACHMENTS_BODY_BYTES,
 } from "../agent-wire.js";
 import { transcriptNowAnswerSchema } from "../live-wire.js";
-import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
+import { bodyCap, declaredProcedure, exactBodyInput, refuses } from "./base.js";
 
 /** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
 const MESSAGE_BODY_BYTES =
@@ -38,6 +44,44 @@ const MESSAGE_BODY_BYTES =
 
 /** The status a message handed to an agent is answered with: taken, its turn yet to read it. */
 const ACCEPTED = 202;
+
+/**
+ * What a message to an agent refuses, and a change of its queue, which may
+ * steer a queued message into it (`coder-host/steer.ts`'s
+ * `steerAgentWritten`, `messages-procedures.ts`): the agent not found or not
+ * the caller's to write to, words past the bound, a session still coming up,
+ * a repository its checkout no longer reaches, a credential missing or
+ * unreadable, and why its session would not take the words
+ * (`runtime-sessions.ts`'s `failedCallRefusal`): a plan that cannot pay, its
+ * session ended, its harness not reached from here, its device removed or
+ * away. GitHub unanswered is let through by the steer and declared all the
+ * same, as the client has always read it as its own failure. A queue full or
+ * out of order is an invalid request.
+ */
+const MESSAGE_REFUSALS = [
+  HOSTED_API_ERROR.NOT_FOUND,
+  HOSTED_API_ERROR.NOT_PERMITTED,
+  HOSTED_API_ERROR.MESSAGE_TOO_LONG,
+  HOSTED_API_ERROR.AGENT_NOT_READY,
+  HOSTED_API_ERROR.AGENT_RETIRED,
+  HOSTED_API_ERROR.DEVICE_REMOVED,
+  HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+  HOSTED_API_ERROR.GITHUB_UNANSWERED,
+  HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE,
+  HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT,
+  HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE,
+  HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED,
+  HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE,
+  HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING,
+  HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE,
+  HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
+] as const;
+
+/** A read of an agent's or a worker's transcript, or of one of its parts, refuses one not found: an agent the caller does not reach, a call or an index that names none. A cursor that is none is an invalid request. */
+const readProcedure = declaredProcedure.errors(refuses(HOSTED_API_ERROR.NOT_FOUND));
+
+/** A message to an agent, or a change of its queue. */
+const messageProcedure = declaredProcedure.errors(refuses(...MESSAGE_REFUSALS));
 
 /** A query value as the handler reads it, checked there rather than here. */
 const queryValue = EffectSchema.optionalKey(EffectSchema.String);
@@ -72,12 +116,12 @@ const newestAnswerSchema = EffectSchema.Union([agentNewestAnswerSchema, agentOld
 
 export const messagesContract = {
   /** One agent's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
-  agent: hostedProcedure
+  agent: readProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/messages" }))
     .input(EffectSchema.Struct({ ...byId, ...agentTranscriptQuery }))
     .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
   /** One message handed to an agent, answering the agent as it then stands. */
-  send: hostedProcedure
+  send: messageProcedure
     .meta(bodyCap(MESSAGE_BODY_BYTES))
     .meta(
       openapi({
@@ -90,7 +134,7 @@ export const messagesContract = {
     .input(exactBodyInput(EffectSchema.Struct(byId), agentMessageRequestSchema))
     .output(EffectSchema.flip(agentMessageAnswerSchema)),
   /** One change of an agent's queue of messages waiting behind its turn, answering the queue as it then stands. */
-  queue: hostedProcedure
+  queue: messageProcedure
     .meta(bodyCap(MESSAGE_BODY_BYTES))
     .meta(
       openapi({
@@ -102,17 +146,17 @@ export const messagesContract = {
     .input(exactBodyInput(EffectSchema.Struct(byId), agentQueueChangeSchema))
     .output(EffectSchema.flip(agentQueueAnswerSchema)),
   /** One agent's worker's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
-  agentWorker: hostedProcedure
+  agentWorker: readProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))
     .input(EffectSchema.Struct({ ...byCall, ...agentTranscriptQuery }))
     .output(EffectSchema.flip(agentTranscriptAnswerSchema)),
   /** One agent's transcript read back from its end, at once: its newest page, or, with `before`, the page below it. */
-  agentNewest: hostedProcedure
+  agentNewest: readProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/messages/newest" }))
     .input(EffectSchema.Struct({ ...byId, ...newestQuery }))
     .output(EffectSchema.flip(newestAnswerSchema)),
   /** One agent's worker's transcript read back from its end, at once: its newest page, or, with `before`, the page below it. */
-  agentWorkerNewest: hostedProcedure
+  agentWorkerNewest: readProcedure
     .meta(
       openapi({
         method: HTTP_METHOD.GET,
@@ -122,7 +166,7 @@ export const messagesContract = {
     .input(EffectSchema.Struct({ ...byCall, ...newestQuery }))
     .output(EffectSchema.flip(newestAnswerSchema)),
   /** One part of a message of an agent's transcript, whole, read at once: what a page carried cut. */
-  agentPart: hostedProcedure
+  agentPart: readProcedure
     .meta(
       openapi({
         method: HTTP_METHOD.GET,
@@ -132,7 +176,7 @@ export const messagesContract = {
     .input(EffectSchema.Struct({ ...byId, ...byPart }))
     .output(EffectSchema.flip(agentPartAnswerSchema)),
   /** One part of a message of an agent's worker's transcript, whole, read at once. */
-  agentWorkerPart: hostedProcedure
+  agentWorkerPart: readProcedure
     .meta(
       openapi({
         method: HTTP_METHOD.GET,

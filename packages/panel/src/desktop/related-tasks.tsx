@@ -1,4 +1,5 @@
-import type { TaskSummary } from "@repo/features/task-wire";
+import { pullRequestsOfTask } from "@repo/features/task-agents-model";
+import type { TaskPullRequests, TaskSummary } from "@repo/features/task-wire";
 import { taskKey } from "@repo/features/workspace-key";
 import {
   type ListRowFold,
@@ -15,6 +16,7 @@ import { useCoarsePointer } from "../coarse-pointer.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { pullRequestNumberLabel } from "../tasks/agent-model.js";
 import type { DescriptionRoom } from "../tasks/description-body.js";
+import { useListedTaskPullRequests } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useFittedColumns } from "./fitted-columns.js";
@@ -100,10 +102,13 @@ function ownRoom(cells: readonly TaskRowCell[]): number {
 function drawnCells(
   rows: readonly RelatedTaskRow[],
   subTasks: ReadonlyMap<string, unknown>,
+  pullRequests: readonly TaskPullRequests[] | undefined,
 ): readonly TaskRowCell[] {
   const filled: Partial<Record<TaskRowCell, boolean>> = {
     [TASK_ROW_CELL.RELATION]: rows.some(({ relation }) => relation !== undefined),
-    [TASK_ROW_CELL.PULL_REQUESTS]: rows.some(({ task }) => openPullRequests(task).length > 0),
+    [TASK_ROW_CELL.PULL_REQUESTS]: rows.some(
+      ({ task }) => openPullRequests(pullRequestsOfTask(pullRequests, task.id)).length > 0,
+    ),
     [TASK_ROW_CELL.SUB_TASKS]: rows.some(({ task }) => subTasks.has(task.id)),
   };
   return RELATED_TASK_CELLS.filter((cell) => filled[cell] ?? true);
@@ -133,7 +138,8 @@ export function RelatedTasks({
   const opened = openedTaskOf(tasks);
   const subTasks = useMemo(() => childTaskCounts(tasks.tasks), [tasks.tasks]);
   const [list, setList] = useState<HTMLDivElement | null>(null);
-  const filled = drawnCells(rows, subTasks);
+  const pullRequests = useListedTaskPullRequests();
+  const filled = drawnCells(rows, subTasks, pullRequests);
   const fitted = useFittedColumns(list, filled.filter(isListColumn), {
     reserved: ownRoom(filled),
   });
@@ -150,7 +156,9 @@ export function RelatedTasks({
           return {
             key: task.number === undefined ? undefined : taskKey(workspaceName, task.number),
             relation: relationWords,
-            pullRequests: openPullRequests(task).map(pullRequestNumberLabel),
+            pullRequests: openPullRequests(pullRequestsOfTask(pullRequests, task.id)).map(
+              pullRequestNumberLabel,
+            ),
             subTasks:
               counted === undefined || counted.total === 0
                 ? undefined
@@ -158,7 +166,7 @@ export function RelatedTasks({
           };
         }),
       ),
-    [rows, subTasks, workspaceName],
+    [rows, subTasks, workspaceName, pullRequests],
   );
   // Note that the rows are drawn only near the view, and every row while a find bar stands open over the plan.
   const finding = useFindOpen();
