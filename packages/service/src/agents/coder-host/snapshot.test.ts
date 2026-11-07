@@ -256,13 +256,21 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
       Effect.gen(function* () {
         const sandbox = sourceSandbox(yield* checkoutFor(t), "stopped");
         const asked = Deferred.makeUnsafe<void>();
-        // Held by the time the stop behind the copy has listed the sandbox.
+        let ran = false;
+        let held = false;
+        // Free as the copy ends; held once the stop behind it lists the sandbox.
         const keepUp = Effect.sync(() => {
           Deferred.doneUnsafe(asked, Effect.void);
-          return true;
+          return held;
         });
+        const answer = (url: string, init: RequestInit) => {
+          const { pathname } = new URL(url);
+          if (pathname.endsWith("/cmd")) ran = true;
+          if (ran && pathname === "/api/v2/sandboxes") held = true;
+          return answerOf(sandbox, url, init);
+        };
 
-        const outcome = yield* copyOver((url, init) => answerOf(sandbox, url, init), keepUp);
+        const outcome = yield* copyOver(answer, keepUp);
         yield* Deferred.await(asked);
         yield* Effect.yieldNow;
 
