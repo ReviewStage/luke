@@ -953,6 +953,24 @@ test("an item a link names under an agent nothing waits on any more, read before
   );
 });
 
+test("an item the feed holds opens whole, with no failure under its thread, though its agent's own read fails", async () => {
+  world.agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
+  world.agentReadFails = true;
+  const { page } = mount([waitingTaskless(QUARANTINE)]);
+  await settle();
+  act(() => world.chooseFromOutside({ agentId: SWEEP_AGENT, itemId: QUARANTINE.id, opened: true }));
+  await settle();
+
+  await vi.waitFor(() => assert.equal(itemPane(page).getAttribute("aria-label"), QUARANTINE.title));
+  assert.equal(
+    itemPane(page).querySelector("[data-inbox-message-text]")?.textContent,
+    "A failed email is retried as the agent sets it up.",
+    "the thread is drawn from the feed",
+  );
+  assert.ok(world.agentReads.includes(SWEEP_AGENT), "the agent's own read was asked, and failed");
+  assert.equal(itemPane(page).querySelector('[role="alert"]')?.textContent, undefined);
+});
+
 test("a teammate's open item of an agent with no plan is listed, wearing the teammate's face; Needs you leaves it out", async () => {
   world.agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, startedBy: TEAMMATE }]]]);
   const { page } = mount([{ ...waitingTaskless(QUARANTINE), startedBy: TEAMMATE.userId }]);
