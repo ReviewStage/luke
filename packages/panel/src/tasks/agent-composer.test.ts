@@ -17,7 +17,6 @@ import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import type { SkillOption } from "@repo/ui/skill-mention";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -33,7 +32,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
+import { testQueryClientNow, withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentComposer } from "./agent-composer.js";
@@ -133,9 +132,7 @@ async function mounted(answer: () => Promise<AgentAgentAnswer> = () => new Promi
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(Box, { sender }))),
-  );
+  await act(async () => root.render(withQueryClient(createElement(Box, { sender }))));
   await settle();
   return {
     container,
@@ -598,9 +595,7 @@ async function mountedForDictation(transcribed: () => Promise<{ text: string }>)
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  await act(async () =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(Box, { sender }))),
-  );
+  await act(async () => root.render(withQueryClient(createElement(Box, { sender }))));
   await settle();
   const press = (label: string) => {
     const found = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
@@ -654,8 +649,7 @@ async function mountedRefusedForMove() {
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(RepositoryRemedyProvider, { value: doors }, createElement(Box, { sender })),
       ),
     ),
@@ -716,8 +710,7 @@ async function mountedRefusedOnToken(unreached: RepositoryUnreached) {
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           OpenSettingsProvider,
           { value: (link: SettingsLink) => opened.settings.push(link) },
@@ -879,7 +872,7 @@ test("while the agent's turn is starting, its status not yet running, a box that
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Starting))));
+  await act(async () => root.render(withQueryClient(createElement(Starting))));
   await settle();
 
   typeInComposer(container, "Then open the pull request.");
@@ -919,7 +912,7 @@ test("while the agent's turn runs, a touch held on Send sends the other way: a b
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Running))));
+  await act(async () => root.render(withQueryClient(createElement(Running))));
   await settle();
   typeInComposer(container, "Then open the pull request.");
   await settle();

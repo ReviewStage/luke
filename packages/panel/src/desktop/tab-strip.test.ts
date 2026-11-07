@@ -2,12 +2,11 @@
 
 import assert from "node:assert/strict";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { MenuTab, TabStrip } from "./tab-strip.js";
 
@@ -93,7 +92,7 @@ async function menuStripTab(label: string): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(MenuStrip))));
+  await act(async () => root.render(withQueryClient(createElement(MenuStrip))));
   return pill(container, label).querySelector<HTMLElement>('[role="tab"]') ?? assert.fail("a tab");
 }
 

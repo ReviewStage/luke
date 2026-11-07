@@ -17,7 +17,6 @@ import {
 import { ACT_KIND } from "@repo/host/acts";
 import { OWN_TRANSCRIPT } from "@repo/host/app-state";
 import { useQuery } from "@tanstack/react-query";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -30,7 +29,7 @@ import {
 } from "../panel-spans.js";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads } from "../testing/app-state.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import {
   type TranscriptsTelling,
   tellingTranscripts,
@@ -124,7 +123,6 @@ function drawn(older?: TranscriptOlderReader) {
       ? null
       : createElement(Probe, props);
   }
-  const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   return {
@@ -134,7 +132,7 @@ function drawn(older?: TranscriptOlderReader) {
     seen: () => frames.at(-1),
     draw: async (shown: boolean) => {
       // Note that the document's subscription mounts as the render's act ends, so it lands in the next.
-      await act(async () => root?.render(onRegistry(registry, createElement(Window, { shown }))));
+      await act(async () => root?.render(withQueryClient(createElement(Window, { shown }))));
       await act(settle);
     },
     push: (transcript: AgentTranscriptKey, page: AgentTranscriptPage) =>

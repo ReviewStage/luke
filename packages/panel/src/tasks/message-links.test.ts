@@ -10,14 +10,13 @@ import {
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import { ACT_KIND } from "@repo/host/acts";
 import { MESSAGE_ROLE } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -87,7 +86,6 @@ async function drawn(
   redraw: (next: MessageReveal | undefined) => Promise<void>;
 }> {
   const revealed: number[] = [];
-  const registry = AtomRegistry.make();
   // Note that the transcript ends on a page with nothing on it, as an ended agent's does.
   pushedTranscripts(
     () =>
@@ -107,8 +105,7 @@ async function drawn(
   const draw = (asked: MessageReveal | undefined) =>
     act(() =>
       root?.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(
             LinkWorkspaceProvider,
             { value: "acme" },

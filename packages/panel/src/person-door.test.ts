@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import { ACT_KIND } from "@repo/host/acts";
 import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@repo/ui/actor-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -12,7 +11,7 @@ import { MemberDirectory } from "./member-directory.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { fakeActPort } from "./testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "./testing/app-platform.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { restOn } from "./testing/hint-rest.js";
 
 /**
@@ -83,7 +82,7 @@ function draw(element: ReactElement, inWindow = true): HTMLElement {
         element,
       )
     : element;
-  act(() => root?.render(onRegistry(AtomRegistry.make(), provided)));
+  act(() => root?.render(withQueryClient(provided)));
   return container;
 }
 

@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
-import { rendererRegistry } from "./renderer-runtime.js";
 import { TranscriptWords } from "./tasks/transcript-blocks.js";
 import { settleQueries, withQueryClient } from "./testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
@@ -23,11 +21,7 @@ test("a reply is drawn only once the parser has landed, its HTML parsed", async 
   const root = createRoot(container);
   const words = createElement(TranscriptWords, { text: "Press <kbd>K</kbd> to search." });
   // Note that the render is synchronous, so nothing the parser's import resolves has run yet.
-  act(() =>
-    root.render(
-      withQueryClient(createElement(RegistryContext.Provider, { value: rendererRegistry }, words)),
-    ),
-  );
+  act(() => root.render(withQueryClient(words)));
   assert.equal(container.textContent, "");
   await act(() => Effect.runPromise(markdownHtmlParserLanded));
   await settleQueries();

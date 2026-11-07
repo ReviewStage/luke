@@ -3,12 +3,11 @@
 import assert from "node:assert/strict";
 import { MOTION_DELAY_MS } from "@repo/brand";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { WorkspaceSwitcher } from "./workspace-switcher.js";
 
@@ -54,12 +53,10 @@ function mount(tasks: Partial<TasksControl>) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
   const render = (inSight: boolean) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(WorkspaceSwitcher, {
             tasks: { ...tasksControl(), ...tasks },
             inSight,

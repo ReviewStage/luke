@@ -2,13 +2,12 @@
 
 import assert from "node:assert/strict";
 import { Duration } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { useCopyToast } from "./copy-feedback.js";
 import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { TOAST_HOLD, ToastHost } from "./toast.js";
 
 /**
@@ -19,14 +18,12 @@ import { TOAST_HOLD, ToastHost } from "./toast.js";
  */
 
 let root: Root | undefined;
-let registry: AtomRegistry.AtomRegistry | undefined;
 let copy: ((words: string, label: string) => void) | undefined;
 
 afterEach(() => {
   vi.useRealTimers();
   act(() => root?.unmount());
   root = undefined;
-  registry?.dispose();
   document.body.innerHTML = "";
 });
 
@@ -41,12 +38,9 @@ function mount(): void {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  registry = AtomRegistry.make();
-  const held = registry;
   act(() =>
     root?.render(
-      onRegistry(
-        held,
+      withQueryClient(
         createElement(Fragment, null, createElement(Copier), createElement(ToastHost)),
       ),
     ),

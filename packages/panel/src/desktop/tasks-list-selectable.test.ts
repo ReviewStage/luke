@@ -10,7 +10,6 @@ import { IDLE_TASKS_VIEW, TASKS_READ } from "@repo/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { RUN_PROFILE } from "@repo/host/app-state";
 import { selectableListBehavior } from "@repo/ui/testing/selectable-list";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { vi } from "vitest";
@@ -19,7 +18,7 @@ import { useLeaveGuard, useTasksTab } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import {
   ADMIN_AWAY,
   AGENT_AWAY,
@@ -129,7 +128,7 @@ async function mount() {
   }
   const container = document.body.appendChild(document.createElement("div"));
   const root: Root = createRoot(container);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Page))));
+  act(() => root.render(withQueryClient(createElement(Page))));
   // Note that the members and the list land after the first paint.
   await act(async () => undefined);
   await act(async () => undefined);

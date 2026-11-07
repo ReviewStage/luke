@@ -26,7 +26,6 @@ import {
 import { ACT_KIND } from "@repo/host/acts";
 import type { SettingsLink } from "@repo/settings/settings-views";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -46,7 +45,7 @@ import {
   installEditorLayout,
   pressInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { startFailureNote } from "./agent-model.js";
@@ -180,11 +179,10 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // Each tab reads the window's document from a registry of its own, so one test's account never answers another's.
+  // Each tab reads the window's document from the test's own Query client, so one test's account never answers another's.
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           OpenSettingsProvider,
           { value: (link: SettingsLink) => links.push(link) },

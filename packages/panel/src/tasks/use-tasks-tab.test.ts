@@ -60,8 +60,6 @@ import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-mode
 import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import { useRouter } from "@tanstack/react-router";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -78,7 +76,6 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   type PanelSpan,
 } from "../panel-spans.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   FAKE_ANSWER,
@@ -97,10 +94,10 @@ import {
   holdPages,
   holdRepositoryLists,
   readExperiments,
-  registryWith,
   stateWith,
+  withExperiments,
 } from "../testing/app-state.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { ADMIN_AWAY, listedAgent } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -151,7 +148,7 @@ const HELD_DESCRIPTIONS: AppDescriptionDocuments = { [TASK.id]: { rows: { task: 
 
 /**
  * Lays `descriptions` over whatever document the window was handed, as the host
- * holds them for it (`LIVE_READ.DESCRIPTION_DOCUMENT`), for a registry that reads
+ * holds them for it (`LIVE_READ.DESCRIPTION_DOCUMENT`), for a surface that reads
  * the document from here on.
  */
 function handDescriptions(descriptions: AppDescriptionDocuments): void {
@@ -249,7 +246,6 @@ const SENT_ON_MUTATIONS: readonly PortActKind[] = [
 function mount(
   initial: Partial<Standing> = {},
   answers: { [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>> } = {},
-  registry?: AtomRegistry,
 ) {
   const told: PortActKind[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
@@ -403,12 +399,10 @@ function mount(
   const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
   const root = createRoot(container);
   roots.push(root);
-  // A fresh registry reads the document handed here, its descriptions among it, rather than one an earlier test handed.
+  // The test's Query client is handed the document here, its descriptions among it, rather than one an earlier test handed.
   act(() => {
     root.render(
-      windowRouter().provide(
-        onRegistry(registry ?? registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), surface),
-      ),
+      windowRouter().provide(withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), surface)),
     );
   });
   return {
@@ -687,7 +681,6 @@ test("with Open a task once it starts off, New task starts the task and its agen
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent } }),
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
     },
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -1260,12 +1253,7 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   });
   // Note that a panel's pages are held through the window's act port and laid on the document, as the host lays them.
   const asked = holdPages(handHostReads({}).deliverPages, () => ({ rows: [page] }));
-  // A fresh registry reads the document handed here, rather than one an earlier test handed.
-  const tab = mount(
-    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
-    {},
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) }, {});
   await settle();
 
   act(() =>
@@ -1290,12 +1278,7 @@ test("a Vespin link to a page of the task, as Open in browser lands on, opens th
     act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
   });
   holdPages(handHostReads({}).deliverPages, () => ({ rows: [page] }));
-  // A fresh registry reads the document handed here, rather than one an earlier test handed.
-  const tab = mount(
-    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
-    {},
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) }, {});
   await settle();
 
   act(() =>
@@ -1601,11 +1584,7 @@ test("a Vespin link to an Inbox item by its id alone opens it where the service 
 });
 
 test("a task's Inbox door and its link narrow the Inbox to the task, an agent's waiting thread choosing that thread there, and the Inbox's own row lists everything", async () => {
-  const tab = mount(
-    { shown: true, tasks: TWO_WORKSPACES },
-    {},
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
-  );
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {});
   await settle();
   const narrowedTo = () => ({
     open: tab.control().inboxView.open,
@@ -1890,12 +1869,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   // Note that the open task's pages are held through the window's act port and laid on the document, as the host lays them.
   const reads = handHostReads({});
   const asked = holdPages(reads.deliverPages, () => ({ rows: [page] }));
-  // A fresh registry reads the document handed here, rather than one an earlier test handed.
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    {},
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
-  );
+  const tab = mount({ shown: true, tasks: OPEN }, {});
   await settle();
   assert.deepEqual(asked, [{ taskId: TASK.id }]);
   // Note that each read of the pages reaches their query one notify tick later, which lands before the tabs move.
@@ -2584,9 +2558,8 @@ test("the repository chip's list for a workspace with GitHub connected is its re
       installationUrl: "https://github.com/apps/luke/installations/new",
     },
   };
-  // Note that the tab and the chip stand on one registry over the document the lists are laid on, so the document each writes into the test's client is the same one.
+  // Note that the tab and the chip stand on the test's one Query client, so the document each writes into it is the same one.
   holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => listed);
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const tab = mount(
     {
       shown: true,
@@ -2596,7 +2569,6 @@ test("the repository chip's list for a workspace with GitHub connected is its re
       },
     },
     {},
-    registry,
   );
   installScrollIntoView();
   const chip = document.body.appendChild(document.createElement("div"));
@@ -2604,8 +2576,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   roots.push(chipRoot);
   act(() =>
     chipRoot.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(RepositoryChip, {
           value: null,
           chooser: tab.control().newTask.repositoriesIn(ACME.id),
@@ -2815,11 +2786,7 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     run: { ...stateWith({}, {}).run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PAGE },
   });
-  const page = mount(
-    { ...run, profile: RUN_PROFILE.AGENT_PAGE },
-    {},
-    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
-  );
+  const page = mount({ ...run, profile: RUN_PROFILE.AGENT_PAGE }, {});
   await settle();
 
   assert.deepEqual(tasks.control().agents.agents, []);
@@ -3828,18 +3795,15 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
 });
 
 /**
- * A registry whose atoms count on this clock, as the window's count on its
- * own. Note that the host's holds, the task's cloud Browser tabs among them,
- * are answered quietly with nothing laid, because a hold refused is opened
- * again on a backoff, and a day passed on this clock would run every one of
- * those waits.
+ * Runs the tab's waits on this clock, as the window's run on its own. Note
+ * that the host's holds, the task's cloud Browser tabs among them, are
+ * answered quietly with nothing laid, because a hold refused is opened again
+ * on a backoff, and a day passed on this clock would run every one of those
+ * waits.
  */
-function registryOn(clock: Clock.Clock): AtomRegistry {
+function serveClock(clock: Clock.Clock): void {
   serveEffectsOn(Context.make(Clock.Clock, clock));
   fakeActPort({});
-  return registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), [
-    [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-  ]);
 }
 
 /** Lets `span` pass on the test's clock, then lets what fell due land. */
@@ -3867,11 +3831,8 @@ it.effect(
   "a side panel tab not viewed for a day closes itself onto ⇧⌘T's stack, while the tab shown and a pinned one stay",
   () =>
     Effect.gen(function* () {
-      const tab = mount(
-        { shown: true, tasks: withAgents([RUNNING_AGENT]) },
-        {},
-        registryOn(yield* Clock.Clock),
-      );
+      serveClock(yield* Clock.Clock);
+      const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) }, {});
       yield* landed;
       const panel = () => tab.control().sidePanel;
       const file = fileTab(FILE_REF.path);
@@ -3906,10 +3867,10 @@ it.effect(
   "an agent's tab not viewed for a day closes unless the agent works, waits on the developer, or ended unseen, and opens again as an Inbox item of its wakes it, where one closed by hand stays closed",
   () =>
     Effect.gen(function* () {
+      serveClock(yield* Clock.Clock);
       const tab = mount(
         { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
         {},
-        registryOn(yield* Clock.Clock),
       );
       yield* landed;
       const column = () => tab.control().mainTabs;
@@ -3953,7 +3914,8 @@ it.effect(
       const clock = yield* Clock.Clock;
       const listed = {};
       const pulls = changesTab(AGENT_ID);
-      const first = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
+      serveClock(clock);
+      const first = mount({ shown: true, tasks: OPEN }, listed);
       yield* landed;
       // Note that another agent's Pull request tab is shown last, so the first is not the one shown.
       const shown = changesTab("9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32");
@@ -3964,7 +3926,8 @@ it.effect(
       closeWindow();
 
       yield* TestClock.adjust(Duration.hours(25));
-      const again = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
+      serveClock(clock);
+      const again = mount({ shown: true, tasks: OPEN }, listed);
       yield* landed;
       assert.deepEqual(again.control().sidePanel.strip, [shown]);
       assert.ok(again.control().onReopenClosedTab, "and stands on ⇧⌘T's stack");
@@ -3983,10 +3946,10 @@ it.effect(
           tasks: { [TASK.id]: { recent: [{ agent: FINISHED_ID }, { agent: AGENT_ID }] } },
         }),
       );
+      serveClock(yield* Clock.Clock);
       const tab = mount(
         { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
         {},
-        registryOn(yield* Clock.Clock),
       );
       yield* landed;
       const column = () => tab.control().mainTabs;
@@ -4013,10 +3976,10 @@ it.effect(
   "an agent's tab left chosen under the side panel filling the window is no longer viewed, so a day of it closes the tab",
   () =>
     Effect.gen(function* () {
+      serveClock(yield* Clock.Clock);
       const tab = mount(
         { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
         {},
-        registryOn(yield* Clock.Clock),
       );
       yield* landed;
       const column = () => tab.control().mainTabs;
@@ -4035,10 +3998,10 @@ it.effect(
   "a tab shown as its task is left for one whose agents are still unread is stamped as it was left, not when it was last stamped",
   () =>
     Effect.gen(function* () {
+      serveClock(yield* Clock.Clock);
       const tab = mount(
         { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
         { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
-        registryOn(yield* Clock.Clock),
       );
       yield* landed;
       const column = () => tab.control().mainTabs;

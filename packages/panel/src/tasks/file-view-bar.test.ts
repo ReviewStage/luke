@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { FileGitHubButton } from "./file-view.js";
 
 /**
@@ -29,9 +28,7 @@ function barOver(github: { href: string; open: (url: string) => void } | undefin
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(FileGitHubButton, { github }))),
-  );
+  act(() => root.render(withQueryClient(createElement(FileGitHubButton, { github }))));
   return container;
 }
 

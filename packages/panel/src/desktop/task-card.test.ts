@@ -4,13 +4,12 @@ import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
 import type { Workspace } from "@repo/features/workspace-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { PullRequestLine, taskCardOf } from "./task-card.js";
 
@@ -70,7 +69,7 @@ function drawn(
     tasks: [task, ...others],
     onSelect: opened,
   });
-  act(() => root.render(onRegistry(AtomRegistry.make(), taskCardOf(tasks, task, 10))));
+  act(() => root.render(withQueryClient(taskCardOf(tasks, task, 10))));
   const card = container.querySelector<HTMLElement>("[data-task-card]");
   assert.ok(card, "the card is drawn");
   return card;

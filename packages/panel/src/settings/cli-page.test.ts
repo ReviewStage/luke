@@ -6,14 +6,13 @@ import type { McpClient } from "@repo/features/mcp-client-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { CLI_INSTALL_OUTCOME } from "@repo/host/contract";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, signedInAs, stateWith } from "../testing/app-state.js";
-import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeHandedAppState } from "../testing/copy-feedback.js";
 import { CliPage } from "./cli-page.js";
 
 /**
@@ -29,11 +28,9 @@ beforeAll(() => {
 });
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.replaceChildren();
 });
 
@@ -72,13 +69,11 @@ async function drawPage(
   );
   fakeAppPlatform(QUIET_PANEL);
   await writeHandedAppState();
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(registry, createElement(CliPage))));
+  act(() => root.render(withQueryClient(createElement(CliPage))));
   await settle();
 }
 

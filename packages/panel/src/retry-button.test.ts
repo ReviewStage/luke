@@ -2,11 +2,10 @@
 
 import assert from "node:assert/strict";
 import { RetryButton } from "@repo/ui";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { restOn } from "./testing/hint-rest.js";
 
 /**
@@ -60,8 +59,7 @@ function hover() {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(RetryButton, {
           label: "Retry agents",
           onRetry: () => {

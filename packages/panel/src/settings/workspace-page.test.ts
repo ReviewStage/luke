@@ -51,7 +51,6 @@ import {
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
 import { SETTINGS_SECTION, type SettingsLink } from "@repo/settings/settings-views";
 import { ProviderMark, SettingsPage } from "@repo/ui";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -78,7 +77,7 @@ import {
   holdRepositoryLists,
   type RepositoriesRead,
 } from "../testing/app-state.js";
-import { onRegistry, startQueriesAfresh } from "../testing/copy-feedback.js";
+import { startQueriesAfresh, withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { stubCanvas, webpBytes } from "../testing/photo-canvas.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -497,7 +496,6 @@ function workspacePort(): Parameters<typeof fakeActPort>[0] {
 }
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
@@ -574,7 +572,6 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -613,8 +610,7 @@ async function mount(
     };
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(
             Fragment,
             null,
@@ -635,9 +631,6 @@ async function mount(
       ),
     );
   };
-  // Each page holds its own atoms, so a toast one test raised is not the next one's.
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   render(workspace.id);
   await settle();
   await peopleLanded(container);
@@ -1118,12 +1111,9 @@ test("while the members are being read the rest of the page stands, a placeholde
     listFailed: false,
     onRetryList: () => undefined,
   };
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   act(() =>
     root.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(SettingsPage, {
           title: "Workspace",
           children: createElement(WorkspacePage, { control, readerId: READER_ID }),

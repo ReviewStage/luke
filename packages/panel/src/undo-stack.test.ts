@@ -3,7 +3,6 @@ import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW, type TasksPinParams, type TasksView } from "@repo/features/tasks-view";
 import type { ACT_KIND } from "@repo/host/acts";
 import { afterEach, test } from "vitest";
-import { rendererRegistry } from "./renderer-runtime.js";
 import {
   pressRows,
   ROW_WRITE,
@@ -24,10 +23,7 @@ import {
 
 const TASK_ID = "3f2c8a51-6d0e-4b7a-9c14-2e5f7a9b0d36";
 
-afterEach(() => {
-  // The window's one registry holds the lists, so the next test's window starts with none.
-  rendererRegistry.reset();
-});
+afterEach(() => {});
 
 /** The tasks drawn: the one task, pinned or not. */
 function tasksShowing(pinned: boolean): TasksView {

@@ -3,13 +3,12 @@
 import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@repo/features/task-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
@@ -54,7 +53,7 @@ function mount(element: ReactElement): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  act(() => root.render(withQueryClient(element)));
   return container;
 }
 

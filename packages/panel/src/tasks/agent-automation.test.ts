@@ -13,7 +13,6 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@repo/features/automation-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -21,7 +20,7 @@ import { AutomationDirectory } from "../automation-directory.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handHostReads, holdAutomations, holdMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentActor } from "./agent-model.js";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
@@ -141,7 +140,7 @@ async function agentCard() {
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), place)));
+  act(() => root?.render(withQueryClient(place)));
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });

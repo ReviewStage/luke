@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import { INLINE_REF_LOOK, InlineRef, ListRow, useMenu } from "@repo/ui";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -11,7 +10,7 @@ import { LinkMenu, useEditedLinksHost } from "./link-menu.js";
 import type { Address } from "./route.js";
 import { OpenAddressesHere } from "./tasks/use-open-link.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { TextLink } from "./text-link.js";
 
 /**
@@ -41,7 +40,7 @@ function mount(element: ReactElement): string[] {
   const root = createRoot(container);
   roots.push(root);
   const drawn = createElement("div", null, element, createElement(LinkMenu));
-  act(() => root.render(onRegistry(AtomRegistry.make(), drawn)));
+  act(() => root.render(withQueryClient(drawn)));
   return copied;
 }
 

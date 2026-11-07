@@ -17,15 +17,14 @@ import {
   type DescriptionCommentsControl,
   DescriptionCommentsProvider,
 } from "@repo/ui/description-comments";
-import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer } from "../testing/app-bridge.js";
-import { registryWith } from "../testing/app-state.js";
+import { writeExperiments } from "../testing/app-state.js";
 import { attachmentChipName } from "../testing/attachment-chip.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { DescriptionBody } from "./description-body.js";
 import { CommentFocusScope } from "./description-comments.js";
@@ -120,7 +119,6 @@ function signIn(account: Identity): void {
 function drawn(
   landing: () => Promise<boolean>,
   asked: DescriptionCommentActionRequest[] = [],
-  registry: AtomRegistry.AtomRegistry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   account: Identity = DEAN,
 ): HTMLElement {
   const control: DescriptionCommentsControl = {
@@ -153,7 +151,7 @@ function drawn(
       createElement(CommentFocusScope, { reveal: undefined, children: tab }),
     );
     // Note that the surface is built before the reader signs in, because building it stands up the test's window, no one signed in.
-    const surface = onRegistry(registry, tree);
+    const surface = withQueryClient(tree);
     signIn(reader);
     act(() => root.render(surface));
   };
@@ -200,6 +198,7 @@ function heldFiles(card: HTMLElement): (string | null)[] {
 
 test("a refused reply goes back above the words typed while it was out, and neither is dropped", async () => {
   const answer = Promise.withResolvers<boolean>();
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const card = drawn(() => answer.promise);
   const field = card.querySelector("textarea") ?? assert.fail("no textarea");
   typeInto(field, "Not for v1.");
@@ -216,6 +215,7 @@ test("a refused reply goes back above the words typed while it was out, and neit
 
 test("a refused reply's files go back before the files pasted while it was out", async () => {
   const answer = Promise.withResolvers<boolean>();
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const card = drawn(() => answer.promise);
   const field = card.querySelector("textarea") ?? assert.fail("no textarea");
   await pastePicture(field, "before.png");
@@ -236,9 +236,9 @@ test("a refused reply's files go back before the files pasted while it was out",
 async function refusedBesideNewer(refused: string, newer: string, account: Identity = DEAN) {
   const answer = Promise.withResolvers<boolean>();
   const asked: DescriptionCommentActionRequest[] = [];
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
-  const card = drawn(landing, asked, registry, account);
+  const card = drawn(landing, asked, account);
   const field = card.querySelector("textarea") ?? assert.fail("no textarea");
   typeInto(field, refused);
   act(() => {
@@ -250,7 +250,7 @@ async function refusedBesideNewer(refused: string, newer: string, account: Ident
     card,
     field,
     asked,
-    redraw: (account?: Identity) => drawn(landing, asked, registry, account),
+    redraw: (account?: Identity) => drawn(landing, asked, account),
   };
 }
 
@@ -327,7 +327,8 @@ test("a reply refused while only the reader's address was known stands with its 
   const answer = Promise.withResolvers<boolean>();
   const asked: DescriptionCommentActionRequest[] = [];
   const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
-  const card = drawn(landing, asked, registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), {
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  const card = drawn(landing, asked, {
     email: DEAN.email,
   });
   const field = card.querySelector("textarea") ?? assert.fail("no textarea");

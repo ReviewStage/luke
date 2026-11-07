@@ -13,7 +13,6 @@ import { PUSH_METHOD } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { createMemoryHistory } from "@tanstack/react-router";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
@@ -27,7 +26,7 @@ import "./desktop/person-route.lazy.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, stateWith } from "./testing/app-state.js";
-import { onRegistry, settleQueries } from "./testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "./testing/copy-feedback.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
 
 /**
@@ -132,7 +131,7 @@ async function drawWindow(at?: string): Promise<TestWindowRouter> {
     at === undefined ? undefined : createMemoryHistory({ initialEntries: [at] }),
   );
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root?.render(onRegistry(AtomRegistry.make(), router.drawn())));
+  act(() => root?.render(withQueryClient(router.drawn())));
   await settle();
   return router;
 }

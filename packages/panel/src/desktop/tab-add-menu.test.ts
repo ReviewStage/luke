@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { AddTabButton } from "./strip-tabs.js";
 
 /**
@@ -84,8 +83,7 @@ async function drawn(inPanel: boolean): Promise<HTMLElement> {
   }));
   await act(async () =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(AddTabButton, {
           label: "Open a tab",
           placeholder: "Search tabs",

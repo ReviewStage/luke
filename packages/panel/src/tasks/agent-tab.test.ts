@@ -18,7 +18,6 @@ import { ProviderMark } from "@repo/ui";
 import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@repo/ui/actor-model";
 import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -27,7 +26,7 @@ import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry, withQueryClient, writeAppState } from "../testing/copy-feedback.js";
+import { withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { heardWords } from "../testing/heard-words.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -92,8 +91,7 @@ function drawn(message: AgentTranscriptMessage, moving = false, page?: TaskMenti
     root.render(
       page === undefined
         ? withQueryClient(turn)
-        : onRegistry(
-            AtomRegistry.make(),
+        : withQueryClient(
             createElement(TaskMentions, {
               value: page,
               children: createElement(TranscriptAgent, { value: TASK_AGENT, children: turn }),
@@ -243,8 +241,7 @@ test("a call's row opened while it runs stays open as its answer lands and names
   const draw = (part: WireRecord) =>
     act(() =>
       root.render(
-        onRegistry(
-          AtomRegistry.make(),
+        withQueryClient(
           createElement(TaskMentions, {
             value: TASK_PAGE,
             children: createElement(AgentMessage, {
@@ -730,7 +727,7 @@ test("a call about an agent the place lists not, whose answer names no model, we
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  // Note that the test's Query client is handed the document at once, so the first frame draws on it.
   writeAppState(state);
   const container = document.createElement("div");
   document.body.append(container);
@@ -746,8 +743,7 @@ test("a call about an agent the place lists not, whose answer names no model, we
   ]);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(AgentMessage, {
           message,
           description: false,
@@ -807,7 +803,7 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  // Note that the test's Query client is handed the document at once, so the first frame draws on it.
   writeAppState(state);
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   const cards = taskCards({
@@ -834,8 +830,7 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
   ]);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(TaskMentions, {
           value: onTask(taskId),
           children: createElement(AgentMessage, {
@@ -931,8 +926,7 @@ test("a call about the plan or another task hangs that task's card as its Plan t
   ]);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(TaskMentions, {
           value: onTask("task-invoices"),
           children: createElement(ChipCards, {
@@ -1084,8 +1078,7 @@ function agentMessageDrawn(
   });
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         page === undefined ? drawn : createElement(TaskMentions, { value: page, children: drawn }),
       ),
     ),

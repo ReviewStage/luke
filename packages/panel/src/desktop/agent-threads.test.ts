@@ -15,14 +15,13 @@ import type { Task } from "@repo/features/task-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { agentTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { handInboxItems } from "../testing/app-state.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts, tasksControl } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
@@ -151,12 +150,7 @@ async function mount(
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopTasks, { looks: NO_LOOKS, tasks: control }),
-      ),
-    ),
+    root.render(withQueryClient(createElement(DesktopTasks, { looks: NO_LOOKS, tasks: control }))),
   );
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();

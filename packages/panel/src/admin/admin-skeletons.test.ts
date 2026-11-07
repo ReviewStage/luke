@@ -2,8 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { rendererRegistry } from "../renderer-runtime.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { type AdminDoors, AdminDoorsProvider, type AdminReads } from "./admin-doors.js";
 import { AccountScreen } from "./screens/account.js";
 import { CostScreen } from "./screens/cost.js";
@@ -71,9 +70,7 @@ async function draw(
   const root = createRoot(page);
   roots.push(root);
   await act(async () =>
-    root.render(
-      onRegistry(rendererRegistry, createElement(AdminDoorsProvider, { value: doors }, screen)),
-    ),
+    root.render(withQueryClient(createElement(AdminDoorsProvider, { value: doors }, screen))),
   );
   return page;
 }

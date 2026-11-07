@@ -286,7 +286,7 @@ minted in one package the same service in another. `@effect/platform`,
 `@effect/rpc`, `@effect/sql`, and `@effect/experimental` are consolidated into
 `effect` itself and reached at its own subpaths (`effect/http`, `effect/sql`,
 `effect/rpc`, `effect/reactivity`, …); `@effect/platform-node`,
-`@effect/sql-pg`, `@effect/sql-pglite`, `@effect/atom-react`, and
+`@effect/sql-pg`, `@effect/sql-pglite`, and
 `@effect/vitest` stay separate, each on the same `4.0.4` through the same
 catalog. The pin is an exact release rather than a range, and is moved
 deliberately.

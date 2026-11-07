@@ -3,13 +3,12 @@
 import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { agentTab, draftTab } from "@repo/ui/tab-strip-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { NOTHING_HELD } from "../tasks/agent-ref.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { MainTabBars } from "./main-tabs.js";
 
@@ -74,8 +73,7 @@ async function mount(
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(MainTabBars, {
           task: { id: "plan-1" },
           main,

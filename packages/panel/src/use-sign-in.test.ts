@@ -11,11 +11,10 @@ import { ACT_KIND } from "@repo/host/acts";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { rendererRegistry } from "./renderer-runtime.js";
 import { SignInGate } from "./sign-in-gate.js";
 import { FAKE_ANSWER, type FakeActAnswer, fakeActs } from "./testing/app-bridge.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
 import { useSignIn } from "./use-sign-in.js";
 
@@ -67,7 +66,7 @@ async function pressedOver(answer: FakeActAnswer): Promise<HTMLElement> {
   document.body.append(container);
   const root = createRoot(container);
   mounted.push(root);
-  act(() => root.render(onRegistry(rendererRegistry, createElement(SignInScreen))));
+  act(() => root.render(withQueryClient(createElement(SignInScreen))));
   const google = [...container.querySelectorAll("button")].find(
     (each) => each.textContent === "Continue with Google",
   );
@@ -123,8 +122,7 @@ test("a Cancel main refuses says why in a toast, and the gate is offered again a
   mounted.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        rendererRegistry,
+      withQueryClient(
         createElement(Fragment, null, createElement(SignInScreen), createElement(ToastHost)),
       ),
     ),

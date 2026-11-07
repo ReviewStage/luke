@@ -9,7 +9,6 @@ import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -19,7 +18,7 @@ import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { useStageRoom } from "../stage-room.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { SHELL_AT, shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -159,7 +158,7 @@ function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
     });
     return createElement("div", { ref: stage.ref, className: "app-stage" }, shell);
   }
-  act(() => root?.render(onRegistry(AtomRegistry.make(), underRouter(createElement(Window)))));
+  act(() => root?.render(withQueryClient(underRouter(createElement(Window)))));
   return container;
 }
 

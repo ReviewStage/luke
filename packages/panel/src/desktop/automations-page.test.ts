@@ -40,7 +40,6 @@ import { type AppWorkspaceIntegrations, NO_KEYS_HELD } from "@repo/host/app-stat
 import type { Experiment } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { PROFILE } from "@repo/ui";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
@@ -63,7 +62,7 @@ import {
   stateWith,
 } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
-import { onRegistry, settleQueries, testQueryClientNow } from "../testing/copy-feedback.js";
+import { settleQueries, testQueryClientNow, withQueryClient } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
@@ -539,15 +538,11 @@ afterEach(() => {
   document.head.innerHTML = "";
 });
 
-/** The registry every render of one mount shares, so a render again is the same window. */
-let registry = AtomRegistry.make();
-
 /** The page as drawn over the tasks control given, rendered again in place where one stands. */
 function render(tasks: ReturnType<typeof tasksControl>): void {
   act(() =>
     root?.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(
           Fragment,
           null,
@@ -566,7 +561,6 @@ function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  registry = AtomRegistry.make();
   render(tasks);
   return container;
 }
@@ -980,11 +974,9 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  registry = AtomRegistry.make();
   act(() =>
     root?.render(
-      onRegistry(
-        registry,
+      withQueryClient(
         createElement(
           OpenFeedbackProvider,
           { value: (about: Experiment) => feedbackAbout.push(about) },
@@ -3245,8 +3237,7 @@ function mountNarrow(start: AutomationsPlace, room: ShellRoom = SHELL_ROOM.NARRO
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  registry = AtomRegistry.make();
-  act(() => root?.render(onRegistry(registry, createElement(Pages))));
+  act(() => root?.render(withQueryClient(createElement(Pages))));
   return container;
 }
 

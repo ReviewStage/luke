@@ -23,9 +23,8 @@ import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { useSidePanel } from "../tasks/use-side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, registryWith } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, withExperiments } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
-import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
 import { shellRouterEachTest } from "../testing/shell-router.js";
@@ -204,8 +203,8 @@ function mount(width: number, onTask = true): HTMLElement {
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+      withExperiments(
+        experimentsOn(EXPERIMENT.DESCRIPTIONS),
         underRouter(createElement(Window, { onTask })),
       ),
     ),

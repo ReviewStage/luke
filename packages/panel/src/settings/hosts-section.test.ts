@@ -8,7 +8,6 @@ import type { HostLine } from "@repo/features/host-live";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateDelivery, AppStateSnapshot, AppThisMacHost } from "@repo/host/app-state";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
@@ -20,7 +19,7 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handBeats } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { HostsSection } from "./hosts-section.js";
 
@@ -42,12 +41,9 @@ beforeAll(() => {
 });
 
 const roots: Root[] = [];
-const registries: AtomRegistry.AtomRegistry[] = [];
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the sections let go of the shared presence on a registry as they unmount, so they unmount before it goes.
-  for (const registry of registries.splice(0)) registry.dispose();
   document.body.replaceChildren();
 });
 
@@ -63,20 +59,18 @@ async function settle(): Promise<void> {
 }
 
 /**
- * Hosts drawn signed in, on a registry of the test's own, so the window's
+ * Hosts drawn signed in, on the test's own Query client, so the window's
  * shared presence is read afresh rather than standing as an earlier test
  * left it, the host answering the window's acts as `procedures` say and
  * holding its holds quietly, as it does while their reads are laid.
  */
 function drawHosts(procedures: Partial<FakeActPort> = {}): void {
   fakeActPort(procedures);
-  const registry = AtomRegistry.make();
-  registries.push(registry);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(registry, createElement(HostsSection, { signedIn: true }))));
+  act(() => root.render(withQueryClient(createElement(HostsSection, { signedIn: true }))));
 }
 
 /**

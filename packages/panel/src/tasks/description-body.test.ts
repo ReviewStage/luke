@@ -21,16 +21,17 @@ import {
   handMembers,
   handState,
   readExperiments,
-  registryWith,
   signedInAs,
+  withExperiments,
+  writeExperiments,
 } from "../testing/app-state.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
-import type { EditAgents } from "./edit-ref.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
+import type { EditAgents } from "./edit-ref.js";
 import type { TaskLooks } from "./use-task-looks.js";
 
 // Note that the description, its comments, and its history stand only while the account has Descriptions on.
@@ -145,8 +146,8 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   });
   act(() =>
     root.render(
-      onRegistry(
-        registryWith(experiments),
+      withExperiments(
+        experiments,
         createElement(MemberDirectory, { workspace: ACME, readerId, children: body }),
       ),
     ),
@@ -495,12 +496,11 @@ test("a save that writes a section above the one the keyboard stands on leaves T
   handMembers(() => ({ rows: { members: MEMBERS } }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = mountRoot(container);
-  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
+  writeExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const drawDescription = (task: Task) =>
     act(() =>
       root.render(
-        onRegistry(
-          registry,
+        withQueryClient(
           createElement(MemberDirectory, {
             workspace: ACME,
             readerId: undefined,

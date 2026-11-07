@@ -5,13 +5,12 @@ import { SETTINGS_ACT_KIND } from "@repo/host/contract";
 import { EXPERIMENT, EXPERIMENTS, type Experiment, NO_EXPERIMENTS } from "@repo/settings";
 import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { OpenFeedbackProvider } from "../open-feedback.js";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { ExperimentalPage } from "./experimental-page.js";
 
@@ -55,8 +54,7 @@ function draw(props: Parameters<typeof ExperimentalPage>[0]): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           OpenFeedbackProvider,
           { value: (about: Experiment) => feedbackAbout.push(about) },

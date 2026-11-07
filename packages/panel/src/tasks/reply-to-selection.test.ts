@@ -11,7 +11,6 @@ import {
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@repo/settings/shortcuts";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Duration, Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -25,7 +24,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
+import { settleQueries, withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentComposer } from "./agent-composer.js";
@@ -151,9 +150,7 @@ async function mounted(answer: () => Promise<AgentAgentAnswer> = () => new Promi
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(Tab, { sender }))),
-  );
+  await act(async () => root.render(withQueryClient(createElement(Tab, { sender }))));
   await settle();
   return {
     container,
@@ -466,8 +463,7 @@ test("on the agent's tab, Reply quotes its words into the tab's own box, and sta
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(AgentTab, {
           agent: AGENT,
           control,

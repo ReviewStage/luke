@@ -73,7 +73,6 @@
     "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@effect/atom-react": "catalog:",
     "@repo/brand": "workspace:*",
     "@repo/credentials": "workspace:*",
     "@repo/features": "workspace:*",

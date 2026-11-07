@@ -6,13 +6,12 @@ import type { KnownNames } from "@repo/features/place-chip-model";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { deliveryOf, stateWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { MentionedAgents } from "./mentioned-place.js";
 import { useKnownNames, useWordTargets } from "./use-known-names.js";
 
@@ -86,8 +85,7 @@ async function twoReaders(first: AppStateSnapshot): Promise<{
   root = createRoot(document.body.appendChild(document.createElement("div")));
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(
           Fragment,
           null,
@@ -154,7 +152,7 @@ test("the tasks' keys are handed again for a delivery that moves no key, and ane
     return null;
   }
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Reader))));
+  act(() => root?.render(withQueryClient(createElement(Reader))));
   await settle();
   const deliver = async (next: AppStateSnapshot) => {
     act(() => {
@@ -207,8 +205,7 @@ test("an untitled agent is named by the catalog around the reader, as its tab an
   root = createRoot(document.body.appendChild(document.createElement("div")));
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(MentionedAgents, {
           value: { models, me: undefined },
           children: createElement(Reader),

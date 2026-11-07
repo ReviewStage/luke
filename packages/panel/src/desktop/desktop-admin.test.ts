@@ -11,7 +11,6 @@ import {
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type { WireBoundaryInput } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -20,7 +19,7 @@ import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { menuItems, pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { DesktopAdmin } from "./desktop-admin.js";
 
@@ -102,8 +101,7 @@ async function open(
   root = createRoot(page);
   act(() =>
     root?.render(
-      onRegistry(
-        AtomRegistry.make(),
+      withQueryClient(
         createElement(DesktopAdmin, {
           room: options.room ?? SHELL_ROOM.WIDE,
           view,

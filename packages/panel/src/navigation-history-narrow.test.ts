@@ -37,8 +37,7 @@ import {
 } from "./tasks/use-tasks-tab.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "./testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { deliveryOf, handState, registryWith, stateWith } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { deliveryOf, handState, stateWith, withExperiments } from "./testing/app-state.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { tasksControl } from "./testing/tasks-control.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
@@ -322,9 +321,7 @@ function mount(
   roots.push(root);
   act(() =>
     root.render(
-      held.provide(
-        onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(Probe)),
-      ),
+      held.provide(withExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS), createElement(Probe))),
     ),
   );
   return {
