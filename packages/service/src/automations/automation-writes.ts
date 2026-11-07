@@ -55,6 +55,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
+import { AutomationCadence, cadenceOrUnavailable } from "./automation-cadence.js";
 import { executeAutomationRun, type SessionsForAccount } from "./automation-runs.js";
 
 /**
@@ -70,7 +71,10 @@ import { executeAutomationRun, type SessionsForAccount } from "./automation-runs
  * installation reaches, or none, and a GitHub trigger has at least one
  * whose events fire it. A schedule's next due instant is computed whenever
  * the automation is made, resumed, or given a new trigger, and cleared
- * while it is paused. A webhook trigger's secret is minted here, kept only
+ * while it is paused, and its Vercel schedule is kept to match once the
+ * write commits (`automation-cadence.ts`): a schedule Vercel did not take
+ * answers the write unavailable with the write committed, so the same
+ * write sent again keeps it. A webhook trigger's secret is minted here, kept only
  * as its SHA-256, and answered once, on the write that made it.
  */
 
@@ -452,6 +456,7 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
       slackDelivery: made.slackDelivery ?? false,
     }),
   );
+  const cadence = yield* AutomationCadence;
   if (Option.isNone(created)) {
     // A make run again under the id it named, beside or after the one that wrote, answers the automation it made.
     const standing =
@@ -459,12 +464,15 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
         ? Option.none()
         : yield* hostedStoreOrUnavailable(readAutomation(userId, id));
     if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    // Its schedule is kept again, since the make that wrote it may have died before keeping it.
+    yield* cadenceOrUnavailable(cadence.keep(standing.value));
     return {
       automation: yield* summaryOf(userId, standing.value),
       webhookSecret: undefined,
       txid: undefined,
     };
   }
+  yield* cadenceOrUnavailable(cadence.keep(created.value.automation));
   yield* recordServerEvent(
     SERVER_EVENT.AUTOMATION_CREATE,
     { userId, workspaceId: standing.organizationId },
@@ -504,6 +512,7 @@ export const changeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
     updateAutomationCommitted(userId, standing.id, changes, access),
   );
   if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  yield* cadenceOrUnavailable((yield* AutomationCadence).keep(written.value.automation));
   yield* recordServerEvent(
     SERVER_EVENT.AUTOMATION_CHANGE,
     { userId, workspaceId: standing.organizationId },
@@ -524,6 +533,17 @@ export const removeAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
   const deleted = yield* hostedStoreOrUnavailable(deleteAutomationCommitted(userId, standing.id));
   if (Option.isNone(deleted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  // Note that a schedule Vercel failed to delete is logged and left, because its firing finds no
+  // automation and records nothing (`automation-run-consumer.ts`), and the delete has committed.
+  yield* (yield* AutomationCadence)
+    .forget(standing)
+    .pipe(
+      Effect.catch((failure) =>
+        Effect.logWarning(
+          `a deleted automation's schedule stands: ${failure.code ?? "unreachable"}`,
+        ),
+      ),
+    );
   yield* recordServerEvent(
     SERVER_EVENT.AUTOMATION_CHANGE,
     { userId, workspaceId: standing.organizationId },
