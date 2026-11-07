@@ -62,10 +62,10 @@
  * text like any other, so the session recording masks them with the rest.
  */
 
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import {
   type MarkProvider,
+  makeWait,
   STATUS_TONE,
   TOAST_HOLD,
   Toast,
@@ -75,13 +75,12 @@ import {
   type ToastTone,
 } from "@repo/ui";
 import { visibleViewport } from "@repo/ui/visible-viewport";
+import { createStore, useSelector } from "@tanstack/react-store";
 import { Clock, Duration, Effect } from "effect";
-import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { appPlatform } from "./app-platform.js";
 import { failureOfConnection, reportShownFailure, type ShownFailure } from "./failure-report.js";
-import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
 
 /** The tones said in the polite region: all but a refusal, which is an alert. */
 const POLITE_TONES: ReadonlySet<ToastTone> = new Set([
@@ -243,7 +242,8 @@ interface ToastLine {
 
 const EMPTY_STACK: ToastLine = { count: 0, shown: [], waiting: [], room: TOAST_ROOM.TALL };
 
-const toastStackAtom = Atom.keepAlive(Atom.make<ToastLine>(EMPTY_STACK));
+/** The window's toasts as they stand, which `ToastHost` draws. */
+const toastStackStore = createStore<ToastLine>(EMPTY_STACK);
 
 /** The hold a notice stands for: its own, the Undo hold where it carries an action and names none, or none where it persists or says work is under way. */
 function holdOf(notice: ToastNotice): Duration.Duration | undefined {
@@ -447,38 +447,44 @@ function tellGone(before: ToastLine, after: ToastLine): Effect.Effect<void> {
 }
 
 /**
- * The toasts' lives, as an atom whose work is their waits: each step lands
- * on the stack, which then runs down to its next change and lets it happen,
- * until nothing in it changes by itself. Note that it is kept alive, because
+ * The toasts' lives, as the module's one wait: each step lands on the
+ * stack, which then runs down to its next change and lets it happen, until
+ * nothing in it changes by itself. Note that the module owns it, because
  * whoever asked for a toast is often a menu already unmounted by the time it
  * leaves, and that each step interrupts the wait of the one before it, which
  * the stack's own times let it take back up where it stood.
  */
-const toastLifeAtom = Atom.keepAlive(
-  rendererRuntime.fn((step: ToastStep, get) =>
-    Effect.gen(function* () {
-      const at = yield* Clock.currentTimeMillis;
-      const said = yield* Effect.sync(() => reportSaid(step, at));
-      const before = get(toastStackAtom);
-      let stack = settle(said === undefined ? before : stepped(before, said, at), at);
-      get.set(toastStackAtom, stack);
-      yield* tellGone(before, stack);
-      // Note that the stack is carried here rather than read back, because
-      // nothing else writes it while this runs, and each settle past a due
-      // moves it on, so the loop ends even under a registry already disposed.
-      for (;;) {
-        const dues = stack.shown.flatMap((toast) => dueAt(toast) ?? []);
-        if (dues.length === 0) return;
-        const now = yield* Clock.currentTimeMillis;
-        yield* Effect.sleep(Duration.millis(Math.max(0, Math.min(...dues) - now)));
-        const was = stack;
-        stack = settle(stack, yield* Clock.currentTimeMillis);
-        get.set(toastStackAtom, stack);
-        yield* tellGone(was, stack);
-      }
-    }),
-  ),
-);
+const toastLife = makeWait();
+
+/** The life of the stack from `step` on: the step lands, then the stack runs down to each change it makes by itself. */
+function lifeFrom(step: ToastStep): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    const at = yield* Clock.currentTimeMillis;
+    const said = yield* Effect.sync(() => reportSaid(step, at));
+    const before = toastStackStore.state;
+    let stack = settle(said === undefined ? before : stepped(before, said, at), at);
+    toastStackStore.setState(() => stack);
+    yield* tellGone(before, stack);
+    // Note that the stack is carried here rather than read back, because
+    // nothing else writes it while this runs, and each settle past a due
+    // moves it on, so the loop ends.
+    for (;;) {
+      const dues = stack.shown.flatMap((toast) => dueAt(toast) ?? []);
+      if (dues.length === 0) return;
+      const now = yield* Clock.currentTimeMillis;
+      yield* Effect.sleep(Duration.millis(Math.max(0, Math.min(...dues) - now)));
+      const was = stack;
+      stack = settle(stack, yield* Clock.currentTimeMillis);
+      toastStackStore.setState(() => stack);
+      yield* tellGone(was, stack);
+    }
+  });
+}
+
+/** Moves the stack on by `step`, calling off the wait the step before it left. */
+function stepToasts(step: ToastStep): void {
+  toastLife.start(lifeFrom(step));
+}
 
 /**
  * The toast an act that happened at once says it with, so the developer can
@@ -497,18 +503,16 @@ export function undoToast(words: string, undo: () => void): ToastNotice {
 }
 
 /**
- * Shows a toast from outside React, on the window's own registry, the one its
- * root provides: for a press whose answer lands after its handler returned
- * (`act.ts`'s `pressAct`).
+ * Shows a toast from outside React: for a press whose answer lands after its
+ * handler returned (`act.ts`'s `pressAct`).
  */
 export function showToast(notice: ToastNotice): void {
-  rendererRegistry.set(toastLifeAtom, { kind: TOAST_STEP.SHOW, notice });
+  stepToasts({ kind: TOAST_STEP.SHOW, notice });
 }
 
 /** Shows a toast; the same function on every render. */
 export function useToast(): (notice: ToastNotice) => void {
-  const step = useAtomSet(toastLifeAtom);
-  return useCallback((notice: ToastNotice) => step({ kind: TOAST_STEP.SHOW, notice }), [step]);
+  return showToast;
 }
 
 /**
@@ -519,22 +523,25 @@ export function useToast(): (notice: ToastNotice) => void {
  * every render.
  */
 export function useWorkingToast(): (words: string) => (notice: ToastNotice) => void {
-  const step = useAtomSet(toastLifeAtom);
-  return useCallback(
-    (words: string) => {
-      const subject = crypto.randomUUID();
-      step({ kind: TOAST_STEP.SHOW, notice: { words, tone: STATUS_TONE.WORKING, subject } });
-      return (notice: ToastNotice) =>
-        step({ kind: TOAST_STEP.SETTLE, subject, notice: { subject, ...notice } });
-    },
-    [step],
-  );
+  return showWorkingToast;
+}
+
+/** Shows a toast saying work is under way, and answers how to settle it (`useWorkingToast`). */
+function showWorkingToast(words: string): (notice: ToastNotice) => void {
+  const subject = crypto.randomUUID();
+  stepToasts({ kind: TOAST_STEP.SHOW, notice: { words, tone: STATUS_TONE.WORKING, subject } });
+  return (notice: ToastNotice) =>
+    stepToasts({ kind: TOAST_STEP.SETTLE, subject, notice: { subject, ...notice } });
 }
 
 /** Withdraws every toast standing or waiting about `subject`, now stale; the same function on every render. */
 export function useWithdrawToast(): (subject: string) => void {
-  const step = useAtomSet(toastLifeAtom);
-  return useCallback((subject: string) => step({ kind: TOAST_STEP.WITHDRAW, subject }), [step]);
+  return withdrawToast;
+}
+
+/** Withdraws every toast standing or waiting about `subject` (`useWithdrawToast`). */
+function withdrawToast(subject: string): void {
+  stepToasts({ kind: TOAST_STEP.WITHDRAW, subject });
 }
 
 /** What a toast says aloud: its words, then its second line. */
@@ -628,12 +635,21 @@ function ToastCard({
 
 /**
  * The toasts standing, in the window's bottom-right corner, and the regions
- * that say them. Mounted once, by the window's root.
+ * that say them. Mounted once, by the window's root. Note that the stack
+ * goes with it, its life called off, so a window that mounts it again never
+ * draws a stale toast.
  */
 export function ToastHost(): React.JSX.Element {
-  const { shown } = useAtomValue(toastStackAtom);
-  const step = useAtomSet(toastLifeAtom);
+  const { shown } = useSelector(toastStackStore);
+  const step = stepToasts;
   useWindowRoom(step);
+  useEffect(
+    () => () => {
+      toastLife.stop();
+      toastStackStore.setState(() => EMPTY_STACK);
+    },
+    [],
+  );
   return createPortal(
     <ToastStack
       label={STACK_LABEL}

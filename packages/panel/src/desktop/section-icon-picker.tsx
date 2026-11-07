@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import {
   TASK_SECTION_GLYPH,
   TASK_SECTION_ICON_COLOR,
@@ -31,6 +30,7 @@ import {
 } from "@repo/ui";
 import { SmilePlusIcon } from "@repo/ui/icons";
 import {
+  type EmojiGroup,
   emojiGroups,
   findEmoji,
   findGlyphs,
@@ -41,9 +41,8 @@ import {
   recentIcons,
 } from "@repo/ui/section-icon-model";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { Effect, Schema } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
+import { queryOptions, type UseQueryResult, useQuery } from "@tanstack/react-query";
+import { Schema } from "effect";
 import {
   BookmarkIcon,
   BriefcaseIcon,
@@ -61,7 +60,7 @@ import {
 } from "lucide-react";
 import { memo, type RefObject, useCallback, useId, useMemo, useRef, useState } from "react";
 import { readKept, writeKept } from "../kept-storage.js";
-import { rendererRuntime } from "../renderer-runtime.js";
+import { QUERY_ROOT } from "../query-keys.js";
 
 /**
  * section-icon-picker.tsx -- how a sidebar section's icon is drawn, and the icon well that changes it: a button wearing the icon, hanging a picker of every Lucide glyph in a color of the palette and every emoji, the icons this Mac picked last and the suggested ones first, under one search.
@@ -183,6 +182,12 @@ const NO_MATCH_EITHER = noMatchWords({ one: "icon or emoji", many: "icons or emo
 /** Whether a value is an icon the wire takes. */
 const isSectionIcon = Schema.is(taskSectionIconSchema);
 
+/** The wholes the picker loads on demand, each next in its query's key. */
+const SECTION_ICONS = {
+  LUCIDE: "lucide",
+  EMOJI: "emoji",
+} as const;
+
 /** Lucide's every glyph, by its PascalCase name. */
 type LucideIcons = Readonly<Record<string, LucideIcon>>;
 
@@ -194,24 +199,30 @@ type LucideIcons = Readonly<Record<string, LucideIcon>>;
  * `lucideWholeOnDemand`), so the whole stays out of the bundle every
  * window parses.
  */
-const lucideAtom = Atom.keepAlive(
-  rendererRuntime.atom(
-    Effect.tryPromise({
-      try: () => import("lucide-react"),
-      catch: () => new Error(LOAD_FAILED[ICON_TAB.ICONS]),
-    }).pipe(Effect.map((module): LucideIcons => module.icons)),
-  ),
-);
+const lucideQuery = queryOptions({
+  queryKey: [QUERY_ROOT.SECTION_ICONS, SECTION_ICONS.LUCIDE],
+  queryFn: (): Promise<LucideIcons> =>
+    import("lucide-react").then(
+      (module) => module.icons,
+      () => Promise.reject(new Error(LOAD_FAILED[ICON_TAB.ICONS])),
+    ),
+  staleTime: Number.POSITIVE_INFINITY,
+  gcTime: Number.POSITIVE_INFINITY,
+  retry: false,
+});
 
 /** Every emoji by category, loaded once per window the first time the picker's Emoji tab is shown. */
-const emojiAtom = Atom.keepAlive(
-  rendererRuntime.atom(
-    Effect.tryPromise({
-      try: () => import("unicode-emoji-json/data-by-group.json"),
-      catch: () => new Error(LOAD_FAILED[ICON_TAB.EMOJI]),
-    }).pipe(Effect.map((module) => emojiGroups(module.default))),
-  ),
-);
+const emojiQuery = queryOptions({
+  queryKey: [QUERY_ROOT.SECTION_ICONS, SECTION_ICONS.EMOJI],
+  queryFn: (): Promise<EmojiGroup[]> =>
+    import("unicode-emoji-json/data-by-group.json").then(
+      (module) => emojiGroups(module.default),
+      () => Promise.reject(new Error(LOAD_FAILED[ICON_TAB.EMOJI])),
+    ),
+  staleTime: Number.POSITIVE_INFINITY,
+  gcTime: Number.POSITIVE_INFINITY,
+  retry: false,
+});
 
 /** A glyph found in Lucide's own map, or nothing for a name it does not know. */
 function lucideGlyph(icons: LucideIcons, glyph: string): LucideIcon | undefined {
@@ -227,8 +238,8 @@ function LoadedGlyph({
   glyph: string;
   color: TaskSectionIconColor | undefined;
 }): React.JSX.Element {
-  const loaded = useAtomValue(lucideAtom);
-  const Glyph = AsyncResult.isSuccess(loaded) ? lucideGlyph(loaded.value, glyph) : undefined;
+  const loaded = useQuery(lucideQuery);
+  const Glyph = loaded.data === undefined ? undefined : lucideGlyph(loaded.data, glyph);
   if (Glyph === undefined)
     return <span className="section-glyph-blank block size-control-icon" aria-hidden="true" />;
   return <Glyph data-icon-color={color} className={inkOf(color)} />;
@@ -357,14 +368,10 @@ function PanelNote({
   loaded,
   tab,
 }: {
-  loaded: AsyncResult.AsyncResult<unknown, Error>;
+  loaded: UseQueryResult<unknown>;
   tab: IconTab;
 }): React.JSX.Element {
-  const words = AsyncResult.isFailure(loaded)
-    ? LOAD_FAILED[tab]
-    : AsyncResult.isSuccess(loaded)
-      ? NO_MATCH[tab]
-      : READING[tab];
+  const words = loaded.isError ? LOAD_FAILED[tab] : loaded.isSuccess ? NO_MATCH[tab] : READING[tab];
   return <NoteLine look={NOTE_LINE_LOOK.LIST}>{words}</NoteLine>;
 }
 
@@ -425,8 +432,8 @@ function emojiChoice(
 const GlyphPanel = memo(function GlyphPanel(
   props: GridProps & { recent: readonly TaskSectionIcon[] },
 ): React.JSX.Element {
-  const loaded = useAtomValue(lucideAtom);
-  const icons = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
+  const loaded = useQuery(lucideQuery);
+  const icons = loaded.data;
   const choices = useMemo(() => glyphChoices(Object.keys(icons ?? {})), [icons]);
   if (icons === undefined) return <PanelNote loaded={loaded} tab={ICON_TAB.ICONS} />;
   const suggested = choices.filter((choice) => isSuggestedGlyph(choice.glyph));
@@ -478,8 +485,8 @@ const GlyphPanel = memo(function GlyphPanel(
 
 /** The Emoji tab with nothing searched: every emoji under its category's name; the one chosen, or the first, is the grid's tab stop. */
 const EmojiPanel = memo(function EmojiPanel(props: GridProps): React.JSX.Element {
-  const loaded = useAtomValue(emojiAtom);
-  const groups = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
+  const loaded = useQuery(emojiQuery);
+  const groups = loaded.data;
   if (groups === undefined || groups.length === 0) {
     return <PanelNote loaded={loaded} tab={ICON_TAB.EMOJI} />;
   }
@@ -504,12 +511,12 @@ const EmojiPanel = memo(function EmojiPanel(props: GridProps): React.JSX.Element
 const FoundPanel = memo(function FoundPanel(
   props: GridProps & { query: string },
 ): React.JSX.Element {
-  const lucide = useAtomValue(lucideAtom);
-  const emoji = useAtomValue(emojiAtom);
-  const icons = AsyncResult.isSuccess(lucide) ? lucide.value : undefined;
+  const lucide = useQuery(lucideQuery);
+  const emoji = useQuery(emojiQuery);
+  const icons = lucide.data;
   const choices = useMemo(() => glyphChoices(Object.keys(icons ?? {})), [icons]);
   const glyphs = icons === undefined ? [] : findGlyphs(choices, props.query);
-  const groups = AsyncResult.isSuccess(emoji) ? findEmoji(emoji.value, props.query) : [];
+  const groups = emoji.data === undefined ? [] : findEmoji(emoji.data, props.query);
   const typed = { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: props.query.trim() };
   const typedOne = isSectionIcon(typed) ? [{ emoji: typed.emoji, name: typed.emoji }] : [];
   const found = [
@@ -518,8 +525,8 @@ const FoundPanel = memo(function FoundPanel(
   ];
   if (glyphs.length === 0 && found.length === 0) {
     // Note that nothing found says why where a set did not load, rather than that nothing matched.
-    if (!AsyncResult.isSuccess(lucide)) return <PanelNote loaded={lucide} tab={ICON_TAB.ICONS} />;
-    if (!AsyncResult.isSuccess(emoji)) return <PanelNote loaded={emoji} tab={ICON_TAB.EMOJI} />;
+    if (!lucide.isSuccess) return <PanelNote loaded={lucide} tab={ICON_TAB.ICONS} />;
+    if (!emoji.isSuccess) return <PanelNote loaded={emoji} tab={ICON_TAB.EMOJI} />;
     return <NoteLine look={NOTE_LINE_LOOK.LIST}>{NO_MATCH_EITHER}</NoteLine>;
   }
   const firstEmoji = typedOne.length > 0;

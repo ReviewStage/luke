@@ -1,6 +1,5 @@
 import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import {
-  AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
   type AgentInboxScope,
   type AgentPullRequestParams,
@@ -20,12 +19,7 @@ import {
 import type { InstalledSkillFollowParams } from "@repo/features/installed-skill-view";
 import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import type { LiveRead } from "@repo/features/live-wire";
-import {
-  type PortForwarding,
-  type PortForwardingAnswer,
-  portForwardingAnswerSchema,
-  portForwardingSchema,
-} from "@repo/features/port-forward-acts";
+import { type PortForwarding, portForwardingSchema } from "@repo/features/port-forward-acts";
 import {
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollow,
@@ -109,23 +103,9 @@ import type {
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
-import {
-  type MacCommandAnswer,
-  type MacCommandAsk,
-  macCommandAsksSchema,
-} from "./mac-command-ask.js";
+import { type MacCommandAsk, macCommandAsksSchema } from "./mac-command-ask.js";
 
-/**
- * The desktop's client over the host's own vocabulary: the settings, account,
- * task, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
- * composes one request and reads its answer, and nothing here runs it — the
- * act procedure that asked yields it, and the act port runs it once on the launch's
- * own runtime. The host is this same process, so an answer that is not the
- * shape the method documents is a defect of the build rather than a reachable
- * host state, and dies where it is read; the act port words a defect as the
- * kind's own refusal. Nothing here holds host state beyond the last settings
- * snapshot a refusal is answered with.
- */
+/** Everything a window's bootstrap reads of the host, in one answer. */
 export interface HostBootstrap {
   settings: AppSettings;
   account: AccountSnapshot;
@@ -140,11 +120,28 @@ interface HostSettingsChange {
   reporter?: string;
 }
 
+/**
+ * The client's door to the host over the Gateway for what is not a declared
+ * act, which the act port answers from the composers directly
+ * (`act-port/declared-acts.ts`): the events the host pushes, each read by
+ * its `on*Changed` reader; the snapshots a window boots from; the live
+ * reads' follows, unfollows, and retries; and the calls the rest of the
+ * client makes of its own accord. Those callers are the client's state and
+ * notices (`client/operator-client.ts`, `client/client-notices.ts`), the
+ * desktop's window service and network watch, the web tab's host
+ * (`web-host.ts`), the desktop's mirror ensure (`register-desktop-ipc.ts`),
+ * and the terminal and browser-live procedures, whose platform work is
+ * their own.
+ *
+ * Every method answers an effect: it composes one request and reads its
+ * answer, and nothing here runs it; whoever asked yields it. The host is
+ * this same process, so an answer that is not the shape the method
+ * documents is a defect of the build rather than a reachable host state.
+ * Nothing here holds host state.
+ */
 export interface HostOperator {
   bootstrap(): Effect.Effect<Option.Option<HostBootstrap>>;
   settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
-  /** The developer's answer to one command an agent asked to run on this Mac; whether the ask still waited. */
-  answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
   /** Which machine This Mac is and the device its host's record names, held by the host for the session, whole, each time it moves; never on a platform with no This Mac. */
   onThisMacHostChanged(listener: (held: AppThisMacHosts) => void): () => void;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
@@ -441,11 +438,6 @@ export interface HostOperator {
   onBrowserLiveMessage(listener: (message: BrowserLiveMessageEvent) => void): () => void;
   /** A live view's socket closed, with its code, by its connection. */
   onBrowserLiveClosed(listener: (closed: BrowserLiveClosedEvent) => void): () => void;
-  /** An agent's forwarding turned on or off, answering how it then stands; nothing where the host refused. */
-  portForwardSet(params: {
-    agentId: string;
-    on: boolean;
-  }): Effect.Effect<PortForwardingAnswer | undefined>;
   /** The one agent forwarded to this Mac's localhost and how its forwarding stands, or none, each time it moves. */
   onPortForwardingChanged(listener: (forwarding: PortForwarding) => void): () => void;
 }
@@ -504,8 +496,6 @@ export interface LiveReadChanged {
   readonly held: unknown;
 }
 
-/** What a coding-agent call the host could not answer is drawn as. */
-/** A followed transcript as the gateway's params carry it. */
 /** The comments a window holds, as the gateway names them: the task, and the page where it holds one's. */
 function commentsFollowParams(scope: TasksCommentsFollow): WireRecord {
   return scope.pageId === undefined
@@ -513,12 +503,11 @@ function commentsFollowParams(scope: TasksCommentsFollow): WireRecord {
     : { taskId: scope.taskId, pageId: scope.pageId };
 }
 
+/** A followed transcript as the gateway's params carry it. */
 function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
   const { kind, agentId, callId } = transcript;
   return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
 }
-
-const _AGENT_UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** A task call that reached no answer, as every task method answers one. */
 const TASK_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
@@ -586,14 +575,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that This Mac is the host's own, handed over in this process, so it is passed on as built, as the held beats are.
         (payload) => (isRecord(payload) ? answered<AppThisMacHosts>(payload) : undefined),
         listener,
-      ),
-    answerMacCommand: (answer) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MAC_COMMAND_ANSWER, {
-          id: answer.id,
-          decision: answer.decision,
-        }),
-        (result) => record(result)?.answered === true,
       ),
     settingsSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT), (answer) =>
@@ -1201,11 +1182,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.BROWSER_LIVE_CLOSED,
         (payload) => Result.getOrUndefined(readEither(browserLiveClosedEventSchema)(payload)),
         listener,
-      ),
-    portForwardSet: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: params.agentId, on: params.on }),
-        answerOf(portForwardingAnswerSchema, undefined),
       ),
     onPortForwardingChanged: (listener) =>
       on(

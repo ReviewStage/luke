@@ -1,5 +1,3 @@
-import { useAtom, useAtomValue } from "@effect/atom-react";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { DescriptionCommentAnchors } from "@repo/features/description-comment-wire";
 import type { DescriptionEditRequest } from "@repo/features/description-edit";
 import {
@@ -22,23 +20,12 @@ import {
 } from "@repo/features/description-edit-model";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TasksEditAnswer } from "@repo/features/tasks-view";
-import { STATUS_TONE } from "@repo/ui";
+import { STATUS_TONE, useWait } from "@repo/ui";
 import { MutationObserver, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createStore, type Store, useCreateStore, useSelector } from "@tanstack/react-store";
 import { Duration, Effect } from "effect";
-import { AsyncResult } from "effect/reactivity";
-import * as Atom from "effect/reactivity/Atom";
-import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { DescriptionEditorPlacement } from "../description-editor/contract.js";
-import { rendererRuntime } from "../renderer-runtime.js";
 import { type ToastNotice, useToast, useWithdrawToast } from "../toast.js";
 import {
   appStateQuery,
@@ -70,47 +57,30 @@ import { type ConflictWords, conflictWords, type EditPlace } from "./edit-ref.js
 /** How long the developer pauses before what they typed is saved. */
 const SAVE_PAUSE = Duration.seconds(1);
 
-/** The pause before a save, as an atom whose work is the wait; setting it again starts the wait over. */
-const savePauseAtom = rendererRuntime.fn((stamp: number) =>
-  Effect.as(Effect.sleep(SAVE_PAUSE), stamp),
-);
-
 /** How words are saved once their task is left: through a mutation of that task's own, which outlives the editor. */
 type LeftSave = (request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 
 /** The words each task was left with that did not save, by the task's id, until they save or the developer comes back to them. */
-const leftUnsavedAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, DocumentEditor>>(new Map()));
+const leftUnsavedStore = createStore<ReadonlyMap<string, DocumentEditor>>(new Map());
 
 /** The account signed in as the window's owner hook last drew it, whose change lets go of the words tasks were left with. */
-const wordsOwnerAtom = Atom.keepAlive(Atom.make<SignedInAccount | undefined>(undefined));
+const wordsOwnerStore = createStore<SignedInAccount | undefined>(undefined);
 
 /** The tasks whose open editor holds words the service does not hold yet, while it does. */
-const openUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
+const openUnsavedStore = createStore<readonly string[]>([]);
 
 /** Each leaving save still out, one mark apiece, so a task left twice stays marked until both answer. */
-const savingLeftAtom = Atom.keepAlive(Atom.make<readonly symbol[]>([]));
+const savingLeftStore = createStore<readonly symbol[]>([]);
 
 /** The titles being typed in, each by its own id, from the first word typed until the rename it asks for answers. */
-const titlesUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
-
-/** Whether any description holds words not saved: an editor open on them, a task left with them, or a title typed in. */
-const descriptionWordsUnsavedAtom = Atom.make(
-  (get) =>
-    get(openUnsavedAtom).length > 0 ||
-    get(savingLeftAtom).length > 0 ||
-    get(leftUnsavedAtom).size > 0 ||
-    get(titlesUnsavedAtom).length > 0,
-);
+const titlesUnsavedStore = createStore<readonly string[]>([]);
 
 /** `key` marked in `marks` as holding words not saved, or not. */
-function mark<Key>(
-  registry: AtomRegistry.AtomRegistry,
-  marks: Atom.Writable<readonly Key[]>,
-  key: Key,
-  unsaved: boolean,
-): void {
-  const others = registry.get(marks).filter((held) => held !== key);
-  registry.set(marks, unsaved ? [...others, key] : others);
+function mark<Key>(marks: Store<readonly Key[]>, key: Key, unsaved: boolean): void {
+  marks.setState((held) => {
+    const others = held.filter((standing) => standing !== key);
+    return unsaved ? [...others, key] : others;
+  });
 }
 
 /** What the toast over words a task was left with says, and its action, by whether they wait on a conflict. */
@@ -127,18 +97,17 @@ interface LeftTask {
   readonly signedIn: () => SignedInAccount | undefined;
   readonly save: LeftSave;
   readonly place: EditPlace;
-  readonly registry: AtomRegistry.AtomRegistry;
   readonly toast: (notice: ToastNotice) => void;
 }
 
 /** The words left unsaved in `taskId` taken back, so nothing else saves them. */
-function takeLeft(registry: AtomRegistry.AtomRegistry, taskId: string): DocumentEditor | undefined {
-  const held = registry.get(leftUnsavedAtom);
+function takeLeft(taskId: string): DocumentEditor | undefined {
+  const held = leftUnsavedStore.state;
   const kept = held.get(taskId);
   if (kept === undefined) return undefined;
   const rest = new Map(held);
   rest.delete(taskId);
-  registry.set(leftUnsavedAtom, rest);
+  leftUnsavedStore.setState(() => rest);
   return kept;
 }
 
@@ -155,25 +124,25 @@ function failureOf(answered: object): object | undefined {
  * reports.
  */
 function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol, cause?: unknown): void {
-  const { taskId, registry } = left;
+  const { taskId } = left;
   // Note that a save answered after another account signed in keeps nothing
   // and lets go of nothing kept, because its words are no longer the account's
   // signed in and what is kept for the task now is the next account's.
   if (!sameAccount(left.signedIn(), left.owner)) {
-    mark(registry, savingLeftAtom, saving, false);
+    mark(savingLeftStore, saving, false);
     return;
   }
   const kept = editorLeft(now);
-  const held = new Map(registry.get(leftUnsavedAtom));
+  const held = new Map(leftUnsavedStore.state);
   if (kept === undefined) held.delete(taskId);
   else held.set(taskId, kept);
-  registry.set(leftUnsavedAtom, held);
-  mark(registry, savingLeftAtom, saving, false);
+  leftUnsavedStore.setState(() => held);
+  mark(savingLeftStore, saving, false);
   if (kept === undefined) return;
   const { state } = kept;
   const conflict = state.kind === DOCUMENT_EDITOR_STATE.CONFLICT;
   const press = () => {
-    const standing = takeLeft(registry, taskId);
+    const standing = takeLeft(taskId);
     if (standing !== undefined) saveLeft(left, editorKeptMine(standing));
   };
   left.toast({
@@ -218,10 +187,10 @@ function saveLeft(
 ): void {
   // Note that words are never sent once another account has signed in, because they would save as it.
   if (!sameAccount(left.signedIn(), left.owner)) {
-    mark(left.registry, savingLeftAtom, saving, false);
+    mark(savingLeftStore, saving, false);
     return;
   }
-  mark(left.registry, savingLeftAtom, saving, true);
+  mark(savingLeftStore, saving, true);
   const request = leavingSave(now);
   if (request === undefined) {
     keepLeft(left, now, saving, cause);
@@ -283,7 +252,11 @@ export interface DescriptionEditing {
  * no way out of the app saves them.
  */
 export function useDescriptionWordsUnsaved(): boolean {
-  return useAtomValue(descriptionWordsUnsavedAtom);
+  const open = useSelector(openUnsavedStore, (held) => held.length > 0);
+  const saving = useSelector(savingLeftStore, (held) => held.length > 0);
+  const left = useSelector(leftUnsavedStore, (held) => held.size > 0);
+  const titles = useSelector(titlesUnsavedStore, (held) => held.length > 0);
+  return open || saving || left || titles;
 }
 
 /**
@@ -291,19 +264,20 @@ export function useDescriptionWordsUnsaved(): boolean {
  * signs in, the words its tasks were left with go, and the toasts over them,
  * because they are the words of the account that wrote them and a Retry or a
  * return would save them as the next. The window calls it once; it reads
- * the account from main's document.
+ * the account from main's document. Note that the words outlive the hook,
+ * as they did the window's registry, so the window drawing itself again as
+ * the same account keeps them.
  */
 export function useDescriptionWordsOwner(): void {
   const account = useQuery({ ...appStateQuery, select: selectSignedIn }).data;
-  const registry = useContext(RegistryContext);
   const withdrawToast = useWithdrawToast();
   useLayoutEffect(() => {
-    const held = registry.get(wordsOwnerAtom);
-    registry.set(wordsOwnerAtom, account);
+    const held = wordsOwnerStore.state;
+    wordsOwnerStore.setState(() => account);
     if (sameAccount(held, account)) return;
-    for (const taskId of registry.get(leftUnsavedAtom).keys()) withdrawToast(taskId);
-    registry.set(leftUnsavedAtom, new Map());
-  }, [registry, withdrawToast, account]);
+    for (const taskId of leftUnsavedStore.state.keys()) withdrawToast(taskId);
+    leftUnsavedStore.setState(() => new Map());
+  }, [withdrawToast, account]);
 }
 
 /**
@@ -312,12 +286,8 @@ export function useDescriptionWordsOwner(): void {
  * answers, which may be after the title has gone.
  */
 export function useMarkTitleUnsaved(): (unsaved: boolean) => void {
-  const registry = useContext(RegistryContext);
   const key = useId();
-  return useCallback(
-    (unsaved: boolean) => mark(registry, titlesUnsavedAtom, key, unsaved),
-    [registry, key],
-  );
+  return useCallback((unsaved: boolean) => mark(titlesUnsavedStore, key, unsaved), [key]);
 }
 
 /**
@@ -342,7 +312,6 @@ export function useDescriptionEditing(
   const [saves, setSaves] = useState(0);
   // Whether the open editor holds words typed since its last hand-over.
   const [holding, setHolding] = useState(false);
-  const registry = useContext(RegistryContext);
   const owner = useQuery({ ...appStateQuery, select: selectSignedIn }).data;
   // Note that whose words are sent is read from main's document as it stands
   // at the send, never as a render drew it, so no order of draws sends them as another.
@@ -353,7 +322,10 @@ export function useDescriptionEditing(
   const withdrawToast = useWithdrawToast();
   // The open editor's words not yet handed over, which a task leaving must save too.
   const heldWords = useRef<(() => void) | undefined>(undefined);
-  const [pause, restartPause] = useAtom(savePauseAtom);
+  // The pause before a save, which each change starts over, and the stamp of the change it last ran out on.
+  const pause = useWait();
+  const pausedOn = useCreateStore<number | undefined>(undefined);
+  const pausedAt = useSelector(pausedOn);
   // Note that these are refs, because a save's answer and the pause's end
   // read them as they land, which no render stands between.
   const latest = useRef(editor);
@@ -401,7 +373,13 @@ export function useDescriptionEditing(
     latest.current = next(latest.current);
     setEditor(latest.current);
     stamp.current += 1;
-    restartPause(stamp.current);
+    const at = stamp.current;
+    pause.start(
+      Effect.andThen(
+        Effect.sleep(SAVE_PAUSE),
+        Effect.sync(() => pausedOn.setState(() => at)),
+      ),
+    );
   };
 
   // Words the service does not hold yet are marked for as long as they stand
@@ -409,9 +387,9 @@ export function useDescriptionEditing(
   const unsaved = editor !== undefined && (holding || editor.draft !== editor.base);
   useEffect(() => {
     if (!unsaved) return;
-    mark(registry, openUnsavedAtom, taskId, true);
-    return () => mark(registry, openUnsavedAtom, taskId, false);
-  }, [registry, taskId, unsaved]);
+    mark(openUnsavedStore, taskId, true);
+    return () => mark(openUnsavedStore, taskId, false);
+  }, [taskId, unsaved]);
 
   // Another account signing in closes an editor open on the last one's words,
   // which are never saved as it; a save's answer still out lands on no editor.
@@ -430,7 +408,7 @@ export function useDescriptionEditing(
 
   // A pause that ran out on the newest keystroke saves what stands.
   useEffect(() => {
-    if (AsyncResult.isSuccess(pause) && !pause.waiting && pause.value === stamp.current) send();
+    if (pausedAt === stamp.current) send();
   });
 
   // An editor asked to close saves what is left, then goes once nothing is.
@@ -447,7 +425,7 @@ export function useDescriptionEditing(
   // opening that was left with words unsaved opens its editor on them.
   useEffect(() => {
     opening.current += 1;
-    const kept = text === undefined ? undefined : takeLeft(registry, taskId);
+    const kept = text === undefined ? undefined : takeLeft(taskId);
     if (kept !== undefined) withdrawToast(taskId);
     wroteAs.current = signedInNow();
     latest.current = kept;
@@ -466,7 +444,6 @@ export function useDescriptionEditing(
         signedIn: signedInNow,
         save: (request) => leaving.mutate(request),
         place: drawnPlace.current,
-        registry,
         toast,
       };
       if (held.sending === undefined) {
@@ -476,7 +453,7 @@ export function useDescriptionEditing(
       // Note that words typed while a save was out go once it lands, from
       // what it saved, and are unsaved work while they wait on it.
       const saving = Symbol(taskId);
-      mark(registry, savingLeftAtom, saving, true);
+      mark(savingLeftStore, saving, true);
       flight.current?.then(
         (answered) => saveLeft(left, editorAnswered(held, answered), saving, failureOf(answered)),
         (refused: Error) => saveLeft(left, editorRefused(held, refused.message), saving, refused),

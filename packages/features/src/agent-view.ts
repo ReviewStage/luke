@@ -9,7 +9,6 @@ import {
   agentBeforeSchema,
   agentCallIdSchema,
   agentChangesAnswerSchema,
-  agentDeleteAnswerSchema,
   agentMessageAnswerSchema,
   agentMessageRequestSchema,
   agentMessagesAnswerSchema,
@@ -33,6 +32,7 @@ import {
   refusedDeviceSchema,
 } from "./agent-wire.js";
 import { accountContract } from "./contract/account.js";
+import { agentsContract } from "./contract/agents.js";
 import { dictationContract } from "./contract/dictation.js";
 import { githubTokenContract } from "./contract/github-token.js";
 import { hostsContract } from "./contract/hosts.js";
@@ -44,7 +44,7 @@ import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import { hostIdRequestSchema } from "./host-wire.js";
-import { answerView, failureSetOf } from "./hosted-failure.js";
+import { answerView, failureSetOf, HOSTED_CALL_FAILURE } from "./hosted-failure.js";
 import {
   inboxAcknowledgeRequestSchema,
   inboxAnsweredSchema,
@@ -138,23 +138,99 @@ const AGENT_HOST_CALLS = {
   },
 };
 
+/** The refusals a call reads as no answer though its procedure declares them, as the table it read its refusals through before read every one it did not name. */
+const READ_AS_UNANSWERED = HOSTED_CALL_FAILURE.UNANSWERED;
+
+/** How a delete reads its refusals: the agent gone, or one still starting with no turn to stop yet; a Stop's other refusals are no answer. */
+export const AGENT_DELETE_RENAMES = {
+  [HOSTED_API_ERROR.NOT_PERMITTED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.DEVICE_REMOVED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: READ_AS_UNANSWERED,
+} as const;
+
+/** How an archive reads its refusals: as a delete does, every other refusal of a change no answer. */
+export const AGENT_ARCHIVE_RENAMES = {
+  ...AGENT_DELETE_RENAMES,
+  [HOSTED_API_ERROR.ALREADY_WRITTEN]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: READ_AS_UNANSWERED,
+} as const;
+
+/** How a model and effort chosen reads its refusals: the agent gone, or a choice the catalog does not offer; every other refusal of a change no answer. */
+export const AGENT_CHOOSE_RENAMES = {
+  ...AGENT_ARCHIVE_RENAMES,
+  ...AGENT_RENAMES,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: READ_AS_UNANSWERED,
+} as const;
+
+/** How a repository added reads its refusals: the agent gone, one only its starter adds to, a repository refused beside its own for why, out of reach, or not read off GitHub; every other refusal of a change no answer. */
+export const AGENT_ADD_REPOSITORY_RENAMES = {
+  [HOSTED_API_ERROR.ALREADY_WRITTEN]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.DEVICE_REMOVED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: READ_AS_UNANSWERED,
+} as const;
+
+/** How a Start reads its refusals: each as its own failure, a choice the catalog does not offer as one the service does not offer now, and a branch gone or an agent gone from its routing as no answer. */
+export const AGENT_START_RENAMES = {
+  ...AGENT_RENAMES,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: READ_AS_UNANSWERED,
+} as const;
+
+/**
+ * How the agent rows and the Starts read their refusals as one set: a
+ * choice refused as an invalid request is one the service does not offer
+ * now, and a key already written under, a branch gone, and an agent gone
+ * from its routing are no answer to every one of them.
+ */
+const AGENT_ROW_RENAMES = {
+  ...AGENT_RENAMES,
+  [HOSTED_API_ERROR.ALREADY_WRITTEN]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: READ_AS_UNANSWERED,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: READ_AS_UNANSWERED,
+} as const;
+
+/** A task's and a workspace's agents listed, an agent started, changed, and deleted, as the agent client asks them through `hostedCall`, as their contracts declare their refusals. */
+const AGENT_ROW_CALLS = {
+  agents: {
+    listOfTask: agentsContract.listOfTask,
+    listOfWorkspace: agentsContract.listOfWorkspace,
+    start: agentsContract.start,
+    startFrom: agentsContract.startFrom,
+    change: agentsContract.change,
+    delete: agentsContract.delete,
+  },
+};
+
 /**
  * Why a coding-agent call answered nothing a window can draw: the failures
- * the account's own procedures and its hosts' declare (`AGENT_ACCOUNT_CALLS`,
- * `AGENT_HOST_CALLS`), among them
+ * the account's own procedures, its hosts', and the agent rows' and Starts'
+ * declare (`AGENT_ACCOUNT_CALLS`, `AGENT_HOST_CALLS`, `AGENT_ROW_CALLS`),
+ * among them
  * no answer at all (`unanswered`), the task, agent, workspace, or host not one
  * the account holds (`not-found`), one only another member may act on
  * (`not-permitted`), a model or effort the service does not offer now
  * (`invalid-choice`), a clip dictated with no OpenAI key saved
  * (`openai-key-missing`), and a ChatGPT sign-in braked (`quota-exhausted`)
- * or given no code (`upstream-error`); and beside them those of the calls
- * that still read their refusals through a table of their own.
+ * or given no code (`upstream-error`), a task that names no repository for
+ * a Start to check out (`no-repository`), and repositories a Start or an
+ * agent named beside its own refused, for the reason that travels beside it
+ * where the service said (`EXTRA_REPOSITORY_REFUSAL`) (`extra-repository-refused`);
+ * and beside them those of the calls that still read their refusals through
+ * a table of their own.
  */
 export const AGENT_CALL_FAILURE = {
   ...failureSetOf(AGENT_ACCOUNT_CALLS, { as: AGENT_RENAMES }),
   ...failureSetOf(AGENT_HOST_CALLS),
-  /** The task names no repository, so there is nothing for an agent to check out. */
-  NO_REPOSITORY: "no-repository",
+  ...failureSetOf(AGENT_ROW_CALLS, { as: AGENT_ROW_RENAMES }),
   /** The task's workspace's GitHub installation does not reach the task's repository; why travels beside it where the service said. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** GitHub did not answer whether the workspace reaches the repository; the same call a moment later may be taken. */
@@ -183,8 +259,6 @@ export const AGENT_CALL_FAILURE = {
   AGENT_API_KEY_UNREADABLE: "agent-api-key-unreadable",
   /** The device the Start would run its agent on would not take it, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
-  /** The repositories the Start named beside its agent's own were refused, for the reason that travels beside it where the service said (`EXTRA_REPOSITORY_REFUSAL`), with the repository where one is why. */
-  EXTRA_REPOSITORY_REFUSED: "extra-repository-refused",
 } as const;
 
 export type AgentCallFailure = (typeof AGENT_CALL_FAILURE)[keyof typeof AGENT_CALL_FAILURE];
@@ -383,10 +457,7 @@ export const agentWorkspaceListParamsSchema = EffectSchema.Struct({
 export type AgentWorkspaceListParams = typeof agentWorkspaceListParamsSchema.Type;
 
 /** One task's agents, as the window hears them: each with its status, in the order started, or why there is no list. */
-export const agentListAnswerViewSchema = EffectSchema.Union([
-  EffectSchema.Struct({ agents: EffectSchema.Array(agentSummarySchema) }),
-  failed,
-]);
+export const agentListAnswerViewSchema = answerView(agentsContract.listOfTask);
 
 export type AgentListAnswer = typeof agentListAnswerViewSchema.Type;
 
@@ -449,7 +520,9 @@ export const agentQueueAnswerViewSchema = EffectSchema.Union([
 export type AgentQueueAnswerView = typeof agentQueueAnswerViewSchema.Type;
 
 /** An agent deleted for good, as the window hears it: that it was, or why it was not. */
-export const agentDeleteAnswerViewSchema = EffectSchema.Union([agentDeleteAnswerSchema, failed]);
+export const agentDeleteAnswerViewSchema = answerView(agentsContract.delete, {
+  as: AGENT_DELETE_RENAMES,
+});
 
 export type AgentDeleteAnswerView = typeof agentDeleteAnswerViewSchema.Type;
 

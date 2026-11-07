@@ -1,5 +1,3 @@
-import { useAtom, useAtomValue } from "@effect/atom-react";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import {
@@ -22,14 +20,13 @@ import {
 } from "@repo/features/integration-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateSnapshot } from "@repo/host/app-state";
+import { effectServices, useWait } from "@repo/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { createStore, type Store, useSelector } from "@tanstack/react-store";
 import { Clock, Context, Duration, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { actMutation } from "./act-mutations.js";
 import { integrationsQuery, integrationsRetryMutation } from "./live-reads.js";
-import { rendererRuntime } from "./renderer-runtime.js";
 import { appStateQuery } from "./use-app-state.js";
 
 /**
@@ -108,13 +105,12 @@ function standingOfRead(answer: IntegrationStatusesAnswer): Standing {
 
 const NO_SIGN_INS: SignIns = new Map();
 
-/** The one wait a surface holds, until a deadline on the runtime's clock: a write arms it afresh, cutting short the wait before it. */
-const signInWaitAtom = () =>
-  rendererRuntime.fn((deadline: number) =>
-    Effect.flatMap(Clock.currentTimeMillis, (now) =>
-      Effect.sleep(Duration.millis(Math.max(0, deadline - now))),
-    ),
+/** The wait until `deadline` on the clock the wait runs on, then `passed`. */
+function untilDeadline(deadline: number, passed: () => void): Effect.Effect<void> {
+  return Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    Effect.andThen(Effect.sleep(Duration.millis(Math.max(0, deadline - now))), Effect.sync(passed)),
   );
+}
 
 /**
  * Every server's sign-in as the host's read leaves it, with the sign-in
@@ -190,24 +186,34 @@ interface Ledger {
 }
 
 /**
- * One account's book and ledger, each made afresh when a surface first
- * draws it after none did, and let go with the last surface that drew it,
- * so a window with no integration on screen keeps nothing. Note that neither
- * lingers once let go, because the next account's surfaces, or a test's,
- * must never meet what the last left.
+ * The book and ledger of the account signed in, by its id: the window's
+ * one, made afresh whenever a surface draws another account than the one
+ * they were made for, so a sign-out leaves nothing of one account's
+ * integrations to the next.
  */
 interface Shared {
-  readonly book: Atom.Writable<Book>;
-  readonly ledger: Atom.Atom<Ledger>;
+  readonly owner: string | null;
+  readonly book: Store<Book>;
+  readonly ledger: Ledger;
 }
 
-/** Each signed-in account's book apart, so a sign-out leaves nothing of one account's integrations to the next. */
-const sharedOf = Atom.family(
-  (_owner: string | null): Shared => ({
-    book: Atom.make(NO_BOOK).pipe(Atom.setIdleTTL(0)),
-    ledger: Atom.make((): Ledger => ({ marks: 0, told: undefined })).pipe(Atom.setIdleTTL(0)),
-  }),
-);
+/** A fresh book and ledger for `owner`. */
+function freshShared(owner: string | null): Shared {
+  return { owner, book: createStore(NO_BOOK), ledger: { marks: 0, told: undefined } };
+}
+
+let shared = freshShared(null);
+
+/** The book and ledger of `owner`, made afresh where the window's are another account's. */
+function sharedOf(owner: string | null): Shared {
+  if (shared.owner !== owner) shared = freshShared(owner);
+  return shared;
+}
+
+/** The time now on the clock every wait here runs on, which a test turns by hand. */
+function clockNow(): number {
+  return Context.get(effectServices.state, Clock.Clock).currentTimeMillisUnsafe();
+}
 
 /** The account signed in to the window, by its id, which the host holds its integrations by; none while signed out. */
 const selectOwner = ({ account }: AppStateSnapshot): string | null =>
@@ -226,26 +232,16 @@ function withSignIns(book: Book, change: (signIns: SignIns) => SignIns): Book {
  */
 export function useIntegrationStatuses(): IntegrationStatuses {
   const { mutateAsync: cancelIntegration } = useMutation(actMutation(ACT_KIND.INTEGRATIONS_CANCEL));
-  const registry = useContext(RegistryContext);
   const owner = useQuery({ ...appStateQuery, select: selectOwner }).data ?? null;
   const held = useQuery(integrationsQuery(owner ?? undefined));
   const { mutateAsync: retryIntegrations } = useMutation(integrationsRetryMutation());
   const answer = held.data;
-  const shared = sharedOf(owner);
-  const { signIns } = useAtomValue(shared.book);
-  const ledger = useAtomValue(shared.ledger);
-  const [waitAtom] = useState(signInWaitAtom);
-  const [waited, arm] = useAtom(waitAtom);
-  const services = useAtomValue(rendererRuntime);
-  // The runtime's own clock, which a test turns by hand; its layer is built synchronously, so it is always there.
-  const now = useCallback(
-    () => Context.get(AsyncResult.getOrThrow(services), Clock.Clock).currentTimeMillisUnsafe(),
-    [services],
-  );
-  const change = useCallback(
-    (next: (book: Book) => Book) => registry.update(shared.book, next),
-    [registry, shared],
-  );
+  const { book, ledger } = sharedOf(owner);
+  const { signIns } = useSelector(book);
+  // The surface's one wait, until the earliest deadline: each arming cuts short the one before, and each deadline passed counts.
+  const wait = useWait();
+  const [passed, setPassed] = useState(0);
+  const change = useCallback((next: (held: Book) => Book) => book.setState(next), [book]);
 
   /** The sign-ins told where the host's read stands now: of what moved in it, or of every server where the deadline asks. */
   const tell = useCallback(
@@ -255,7 +251,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       if (standing === undefined) return;
       ledger.told = { answer: latest, standing };
       ledger.marks += 1;
-      const read = { mark: ledger.marks, at: now() };
+      const read = { mark: ledger.marks, at: clockNow() };
       // Note that the failures a read names are told once, by the read that carried them, never again at a deadline.
       const failures = deadline ? [] : (latest.signInFailures ?? []);
       change((book) => ({
@@ -268,7 +264,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
         ),
       }));
     },
-    [ledger, now, change],
+    [ledger, change],
   );
 
   // The host's read moved: the first surface to hear it tells the sign-ins for all of them.
@@ -278,15 +274,15 @@ export function useIntegrationStatuses(): IntegrationStatuses {
 
   // A deadline passed: the sign-ins told where the read stands now, which gives up on one still pending past it.
   useEffect(() => {
-    if (!AsyncResult.isSuccess(waited) || waited.waiting) return;
+    if (passed === 0) return;
     const latest = ledger.told?.answer;
     if (latest !== undefined) tell(latest, true);
-  }, [waited, ledger, tell]);
+  }, [passed, ledger, tell]);
 
   const deadline = nextDeadline(signIns);
   useEffect(() => {
-    if (deadline !== undefined) arm(deadline);
-  }, [deadline, arm]);
+    if (deadline !== undefined) wait.start(untilDeadline(deadline, () => setPassed((n) => n + 1)));
+  }, [deadline, wait]);
 
   const standing = answer === undefined ? undefined : standingOfRead(answer);
 
@@ -296,10 +292,10 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     (server: string) => {
       if (ledger.told?.standing.get(server) === INTEGRATION_STATUS.CONNECTED) return;
       ledger.marks += 1;
-      const signIn = begunSignIn(ledger.marks, now(), !byGitHub(server));
+      const signIn = begunSignIn(ledger.marks, clockNow(), !byGitHub(server));
       change((book) => withSignIns(book, (held) => new Map(held).set(server, signIn)));
     },
-    [ledger, now, change],
+    [ledger, change],
   );
 
   /**
@@ -312,7 +308,7 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     async (server: string): Promise<boolean> => {
       const provider = providerOfServer(server);
       if (provider === undefined) return false;
-      const waited = registry.get(shared.book).signIns.get(server);
+      const waited = book.state.signIns.get(server);
       change((book) =>
         withSignIns(book, (held) => {
           const rest = new Map(held);
@@ -339,12 +335,12 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       // A sign-in begun again while the Cancel was out still stands, and is waited on for its own whole wait.
       if (canceled.status === INTEGRATION_STATUS.PENDING) {
         ledger.marks += 1;
-        const begun = begunSignIn(ledger.marks, now(), true);
+        const begun = begunSignIn(ledger.marks, clockNow(), true);
         change((book) => withSignIns(book, (held) => new Map(held).set(server, begun)));
       }
       return true;
     },
-    [cancelIntegration, registry, shared, now, change, ledger],
+    [cancelIntegration, book, change, ledger],
   );
 
   /**

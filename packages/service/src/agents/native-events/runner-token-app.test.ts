@@ -176,7 +176,10 @@ const agentOn = (
 
 const codexOnPlan = agentOn(CONVERSATION_RUNTIME.CODEX, AGENT_PAYER.CHATGPT_SUBSCRIPTION);
 
-/** The account's ChatGPT plan, its access token `access-0` good for the minutes given. */
+/** The ChatGPT workspace the plan's ID token names. */
+const WORKSPACE = "chatgpt-workspace-fixture";
+
+/** The account's ChatGPT plan in `WORKSPACE`, its access token `access-0` good for the minutes given. */
 const signIn = (userId: string, minutesLeft: number) =>
   Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -186,7 +189,7 @@ const signIn = (userId: string, minutesLeft: number) =>
       refreshToken: "refresh-0",
       idToken: "id-token-0",
       accountId: "chatgpt-subject",
-      chatgptAccountId: undefined,
+      chatgptAccountId: WORKSPACE,
       accessExpiresAt,
     });
     yield* saveProviderKey(
@@ -203,7 +206,7 @@ const signIn = (userId: string, minutesLeft: number) =>
 
 it.layer(getTestDB())("the runner's token route", (it) => {
   it.effect(
-    "hands a Codex agent on the plan its starter's access token, uncached, renewed first once less than forty-five minutes are left, and logs none of it",
+    "hands a Codex agent on the plan its starter's access token and workspace, uncached, renewed first once less than forty-five minutes are left, and logs none of it",
     () =>
       Effect.gen(function* () {
         const { ask, openai, logged } = yield* standing;
@@ -214,14 +217,14 @@ it.layer(getTestDB())("the runner's token route", (it) => {
         assert.deepEqual(fresh, {
           status: HOSTED_HTTP_STATUS.OK,
           cache: "private, no-store",
-          body: { accessToken: "access-0" },
+          body: { accessToken: "access-0", chatgptAccountId: WORKSPACE },
         });
         assert.equal(openai.state.renewals, 0);
 
         // Sixteen minutes on, forty-four are left: renewed, though a launch margin of fifteen would not have.
         yield* TestClock.adjust("16 minutes");
         const renewed = yield* ask(agent.bearer);
-        assert.deepEqual(renewed.body, { accessToken: "access-1" });
+        assert.deepEqual(renewed.body, { accessToken: "access-1", chatgptAccountId: WORKSPACE });
         assert.equal(openai.state.renewals, 1);
         const [row] = yield* listProviderKeyRows(agent.userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
         const now = (yield* DateTime.nowAsDate).getTime();
@@ -229,7 +232,10 @@ it.layer(getTestDB())("the runner's token route", (it) => {
 
         // And held until it is due again.
         yield* TestClock.adjust("5 minutes");
-        assert.deepEqual((yield* ask(agent.bearer)).body, { accessToken: "access-1" });
+        assert.deepEqual((yield* ask(agent.bearer)).body, {
+          accessToken: "access-1",
+          chatgptAccountId: WORKSPACE,
+        });
         assert.equal(openai.state.renewals, 1);
 
         const log = logged.join("\n");
@@ -240,7 +246,7 @@ it.layer(getTestDB())("the runner's token route", (it) => {
   );
 
   it.effect(
-    "hands nothing to a missing, unknown or retired bearer, nor to an agent not on Codex on the plan, nor to a runner in the cloud's sandbox",
+    "hands nothing to a missing, unknown or retired bearer, nor to an agent not on Codex on the plan",
     () =>
       Effect.gen(function* () {
         const { ask, openai } = yield* standing;
@@ -264,13 +270,6 @@ it.layer(getTestDB())("the runner's token route", (it) => {
             "anthropic/claude-opus-5.5",
           ),
           agentOn(CONVERSATION_RUNTIME.CLAUDE_CODE, AGENT_PAYER.CHATGPT_SUBSCRIPTION),
-          // Its token stands at its sandbox's firewall, so its command asks for none.
-          agentOn(
-            CONVERSATION_RUNTIME.CODEX,
-            AGENT_PAYER.CHATGPT_SUBSCRIPTION,
-            "openai/gpt-5.5",
-            AGENT_MACHINE.VERCEL,
-          ),
         ];
         for (const other of others) {
           const { userId, bearer } = yield* other;
@@ -287,6 +286,26 @@ it.layer(getTestDB())("the runner's token route", (it) => {
   );
 
   it.effect(
+    "hands a Codex agent in the cloud's sandbox the plan's token and workspace, which its runner signs app-server in on",
+    () =>
+      Effect.gen(function* () {
+        const { ask } = yield* standing;
+        const agent = yield* agentOn(
+          CONVERSATION_RUNTIME.CODEX,
+          AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+          "openai/gpt-5.5",
+          AGENT_MACHINE.VERCEL,
+        );
+        yield* signIn(agent.userId, 60);
+
+        assert.deepEqual((yield* ask(agent.bearer)).body, {
+          accessToken: "access-0",
+          chatgptAccountId: WORKSPACE,
+        });
+      }),
+  );
+
+  it.effect(
     "hands a Codex agent recorded on its Mac's sign-in the plan's token, which its launch turns to",
     () =>
       Effect.gen(function* () {
@@ -294,7 +313,10 @@ it.layer(getTestDB())("the runner's token route", (it) => {
         const agent = yield* agentOn(CONVERSATION_RUNTIME.CODEX, AGENT_PAYER.MAC_SIGN_IN);
         yield* signIn(agent.userId, 60);
 
-        assert.deepEqual((yield* ask(agent.bearer)).body, { accessToken: "access-0" });
+        assert.deepEqual((yield* ask(agent.bearer)).body, {
+          accessToken: "access-0",
+          chatgptAccountId: WORKSPACE,
+        });
       }),
   );
 
@@ -308,7 +330,10 @@ it.layer(getTestDB())("the runner's token route", (it) => {
         const bearer = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${randomBytes(32).toString("base64url")}`;
         yield* recordAgentRunnerToken(agent.userId, agent.agentId, runnerTokenDigest(bearer));
 
-        assert.deepEqual((yield* ask(bearer)).body, { accessToken: "access-0" });
+        assert.deepEqual((yield* ask(bearer)).body, {
+          accessToken: "access-0",
+          chatgptAccountId: WORKSPACE,
+        });
       }),
   );
 

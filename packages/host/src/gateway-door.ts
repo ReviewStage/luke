@@ -12,11 +12,6 @@ import { ACT, type Act, type DoorTable } from "@repo/sync";
 
 /** What each Gateway method does, said once; a method added to the protocol fails here until it is classified. */
 const GATEWAY_ACT = {
-  // Note that a disconnect deletes the rows a workspace's held integrations read, so it is drawn gone before the service answers.
-
-  // Note that a workspace made mints its slug and membership and changes what the account reaches.
-  // Note that a connect asks Slack which team the bot answers for, so the row it writes is known only once it answers.
-  // Note that no held read carries the account's experiments, which ride the settings snapshot, so its switch draws at once in the panel as every settings switch does; it becomes a field change on the account preferences kind once the settings snapshot is fed from that read.
   // Note that a terminal is the sandbox's state, never a row the service holds.
   [GATEWAY_METHOD.TERMINALS_CREATE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.TERMINALS_RENAME]: ACT.REMOTE_WORK,
@@ -32,10 +27,7 @@ const GATEWAY_ACT = {
   [GATEWAY_METHOD.BROWSER_LIVE_CONNECT]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.BROWSER_LIVE_SEND]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT]: ACT.REMOTE_WORK,
-  // Note that turning forwarding on asks the service to start it, and its state is this Mac's listeners, never a row.
-  [GATEWAY_METHOD.PORT_FORWARDS_SET]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.MIRRORS_ENSURE]: ACT.REMOTE_WORK,
-  [GATEWAY_METHOD.MAC_COMMAND_ANSWER]: ACT.REMOTE_WORK,
 
   [GATEWAY_METHOD.SHUTDOWN]: ACT.LOCAL_WRITE,
   [GATEWAY_METHOD.ANALYTICS_RECORD]: ACT.LOCAL_WRITE,

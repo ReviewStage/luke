@@ -89,6 +89,7 @@ const FOLLOWS = [
   readonly follow: PortActKind;
   readonly retry: PortActKind;
   readonly key: WireBoundaryInput;
+  readonly [field: string]: unknown;
 }[];
 
 const ports: TestActPort<unknown>[] = [];

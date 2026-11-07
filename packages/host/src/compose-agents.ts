@@ -221,7 +221,7 @@ const AGENT_QUEUED_WRITE = {
  * account's devices last beat, asked every `MAC_PRESENCE.POLL_MS` while
  * held, and an agent's own tools, each told the same way; and each
  * workspace's memories Settings › Memory holds, followed live into the
- * sync engine's pool (`memory-follow.ts`) and told as `MEMORIES_CHANGED`,
+ * sync engine's pool (`memory-follow.ts`) and told on its live follow's slice (`liveTold`),
  * a forget drawn gone over them the moment it is asked. The window holds the agents it draws and the cursor it reads
  * from, asks when a task opens, when it starts or stops an agent, and while
  * an agent's tab shows its running transcript, and every ask is one call of
