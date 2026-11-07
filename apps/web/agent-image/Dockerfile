@@ -84,13 +84,15 @@ EOF
 # `docker` with its daemon started first where none runs, detached as root in a session of its own so
 # it outlives the command that asked, and waited on until it answers on every call, since a call
 # beside the one that started it may find it running before it answers; the CLI's plugins,
-# `compose` among them, all run through it. Note that a call naming another daemon, by
-# `DOCKER_HOST` or `DOCKER_CONTEXT`, is left alone, and the CLI runs even where the daemon never
-# answers, because a command that asks no daemon, `--version` or `context use` among them, must
-# still work.
+# `compose` among them, all run through it. Note that a call naming another daemon than the local
+# socket, by `DOCKER_HOST` or `DOCKER_CONTEXT`, is left alone, and the CLI runs even where the
+# daemon never answers, because a command that asks no daemon, `--version` or `context use` among
+# them, must still work.
 COPY --chmod=0755 <<'EOF' /usr/local/bin/docker
 #!/usr/bin/env bash
-if [ -z "${DOCKER_HOST:-}" ] && [ -z "${DOCKER_CONTEXT:-}" ]; then
+case "${DOCKER_HOST:-}" in "" | unix:///var/run/docker.sock | unix:///run/docker.sock) local_host=1 ;; *) local_host= ;; esac
+case "${DOCKER_CONTEXT:-}" in "" | default) local_context=1 ;; *) local_context= ;; esac
+if [ -n "$local_host" ] && [ -n "$local_context" ]; then
   if ! pgrep -x dockerd > /dev/null; then
     sudo -n sh -c 'setsid -f dockerd >> /var/log/dockerd.log 2>&1 < /dev/null'
   fi
