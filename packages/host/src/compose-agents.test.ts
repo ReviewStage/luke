@@ -3803,6 +3803,32 @@ it.effect(
 );
 
 it.effect(
+  "a held close its window let go while it waited behind another write is never sent once another account is signed in",
+  () =>
+    Effect.gen(function* () {
+      let account = "user-ana";
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
+      const { acts, asked, answerMarks } = yield* subject({ pool, accountId: () => account });
+      answerMarks(false);
+      yield* acts.AGENTS_INBOX_READ_STATE({ itemId: ITEM.id, unread: false });
+      yield* settled;
+      const closing = yield* Effect.forkChild(acts.AGENTS_INBOX_CLOSE(heldClose("close-1")));
+      yield* settled;
+      yield* acts.AGENTS_INBOX_CLOSE_RELEASE({ clientKey: "close-1", send: true });
+
+      account = "user-ben";
+      answerMarks(true);
+      yield* pool.resend;
+      yield* settled;
+      yield* Fiber.join(closing);
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("close:")),
+        [],
+      );
+    }),
+);
+
+it.effect(
   "a rename, an archive, a change of model, and a switch of MCP servers each stand on the agent's row of the task list from the press, and a delete draws the agent gone before the service answers",
   () =>
     Effect.gen(function* () {
