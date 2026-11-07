@@ -18,8 +18,9 @@ import {
  * though the rows far from the view are not drawn at all; and a run read
  * from its top draws the rows its scroller shows, wherever in the scroller
  * the boxes around it place it, by the sizes it measured when it was last
- * drawn where it is handed them. A list of several runs answers every row's
- * key, in the order its runs stand.
+ * drawn where it is handed them. A run anchored to its end, drawn before its
+ * scroller is laid out, opens at its end once the scroller is. A list of
+ * several runs answers every row's key, in the order its runs stand.
  */
 
 declare global {
@@ -42,6 +43,7 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
 });
 
 test("the rows are the items of a list, each saying the run's size and its own place in it", () => {
@@ -224,6 +226,80 @@ test("a row moved to another place, the run's length unchanged, is drawn under i
   const drawn = [...container.querySelectorAll("p")].map((row) => row.textContent);
   assert.deepEqual(drawn, ["d", "a", "b", "c"]);
   assert.deepEqual(handle.current?.drawnKeys(), drawn);
+});
+
+test("a run anchored to its end, first drawn in a scroller not laid out, opens at its end once it is", () => {
+  // Note that a scroller in a pane not shown yet is no size and scrolls nowhere, as the browser lays it out; shown, it is 600px tall over the 50,000px its 500 rows of 100px stand in.
+  const heard: ResizeObserverCallback[] = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      readonly #hear: ResizeObserverCallback;
+      constructor(hear: ResizeObserverCallback) {
+        this.#hear = hear;
+      }
+      observe(): void {
+        heard.push(this.#hear);
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  );
+  let shown = false;
+  let top = 0;
+  const isScroller = (element: Element) => element.id === "scroller";
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return isScroller(this) && shown ? 600 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return isScroller(this) && shown ? 50_000 : 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "get").mockImplementation(function (this: Element) {
+    return isScroller(this) ? top : 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "set").mockImplementation(function (
+    this: Element,
+    to: number,
+  ) {
+    if (!isScroller(this) || to === top) return;
+    top = to;
+    this.dispatchEvent(new Event("scroll"));
+  });
+  // jsdom has no `scrollTo` on an element, which the virtualizer writes through.
+  Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+    configurable: true,
+    value(this: HTMLElement, options?: ScrollToOptions) {
+      if (options?.top !== undefined) this.scrollTop = options.top;
+    },
+  });
+  const keys = Array.from({ length: 500 }, (_, index) => `row-${index}`);
+  const scroller = createRef<HTMLDivElement>();
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        "div",
+        { id: "scroller", ref: scroller },
+        createElement(VirtualRows, {
+          scroller,
+          keys,
+          estimate: 100,
+          children: (index: number) => createElement("p", null, keys[index]),
+        }),
+      ),
+    ),
+  );
+  shown = true;
+  act(() => {
+    for (const hear of heard) hear([], {} as ResizeObserver);
+  });
+  assert.equal(top, 49_400);
 });
 
 test("a list's runs answer every row's key, those left undrawn among them, in the order the runs stand", () => {
