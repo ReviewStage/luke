@@ -63,7 +63,6 @@ import {
   cloneElement,
   createContext,
   useContext,
-  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -379,11 +378,6 @@ function ServersPopover({
     .filter((row) => row.kind !== SERVER_ROW.QUIET);
   const at = Math.min(highlight, Math.max(picks.length - 1, 0));
 
-  // The field takes focus as the popover opens, unless its owner leaves the keyboard where it was.
-  useEffect(() => {
-    if (takesFocus) field.current?.focus();
-  }, [takesFocus]);
-
   useLayoutEffect(() => {
     const row = document.getElementById(`${rowsId}-${at}`);
     if (list.current !== null && row !== null) revealWithin(list.current, row);
@@ -528,6 +522,8 @@ function ServersPopover({
       look={POPOVER_PANEL_LOOK.MENU}
       title={SERVERS_LABEL}
       takesFocus={takesFocus}
+      // Note that the panel hands the field the focus each time it opens, a reopening while it fades out among them.
+      initialFocus={field}
       onDismiss={onBack}
       onLeave={onLeave}
       onExited={onExited}
