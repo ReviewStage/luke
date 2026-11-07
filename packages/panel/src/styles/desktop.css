@@ -1186,10 +1186,8 @@ body,
 
 /* Over a File tab the bar stands just under the file's own bar
    (`tasks.css`), whose controls it would otherwise cover: that bar's
-   buttons, its padding, and its hairline. The side panel holds its tab in
-   `.side-panel-keeps`, which lays nothing out but stands between the scope
-   and the tab, so the tab is looked for there too. */
-.find-scope:has(> .file-view, > .side-panel-keeps > .file-view) > .find-bar {
+   buttons, its padding, and its hairline. */
+.find-scope:has(> .file-view) > .find-bar {
   top: calc(var(--ui-control-height) + 2 * var(--ui-tight-gap) + 1px + var(--ui-space-8));
 }
 

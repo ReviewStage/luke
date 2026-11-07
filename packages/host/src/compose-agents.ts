@@ -1,4 +1,6 @@
 import type { HostedAgentClient } from "@repo/features";
+import { ACCOUNT_PREFERENCES_READ } from "@repo/features/account-preferences-live";
+import { AGENT_ORIGIN_READ } from "@repo/features/agent-origin-live";
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
@@ -62,7 +64,8 @@ import {
 } from "@repo/features/inbox-writes";
 import { WRITE_UNTAKEN, writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
-import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire";
+import { WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
+import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { CHATGPT_DEVICE_LOGIN, type ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import { pullRequestChaptersReadParamsSchema } from "@repo/features/pull-request-chapters-view";
@@ -103,7 +106,11 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
-import { agentDefaultWritten, heldAccountPreferences } from "./account-preferences-follow.js";
+import {
+  agentDefaultWritten,
+  chaptersProviderWritten,
+  heldAccountPreferences,
+} from "./account-preferences-follow.js";
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
@@ -250,11 +257,10 @@ const AGENT_QUEUED_WRITE = {
 export type AgentClient = Pick<
   HostedAgentClient,
   | "pullRequestChaptersLive"
-  | "agentOriginLive"
   | "generateChapters"
   | "models"
-  | "accountPreferencesLive"
   | "writeDefault"
+  | "writeChaptersProvider"
   | "liveRead"
   | "devicePresence"
   | "removeHost"
@@ -303,7 +309,6 @@ export type AgentClient = Pick<
   | "readGitHubToken"
   | "saveGitHubToken"
   | "removeGitHubToken"
-  | "workspaceMemoriesLive"
   | "forgetMemory"
   | "transcribeDictation"
   | "answerInbox"
@@ -372,6 +377,13 @@ export interface AgentsComposer extends Composer {
   readonly queueable: readonly AnyWrite[];
   /** Every close a window still holds for its Undo let go as sent, answering once each is answered, so a quit drops none. */
   readonly flushHeldCloses: Effect.Effect<void>;
+  /**
+   * Every held close let go as sent under the account that held it, as that
+   * account leaves, answering once each is answered or
+   * `HELD_CLOSE_SETTLE_BOUND` has passed; what is still out then is dropped,
+   * so none goes under whoever signs in next.
+   */
+  readonly letGoHeldCloses: Effect.Effect<void>;
 }
 
 /** What a call the closed gate kept from the service answers: unanswered, as the window draws it, with why the host asked nothing. */
@@ -401,6 +413,14 @@ function gateClosed(by: string): GateClosed {
  * reloaded, while its Undo stood.
  */
 const HELD_CLOSE_BOUND = Duration.minutes(1);
+
+/**
+ * The longest an account's departure waits for the closes it held to be
+ * answered before it drops what is still out: a sign-out waits on it, and a
+ * close still out past it would be sent again under the next account's
+ * credential, which each attempt reads afresh.
+ */
+const HELD_CLOSE_SETTLE_BOUND = Duration.seconds(5);
 
 /** What a held close its window took back answers: refused, so the pool takes back what it drew and keeps nothing to send again, and the window that undid it reads nothing of it. */
 const CLOSE_UNDONE: AgentInboxAnsweredView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
@@ -543,7 +563,9 @@ export function composeAgents(
     });
     const origins = yield* heldAgentOrigins({
       seal: (agentId, poll, userId, after) =>
-        asked(client.agentOriginLive(agentId, userId, poll, after)),
+        asked(
+          client.liveRead(AGENT_ORIGIN_READ, { id: agentId, userId }, poll ? { after } : undefined),
+        ),
       accountId: dependencies.accountId,
       gate,
       tell: (held: AppAgentOrigins) =>
@@ -565,7 +587,8 @@ export function composeAgents(
         tellItems,
       );
     const preferences = yield* heldAccountPreferences({
-      seal: (userId, poll, after) => asked(client.accountPreferencesLive(userId, poll, after)),
+      seal: (userId, poll, after) =>
+        asked(client.liveRead(ACCOUNT_PREFERENCES_READ, { userId }, poll ? { after } : undefined)),
       gate,
       pool: dependencies.pool,
       tell: (held: AppAccountPreferences) =>
@@ -576,7 +599,13 @@ export function composeAgents(
       Effect.scoped(Effect.andThen(preferences.hold(userId), Effect.never));
     const memories = yield* heldMemories({
       seal: (workspaceId, userId, poll, after) =>
-        asked(client.workspaceMemoriesLive(workspaceId, userId, poll, after)),
+        asked(
+          client.liveRead(
+            WORKSPACE_MEMORIES_READ,
+            { userId, workspaceId },
+            poll ? { after } : undefined,
+          ),
+        ),
       accountId: dependencies.accountId,
       gate,
       pool: dependencies.pool,
@@ -734,8 +763,8 @@ function presenceOf(answer: DevicePresenceAnswer, askedAt: number): AppDevicePre
  * account's; that the models are asked again as the keys move, since a key,
  * a plan, or a plan's default moves which models no credential pays for;
  * and that
- * an ask of the beats which fails, or runs past
- * `MAC_PRESENCE.READ_TIMEOUT_MS`, after one answered keeps the beats it
+ * an ask of the beats which fails, its deadline of
+ * `MAC_PRESENCE.READ_TIMEOUT_MS` among the ways, after one answered keeps the beats it
  * answered, marked stale, under the new instant, so a window says it cannot
  * check rather than that a device left.
  */
@@ -755,15 +784,10 @@ function fetchedReads(
       fetch: (userId, held) =>
         Effect.gen(function* () {
           if (userId !== accountId()) return Option.none();
-          // Note that a read past its bound counts as one that failed, so a window says it cannot check rather than letting every device age away while it hangs.
-          const answer = yield* Effect.timeoutOption(
-            asked(client.devicePresence()),
-            Duration.millis(MAC_PRESENCE.READ_TIMEOUT_MS),
-          );
+          // Note that a read past its deadline fails like any other, so a window says it cannot check rather than letting every device age away while it hangs.
+          const answer = yield* asked(client.devicePresence());
           const askedAt = yield* Clock.currentTimeMillis;
-          if (Option.isSome(answer) && !("failure" in answer.value)) {
-            return Option.some(presenceOf(answer.value, askedAt));
-          }
+          if (!("failure" in answer)) return Option.some(presenceOf(answer, askedAt));
           return held === undefined
             ? Option.none()
             : Option.some({ beats: held.beats, askedAt, stale: true as const });
@@ -788,7 +812,6 @@ function fetchedReads(
       path: (userId) => [userId],
       gate,
       focus,
-      every: MODEL_CATALOG_TTL,
       fetch: (userId) =>
         userId === accountId()
           ? Effect.map(asked(client.models()), (answer) =>
@@ -1119,11 +1142,21 @@ function composed(
       queued: settledAs,
     },
   );
-  /** The closes windows hold for their Undo, by each close's key: told once whether it goes to the service, and answered once it has. */
-  const heldCloses = new Map<
-    string,
-    { readonly told: Deferred.Deferred<boolean>; readonly answered: Deferred.Deferred<void> }
-  >();
+  /**
+   * A close a window holds for its Undo: told once whether it goes to the
+   * service, answered once it has, dropped where its account left before it
+   * was answered, and the account that held it, which alone may send it.
+   */
+  interface HeldClose {
+    readonly told: Deferred.Deferred<boolean>;
+    readonly answered: Deferred.Deferred<void>;
+    readonly dropped: Deferred.Deferred<void>;
+    readonly holder: string | undefined;
+  }
+  /** The closes windows hold for their Undo, by each close's key, until each is told. */
+  const heldCloses = new Map<string, HeldClose>();
+  /** The held closes told to go and not yet answered, which an account's departure drops. */
+  const sendingCloses = new Set<HeldClose>();
   /**
    * What a window decided of a held close before the close came to wait, by
    * its key, with when: as an Undo pressed while an earlier write on the same
@@ -1151,6 +1184,9 @@ function composed(
    * `HELD_CLOSE_BOUND` with no word from its window, as sent. What `send`
    * answers, or `undone`, it answers. Note that it is answered to a quit's
    * flush however it ends, interrupted too, so the quit never waits on it.
+   * Note too that it goes only under the account that held it: one let go
+   * once another is signed in, or dropped as its account leaves while it is
+   * still out, answers `undone`, so its item stands open again.
    */
   const released = <Answer>(
     clientKey: string,
@@ -1158,19 +1194,25 @@ function composed(
     undone: Answer,
   ): Effect.Effect<Answer> =>
     Effect.gen(function* () {
-      const held = {
+      const held: HeldClose = {
         told: yield* Deferred.make<boolean>(),
         answered: yield* Deferred.make<void>(),
+        dropped: yield* Deferred.make<void>(),
+        holder: dependencies.accountId(),
       };
       heldCloses.set(clientKey, held);
       const settled = Effect.sync(() => {
         heldCloses.delete(clientKey);
+        sendingCloses.delete(held);
         letGoAt.set(clientKey, kernel.now());
       }).pipe(Effect.andThen(Deferred.succeed(held.answered, undefined)));
       return yield* Effect.gen(function* () {
         const heard = yield* Effect.timeoutOption(Deferred.await(held.told), HELD_CLOSE_BOUND);
         heldCloses.delete(clientKey);
-        return yield* Option.getOrElse(heard, () => true) ? send : Effect.succeed(undone);
+        const goes = Option.getOrElse(heard, () => true);
+        if (!goes || dependencies.accountId() !== held.holder) return undone;
+        sendingCloses.add(held);
+        return yield* Effect.raceFirst(send, Effect.as(Deferred.await(held.dropped), undone));
       }).pipe(Effect.ensuring(settled));
     });
   // Note that the closes are read before they are told, since telling one takes it out of the map.
@@ -1183,6 +1225,29 @@ function composed(
         Effect.andThen(Deferred.succeed(told, true), Deferred.await(answered)),
       { concurrency: "unbounded", discard: true },
     );
+  });
+  /** Every held close not yet answered dropped: told to stay, or, where it is already out, cut off and answered as undone. */
+  const dropHeldCloses = Effect.suspend(() => {
+    const held = [...heldCloses.values(), ...sendingCloses];
+    heldCloses.clear();
+    sendingCloses.clear();
+    return Effect.forEach(
+      held,
+      ({ told, dropped }) =>
+        Effect.andThen(Deferred.succeed(told, false), Deferred.succeed(dropped, undefined)),
+      { discard: true },
+    );
+  });
+  // Note that the closes already out are waited for beside those let go, since each attempt reads the credential afresh and one still out past the departure would go under the next account.
+  const letGoHeldCloses = Effect.suspend(() => {
+    const out = [...sendingCloses];
+    return Effect.timeoutOption(
+      Effect.andThen(
+        flushHeldCloses,
+        Effect.forEach(out, ({ answered }) => Deferred.await(answered), { discard: true }),
+      ),
+      HELD_CLOSE_SETTLE_BOUND,
+    ).pipe(Effect.andThen(dropHeldCloses));
   });
   /**
    * An open item closed without an answer, settling it. A close the window
@@ -1263,7 +1328,7 @@ function composed(
   /** An item's reminder set for an instant, or canceled, drawn at once; whether it is read stands as it was. */
   const reminded = inboxWrite<AgentInboxRemindParams, AgentInboxReadStateView>(
     ({ itemId }) => [itemId],
-    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until, at: kernel.now() }),
+    ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until }),
     ({ itemId, until }, key) => asked(client.remindInboxItem(itemId, until, key)),
     {
       name: INBOX_QUEUED_WRITE.REMIND,
@@ -1374,6 +1439,13 @@ function composed(
     AGENTS_DEFAULT_WRITE: declaredWrite(
       dependencies.pool,
       agentDefaultWritten((choice) => asked(client.writeDefault(choice)), dependencies.accountId),
+    ),
+    AGENTS_CHAPTERS_PROVIDER_WRITE: declaredWrite(
+      dependencies.pool,
+      chaptersProviderWritten(
+        (provider) => asked(client.writeChaptersProvider(provider)),
+        dependencies.accountId,
+      ),
     ),
     // A removal is drawn gone over the held hosts the moment it is asked.
     HOSTS_REMOVE: declaredWrite(
@@ -1800,6 +1872,8 @@ function composed(
 
   // Note that the windows' holds stand through a sign-out, so a session signing in follows them anew (`open`).
   const reset = Effect.gen(function* () {
+    // Note that a close the leaving account held is never sent under whoever comes next.
+    yield* dropHeldCloses;
     yield* transcriptSlice.end;
     yield* holders.end;
     yield* chapters.end;
@@ -1856,5 +1930,6 @@ function composed(
       anyWrite(markedAll),
     ],
     flushHeldCloses,
+    letGoHeldCloses,
   };
 }

@@ -9,7 +9,6 @@ import {
   callAnswered,
   jsonOf,
 } from "./account-call.js";
-import { type BrowserTabsPlace, browserTabsPlaceId } from "./agent-browser-tab-wire.js";
 import { startRefusedAs } from "./agent-client.js";
 import type { AgentAgentAnswer } from "./agent-view.js";
 import type { LocalAgentRefusal } from "./agent-wire.js";
@@ -19,7 +18,6 @@ import {
   DESCRIPTION_ATTACHMENT_REFUSAL,
   descriptionAttachmentTypeSchema,
 } from "./description-attachment-wire.js";
-import type { TaskCommentsLiveAnswer } from "./description-comment-live.js";
 import {
   type DescriptionCommentActionRequest,
   type DescriptionCommentStart,
@@ -37,7 +35,7 @@ import type {
   GitHubRepositoryIssueAnswer,
   GitHubRepositoryPullRequestAnswer,
 } from "./github-repositories-wire.js";
-import { hostedCall } from "./hosted-call.js";
+import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
 import {
   askHosted,
   askLive,
@@ -49,16 +47,9 @@ import {
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import { WRITE_UNTAKEN, type WriteUntaken, writeUntakenOf } from "./keyed-write.js";
-import {
-  LIVE_POLL,
-  LIVE_SIGNED_OUT,
-  LIVE_USER_QUERY,
-  type TaskBrowserTabsLiveAnswer,
-  type TaskHistoryLiveAnswer,
-  type TaskPagesLiveAnswer,
-  type TaskRecordLiveAnswer,
-} from "./live-wire.js";
-import { type PagePlace, type PageVersion, pagePlaceId } from "./page-wire.js";
+import type { AnyLiveRead, LiveReadAsked } from "./live-read.js";
+import { LIVE_POLL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
+import type { PagePlace, PageVersion } from "./page-wire.js";
 import {
   descriptionAttachmentPath,
   type RepositoryPlace,
@@ -70,7 +61,6 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
-import type { SidebarLiveAnswer } from "./sidebar-live.js";
 import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
   type TaskSectionsWritten,
@@ -80,6 +70,7 @@ import {
 import {
   type DescriptionRevisionAnswer,
   type DescriptionRevisionsAnswer,
+  type HeldTaskListAnswer,
   type RepositoryPinsWritten,
   repositoryPinRequestSchema,
   TASK_LIST_ARCHIVED,
@@ -89,7 +80,6 @@ import {
   type TaskCreateRequest,
   type TaskFileAnswer,
   type TaskFileRequest,
-  type TaskListAnswer,
   type TaskParentRequest,
   type TaskRelationChangeRequest,
   type TaskRenameRequest,
@@ -127,7 +117,6 @@ import {
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksCommentAnswer,
-  type TasksCommentsFollow,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
 } from "./tasks-view.js";
@@ -430,7 +419,7 @@ export class HostedTaskClient {
 
   /** Every plan the account owns, newest started first, and every agent with no plan in its workspaces, the archived agents among them. */
   list(): Effect.Effect<
-    TaskCallResult<TaskListAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>,
+    TaskCallResult<HeldTaskListAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>,
     never,
     HttpClient.HttpClient
   > {
@@ -533,9 +522,12 @@ export class HostedTaskClient {
     never,
     HttpClient.HttpClient
   > {
-    return Effect.match(
-      askHosted(this.#hosted.github.repositories, workspaceId === undefined ? {} : { workspaceId }),
-      { onSuccess: succeeded, onFailure: () => UNANSWERED },
+    return Effect.map(
+      hostedCall(
+        this.#hosted.github.repositories,
+        workspaceId === undefined ? {} : { workspaceId },
+      ),
+      (listed) => ("failure" in listed ? UNANSWERED : succeeded(listed)),
     );
   }
 
@@ -653,117 +645,9 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Where one task's description and pages stand, sealed for following over Neon
-   * Realtime, or with `poll` their rows inline, for a reader polling while
-   * Realtime fails them, for the account `userId` names: not found where the
-   * account reaches no such task, signed out where the session is another's,
-   * unanswered for anything else, which the caller answers by sealing again.
-   */
-  recordLive(
-    taskId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskRecordLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(this.#hosted.live.taskRecord, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
-      LIVE_REFUSALS,
-    );
-  }
-
-  /**
-   * One task's pages, or one coding agent's on no task, each at its newest
-   * version, sealed for following over Neon Realtime, or with `poll` their
-   * rows inline at the poll address, on the terms a task's record's is.
-   */
-  pagesLive(
-    place: PagePlace,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskPagesLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    const procedure =
-      "taskId" in place ? this.#hosted.live.taskPages : this.#hosted.live.agentPages;
-    return hostedResult(
-      askLive(procedure, { id: pagePlaceId(place), [LIVE_USER_QUERY]: userId }, poll, after),
-      LIVE_REFUSALS,
-    );
-  }
-
-  /** One agent's Browser tabs, or a task's agents' together, the agent's pointer on each among them, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
-  browserTabsLive(
-    place: BrowserTabsPlace,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskBrowserTabsLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(
-        "taskId" in place ? this.#hosted.live.taskBrowserTabs : this.#hosted.live.agentBrowserTabs,
-        { id: browserTabsPlaceId(place), [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-      LIVE_REFUSALS,
-    );
-  }
-
-  /** One task's comments, its description's own threads or one page's where `subject` names one, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
-  commentsLive(
-    subject: TasksCommentsFollow,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskCommentsLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    const page = subject.pageId === undefined ? undefined : { page: subject.pageId };
-    return hostedResult(
-      askLive(
-        this.#hosted.live.taskComments,
-        { id: subject.taskId, ...page, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-      LIVE_REFUSALS,
-    );
-  }
-
-  /** One task's newest page of description history sealed for following, or with `poll` its rows inline, on the terms its pages' is. */
-  historyLive(
-    taskId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskHistoryLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(
-        this.#hosted.live.taskHistory,
-        { id: taskId, [LIVE_USER_QUERY]: userId },
-        poll,
-        after,
-      ),
-      LIVE_REFUSALS,
-    );
+  /** A declared live read sealed for following, or polled where `poll` asks (`askLiveRead`). */
+  liveRead<Read extends AnyLiveRead>(read: Read, params: LiveReadAsked<Read>, poll?: HostedPoll) {
+    return askLiveRead(this.#hosted.live, read, params, poll);
   }
 
   /**
@@ -789,7 +673,10 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskFileAnswer | undefined, never, HttpClient.HttpClient> {
     const query = fileWindowQuery(window);
     if (query === undefined) return Effect.succeed(undefined);
-    return orNothing(askHosted(this.#hosted.github.repositoryFile, { ...place, ...query }));
+    return Effect.map(
+      hostedCall(this.#hosted.github.repositoryFile, { ...place, ...query }),
+      (read) => ("failure" in read ? undefined : read),
+    );
   }
 
   /**
@@ -835,14 +722,15 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskTreeAnswer | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskTreeRequestSchema)(folder));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return orNothing(
-      askHosted(this.#hosted.github.repositoryTree, {
+    return Effect.map(
+      hostedCall(this.#hosted.github.repositoryTree, {
         ...place,
         ...(admitted.path === "" ? undefined : { path: admitted.path }),
         ...(admitted.recursive === true
           ? { recursive: GITHUB_REPOSITORY_TREE_RECURSIVE }
           : undefined),
       }),
+      (listed) => ("failure" in listed ? undefined : listed),
     );
   }
 
@@ -850,11 +738,12 @@ export class HostedTaskClient {
   readRepositorySkills(
     place: SkillsPlace,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.github.repositorySkills, {
+    return Effect.map(
+      hostedCall(this.#hosted.github.repositorySkills, {
         ...place,
         installed: TASK_SKILLS_INSTALLED,
       }),
+      (read) => ("failure" in read ? undefined : read),
     );
   }
 
@@ -863,8 +752,9 @@ export class HostedTaskClient {
     place: RepositoryPlace,
     number: number,
   ): Effect.Effect<GitHubRepositoryPullRequestAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.github.repositoryPullRequest, { ...place, number: String(number) }),
+    return Effect.map(
+      hostedCall(this.#hosted.github.repositoryPullRequest, { ...place, number: String(number) }),
+      (read) => ("failure" in read ? undefined : read),
     );
   }
 
@@ -873,8 +763,9 @@ export class HostedTaskClient {
     place: RepositoryPlace,
     number: number,
   ): Effect.Effect<GitHubRepositoryIssueAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.github.repositoryIssue, { ...place, number: String(number) }),
+    return Effect.map(
+      hostedCall(this.#hosted.github.repositoryIssue, { ...place, number: String(number) }),
+      (read) => ("failure" in read ? undefined : read),
     );
   }
 
@@ -1125,26 +1016,6 @@ export class HostedTaskClient {
     return Effect.map(
       hostedCall(this.#hosted.repositoryPins.set, asked, keyedReading(key)),
       (pinned) => ("failure" in pinned ? untakenAs(pinned) : succeeded(pinned)),
-    );
-  }
-
-  /**
-   * The account's sidebar sealed for following over Neon Realtime, for the
-   * account named, or with each part's rows inline where `poll` asks for
-   * them; signed out where the session is another account's.
-   */
-  sidebarLive(
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<SidebarLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(this.#hosted.live.sidebar, { [LIVE_USER_QUERY]: userId }, poll, after),
-      LIVE_REFUSALS,
     );
   }
 

@@ -33,8 +33,6 @@ import { standingFailures } from "./task-agents-model.js";
 import {
   DESCRIPTION_ACTOR,
   type ListedPullRequest,
-  TASK_AGENTS_BOUNDS,
-  type TaskAgentLine,
   type TaskAgentPin,
   type TaskAgentsSummary,
   type TaskListAnswer,
@@ -196,6 +194,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   /** The Mac a local agent runs on, by its id and its name; null for an agent in a sandbox, or whose Mac is gone. */
   deviceId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   deviceName: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** Whether the agent's conversation records its sandbox's session; absent from a statement before it was carried. */
+  sandboxOpen: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /** The plan list's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
@@ -215,7 +215,7 @@ const WORKING_STATUSES: ReadonlySet<AgentStatus> = new Set([
   AGENT_STATUS.RUNNING,
 ]);
 
-/** The order the pull requests a row names stand in: those still to act on first, then merged, then closed. */
+/** The order a plan's pull requests stand in: those still to act on first, then merged, then closed. */
 const PULL_REQUEST_RANK = {
   [PULL_REQUEST_STATE.OPEN]: 0,
   [PULL_REQUEST_STATE.DRAFT]: 0,
@@ -277,33 +277,10 @@ function newestStarted(a: AgentLiveRow, b: AgentLiveRow): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-/** One agent as its plan's row names it, its status read at `now`. */
-function agentLine(row: AgentLiveRow, now: number): TaskAgentLine {
-  const status = statusOf(row, now);
-  const at = WORKING_STATUSES.has(status)
-    ? runStartedAt(row, now)
-    : turnOf(row) === undefined
-      ? undefined
-      : (row.settledAt ?? undefined);
-  return {
-    id: row.id,
-    title: row.title,
-    model: row.model,
-    effort: row.effort,
-    status,
-    ...(at === undefined ? undefined : { at }),
-    ...(row.starterName === null
-      ? undefined
-      : { startedBy: { userId: row.starterId, name: row.starterName } }),
-    ...(row.automationId === null ? undefined : { automationId: row.automationId }),
-  };
-}
-
 /**
  * Every pull request a plan's agents opened, the archived agents' left out,
  * each once by its page: those still open first, the newest agent's first
- * within a rank. Uncapped, so a card can name every one; the plan's row
- * names the first few.
+ * within a rank, every one of them.
  */
 function pullRequestLinesOf(rows: readonly AgentLiveRow[]): readonly TaskPullRequestLine[] {
   const pullRequests = new Map<string, TaskPullRequestLine>();
@@ -336,34 +313,28 @@ interface AgentGroup {
 }
 
 /**
- * One plan's agents in brief, as the held read sums them: those at work
- * named first, then the rest, newest started first within each; each pull
- * request once by its page, those still open first, newest agent's first
- * within a rank; the latest settled activity of every agent, archived
- * or not; and how many failed with no agent started since
- * (`standingFailures`).
+ * One plan's agents counted, as the held read counts them: the archived
+ * left out, how many are at work and how many failed with no agent
+ * started since (`standingFailures`), how many pull
+ * requests they opened, and the latest settled activity of every agent,
+ * archived or not. The agents and pull requests themselves are the
+ * drawing's `taskAgents` and `taskPullRequests`.
  */
 function agentsSummaryOf(group: AgentGroup, now: number): TaskAgentsSummary {
   const { agents: rows, pullRequests } = group;
-  const newest = rows
+  const standing = rows
     .filter((row) => row.archivedAt === null)
-    .toSorted(newestStarted)
-    .map((row) => ({ row, line: agentLine(row, now) }));
-  const working = newest.filter(({ line }) => WORKING_STATUSES.has(line.status));
-  const resting = newest.filter(({ line }) => !WORKING_STATUSES.has(line.status));
+    .map((row) => ({
+      createdAt: row.createdAt,
+      status: statusOf(row, now),
+      at: turnOf(row) === undefined ? undefined : (row.settledAt ?? undefined),
+    }));
   return {
-    total: newest.length,
-    working: working.length,
-    failed: standingFailures(
-      newest.map(({ row, line }) => ({ createdAt: row.createdAt, line })),
-      Math.max(...rows.map((row) => row.createdAt)),
-    ),
+    total: standing.length,
+    working: standing.filter(({ status }) => WORKING_STATUSES.has(status)).length,
+    failed: standingFailures(standing, Math.max(...rows.map((row) => row.createdAt))),
     ...(rows.length === 0 ? undefined : { activityAt: Math.max(...rows.map(activityAt)) }),
-    agents: [...working, ...resting]
-      .slice(0, TASK_AGENTS_BOUNDS.MAX_AGENTS)
-      .map(({ line }) => line),
     pullRequestTotal: pullRequests.length,
-    pullRequests: pullRequests.slice(0, TASK_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
   };
 }
 
@@ -519,6 +490,7 @@ function agentSummaryOf(
     ...(continuedBy === undefined ? undefined : { continuedBy }),
     ...(started === undefined ? undefined : { runStartedAt: started }),
     ...(stoppable ? undefined : { stoppable: false }),
+    ...(row.sandboxOpen === undefined ? undefined : { sandboxOpen: row.sandboxOpen }),
   };
 }
 
@@ -557,6 +529,21 @@ function pullRequestOf(published: AgentLiveRow["published"]) {
       checks,
       ...(queued === true ? { queued } : undefined),
     },
+  };
+}
+
+/** One agent on a plan as the list carries it, its status read at `now`, with its own workspace and repository, and when its newest turn ended where one has. */
+function listedAgentOf(
+  row: AgentLiveRow,
+  now: number,
+  continuedBy: ContinuedBy | undefined,
+): ListedAgent {
+  const settledAt = turnOf(row) === undefined ? null : row.settledAt;
+  return {
+    ...agentSummaryOf(row, now, continuedBy),
+    workspaceId: row.workspaceId,
+    repository: row.repository,
+    ...(settledAt === null ? undefined : { settledAt }),
   };
 }
 
@@ -650,7 +637,7 @@ export interface TaskListDrawing {
   readonly list: TaskListAnswer;
   /** Every agent on a plan, the archived among them, first started first, with the workspace and repository its own row names. */
   readonly taskAgents: readonly ListedAgent[];
-  /** Every pull request of each plan that has one, uncapped, in the order its row names them. */
+  /** Every pull request of each plan that has one, those still open first, the newest agent's first within each. */
   readonly taskPullRequests: readonly TaskPullRequests[];
   /** The pull request of every agent whose row keeps one, on a plan or none, the archived among them. */
   readonly agentPullRequests: readonly ListedPullRequest[];
@@ -754,11 +741,7 @@ export function taskListDrawer(): (rows: TaskListLiveRows, now: number) => TaskL
         continue;
       }
       const built = rebuilt(listed.get(row.id), row, continuedBy, now, () => ({
-        value: {
-          ...agentSummaryOf(row, now, continuedBy),
-          workspaceId: row.workspaceId,
-          repository: row.repository,
-        },
+        value: listedAgentOf(row, now, continuedBy),
         until: clockEdgeOf(row, now),
       }));
       nextListed.set(row.id, built);
@@ -858,8 +841,8 @@ export function taskAgentPinsOfLiveRows(rows: TaskListLiveRows): readonly TaskAg
 
 /**
  * Every pull request of each plan that has one, uncapped, in the order its
- * row names them (`pullRequestLinesOf`): what a card naming a plan's pull
- * requests reads, where its row names only the first few.
+ * plan's readers name them (`pullRequestLinesOf`): what every reader of a
+ * plan's pull requests reads.
  */
 export function taskPullRequestsOfLiveRows(rows: TaskListLiveRows): readonly TaskPullRequests[] {
   const byTask = new Map<string, AgentLiveRow[]>();

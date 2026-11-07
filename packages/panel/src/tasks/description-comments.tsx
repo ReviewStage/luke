@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react";
 import { AGENT_BOUNDS, type AgentAttachment, base64Bytes } from "@repo/features/agent-wire";
 import { textChange } from "@repo/features/description-comment-anchor";
 import {
@@ -116,9 +115,9 @@ import { ReplayUnmask, writeWithheldSheet } from "@repo/ui/session-replay-marks"
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { VIRTUAL_ROWS_ANCHOR, VirtualRows, type VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { visibleViewport } from "@repo/ui/visible-viewport";
+import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
 import { Equal } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   createContext,
   Fragment,
@@ -928,10 +927,10 @@ function CommentText(props: CommentTextProps): React.JSX.Element {
 function useCommentEditor():
   | { readonly module: DescriptionEditorModule | undefined; readonly mentions: TaskMentionsValue }
   | undefined {
-  const bundle = useAtomValue(useSideBundles().descriptionEditor);
+  const bundle = useQuery(useSideBundles().descriptionEditor);
   const mentions = useTaskMentions();
-  if (AsyncResult.isFailure(bundle) || mentions === undefined) return undefined;
-  return { module: AsyncResult.isSuccess(bundle) ? bundle.value : undefined, mentions };
+  if (bundle.isError || mentions === undefined) return undefined;
+  return { module: bundle.data, mentions };
 }
 
 interface CommentTextProps {

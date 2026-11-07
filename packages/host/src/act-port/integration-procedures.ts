@@ -1,5 +1,5 @@
 import type { IntegrationProviderParams } from "@repo/features/integration-view";
-import { Effect, MutableHashMap, Option, Stream } from "effect";
+import { Effect, MutableHashMap, Stream } from "effect";
 import { INTEGRATION_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
@@ -45,24 +45,21 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function integrationProcedures(dependencies: IntegrationProceduresDependencies) {
   const { host } = dependencies;
   /** The account's integrations while a window holds a stream open of them, so the host lets them go only with the last. */
-  const openHolds: OpenFollows<never> = MutableHashMap.empty();
+  const openHolds: OpenFollows = MutableHashMap.empty();
   /** Every server's tools a window holds a stream open of, by the server's name, so the host lets them go only with the last. */
-  const openTools: OpenFollows<never> = MutableHashMap.empty();
+  const openTools: OpenFollows = MutableHashMap.empty();
   /** The windows' streams on the outside MCP clients, so the host lets them go only with the last. */
-  const openClients: OpenFollows<never> = MutableHashMap.empty();
+  const openClients: OpenFollows = MutableHashMap.empty();
   return {
     [INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW]: actPort[
       INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held integrations reach the panel on app state.
       const hold = followedStream(
         {
           keyOf: () => "integrations",
           follow: () => host.integrationsFollow(),
           unfollow: () => host.integrationsUnfollow(),
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openHolds,
         input,
@@ -79,14 +76,11 @@ export function integrationProcedures(dependencies: IntegrationProceduresDepende
       INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held tools reach the panel on app state.
       const hold = followedStream(
         {
           keyOf: (server: IntegrationProviderParams) => server.connection ?? server.provider,
           follow: host.integrationsToolsFollow,
           unfollow: host.integrationsToolsUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openTools,
         input,
@@ -103,14 +97,11 @@ export function integrationProcedures(dependencies: IntegrationProceduresDepende
       INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held clients reach the panel on app state.
       const hold = followedStream(
         {
           keyOf: () => "mcpClients",
           follow: () => host.mcpClientsFollow(),
           unfollow: () => host.mcpClientsUnfollow(),
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
         },
         openClients,
         input,

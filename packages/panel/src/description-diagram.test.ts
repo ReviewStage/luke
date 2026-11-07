@@ -15,9 +15,9 @@ import { Effect } from "effect";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { type SideBundles, sideBundles } from "./bundle-loader.js";
-import { MarkdownMessage } from "./markdown-message.js";
+import type { SideBundles } from "./bundle-loader.js";
 import { DiagramPreview } from "./description-diagram.js";
+import { MarkdownMessage } from "./markdown-message.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext } from "./stage-room.js";
 import { DescriptionBody } from "./tasks/description-body.js";
@@ -25,9 +25,9 @@ import { HISTORY_READ } from "./tasks/use-description-history.js";
 import { VersionView } from "./tasks/version-view.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 import { registryWith } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
-import { landedBundles, onSideBundles } from "./testing/side-bundles.js";
+import { landedBundles, onSideBundles, standInBundles } from "./testing/side-bundles.js";
 
 /**
  * description-diagram.test.ts -- a ```` ```mermaid ```` fence on a plan's page and
@@ -104,6 +104,7 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
 }
 
 /** `node` drawn in a window of its own, once every draw it asked for has landed. */
@@ -272,7 +273,7 @@ test("a fence the diagram bundle refuses says it could not be drawn, over its co
 test("a diagram bundle that failed to load says so with Retry, which imports it again and draws the fence", async () => {
   const code = "flowchart TD\n  Offline --> Online";
   let online = false;
-  const unloaded = sideBundles({
+  const unloaded = standInBundles({
     diagram: () => (online ? Promise.resolve(STAND_IN) : Promise.reject(new Error("offline"))),
   });
   const container = document.body.appendChild(document.createElement("div"));

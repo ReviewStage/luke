@@ -17,15 +17,15 @@ const ITEM: InboxItem = {
   unread: true,
 };
 
-/** The item as a reminder asked at `at` draws it over `item`. */
-function reminded(item: InboxItem, until: number | null, at: number): InboxItem | undefined {
-  const drawn = INBOX_ITEM.drawn({ kind: INBOX_CHANGE.REMINDED, itemId: item.id, until, at }, item);
+/** The item as a reminder change draws it over `item`. */
+function reminded(item: InboxItem, until: number | null): InboxItem | undefined {
+  const drawn = INBOX_ITEM.drawn({ kind: INBOX_CHANGE.REMINDED, itemId: item.id, until }, item);
   return typeof drawn === "object" ? drawn : undefined;
 }
 
-test("a reminder draws the item put away at once and leaves it unread, and canceling one brings the item back when it was asked rather than forgetting when", () => {
-  const asleep = reminded(ITEM, 9_000, 3_000);
+test("a reminder draws the item put away at once and leaves it unread, and canceling one draws the item as it stood before, with no reminder come due", () => {
+  const asleep = reminded(ITEM, 9_000);
   assert.deepEqual(asleep, { ...ITEM, remindAt: 9_000 });
-  assert.equal(asleep === undefined ? undefined : reminded(asleep, null, 4_000)?.remindAt, 4_000);
-  assert.equal(reminded(ITEM, null, 4_000), undefined, "canceling no reminder changes nothing");
+  assert.deepEqual(asleep === undefined ? undefined : reminded(asleep, null), ITEM);
+  assert.equal(reminded(ITEM, null), undefined, "canceling no reminder changes nothing");
 });

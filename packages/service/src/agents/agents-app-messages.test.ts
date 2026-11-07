@@ -63,10 +63,10 @@ import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import {
+  heldTaskListAnswerSchema,
   TASK_LIST_ARCHIVED,
   TASK_STATUS,
   taskDeleteAnswerSchema,
-  taskListAnswerSchema,
 } from "@repo/features/task-wire";
 import { RUN_ON_MAC_OFF, workspaceToolsAnswerSchema } from "@repo/features/workspace-tools-wire";
 import { sentLineId } from "@repo/wire/host-ids";
@@ -995,7 +995,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
 
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, other)),
         );
@@ -1023,7 +1023,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
               yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
             );
             const tasks = readAnswer(
-              taskListAnswerSchema,
+              heldTaskListAnswerSchema,
               HOSTED_HTTP_STATUS.OK,
               yield* ask(request(TASKS, owner)),
             );
@@ -1201,7 +1201,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
 
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, owner, { archived: TASK_LIST_ARCHIVED.INCLUDE })),
         );
@@ -1228,7 +1228,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         const listed = (bearer: string, archived?: string) =>
           Effect.map(ask(request(TASKS, bearer, { archived })), (answered) =>
-            readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+            readAnswer(heldTaskListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
           );
         const page = readAnswer(
           agentPageAnswerSchema,
@@ -1282,7 +1282,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             ask(request(TASKS, bearer)),
             (answered) =>
               readAnswer(
-                taskListAnswerSchema,
+                heldTaskListAnswerSchema,
                 HOSTED_HTTP_STATUS.OK,
                 answered,
               ).planlessAgents?.find((each) => each.id === agent.id)?.pinnedAt,
@@ -1320,9 +1320,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const patch = (body: { pinned: boolean; position: string }) =>
           ask(request(AGENT, owner, { method: "PATCH", id: agent.id, body }));
         const listed = Effect.map(ask(request(TASKS, owner)), (answered) =>
-          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).planlessAgents?.find(
-            (each) => each.id === agent.id,
-          ),
+          readAnswer(
+            heldTaskListAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            answered,
+          ).planlessAgents?.find((each) => each.id === agent.id),
         );
 
         const placed = yield* patch({ pinned: true, position: "a1" });

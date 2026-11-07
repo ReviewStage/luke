@@ -182,7 +182,7 @@ function useOwnedPullRequest(url: string): OwnedPullRequest | undefined {
   const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
   if (tasks === undefined) return undefined;
   const number = pullRequestAddressOf(url)?.number;
-  const listed = listedPullRequestOf(url, tasks.tasks, tasks.tasklessAgents);
+  const listed = listedPullRequestOf(url, tasks.taskPullRequests ?? [], tasks.tasklessAgents);
   return listed === undefined ? undefined : { ...listed, number };
 }
 

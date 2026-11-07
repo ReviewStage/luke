@@ -1505,6 +1505,7 @@ export function useWindowHistory(input: {
     | "mainTabs"
     | "activeTaskId"
     | "agents"
+    | "liveAgents"
     | "pages"
     | "workspaces"
   >;

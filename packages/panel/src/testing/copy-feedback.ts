@@ -30,6 +30,7 @@ import { appBridge } from "../app-bridge.js";
 import { useDraftsOwner } from "../composer-drafts.js";
 import { LiveReadSubscription } from "../live-reads.js";
 import { AppStateSubscription, appStateQuery } from "../use-app-state.js";
+import { seedLanded } from "./landed-reads.js";
 
 /**
  * A client as the Testing guide makes one, a failed read not tried again,
@@ -48,6 +49,7 @@ function freshQueryClient(): QueryClient {
   });
   client.setQueryDefaults(appStateQuery.queryKey, { enabled: false });
   if (heldForFile !== undefined) client.setQueryData(appStateQuery.queryKey, heldForFile);
+  seedLanded(client);
   return client;
 }
 
@@ -67,7 +69,8 @@ let draftsRoot: Root | undefined;
 
 /** Stands the window's drafts owner up for the test, where it is not standing already. */
 function standDraftsOwner(): void {
-  if (draftsRoot !== undefined) return;
+  // Note that a static render in a node test opens no window, so it holds no drafts to let go.
+  if (draftsRoot !== undefined || typeof document === "undefined") return;
   const root = createRoot(document.createElement("div"));
   draftsRoot = root;
   act(() => root.render(createElement(NoOneSignedIn)));

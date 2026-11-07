@@ -1,13 +1,9 @@
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { DiagramModule } from "@repo/ui/diagram-contract";
-import { Effect } from "effect";
-import type * as AsyncResult from "effect/reactivity/AsyncResult";
-import type * as Atom from "effect/reactivity/Atom";
+import { queryOptions, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext } from "react";
+import type { DescriptionEditorModule } from "./description-editor/contract.js";
 import type { DiffViewModule } from "./diff-view/contract.js";
 import type { FileTreeModule } from "./file-tree/contract.js";
-import type { DescriptionEditorModule } from "./description-editor/contract.js";
-import { rendererRuntime } from "./renderer-runtime.js";
 import type { TerminalModule } from "./terminal/contract.js";
 
 /**
@@ -20,12 +16,17 @@ import type { TerminalModule } from "./terminal/contract.js";
  * and loads from wherever it put it, so nothing here names a file. Where a
  * bundle has a stylesheet, its entry imports it. A bundle that landed is
  * kept, so leaving the surface and coming back loads nothing; one that
- * failed is not, so the next surface to read it imports it again, as a
- * connection that dropped for a moment has come back.
+ * failed is imported again by the next surface to read it, as a connection
+ * that dropped for a moment has come back.
  *
- * A surface reads its bundle through `useSideBundles`, whose atoms are built
- * over `SIDE_BUNDLE_IMPORTERS` unless a `SideBundlesContext` above it hands
- * others, as a test does to stand a bundle in or to have one fail.
+ * Each bundle is read through TanStack Query, built with `queryOptions`
+ * (`bundleQuery`), since an import is async data: pending, then the module or
+ * why it could not be had. A surface reads one with `useQuery`, so its first
+ * read imports it, every reader after has it from the window's client, and
+ * Retry is the query's `refetch`. It reads the bundles built over
+ * `SIDE_BUNDLE_IMPORTERS` unless a `SideBundlesContext` above it hands
+ * others, as a test does to stand a bundle in or to have one fail; each test
+ * draws on a Query client of its own, so a key names the bundle alone.
  */
 
 /** How a bundle is reached: its entry imported, answering the module it exports. */
@@ -40,10 +41,10 @@ export interface SideBundleImporters {
   readonly diffView: BundleImporter<DiffViewModule>;
 }
 
-/** Each bundle of the panel's own, as the module its entry exports once imported, or why it could not be. */
+/** Each bundle of the panel's own. */
 export type SideBundles = {
-  readonly [Bundle in keyof SideBundleImporters]: Atom.Atom<
-    AsyncResult.AsyncResult<Awaited<ReturnType<SideBundleImporters[Bundle]>>, Error>
+  readonly [Bundle in keyof SideBundleImporters]: SideBundle<
+    Awaited<ReturnType<SideBundleImporters[Bundle]>>
   >;
 };
 
@@ -79,42 +80,40 @@ const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
 };
 
 /**
- * A bundle imported the first time it is read, as the module its entry
- * exports, or the failure given. Note that the module is kept here rather
- * than by keeping the atom alive, so a bundle imported once is had at once
- * by every later reader, as a script that has run is, while a failure goes
- * with the last reader that saw it and the next one imports again.
+ * A bundle's read: its entry imported the first time it is read, as the
+ * module it exports, or the failure given. A module that landed is kept for
+ * the window's life and never read again, as a script that has run is.
+ * A failure is kept too, since `gcTime` holds for the query whatever it
+ * answered, but a query holding an error and no module is read again by the
+ * next surface to mount over it (Query's `retryOnMount`), as a connection
+ * that dropped for a moment has come back; it is not retried on its own.
  */
-function bundleAtom<A>(
-  importer: BundleImporter<A>,
-  failure: string,
-): Atom.Atom<AsyncResult.AsyncResult<A, Error>> {
-  let landed: { readonly module: A } | undefined;
-  // Note that the import's own error is kept as the cause, so a report names the chunk that failed.
-  const imported = Effect.tryPromise({
-    try: importer,
-    catch: (cause) => new Error(failure, { cause }),
-  }).pipe(
-    Effect.tap((module) =>
-      Effect.sync(() => {
-        landed = { module };
-      }),
-    ),
-  );
-  return rendererRuntime.atom(
-    Effect.suspend(() => (landed === undefined ? imported : Effect.succeed(landed.module))),
-  );
+function bundleQuery<A>(name: keyof SideBundleImporters, importer: BundleImporter<A>) {
+  return queryOptions({
+    queryKey: ["side-bundle", name] as const,
+    queryFn: () =>
+      importer().catch(
+        // Note that the import's own error is kept as the cause, so a report names the chunk that failed.
+        (cause: unknown) => Promise.reject(new Error(LOAD_FAILED[name], { cause })),
+      ),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
 }
+
+/** A bundle's read, as `useQuery` and the client take it, answering the module its entry exports. */
+export type SideBundle<A> = ReturnType<typeof bundleQuery<A>>;
 
 /** The bundles, each imported through the importer given and the rest through their own entries. */
 export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideBundles {
   const reach: SideBundleImporters = { ...SIDE_BUNDLE_IMPORTERS, ...importers };
   return {
-    descriptionEditor: bundleAtom(reach.descriptionEditor, LOAD_FAILED.descriptionEditor),
-    fileTree: bundleAtom(reach.fileTree, LOAD_FAILED.fileTree),
-    terminal: bundleAtom(reach.terminal, LOAD_FAILED.terminal),
-    diagram: bundleAtom(reach.diagram, LOAD_FAILED.diagram),
-    diffView: bundleAtom(reach.diffView, LOAD_FAILED.diffView),
+    descriptionEditor: bundleQuery("descriptionEditor", reach.descriptionEditor),
+    fileTree: bundleQuery("fileTree", reach.fileTree),
+    terminal: bundleQuery("terminal", reach.terminal),
+    diagram: bundleQuery("diagram", reach.diagram),
+    diffView: bundleQuery("diffView", reach.diffView),
   };
 }
 
@@ -135,9 +134,9 @@ export function useSideBundles(): SideBundles {
  * over it, so the editor is there by the time it is opened.
  */
 export function usePrefetchEditorBundle(): () => void {
-  const registry = useContext(RegistryContext);
+  const client = useQueryClient();
   const { descriptionEditor } = useSideBundles();
   return useCallback(() => {
-    registry.get(descriptionEditor);
-  }, [registry, descriptionEditor]);
+    void client.prefetchQuery(descriptionEditor);
+  }, [client, descriptionEditor]);
 }

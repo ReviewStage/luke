@@ -39,7 +39,7 @@ import {
   hostedFailureFacts,
   type LivePollInput,
 } from "./hosted-link.js";
-import type { AnyLiveRead, LiveReadAnswer, LiveReadParams } from "./live-read.js";
+import type { AnyLiveRead, LiveReadAnswer, LiveReadAsked } from "./live-read.js";
 import { LIVE_POLL, LIVE_SIGNED_OUT } from "./live-wire.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 
@@ -130,16 +130,18 @@ export function hostedCall<
  * A declared live read asked for the params it is bound to, sealed for
  * following, or polled where `poll` asks: its answer, signed out where the
  * session is another account's, or how it failed as its declaration's
- * refusals spell it.
+ * refusals spell it, each renamed where `as` names it, as a domain that
+ * shipped another spelling, or read a refusal any procedure may answer as
+ * its own, reads it.
  */
-export function askLiveRead<Read extends AnyLiveRead>(
+export function askLiveRead<Read extends AnyLiveRead, As extends HostedRenames = NoRenames>(
   live: HostedClient["live"],
   read: Read,
-  params: LiveReadParams<Read>,
+  params: LiveReadAsked<Read>,
   poll?: HostedPoll,
+  as?: As,
 ): Effect.Effect<
-  | LiveReadAnswer<Read>
-  | HostedFailed<DeclaredBy<ORPCErrorFromErrorMap<Read["errors"]>>, NoRenames, true>,
+  LiveReadAnswer<Read> | HostedFailed<DeclaredBy<ORPCErrorFromErrorMap<Read["errors"]>>, As, true>,
   never,
   HttpClient.HttpClient
 > {
@@ -151,5 +153,9 @@ export function askLiveRead<Read extends AnyLiveRead>(
   >;
   // SAFETY: a read's params are the fields of its input its mode's poll fields stand beside, each as text.
   const input = params as LivePollInput;
-  return hostedCall(procedure, input, { live: true, ...(poll === undefined ? {} : { poll }) });
+  return hostedCall(procedure, input, {
+    live: true,
+    ...(poll === undefined ? {} : { poll }),
+    ...(as === undefined ? {} : { as }),
+  });
 }

@@ -12,6 +12,7 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -31,8 +32,8 @@ import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handHostReads, handMembers } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { handHostReads, handMembers, handState, stateWith } from "../testing/app-state.js";
+import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { layScrollerOut } from "../testing/scroller.js";
@@ -789,23 +790,34 @@ test("a row's ⋯ is a control a keyboard reaches, described by the row's name, 
 test("a row wears the icon of the pull request its agents opened", async () => {
   const withPullRequest: TaskSummary = {
     ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
-    agents: {
-      total: 1,
-      working: 0,
-      agents: [],
-      pullRequestTotal: 1,
-      pullRequests: [
-        {
-          number: 4222,
-          title: "Rate limit search",
-          state: "open",
-          checks: "passing",
-          additions: 10,
-          deletions: 2,
-        },
-      ],
-    },
+    agents: { total: 1, working: 0, pullRequestTotal: 1 },
   };
+  // Its pull request, as the list followed live holds it, in the document the bridge hands and the one the window holds now.
+  const followed = stateWith(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        taskPullRequests: [
+          {
+            taskId: withPullRequest.id,
+            pullRequests: [
+              {
+                number: 4222,
+                title: "Rate limit search",
+                state: "open",
+                checks: "passing",
+                additions: 10,
+                deletions: 2,
+              },
+            ],
+          },
+        ],
+      },
+    },
+  );
+  handState({}, followed);
+  writeAppState(followed);
   const page = await mountPage([withPullRequest, ...TASKS.slice(2)]);
   const agents = rowOf(page, "ACME-39").querySelector("[data-cell='agents']");
 

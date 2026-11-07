@@ -173,7 +173,7 @@ describe("a delivery that crosses the wire", () => {
   const [invites, billing] = [
     {
       ...summary("invites", "Teammate invitations"),
-      agents: { total: 0, working: 0, agents: [], pullRequestTotal: 0, pullRequests: [] },
+      agents: { total: 0, working: 0, pullRequestTotal: 0 },
     },
     summary("billing", "Billing usage alerts"),
   ];

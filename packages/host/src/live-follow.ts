@@ -600,13 +600,34 @@ const SYNC_STALL = Duration.seconds(30);
  */
 export const FOLLOW_RESEAL = { FIRST: Duration.seconds(2), LONGEST: Duration.minutes(1) } as const;
 
-export const FOLLOW_BACKOFF = untilRegained(
-  Schedule.exponential(FOLLOW_RESEAL.FIRST).pipe(
-    Schedule.modifyDelay(({ duration }) =>
-      Effect.succeed(Duration.min(duration, FOLLOW_RESEAL.LONGEST)),
-    ),
+/** `FOLLOW_RESEAL`'s waits, doubling from the first up to the longest. */
+const FOLLOW_DOUBLING = Schedule.exponential(FOLLOW_RESEAL.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, FOLLOW_RESEAL.LONGEST)),
   ),
 );
+
+export const FOLLOW_BACKOFF = untilRegained(FOLLOW_DOUBLING);
+
+/**
+ * `FOLLOW_BACKOFF` for as long as `again` holds of the input. Note that
+ * `again` is asked before the wait, because `untilRegained` waits inside the
+ * schedule's step, which a `while` given to `Effect.repeat` or
+ * `Effect.retry` is asked after, so an input that ends it would still wait
+ * out the delay first.
+ */
+export function followBackoffWhile<Input>(
+  again: (input: Input) => boolean,
+): Schedule.Schedule<Duration.Duration, Input> {
+  const doubling: Schedule.Schedule<Duration.Duration, Input> = FOLLOW_DOUBLING;
+  return untilRegained(Schedule.while(doubling, ({ input }) => again(input)));
+}
+
+/** How long to wait before reading again after `fruitless` reads in a row that came to nothing: `FOLLOW_BACKOFF`'s wait for a loop that holds its own count, the first wait doubled for each after the first, never past the longest. */
+export function resealWait(fruitless: number): Duration.Duration {
+  const doubled = Duration.times(FOLLOW_RESEAL.FIRST, 2 ** Math.max(0, fruitless - 1));
+  return Duration.min(doubled, FOLLOW_RESEAL.LONGEST);
+}
 
 /** How long a follow that stopped, or whose read the service did not answer, waits before it is read again. */
 export const LIVE_RESTART = Duration.seconds(5);

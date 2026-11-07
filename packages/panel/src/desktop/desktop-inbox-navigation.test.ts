@@ -1314,7 +1314,7 @@ test("an item of an agent with no task reads the lines its code names through th
   const previewed: string[] = [];
   const panel: SidePanelControl = {
     ...tasksControl().sidePanel,
-    onPreviewFile: (ref, at) => previewed.push(`${JSON.stringify(ref)} ${at}`),
+    onOpenFile: (ref, at) => previewed.push(`${JSON.stringify(ref)} ${at}`),
   };
   const { page } = mount([{ ...waitingTaskless(QUARANTINE), workspaceId: "workspace-acme" }], {
     panel,

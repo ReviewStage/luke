@@ -147,7 +147,7 @@ export const automationRun = pgTable(
      */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
     /**
-     * When the sweep settled what becomes of the agent a run started for an
+     * When it was settled what becomes of the agents of a run for an
      * automation that archives its successful runs: archived once it
      * finished well, or left standing for good as failed, stopped, or put
      * away by hand; null until then, and for every other run.

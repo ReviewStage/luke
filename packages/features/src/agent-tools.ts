@@ -1,8 +1,8 @@
 /**
  * agent-tools.ts -- every tool name an agent's transcript may carry, which the service offers and the desktop draws.
  *
- * The service's tool registry (`packages/service/src/agents/agent-runtime/tools.ts`)
- * says which roles each of our tools serves; the names themselves are
+ * The service's tool catalog (`packages/service/src/agents/tool-catalog/catalog.ts`)
+ * says which agents each of our tools serves; the names themselves are
  * declared here, once, so the desktop reads a call in a transcript by the
  * same name the service offered it under, the brain's as a coding
  * agent's. Beside them stand the names the retired runtime gave tools of its own that a

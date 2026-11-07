@@ -20,6 +20,7 @@ import {
 } from "effect/http";
 import { agentPublished } from "../agents/coder-host/published.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
+import { cadenceOrUnavailable } from "../automations/automation-cadence.js";
 import { queueGithubRuns } from "../automations/automation-github.js";
 import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
@@ -420,7 +421,7 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     if (event === WEBHOOK_EVENT.REPOSITORY) return hostedJsonResponse(200, { read: 0 });
     // A deployment with no App configured knows no bot of its own, so every bot is another's.
     const agentLogin = yield* Effect.orElseSucceed((yield* GitHubApp).botLogin, () => undefined);
-    const queued = yield* hostedStoreOrUnavailable(
+    const queued = yield* cadenceOrUnavailable(
       queueGithubRuns(request.headers[DELIVERY_HEADER.DELIVERY] ?? "", event, payload, agentLogin),
     );
     const target = deliveryTarget(event, payload);

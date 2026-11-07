@@ -265,7 +265,8 @@ export const messages = pgTable(
      * record failed after the runtime took it, may still reach a turn, and
      * the row is the one record of what the line says carried it and who
      * sent it. Every read leaves such a row out until a turn takes it, and
-     * the maintenance sweep deletes it once no turn can.
+     * the conversation's next line deletes it once no turn can (`writer.ts`'s
+     * `deleteStaleWithdrawnLines`).
      */
     withdrawnAt: timestamptz("withdrawn_at"),
   },
@@ -276,16 +277,15 @@ export const messages = pgTable(
     index("messages_conversation_revision")
       .on(table.conversationId, table.revision)
       .where(sql`${table.revision} is not null`),
-    // The awaiting-line reads find a conversation's user lines no turn owns, a few among its every
-    // row, which a scan of the conversation's sequence would read through to the last.
+    // The awaiting-line reads, and the delete of the withdrawn lines no turn took in time, find a
+    // conversation's user lines no turn owns, a few among its every row, which a scan of the
+    // conversation's sequence would read through to the last.
     index("messages_awaiting_line")
       .on(table.conversationId, table.seq)
       .where(turnlessUserLine(table)),
     // The foreign key's check on every turn deleted, by the purge, an agent's delete, or a rewind,
     // finds the messages that turn wrote, which a scan of the table would read through to the last.
     index("messages_turn").on(table.turnId).where(sql`${table.turnId} is not null`),
-    // The sweep finds the withdrawn lines no turn took in time, a handful among every row.
-    index("messages_withdrawn").on(table.withdrawnAt).where(sql`${table.withdrawnAt} is not null`),
   ],
 );
 

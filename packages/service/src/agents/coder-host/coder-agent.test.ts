@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SHARED_FILES_DIRECTORY } from "@repo/agent-runner/pins";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   AGENT_BRIEF,
   AGENT_KIND,
@@ -14,7 +15,6 @@ import { standingFor } from "../../testing/agent-standing.js";
 import { COMMIT_BY } from "./checkout.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { CODER_HARNESS, coderInstructions, type OwnTask } from "./instructions.js";
-import { CODER_TOOL } from "./tool-set.js";
 
 /** The task an agent on one works on, its link and its id, as its instructions are handed them. */
 const TASK_ADDRESS = {
@@ -31,10 +31,10 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Vespin
     "`apply_patch`",
     "`glob`",
     "`grep`",
-    `\`${CODER_TOOL.SLEEP}\``,
-    `\`${CODER_TOOL.WEB_SEARCH}\``,
-    `\`${CODER_TOOL.READ_WEB_PAGE}\``,
-    `\`${CODER_TOOL.LOAD_SKILL}\``,
+    `\`${AGENT_TOOL.SLEEP}\``,
+    `\`${AGENT_TOOL.WEB_SEARCH}\``,
+    `\`${AGENT_TOOL.READ_WEB_PAGE}\``,
+    `\`${AGENT_TOOL.LOAD_SKILL}\``,
     "`write_todos`",
     "`delegate`",
     "task_wait",
@@ -69,7 +69,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Vespin
           label,
         );
         // The tools that touch the app stay ours, under their own names.
-        for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
+        for (const kept of [INBOX_TOOLS.POST.name, AGENT_TOOL.START_AGENT, AGENT_TOOL.SHOW_IMAGE]) {
           assert.ok(claudeCode.includes(`\`${kept}\``), `${label}: ${kept}`);
         }
       }
@@ -90,7 +90,7 @@ test("a Claude Code agent is told of Claude Code's own tools and never of Vespin
 });
 
 test("a Claude Code or Codex agent is told of its browser, which Vespin's MCP server serves it, with Playwright run from its own shell", () => {
-  const BROWSER = `\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox`;
+  const BROWSER = `\`${AGENT_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox`;
   const SHELL_OF = [
     [CODER_HARNESS.CLAUDE_CODE, "on Playwright from Bash,"],
     [CODER_HARNESS.CODEX, "on Playwright from your shell,"],
@@ -210,10 +210,10 @@ test("a Codex agent is told of Codex's own tools and never of Vespin's it is not
     "`write_file`",
     "`glob`",
     "`grep`",
-    `\`${CODER_TOOL.SLEEP}\``,
-    `\`${CODER_TOOL.WEB_SEARCH}\``,
-    `\`${CODER_TOOL.READ_WEB_PAGE}\``,
-    `\`${CODER_TOOL.LOAD_SKILL}\``,
+    `\`${AGENT_TOOL.SLEEP}\``,
+    `\`${AGENT_TOOL.WEB_SEARCH}\``,
+    `\`${AGENT_TOOL.READ_WEB_PAGE}\``,
+    `\`${AGENT_TOOL.LOAD_SKILL}\``,
     "`write_todos`",
     "`delegate`",
     "task_wait",
@@ -257,7 +257,7 @@ test("a Codex agent is told of Codex's own tools and never of Vespin's it is not
         );
         // An agent with a repository is pointed at its skills where Codex keeps them.
         assert.equal(codex.includes("`.agents/skills`"), repository !== null, label);
-        for (const kept of [INBOX_TOOLS.POST.name, CODER_TOOL.START_AGENT, CODER_TOOL.SHOW_IMAGE]) {
+        for (const kept of [INBOX_TOOLS.POST.name, AGENT_TOOL.START_AGENT, AGENT_TOOL.SHOW_IMAGE]) {
           assert.ok(codex.includes(`\`${kept}\``), `${label}: ${kept}`);
         }
       }
@@ -279,8 +279,8 @@ test("a Codex agent is told of Codex's own tools and never of Vespin's it is not
 
 test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of its own pages alone", () => {
   const TASK_LINK = "`https://vespin.dev/<workspace>/task/<number>` link, or one by the task's id";
-  const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
-  const COMMENTS = `answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\``;
+  const PAGES = `show it with \`${AGENT_TOOL.SHOW_PAGE}\``;
+  const COMMENTS = `answer in that thread with \`${AGENT_TOOL.REPLY_TO_COMMENT}\``;
   for (const brief of Object.values(AGENT_BRIEF)) {
     const onTask = coderInstructions(
       "Acme/Relay",
@@ -326,12 +326,12 @@ test("an agent on a task starts the agents that help with it on its own task, an
 
 test("every agent on a task is told how to update its description, one handed a prompt told to read it first, and one on no task told of no description", () => {
   const UPDATING = "## Updating the description";
-  const READ_FIRST = `Read it with \`${CODER_TOOL.READ_TASK}\``;
+  const READ_FIRST = `Read it with \`${AGENT_TOOL.READ_TASK}\``;
   const told = (brief: AgentBrief, task: OwnTask | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, task, standingFor("Acme/Relay"));
     return [
       words.includes(UPDATING),
-      words.includes(CODER_TOOL.EDIT_DESCRIPTION),
+      words.includes(AGENT_TOOL.EDIT_DESCRIPTION),
       words.includes(READ_FIRST),
     ];
   };
@@ -369,7 +369,7 @@ test("every agent on a task is told to keep its task's status with update_task, 
     const section = words.slice(at, words.indexOf("\n\n## ", at + STATUS.length));
     return [
       true,
-      section.includes(CODER_TOOL.UPDATE_TASK),
+      section.includes(AGENT_TOOL.UPDATE_TASK),
       section.includes("Mark it done"),
       section.includes(
         "Where another agent started you on its task, leave the status to that agent",
@@ -385,8 +385,8 @@ test("every agent on a task is told to keep its task's status with update_task, 
 
 test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the description, or a page, on its task or on itself", () => {
   const NO_DOCUMENT = "never commit the write-up as a document";
-  const PLAN = `write it into the description with \`${CODER_TOOL.EDIT_DESCRIPTION}\``;
-  const PAGE = `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``;
+  const PLAN = `write it into the description with \`${AGENT_TOOL.EDIT_DESCRIPTION}\``;
+  const PAGE = `show it as a page with \`${AGENT_TOOL.SHOW_PAGE}\``;
   const told = (brief: AgentBrief, task: OwnTask | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, task, standingFor("Acme/Relay"));
     assert.ok(words.includes(NO_DOCUMENT), brief);
@@ -471,7 +471,7 @@ test("an agent is told whose its commits are and to end each on the trailer it i
       }
       assert.ok(
         words.includes(
-          `open the pull request with \`${CODER_TOOL.OPEN_PULL_REQUEST}\`, never \`gh pr create\``,
+          `open the pull request with \`${AGENT_TOOL.OPEN_PULL_REQUEST}\`, never \`gh pr create\``,
         ),
         named,
       );
@@ -569,7 +569,7 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
         instructions.includes('NODE_PATH="/usr/local/lib/node_modules:$(npm root -g)"'),
         brief,
       );
-      assert.ok(instructions.includes(`with \`${CODER_TOOL.SHOW_IMAGE}\``), brief);
+      assert.ok(instructions.includes(`with \`${AGENT_TOOL.SHOW_IMAGE}\``), brief);
     }
   }
 });
@@ -640,18 +640,18 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
       AGENT_KIND.CODER,
     );
     assert.ok(!off.includes("## The workspace's memory"), brief);
-    assert.ok(!off.includes(`\`${CODER_TOOL.SAVE_MEMORY}\``), brief);
+    assert.ok(!off.includes(`\`${AGENT_TOOL.SAVE_MEMORY}\``), brief);
     const start = on.indexOf("## The workspace's memory\n\n");
     const end = on.indexOf("## What your messages are", start);
     assert.ok(start > 0 && end > start, brief);
-    assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.SEARCH_MEMORY}\``), brief);
+    assert.ok(on.slice(start, end).includes(`\`${AGENT_TOOL.SEARCH_MEMORY}\``), brief);
     assert.equal(on.slice(0, start) + on.slice(end), off, brief);
   }
 });
 
 test("with Task descriptions off the instructions say nothing of a description: no edit_description, no description handed with a task's link or read_task, no description to name or write a write-up into, and comments on pages alone", () => {
   const DESCRIPTION_WORDS = [
-    `\`${CODER_TOOL.EDIT_DESCRIPTION}\``,
+    `\`${AGENT_TOOL.EDIT_DESCRIPTION}\``,
     "## Updating the description",
     "take that decision into the description",
     "write it into the description",
@@ -688,8 +688,8 @@ test("with Task descriptions off the instructions say nothing of a description: 
       brief,
     );
     const comments = off.slice(off.indexOf("## Comments"), off.indexOf("## Handing work"));
-    assert.ok(comments.includes(`\`${CODER_TOOL.REPLY_TO_COMMENT}\``), brief);
-    assert.ok(off.includes(`show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``), brief);
+    assert.ok(comments.includes(`\`${AGENT_TOOL.REPLY_TO_COMMENT}\``), brief);
+    assert.ok(off.includes(`show it as a page with \`${AGENT_TOOL.SHOW_PAGE}\``), brief);
   }
   const planned = coderInstructions(
     "Acme/Relay",

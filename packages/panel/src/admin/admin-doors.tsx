@@ -110,6 +110,13 @@ export interface AdminDoors {
    * the web page answers it, and the app leaves it out.
    */
   readonly impersonate?: (userId: string) => Promise<string | undefined>;
+  /**
+   * Opens a page outside the dashboard as the mount opens one: the app
+   * through the window's opener (`useOpenLink`), since its window opens no
+   * browser tab of its own. The web page leaves it out, a link there
+   * opening in a new browser tab as any link does.
+   */
+  readonly openLink?: (href: string) => void;
 }
 
 const AdminDoorsContext = createContext<AdminDoors | undefined>(undefined);

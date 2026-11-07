@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@repo/features/link-grammar";
-import type { TaskSummary } from "@repo/features/task-wire";
+import type { TaskPullRequests } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { useQuery } from "@tanstack/react-query";
@@ -49,22 +49,9 @@ const LINE = {
   url: URL,
 };
 
-const LISTED: readonly TaskSummary[] = [
-  {
-    id: TASK,
-    workspaceId: "workspace-acme",
-    name: "Teammate invitations",
-    createdAt: 1,
-    updatedAt: 2,
-    repository: "acme/relay",
-    agents: {
-      total: 1,
-      working: 0,
-      agents: [],
-      pullRequestTotal: 1,
-      pullRequests: [{ ...LINE, agentId: AGENT }],
-    },
-  },
+/** The listed task's pull requests, as the list followed live holds them. */
+const LISTED: readonly TaskPullRequests[] = [
+  { taskId: TASK, pullRequests: [{ ...LINE, agentId: AGENT }] },
 ];
 
 let root: Root | undefined;
@@ -123,7 +110,7 @@ test("a new list of tasks draws no part opening links again, and a link opened a
   const openPlace = (link: ReadLink) => {
     links.push(link);
   };
-  const draw = (tasks: readonly TaskSummary[]) =>
+  const draw = (tasks: readonly TaskPullRequests[]) =>
     withQueryClient(
       createElement(
         OpenLinkProvider,
@@ -159,7 +146,17 @@ test("a link naming a listed task by its number is asked of the place it is pres
       tasks: {
         ...IDLE_TASKS_VIEW,
         workspaces: [acme],
-        tasks: LISTED.map((task) => ({ ...task, number: 42 })),
+        tasks: [
+          {
+            id: TASK,
+            workspaceId: "workspace-acme",
+            name: "Teammate invitations",
+            createdAt: 1,
+            updatedAt: 2,
+            repository: "acme/relay",
+            number: 42,
+          },
+        ],
       },
     },
   );

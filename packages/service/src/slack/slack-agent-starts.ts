@@ -163,7 +163,7 @@ import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { fencedWithin } from "../agents/fenced-text.js";
 import { workspaceStepOf } from "../agents/written-mentions.js";
 import { runResultContent } from "../automations/automation-slack-delivery.js";
-import { archiveFinishedAgents } from "../automations/automation-sweep.js";
+import { archiveFinishedAgents } from "../automations/run-archive.js";
 import { HostedEnvironment } from "../environment.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import { afterResponse } from "../http/after-response.js";

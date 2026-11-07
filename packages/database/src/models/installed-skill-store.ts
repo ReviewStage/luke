@@ -12,7 +12,6 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wir
 import { and, asc, eq, exists, or, type SQL, sql } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
 import { member } from "../schemas/auth.js";
 import { installedSkill, installedSkillFile } from "../schemas/installed-skill.js";
@@ -38,7 +37,7 @@ import { roleAmong } from "./workspace-store.js";
  * name's rule and a path held once per skill. A name
  * already held in its scope is refused as `InstalledSkillNameTaken`. Every
  * write answers the transaction it committed in, which a reader holding the
- * skills live (`installedSkillsLiveStatement`) waits for.
+ * skills live (`packages/service/src/live/reads/installed-skills.ts`) waits for.
  */
 
 /** A skill's name already held in its scope: by the account's own personal skill, or by the workspace's. */
@@ -198,7 +197,7 @@ function allowedTo(userId: string, access: InstalledSkillAccess, id?: string): S
 }
 
 /** The condition that the skill is one the account's agents are offered in the workspace: its own personal ones, and the workspace's where it is a member. */
-function offeredIn(userId: string, organizationId: string | null): SQL | undefined {
+export function offeredIn(userId: string, organizationId: string | null): SQL | undefined {
   return or(
     ownPersonal(userId),
     organizationId === null
@@ -492,41 +491,11 @@ export function sessionInstalledSkills(
 }
 
 /**
- * The skills the account sees in the workspace as its held read answers
- * them: the rows `listInstalledSkills` reads, each with whether the account
- * may manage it, by the store's own rule (`allowedTo`), and the workspace a
- * workspace skill is, null for a personal one. Every column is under the key
- * the wire reads it by (`@repo/features/installed-skill-live`), each instant
- * as epoch milliseconds, and the order is the reader's to keep. None where a
- * statement names a value Realtime cannot carry.
+ * Whether the account may manage the skill a statement names, by the
+ * store's own rule (`allowedTo`), as a held read selects it. Note that a
+ * skill whose installer's account is gone compares as unknown, so it reads
+ * manageable only by those who manage the workspace.
  */
-export function installedSkillsLiveStatement(
-  userId: string,
-  organizationId: string,
-): Option.Option<LiveStatement> {
-  // Note that a skill whose installer's account is gone compares as unknown, so it reads manageable only by those who manage the workspace.
-  const manageable = sql<boolean>`coalesce(${allowedTo(userId, INSTALLED_SKILL_ACCESS.MANAGE)}, false)`;
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection(
-          {
-            id: installedSkill.id,
-            scope: installedSkill.scope,
-            name: installedSkill.name,
-            description: installedSkill.description,
-            userInvocable: installedSkill.userInvocable,
-            source: installedSkill.source,
-            // Note that every skill is on, and a desktop released before the switch went still reads it.
-            enabled: sql<boolean>`true`,
-            workspaceId: installedSkill.organizationId,
-            installedBy: installedSkill.installedByUserId,
-            manageable,
-          },
-          { createdAt: installedSkill.createdAt, updatedAt: installedSkill.updatedAt },
-        ),
-      )
-      .from(installedSkill)
-      .where(offeredIn(userId, organizationId)),
-  );
+export function manageableBy(userId: string): SQL<boolean> {
+  return sql<boolean>`coalesce(${allowedTo(userId, INSTALLED_SKILL_ACCESS.MANAGE)}, false)`;
 }

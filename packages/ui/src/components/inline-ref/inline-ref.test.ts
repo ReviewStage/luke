@@ -10,7 +10,8 @@ import { INLINE_REF_LOOK, INLINE_REF_NAME, InlineRef, type InlineRefHint } from 
 /**
  * inline-ref.test.ts -- a token handed a press is a button named by its
  * words, or by what its press does where the place says so, and answers a
- * click and the keyboard, or a link where its press leaves the app; without
+ * click and the keyboard, or a link where its press leaves the app, which a
+ * middle-click opens through as a click does; without
  * one it is words a reader reaches no press on, which take the focus while
  * they hang a card. A name drawn nowhere is still heard, its kind is heard
  * before it, and a gone subject keeps its name and is heard to be gone. What its hint is handed is its words or its card, and what the
@@ -163,6 +164,30 @@ test("a press that leaves the app is a link to its address, which the press open
   assert.equal(link.getAttribute("href"), "https://linear.app/acme/issue/ACME-142");
   act(() => link.click());
   assert.deepEqual(opened, ["by the press"]);
+});
+
+test("a middle-click on a link that leaves the app is opened by its press, as a click is, not by the browser", () => {
+  const opened: string[] = [];
+  const view = draw(
+    createElement(InlineRef, {
+      look: INLINE_REF_LOOK.PILL,
+      label: "Fix the refresh",
+      linkHref: "https://github.com/acme/app/pull/42",
+      leaves: true,
+      onPress: () => {
+        opened.push("by the press");
+      },
+    }),
+  );
+  const link = view.querySelector("a") ?? assert.fail("the token is a link");
+  let followed = true;
+  act(() => {
+    followed = link.dispatchEvent(
+      new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }),
+    );
+  });
+  assert.deepEqual(opened, ["by the press"]);
+  assert.equal(followed, false);
 });
 
 test("a press that opens in the app stays a button, though it names an address", () => {

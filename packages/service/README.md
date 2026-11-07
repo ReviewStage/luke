@@ -693,7 +693,13 @@ until nothing is changed meanwhile; once nothing names the old version,
 and a day and an hour has passed since, drop it from the list and redeploy.
 The wait is for the swaps a runner's launch keeps at its sandbox's firewall
 (`sandbox_firewall`), sealed under the ring for as long as the launch runs, which the rewrap
-does not move and the sweep drops a day and an hour after its last write. A row counted unreadable reads
+does not move and no running session holds past a day and an hour after its last write; a row
+older than that is a stopped session's, which nothing reads again. The rewrap
+does not move a workspace's environment variables (`workspace_environment_variable`)
+either, and its counts leave them out: before dropping a version, check that
+`select count(*) from workspace_environment_variable where key_version = <old>`
+answers none, and keep the version until each one it counts is set again or
+removed, since dropping it leaves their values unopenable. A row counted unreadable reads
 `unreadable` to its account, which is told to replace it. It is not a
 migration, since a migration holds no key and runs before the deployment
 whose ring it would need.
@@ -1421,10 +1427,13 @@ would. Each is opened from its sealed row under
 `PROVIDER_KEY_ENCRYPTION_KEYS`. In a sandbox it is set at the sandbox's
 firewall as a placeholder swap (`src/agents/sandbox-firewall.ts`), as the
 runner's bearer is, the runner's environment holding only the placeholder
-minted for the launch, and the sweep renews a ChatGPT plan's token there; on
-a host it is in the runner's environment, and a Codex agent on a ChatGPT plan
-asks the service for its token as it needs one
-(`src/agents/native-events/runner-token-app.ts`). Neither harness runs a
+minted for the launch; on a host it is in the runner's environment. A Codex
+agent on a ChatGPT plan asks the service for the plan's access token as it
+needs one (`src/agents/native-events/runner-token-app.ts`): on a host through
+its token command, and in a sandbox to sign Codex in on host-supplied ChatGPT
+tokens and to answer Codex's refresh after a 401, so in a sandbox app-server
+holds the access token, and the sign-in that renews it stays with the
+service. Neither harness runs a
 command sandbox of its own, in a sandbox or on a host, so in a sandbox the
 firewall is what keeps a credential from the agent's commands: they can read
 the placeholders, each good only through that sandbox's firewall, and never
@@ -2064,21 +2073,24 @@ there, unread, and their runs fail as they fire.
 A schedule is five-field cron read in an IANA zone
 (`@repo/features/automation-schedule`), so nine o'clock stays nine o'clock
 in that zone across a daylight-saving change; one that would fire more
-often than every fifteen minutes is refused. Its next due instant is the
-row's `next_run_at`, which the minute sweep claims by
-(`src/automations/automation-sweep.ts`): in one transaction it locks the enabled
-rows due, skipping any another claim holds, writes each one's next instant,
-and records a queued run under the due instant. Vercel's cron may call the
-same minute twice; the second claim finds the row moved on or locked, and
-a claim that still read it at its old instant records nothing past the
-unique key. A schedule due more than an hour ago, the cron down or a
-deploy between, is moved on without a run, so a backlog is never replayed.
+often than every fifteen minutes is refused. On production each scheduled
+automation is one Vercel schedule (`src/automations/automation-cadence.ts`),
+named by the automation's id in its workspace's namespace, on its own cron
+and zone, kept as the automation is saved, paused, and deleted; it
+publishes to the `automation-runs` queue topic, as a webhook's call, a
+GitHub delivery, and a Sentry event publish their firings. The queue's
+consumer (`src/automations/automation-run-consumer.ts`) records each firing
+under its dedupe key, a schedule's `executionId` among them, so a firing
+delivered twice is one run, writes a schedule's next instant to
+`next_run_at` for the list to show, and acts on the run while it is still
+queued; a delivery that throws is left unacknowledged and the queue delivers
+it again. Off production nothing is scheduled or published, and a firing is
+recorded queued for nothing to start, since a Preview's database is a branch
+of production's.
 
-A queued run is acted on by `src/automations/automation-runs.ts`, one automation's
-runs one after another so each run's guards read what the one before
-settled; a run still queued two hours after it fired, an hour past the
-last sweep that would act on it, is settled as `missed`, which no failure
-count reads.
+A queued run is acted on by `src/automations/automation-runs.ts`, one
+automation's runs decided one after another under its row lock, so each
+run's guards read what the one before settled.
 Its guards come first: a run whose automation was paused after it was
 queued is skipped as `paused` (the owner's own "Run now" still runs), and
 a run past the daily cap (runs started in the last twenty-four
@@ -2089,10 +2101,10 @@ queued. Then it is a Start with a prompt, on the one path a Start takes
 the automation's repository and the reach of it through the workspace's
 installation, and the model are checked as for the developer's own
 Start, the agent runs as the owner on the owner's keys, and its session is
-reached through `routedSessions` acting for the owner, never on the bearer
-the cron called with, as an agent's own `start_agent` reaches one. The prompt is the
+reached through `routedSessions` acting for the owner, never on a
+caller's bearer, as an agent's own `start_agent` reaches one. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
-fired. The run's id is the Start's key, so a run two sweeps both act on
+fired. The run's id is the Start's key, so a run two deliveries both act on
 starts one agent, and a named model does not become the account's default.
 The MCP servers the action switches off (`disabledServers`) are switched off
 for the run's new agent, as a Start's draft switches them off; every other
@@ -2631,13 +2643,10 @@ the rest still run, and any failure fails the cron's check-in. In order:
   settled as failed. An idle sandbox stops on Vercel's own timeout.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.
-- `withdrawnLines`: withdrawn lines no turn took within an agent's turn
-  bound deleted.
 - `automations`: the automations whose schedule is due fired
   ("Automations" below), at most twenty-five a sweep, and the runs still
   queued from the last hour acted on, at most twelve a sweep and four at
   once, counted as `fired`, `started`, `skipped`, `failed`, and `archived`.
-- `purgedPictures`: description pictures uploaded a day ago that no save named.
 - `agentQueues`: unpaused queues of idle agents handed on.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every

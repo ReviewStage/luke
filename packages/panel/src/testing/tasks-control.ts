@@ -6,7 +6,6 @@ import {
 } from "@repo/features/agent-view";
 import {
   type AgentOlderAnswer,
-  type AgentSummary,
   applyMessagesPage,
   type ListedAgent,
 } from "@repo/features/agent-wire";
@@ -59,7 +58,7 @@ const LISTED_WORKSPACE_ID = "workspace-listed";
 
 /** An agent as the task list carries it: with the workspace and repository its own row names, a test's own where given, else one workspace and no repository. */
 export function listedAgent(
-  agent: AgentSummary,
+  agent: Omit<ListedAgent, "workspaceId" | "repository">,
   place: Partial<Pick<ListedAgent, "workspaceId" | "repository">> = {},
 ): ListedAgent {
   return {
@@ -550,7 +549,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onPullRequestView: () => undefined,
       strip: DRAWN_KINDS,
       tab: undefined,
-      preview: undefined,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       opened: 0,
       onToggle: ignore,
@@ -570,10 +568,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onUnpin: ignore,
       onRenamePins: ignore,
       onPlacePins: ignore,
+      onOpen: ignore,
       onOpenFile: ignore,
-      onPreview: ignore,
-      onPreviewFile: ignore,
-      onKeep: ignore,
       onBrowseFile: ignore,
       onFileHistory: ignore,
       onResize: ignore,

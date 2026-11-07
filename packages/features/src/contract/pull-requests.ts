@@ -10,10 +10,16 @@
  * so a client draws either alike. The change takes its input detailed, as
  * the agent's does: the query names the pull request, and the body is the
  * change alone, read exactly.
+ *
+ * Each refuses, beyond what any procedure may (`declaredProcedure`), a
+ * workspace the account is not a member of, or a number the repository
+ * holds no pull request under, as not found, and a repository the
+ * workspace no longer reaches as out of reach
+ * (`packages/service/src/github/repository-pull-request-procedures.ts`).
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   agentChangesAnswerSchema,
@@ -28,8 +34,9 @@ import {
   pullRequestViewedAnswerSchema,
   pullRequestWriteAnswerSchema,
 } from "../pull-request-write-wire.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
 import { PULL_REQUEST_ACTION_BODY_BYTES } from "./agent-pull-requests.js";
-import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, declaredProcedure, exactInput, refuses } from "./base.js";
 import { numberedQuerySchema } from "./github.js";
 
 /** The public paths, each naming the pull request in its query. */
@@ -44,9 +51,14 @@ const PULL_REQUEST_PATH = {
   OVERVIEW_CONVERSATION: "/api/pull-requests/overview/conversation",
 } as const;
 
+/** What every procedure refuses beyond what any may: the pull request or its workspace out of the account's reach, and its repository out of the workspace's. */
+const pullRequestProcedure = declaredProcedure.errors(
+  refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
+);
+
 /** A GET of one of the reads, the pull request named in its query. */
 const read = (path: `/${string}`) =>
-  hostedProcedure.meta(openapi({ method: HTTP_METHOD.GET, path })).input(numberedQuerySchema);
+  pullRequestProcedure.meta(openapi({ method: HTTP_METHOD.GET, path })).input(numberedQuerySchema);
 
 /** The change's input, detailed: the pull request in the query, beside whatever else a caller wrote there, and the change itself as the body, read exactly. */
 const actionInput = exactInput(
@@ -69,7 +81,7 @@ export const pullRequestsContract = {
   /** Its changed files, who it names, and the commits its changed images are read at. */
   changes: read(PULL_REQUEST_PATH.CHANGES).output(EffectSchema.flip(agentChangesAnswerSchema)),
   /** One change to the pull request, made on GitHub as the asking member. */
-  action: hostedProcedure
+  action: pullRequestProcedure
     .meta(bodyCap(PULL_REQUEST_ACTION_BODY_BYTES))
     .meta(
       openapi({

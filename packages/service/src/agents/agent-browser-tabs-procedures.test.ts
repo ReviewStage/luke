@@ -4,7 +4,6 @@ import { it } from "@effect/vitest";
 import type { LiveStatement } from "@repo/database/core/live-statement";
 import { Database } from "@repo/database/core/query";
 import {
-  browserTabsLiveStatement,
   pointBrowserTab,
   takeOverBrowserTab,
   upsertBrowserTab,
@@ -27,12 +26,12 @@ import {
   type BrowserTabsPlace,
 } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
-import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   browserTabsOfLiveRows,
   nextBrowserTabLapse,
-  taskBrowserTabsLiveRowsSchema,
-} from "@repo/features/live-wire";
+  TASK_BROWSER_TABS_READ,
+} from "@repo/features/browser-tabs-live";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { eq } from "drizzle-orm";
@@ -45,6 +44,7 @@ import {
   SERVER_EVENT,
 } from "../events/server-events.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { agentBrowserTabsRead, taskBrowserTabsRead } from "../live/reads/browser-tabs.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import {
@@ -292,9 +292,13 @@ const runLive = (statement: LiveStatement) =>
 /** The task's or the agent's tabs as Realtime would deliver them to `reader`, read as a window reads them now, and when they would next be read again for a lapse. */
 const liveTabsOf = (reader: string, place: BrowserTabsPlace) =>
   Effect.gen(function* () {
-    const statement = Option.getOrThrow(browserTabsLiveStatement(reader, place));
-    const rows = yield* Schema.decodeUnknownEffect(taskBrowserTabsLiveRowsSchema)({
-      tabs: yield* runLive(statement),
+    const { tabs } = Option.getOrThrow(
+      "taskId" in place
+        ? taskBrowserTabsRead.statements({ userId: reader, id: place.taskId })
+        : agentBrowserTabsRead.statements({ userId: reader, id: place.agentId }),
+    );
+    const rows = yield* Schema.decodeUnknownEffect(TASK_BROWSER_TABS_READ.rows)({
+      tabs: yield* runLive(tabs),
     });
     const now = (yield* DateTime.nowAsDate).getTime();
     return { tabs: browserTabsOfLiveRows(rows, now), lapse: nextBrowserTabLapse(rows, now) };

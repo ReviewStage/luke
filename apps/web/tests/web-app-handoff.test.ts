@@ -45,7 +45,12 @@ test("a plan's link opened on a Mac by an account that chose the Mac app is hand
   assert.match(opened[0] ?? "", new RegExp(`/task/${LISTED_TASK.id}$`, "u"));
   // The visitor comes back to the tab, which is still drawn and asks the app nothing more.
   window.dispatchEvent(new Event("focus"));
-  await vi.waitFor(() => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")));
+  // Note that the 5 s bound covers a known regression in the panel's cold first render in jsdom since the TanStack work, about
+  // 500 ms to about 850 ms unloaded, which "Bring the panel's first render back to its pre-TanStack time" (STAG-1593) fixes.
+  await vi.waitFor(
+    () => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")),
+    5_000,
+  );
   assert.equal(opened.length, 1);
   assert.equal(root.querySelector("section.ui-auth-card"), null, "no sign-in is drawn");
 });

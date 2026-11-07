@@ -221,3 +221,58 @@ it.effect(
       yield* Deferred.succeed(network, undefined);
     }).pipe(Effect.scoped),
 );
+
+it.effect(
+  "a waiting write is never sent as the account the session moved to while a resend round runs",
+  () =>
+    Effect.gen(function* () {
+      const session = { holder: "account-a" };
+      const reachable = { now: false };
+      const gate = yield* Deferred.make<void>();
+      const sentAs: string[] = [];
+      const refusedCount = { now: 0 };
+      const rename: WriteDeclaration<Row, FieldChange<Row>, string, string> = {
+        kind: ROW,
+        keys: () => ["1"],
+        change: (name) => () => ({ name }),
+        send: () => {
+          const sent = Effect.sync(() => sentAs.push(session.holder));
+          return reachable.now
+            ? Effect.andThen(
+                sent,
+                Effect.as(Deferred.await(gate), { answer: "renamed", txid: undefined }),
+              )
+            : Effect.andThen(
+                sent,
+                Effect.succeed({ refused: "not renamed", unanswered: true as const }),
+              );
+        },
+        queue: { name: "rename", input: Schema.String, queued: () => "waits" },
+      };
+      const pool = yield* entityPool({
+        mintKey: () => "key",
+        replayRefused: Effect.sync(() => {
+          refusedCount.now += 1;
+        }),
+        holder: () => session.holder,
+      });
+      const list = yield* standing(pool);
+      yield* list.rows.answer([{ id: "1", name: "Triage", runs: 0 }]);
+      yield* pool.write(rename, "Triage issues");
+      yield* pool.write(rename, "Triage bugs");
+      yield* settled;
+      reachable.now = true;
+
+      const round = yield* Effect.forkChild(pool.resend);
+      yield* settled;
+      session.holder = "account-b";
+      yield* Deferred.succeed(gate, undefined);
+      yield* Fiber.join(round);
+      yield* settled;
+
+      assert.ok(!sentAs.includes("account-b"), `sent as ${sentAs.join(", ")}`);
+      assert.deepEqual(pool.queued(), []);
+      assert.deepEqual(list.rows.rows(), [{ id: "1", name: "Triage issues", runs: 0 }]);
+      assert.equal(refusedCount.now, 0, "a write let go is not told as one the service refused");
+    }).pipe(Effect.scoped),
+);
