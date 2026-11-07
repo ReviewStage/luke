@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { HostedDeviceAgentClient } from "@repo/features";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { Duration, Effect, Layer, Option } from "effect";
+import { Effect, Layer, Option } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { composeLocalAgents } from "../compose-local-agents.js";
 import { LocalAgentPlatform, type LocalAgentPlatformSeam, Reporter } from "../effect/seams.js";
-import { type HostDevice, markHostDeviceRefused, readHostDevice } from "../host-device-record.js";
+import { type HostDevice, hostDeviceWhen, markHostDeviceRefused } from "../host-device-record.js";
 import { hostServiceStanding } from "./host-standing.js";
 import { type HostReleases, hostTargetOf, hostUpdate } from "./host-update.js";
 
@@ -27,12 +27,9 @@ import { type HostReleases, hostTargetOf, hostUpdate } from "./host-update.js";
  * asked again in place when the service is out of reach.
  *
  * A box whose record is refused rests (`hostRefusedRest`) rather than
- * exiting: it reads its record every `REFUSED_READ`, so a connect again,
- * by hand or by This Mac's app, is followed within a minute.
+ * exiting: it watches its record (`hostDeviceWhen`), so a connect again, by
+ * hand or by This Mac's app, is followed as soon as it writes a new one.
  */
-
-/** How often a refused box reads its record again, for a connect that wrote a new one. */
-const REFUSED_READ = Duration.minutes(1);
 
 /** Why the daemon returned: the service refused the box's secret, or it switched to a newer release, which a start on it runs. */
 export const HOST_DAEMON_END = { REMOVED: "removed", UPDATED: "updated" } as const;
@@ -110,18 +107,16 @@ export interface HostRefusedRestOptions {
 export const hostRefusedRest = Effect.fnUntraced(function* (options: HostRefusedRestOptions) {
   const { report } = yield* Reporter;
   const { stateRoot, device } = options;
-  /** Whether the record still stands refused on the secret this rest was handed. */
-  const stillRefused = Effect.map(readHostDevice(stateRoot), (kept) =>
-    Option.exists(
-      kept,
-      (record) => record.refused === true && record.deviceSecret === device.deviceSecret,
-    ),
-  );
   report(
     `${PRODUCT_NAME} host: ${PRODUCT_NAME} refused this box's secret, so it was removed. Connect it again to follow its agents.`,
   );
-  for (;;) {
-    yield* Effect.sleep(REFUSED_READ);
-    if (!(yield* stillRefused)) return;
-  }
+  // Note that the rest ends once the record no longer stands refused on the secret it was handed.
+  yield* hostDeviceWhen(
+    stateRoot,
+    (kept) =>
+      !Option.exists(
+        kept,
+        (record) => record.refused === true && record.deviceSecret === device.deviceSecret,
+      ),
+  );
 });
