@@ -1,25 +1,25 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
-  keepDescriptionAttachment,
   DESCRIPTION_ATTACHMENT_KEEP,
+  keepDescriptionAttachment,
 } from "@repo/database/models/description-attachments";
 import type { DescriptionWriter } from "@repo/database/models/description-revisions";
 import { readTaskHeader } from "@repo/database/models/task-store";
 import { workspaceOf } from "@repo/database/models/workspace-store";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
-import { PICTURE_BOUNDS, type Picture } from "@repo/features/picture-wire";
 import {
   descriptionAttachmentAddress,
   taskPictureMarkdown,
 } from "@repo/features/description-attachment-link";
 import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
 import {
-  NOTE_KIND,
   type DescriptionNote,
   descriptionNoteSectionSchema,
   descriptionNotesSchema,
+  NOTE_KIND,
   readNotes,
 } from "@repo/features/description-notes";
+import { PICTURE_BOUNDS, type Picture } from "@repo/features/picture-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { describeWire, readEither } from "@repo/wire/effect";
@@ -169,7 +169,6 @@ export const DESCRIPTION_EDIT_REFUSAL = {
   UNREADABLE: "Not saved: the notes do not read under the notes' schema.",
   TOO_MANY: `Not saved: a turn may take at most ${DESCRIPTION_EDIT.MAX_NOTES_PER_TURN} notes on the description. Go on, and name what you would have noted in your message.`,
   UNAVAILABLE: "Not saved: the service could not reach its store.",
-  OFF: "Not saved: your developer has Task descriptions off, so no description is written. Say in your message what you would have noted.",
   NO_TASK_NAMED: `Not saved: name the task whose description to edit as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   NO_TASK: `Not saved: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_TURN:

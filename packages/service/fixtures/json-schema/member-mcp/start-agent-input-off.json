@@ -1,0 +1,151 @@
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "description": "Where you name no taskId and no from, the workspace of the task made for the agent, by the slug list_workspaces answered; leave it out where the member belongs to one workspace alone."
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The task to start the agent on, by the id list_tasks answered; leave it out to start it on a new task made for it."
+    },
+    "repository": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 140
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Where you name no taskId and no from, the GitHub repository of the task made for the agent, as owner/name, which the workspace's GitHub installation must reach; null or left out for none. A task's agent works in the task's own."
+    },
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64000,
+      "description": "What the agent should do, typed to it as its first message: everything it needs to start on its work, or the developer's words where they named the job. Every start takes one but a start from another agent, which takes none."
+    },
+    "note": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64000,
+      "description": "Everything else the agent should hear as it starts (what to start with, what to watch out for, what to leave alone), handed to it after the prompt in the same first message; leave it out where there is nothing beyond the prompt."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "The agent's title from the start, how the developer sees it named, such as the pull request it will open; leave it out to have it named from what it is told."
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "The branch of the task's repository to clone the agent's checkout at and cut its own branch from, such as the head branch of a pull request it builds on; it must already be on GitHub. Leave it out for the repository's default branch."
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The model to run on, by its catalog id (such as anthropic/claude-opus-5.5); leave it out with the effort for the member's default."
+    },
+    "effort": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The reasoning effort, as the model lists it (such as high); given with the model or not at all."
+    },
+    "runsOn": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "machine": {
+              "type": "string",
+              "enum": [
+                "vercel"
+              ]
+            }
+          },
+          "required": [
+            "machine"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "machine": {
+              "type": "string",
+              "enum": [
+                "device"
+              ]
+            },
+            "deviceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            }
+          },
+          "required": [
+            "machine",
+            "deviceId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "machine": {
+              "type": "string",
+              "enum": [
+                "device"
+              ]
+            },
+            "device": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "machine",
+            "device"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Where the agent runs: {\"machine\":\"vercel\"} for the cloud, or {\"machine\":\"device\",\"device\":\"<name>\"} for one of the member's own devices (a Mac or a host) by its name, in any case, or {\"machine\":\"device\",\"deviceId\":\"<id>\"} by its id, which must be registered and online; a name that matches none of the member's devices, or more than one, is refused with their devices listed by name, id, and whether each is online. With from, another place than that agent's moves it there. Leave it out for where the agent it starts from runs, with from; else where the member's newest agent on the task runs; else where the member last chose to run one; else the cloud."
+    },
+    "from": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36,
+          "description": "The agent to start from, by the id list_agents answered."
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36,
+          "description": "One of that agent's messages, by the messageId read_agent names on an entry of its tail, to fork it there; leave it out to continue the agent from where it stands."
+        }
+      },
+      "required": [
+        "agentId"
+      ],
+      "additionalProperties": false,
+      "description": "Another agent of your workspace to take over from, on its own task, or on no task where it has none: the new agent is handed its brief and its transcript (with Vespin's summary of the steps that do not fit) and a copy of its work, runs on its model unless you name one, and hears the note after them; it takes no prompt and no branch. Without messageId it continues the agent, which is stopped; with one it forks the agent at that message, which goes on."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

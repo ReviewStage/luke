@@ -168,7 +168,7 @@ export const ROUTED_PLACE = {
   SETTINGS: {
     routes: ["/$workspace/settings", "/app/settings"],
     gate: (params, access) =>
-      params.page === undefined || settingsPageRouteStands(params.page, access),
+      params.page === undefined || settingsPageRouteStands(params.page, access, params.workspace),
     stillThere: () => true,
     overThePlan: false,
     listedOnly: false,
@@ -284,7 +284,8 @@ export const ROUTED_PLACE = {
   },
   VERSION_HISTORY: {
     routes: ["/version-history"],
-    gate: (_params, access) => versionHistoryRouteStands(access),
+    gate: (params, access) =>
+      params.workspace === undefined || versionHistoryRouteStands(access, params.workspace),
     // Note that a version history is passed over once its task is deleted, as the task's own step is.
     stillThere: (_params, _search, there) =>
       there.historyTask === undefined || there.taskStands(there.historyTask),

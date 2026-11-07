@@ -104,14 +104,14 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount;
-        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.PILOT), false);
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.SKILLS), false);
         yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } });
-        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.PILOT), false);
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PILOT]: true } });
-        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.PILOT), true);
-        assert.equal(yield* accountExperimentOn(yield* openAccount, EXPERIMENT.PILOT), false);
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PILOT]: false } });
-        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.PILOT), false);
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.SKILLS), false);
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.SKILLS]: true } });
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.SKILLS), true);
+        assert.equal(yield* accountExperimentOn(yield* openAccount, EXPERIMENT.SKILLS), false);
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.SKILLS]: false } });
+        assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.SKILLS), false);
       }),
   );
 

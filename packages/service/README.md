@@ -1602,11 +1602,13 @@ experiment, and only a value that is not a record at all is
 
 ### Workspace memory
 
-Memory stands behind the Memory experiment (`EXPERIMENT.MEMORY`), read for
-the agent's starter by `memoryOnFor` (`src/agents/memory-tools.ts`): while it
-is off the agent is offered neither tool, its instructions say nothing of the
-memory, and the tools' door refuses a call a harness offering every tool
-still makes; Settings › Memory stands nowhere in the panel.
+Memory stands behind the Memory experiment (`EXPERIMENT.MEMORY`), which a
+workspace's owners and admins turn on for everyone in it, read for the
+workspace the agent works in by `experimentOnIn`
+(`src/agents/workspace-experiment-on.ts`): while it is off the agent is
+offered neither tool, its instructions say nothing of the memory, and the
+tools' door refuses a call a harness offering every tool still makes, in
+words that name no experiment; Settings › Memory stands nowhere in the panel.
 
 The `memory` table (`packages/database/src/schemas/memory.ts`) holds the facts
 and conventions a workspace's agents kept, one short statement a row,

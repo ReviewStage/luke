@@ -40,10 +40,10 @@ import {
  */
 
 /**
- * The account's workspaces as the desktop follows them: two parts, its
- * workspaces and the GitHub installations connected to them, which the
- * held read reads apart too, since a workspace holding several would
- * otherwise be a row for each. Its own first workspace stands first, the
+ * The account's workspaces as the desktop follows them: three parts, its
+ * workspaces, the GitHub installations connected to them, and the
+ * experiments chosen for them, which the held read reads apart too, since a
+ * workspace holding several would otherwise be a row for each. Its own first workspace stands first, the
  * rest by name, then by id; a workspace's installations by when they were
  * first linked, then by id.
  */
@@ -95,6 +95,24 @@ export const WORKSPACES_READ = liveRead({
         ["installationId", ORDER.ASC],
       ],
     }),
+    experiments: liveRows({
+      row: Schema.Struct({
+        workspaceId: Schema.String,
+        /** The experiment's key, read by `@repo/settings`, which names the experiments. */
+        experiment: Schema.String,
+        on: Schema.Boolean,
+        /** Who changed it last and their name now; null where that account is gone. */
+        changedById: Schema.NullOr(Schema.String),
+        changedByName: Schema.NullOr(Schema.String),
+        changedAt: countedNumber,
+      }),
+      // Note that a workspace holds one row per experiment, and this snapshot read keys no row to diff it.
+      key: "workspaceId",
+      order: [
+        ["workspaceId", ORDER.ASC],
+        ["experiment", ORDER.ASC],
+      ],
+    }),
   },
 });
 
@@ -105,6 +123,8 @@ type WorkspacesLiveRows = typeof WORKSPACES_READ.rows.Type;
 
 type WorkspaceInstallationLiveRow = LiveRowOf<typeof WORKSPACES_READ.parts.installations>;
 
+type WorkspaceExperimentLiveRow = LiveRowOf<typeof WORKSPACES_READ.parts.experiments>;
+
 /**
  * A row as the wire carries its workspace, as the held read writes it: every
  * installation, the first linked first, and again the first still active,
@@ -113,6 +133,7 @@ type WorkspaceInstallationLiveRow = LiveRowOf<typeof WORKSPACES_READ.parts.insta
 function workspaceOfLiveRow(
   row: LiveRowOf<typeof WORKSPACES_READ.parts.workspaces>,
   installations: readonly WorkspaceInstallationLiveRow[],
+  experiments: readonly WorkspaceExperimentLiveRow[],
 ): Workspace {
   const githubInstallations = orderedLiveRows(
     WORKSPACES_READ.parts.installations,
@@ -133,6 +154,21 @@ function workspaceOfLiveRow(
     ...(row.photoVersion === null ? undefined : { photoVersion: row.photoVersion }),
     ...(pictureUrl === undefined ? undefined : { pictureUrl }),
     ...(row.personal ? { personal: true } : undefined),
+    ...(experiments.length === 0
+      ? undefined
+      : {
+          experiments: orderedLiveRows(WORKSPACES_READ.parts.experiments, experiments).map(
+            ({ experiment, on, changedById, changedByName, changedAt }) => ({
+              experiment,
+              on,
+              changedBy:
+                changedById === null || changedByName === null
+                  ? null
+                  : { id: changedById, name: changedByName },
+              changedAt,
+            }),
+          ),
+        }),
   };
 }
 
@@ -142,8 +178,12 @@ export function workspacesOfLiveRows(rows: WorkspacesLiveRows): readonly Workspa
   for (const row of rows.installations) {
     installations.set(row.workspaceId, [...(installations.get(row.workspaceId) ?? []), row]);
   }
+  const experiments = new Map<string, WorkspaceExperimentLiveRow[]>();
+  for (const row of rows.experiments) {
+    experiments.set(row.workspaceId, [...(experiments.get(row.workspaceId) ?? []), row]);
+  }
   return orderedLiveRows(WORKSPACES_READ.parts.workspaces, rows.workspaces).map((row) =>
-    workspaceOfLiveRow(row, installations.get(row.id) ?? []),
+    workspaceOfLiveRow(row, installations.get(row.id) ?? [], experiments.get(row.id) ?? []),
   );
 }
 
