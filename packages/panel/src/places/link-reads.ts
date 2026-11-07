@@ -4,15 +4,17 @@
  * A link that names its place by something only the service resolves (an
  * Inbox item by its id alone, a task by its number, an agent with no task
  * named) opens once that read answers. Any move the developer makes before
- * then supersedes it, whatever door made the move: a new step pushed onto the
- * window's router history at another page, or Back and Forward to one. A
- * move that only rewrites the step standing, as a redirect or the history's
- * own settle does, supersedes nothing, nor does a new step on the same page.
+ * then supersedes it, whatever door made the move: any move of the window's
+ * router history to another page, pushed, replaced in the step's place, or
+ * Back and Forward. Only the history's own write of the step standing
+ * (`navigation-history.ts`), which carries the step it saves and moves no
+ * one, supersedes nothing, nor does a move within the same page.
  */
 
 import type { RouterHistory } from "@tanstack/react-router";
 import { useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
+import { savesStep } from "../navigation-history.js";
 
 /** The developer's moves to another page counted beside each window's router history. */
 const movesBeside = new WeakMap<RouterHistory, { count: number }>();
@@ -26,7 +28,8 @@ function movesOf(history: RouterHistory): { count: number } {
   history.subscribe(({ location, action }) => {
     const before = path;
     path = location.pathname;
-    if (action.type === "REPLACE" || location.pathname === before) return;
+    if (location.pathname === before) return;
+    if (action.type === "REPLACE" && savesStep(location)) return;
     made.count += 1;
   });
   movesBeside.set(history, made);

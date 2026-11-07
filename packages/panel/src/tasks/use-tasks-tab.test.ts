@@ -480,6 +480,8 @@ function mount(
     },
     /** The router arriving at `address`, as a browser's own move lands it. */
     arrive: (address: string) => act(() => held.history.push(address)),
+    /** The router taking `address` in the step's place, as a door that replaces moves it. */
+    replace: (address: string) => act(() => held.history.replace(address)),
     /** The window's history, where the tab was mounted with one. */
     history: () => windowHistory ?? assert.fail("the window's history stands"),
     stand: (patch: Partial<Standing>) => {
@@ -1732,6 +1734,38 @@ test.each([
     assert.deepEqual(tab.control().inboxView.chosen, row);
   },
 );
+
+test("a link to an Inbox item by its id alone whose read lands after the window replaced its step with another page leaves that page standing", async () => {
+  const answers: Array<() => void> = [];
+  const tab = mount(
+    { shown: true, tasks: TWO_WORKSPACES },
+    {
+      [ACT_KIND.AGENTS_INBOX_ITEM_HOME]: () =>
+        new Promise((resolve) =>
+          answers.push(() =>
+            resolve({ agentId: AGENT_ID, planId: "alerts", workspaceId: ACME.id }),
+          ),
+        ),
+    },
+  );
+  await settle();
+  act(() => tab.control().inboxView.onOpen());
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.INBOX_ITEM, itemId: "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6" },
+    }),
+  );
+  tab.replace("/personal/tasks");
+  await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
+    answers[0]?.();
+  });
+  await settle();
+
+  assert.equal(tab.at(), "/personal/tasks");
+  assert.equal(tab.control().inboxView.open, false);
+});
 
 test("a task's Inbox door and its link narrow the Inbox to the task, an agent's waiting thread choosing that thread there, and the Inbox's own row lists everything", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {});
