@@ -21,13 +21,12 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** A conversation of the account that ran in the session named, stamped deleted where an instant is given. */
+/** A conversation of the account that ran in the session named. */
 const openConversation = (
   userId: string,
   options: {
     readonly kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
     readonly sessionId?: string;
-    readonly deletedAt?: Date;
   },
 ) =>
   Effect.gen(function* () {
@@ -38,7 +37,6 @@ const openConversation = (
         userId,
         kind: options.kind,
         runtimeSessionId: options.sessionId ?? null,
-        deletedAt: options.deletedAt ?? null,
       })
       .returning({ id: conversations.id });
     assert.ok(row);
@@ -61,11 +59,6 @@ it.layer(getTestDB())("the standing sessions read", (it) => {
           sessionId: main,
         });
         yield* openConversation(userId, { kind: CONVERSATION_KIND.AGENT, sessionId: agent });
-        yield* openConversation(userId, {
-          kind: CONVERSATION_KIND.AGENT,
-          sessionId: mintSession(),
-          deletedAt: new Date(),
-        });
         yield* openConversation(userId, { kind: CONVERSATION_KIND.CHILD });
         yield* openConversation(other, { kind: CONVERSATION_KIND.MAIN, sessionId: mintSession() });
 

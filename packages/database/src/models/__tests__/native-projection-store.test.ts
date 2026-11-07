@@ -139,16 +139,13 @@ it.layer(getTestDB())("the native projection's place", (it) => {
     }),
   );
 
-  it.effect("a conversation another account holds, or one cleared, is never applied to", () =>
+  it.effect("a conversation another account holds, or one deleted, is never applied to", () =>
     Effect.gen(function* () {
       const db = yield* Database;
       const target = yield* openConversation;
       const stranger = yield* openConversation;
-      const cleared = yield* openConversation;
-      yield* db
-        .update(conversations)
-        .set({ deletedAt: new Date() })
-        .where(eq(conversations.id, cleared.conversationId));
+      const deleted = yield* openConversation;
+      yield* db.delete(conversations).where(eq(conversations.id, deleted.conversationId));
       let ran = 0;
       const apply = () =>
         Effect.sync(() => {
@@ -161,7 +158,7 @@ it.layer(getTestDB())("the native projection's place", (it) => {
         target.digest,
         apply,
       );
-      const gone = yield* withNativeProjection(cleared, cleared.digest, apply);
+      const gone = yield* withNativeProjection(deleted, deleted.digest, apply);
       const untouched = yield* readBack(target);
       const strangers = yield* readNativeSequence({
         userId: stranger.userId,

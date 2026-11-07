@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@repo/database/core/query";
 import { EpochMillisColumnSchema } from "@repo/database/models/columns";
+import { deleteConversations } from "@repo/database/models/conversation-delete";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
@@ -16,7 +17,6 @@ import {
   openHostedStoreTestDatabase,
   readMessagesByConversationTyped,
   readTurnById,
-  setConversationDeletedAt,
 } from "@repo/database/testing";
 import {
   RUN_EVENT,
@@ -416,9 +416,9 @@ test("every event delivered twice, and the whole stream replayed, writes one row
   assert.deepEqual(await counters(target), { message: 3 });
 });
 
-test("a cleared conversation is written by nothing, like one that never was", async () => {
+test("a deleted conversation is written by nothing, like one that never was", async () => {
   const target = await conversation();
-  await setConversationDeletedAt(database.run, target.conversationId, new Date(NOW));
+  await database.run(deleteConversations([target.conversationId]));
   const stream = new Stream();
   const started = await database.run(
     writer.consume(target, stream.started(RUN_TURN_ORIGIN.TYPED, TURN_TRIGGER.ASK)),

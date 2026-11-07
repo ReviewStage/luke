@@ -258,8 +258,8 @@ affected users and relevant authorities as required by applicable law.
 
 We retain your data for as long as your account is active and as needed to
 provide the Service. Deleting a task deletes it at once with its history,
-pages, inbox items, and pictures; its agents' transcripts are removed seven
-days later, and their sandboxes and those sandboxes' snapshots expire and are
+pages, inbox items, and pictures, and its agents' transcripts. Deleting an
+agent deletes its transcript at once. Their sandboxes and those sandboxes' snapshots expire and are
 removed seven days after they were last used. When you delete your account:
 
 - **Account data** (profile, sessions, OAuth tokens, saved credentials,

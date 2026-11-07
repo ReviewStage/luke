@@ -69,6 +69,7 @@ import { taskRead } from "../schemas/task-read.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ArchivedByColumnSchema, InstantColumnSchema } from "./columns.js";
+import { deleteConversations } from "./conversation-delete.js";
 import { stampSavedAttachments } from "./description-attachments.js";
 import { readLastEdit, readSectionWriters } from "./description-revisions.js";
 import { type Device, devicesNamed } from "./device-store.js";
@@ -79,7 +80,6 @@ import {
   settleTaskInboxItems,
 } from "./inbox-settle.js";
 import { taskMadeByRun } from "./run-tasks.js";
-import { stampConversationsDeleted } from "./soft-delete.js";
 import {
   leaveTaskBlocks,
   lockTasksForBlocks,
@@ -111,8 +111,8 @@ import {
  * account is a member of the workspace a task starts in. A save is one `update` over the row that
  * stands and never an insert, so a task deleted before a save lands stays
  * deleted, and a save that fails leaves the document as it was. A task's
- * coding agents' conversations go with the task: deleting the task stamps
- * them `deleted_at`, so the purge takes their words seven days on. Every function is an effect over the ambient `SqlClient` and names
+ * coding agents' conversations go with the task: deleting the task deletes
+ * them in the same transaction, their words with them. Every function is an effect over the ambient `SqlClient` and names
  * no database of its own.
  */
 
@@ -2436,7 +2436,7 @@ export function deleteTaskCommitted(
         const conversationIds = agents.map((agent) => agent.conversationId);
         const removed = yield* removeTask({ userId, taskId });
         if (Option.isNone(removed)) return Option.none();
-        yield* stampConversationsDeleted(conversationIds);
+        yield* deleteConversations(conversationIds);
         return Option.some({ txid: removed.value.txid });
       }),
     ),

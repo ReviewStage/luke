@@ -73,7 +73,7 @@
     "./models/agent-runner-record": "./src/models/agent-runner-record.js",
     "./models/agent-wakeups": "./src/models/agent-wakeups.js",
     "./models/conversation-rewind": "./src/models/conversation-rewind.js",
-    "./models/soft-delete": "./src/models/soft-delete.js",
+    "./models/conversation-delete": "./src/models/conversation-delete.js",
     "./models/sync-log": "./src/models/sync-log.js",
     "./models/workspace-seams": "./src/models/workspace-seams.js",
     "./models/workspace-experiment-store": "./src/models/workspace-experiment-store.js",

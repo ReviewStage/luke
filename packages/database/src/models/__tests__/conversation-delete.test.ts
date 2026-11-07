@@ -1,21 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { eq, inArray } from "drizzle-orm";
-import { DateTime, Effect } from "effect";
+import { inArray } from "drizzle-orm";
+import { Effect } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
-import { getTestDB, planOf, plansOf } from "../../testing/index.js";
-import {
-  CLEARED_CONVERSATION_RETENTION_MS,
-  purgeClearedConversations,
-  stampConversationsDeleted,
-} from "../soft-delete.js";
+import { getTestDB, planOf } from "../../testing/index.js";
+import { deleteConversations } from "../conversation-delete.js";
 
 /**
- * soft-delete.test.ts -- a conversation stamped deleted with every one delegated from it, and the purge seven days on taking each one, a worker's beside its agent's.
+ * conversation-delete.test.ts -- a conversation deleted with every one delegated from it, a worker's beside its agent's, and the cascade that takes them found through indexes.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -41,9 +37,9 @@ const openConversation = (userId: string, parentConversationId?: string) =>
     return id;
   });
 
-it.layer(getTestDB())("the soft delete", (it) => {
+it.layer(getTestDB())("the delete", (it) => {
   it.effect(
-    "an agent's conversation is stamped with its workers' and theirs, a sibling stands, and the purge seven days on takes every stamped one",
+    "an agent's conversation goes at once with its workers' and theirs, and a sibling stands",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -53,46 +49,21 @@ it.layer(getTestDB())("the soft delete", (it) => {
         const sibling = yield* openConversation(owner);
         const db = yield* Database;
 
-        yield* stampConversationsDeleted([agent]);
+        yield* deleteConversations([agent]);
 
-        const stamped = yield* db
-          .select({ id: conversations.id, deletedAt: conversations.deletedAt })
-          .from(conversations)
-          .where(inArray(conversations.id, [agent, worker, nested, sibling]));
-        assert.deepEqual(
-          new Set(stamped.filter((row) => row.deletedAt !== null).map((row) => row.id)),
-          new Set([agent, worker, nested]),
-        );
-
-        const stampedAt = yield* DateTime.nowAsDate;
-        const purged = yield* purgeClearedConversations(
-          new Date(stampedAt.getTime() + CLEARED_CONVERSATION_RETENTION_MS),
-        );
-        assert.equal(purged, 3);
         const left = yield* db
           .select({ id: conversations.id })
           .from(conversations)
-          .where(eq(conversations.id, sibling));
+          .where(inArray(conversations.id, [agent, worker, nested, sibling]));
         assert.deepEqual(left, [{ id: sibling }]);
       }),
   );
 });
 
-it.layer(getTestDB())("the soft delete's reads and the purge's cascade", (it) => {
-  it.effect(
-    "a delete's stamp finds the conversations delegated from those it stamps through their parent's index",
-    () =>
-      Effect.gen(function* () {
-        const plans = yield* plansOf(stampConversationsDeleted([randomUUID()]));
-        const children = plans.find(({ sql }) => /^select/i.test(sql));
-
-        assert.match(children?.plan ?? "", /conversations_parent/);
-      }),
-  );
-
+it.layer(getTestDB())("the delete's cascade", (it) => {
   // Note that these are the statements Postgres's own foreign key triggers run for each row a
-  // purge deletes, which no store call sends and so none can be captured from.
-  it.effect("the purge's cascade finds each deleted conversation's children by their parent", () =>
+  // delete removes, which no store call sends and so none can be captured from.
+  it.effect("the cascade finds each deleted conversation's children by their parent", () =>
     Effect.gen(function* () {
       const plan = yield* planOf(
         `DELETE FROM ONLY "public"."conversations" WHERE $1 OPERATOR(pg_catalog.=) "parent_conversation_id"`,
