@@ -1275,6 +1275,14 @@ function composed(
       hold: ({ agentId, number }) => chapters.hold(new ChaptersKey({ agentId, number })),
       retry: ({ agentId, number }) => chapters.retry(new ChaptersKey({ agentId, number })),
     },
+    // The session's inbox items, followed again at once, as Try again asks.
+    AGENTS_INBOX_ITEMS_RETRY: () => sessionReads.reopen(LIVE_READ.INBOX_ITEMS, followItems),
+    // The account's preferences, read again at once for the account signed in, as Try again asks.
+    AGENTS_PREFERENCES_RETRY: () =>
+      Effect.suspend(() => {
+        const userId = dependencies.accountId();
+        return userId === undefined ? Effect.void : preferences.retry(userId);
+      }),
   };
 
   const methods: HostMethodTable = {
@@ -1434,13 +1442,6 @@ function composed(
       }),
     [GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_UNFOLLOW]: () =>
       Effect.as(FiberHandle.clear(accountFollow), {}),
-    [GATEWAY_METHOD.AGENTS_INBOX_ITEMS_RETRY]: () =>
-      Effect.as(sessionReads.reopen(LIVE_READ.INBOX_ITEMS, followItems), {}),
-    [GATEWAY_METHOD.AGENTS_PREFERENCES_RETRY]: () =>
-      Effect.suspend(() => {
-        const userId = dependencies.accountId();
-        return Effect.as(userId === undefined ? Effect.void : preferences.retry(userId), {});
-      }),
   };
 
   // Note that the windows' holds stand through a sign-out, so a session signing in follows them anew (`open`).

@@ -1,5 +1,5 @@
-import { eventIterator, type } from "@orpc/contract";
 import { workspaceTokenRepositorySchema } from "@repo/features/github-repositories-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { workspaceSentryAnswerSchema } from "@repo/features/sentry-install-wire";
 import { workspaceSlackBotAnswerSchema } from "@repo/features/slack-bot-wire";
 import {
@@ -33,12 +33,11 @@ import { workspaceMemberSchema, workspaceSchema } from "@repo/features/workspace
 import { WORKSPACE_EXPERIMENT_LIST } from "@repo/settings";
 import { ACT } from "@repo/sync";
 import { Schema as EffectSchema } from "effect";
-import { actProcedure, exactInput } from "./base.js";
 import { contractOf, declaredActs, hostAct } from "./declared-act.js";
-import { WORKSPACE_ACT_KIND } from "./kinds.js";
+import { followsContractOf, HOLD, liveFollow, liveFollows } from "./live-follow.js";
 
 /**
- * workspaces.ts -- the panel's asks of the host about the account's workspaces: its plain acts declared, and the procedures of the holds and the opened addresses beside them.
+ * workspaces.ts -- the panel's asks of the host about the account's workspaces: its plain acts and live follows declared, and the procedures of the opened addresses beside them.
  *
  * Only a panel draws a workspace, so every act is the panel's alone. Each
  * plain act answers the value the panel reads, or is refused: a write the
@@ -48,8 +47,8 @@ import { WORKSPACE_ACT_KIND } from "./kinds.js";
  * `workspaceAnswered`). A write that answers nothing the panel reads answers
  * `void`. A connection's handler answers the install address the service
  * named, which its procedure, written by hand, opens (`act-port/workspace-procedures.ts`),
- * answering the window nothing. Each hold, and its Try again, stays a
- * procedure of its own.
+ * answering the window nothing. Each per-workspace read is a live follow,
+ * declared once (`live-follow.ts`).
  */
 
 const members = EffectSchema.Array(workspaceMemberSchema);
@@ -233,61 +232,66 @@ export const WORKSPACE_ACTS = declaredActs({
   }),
 });
 
+/** A workspace's people, invitations, own integrations, Slack channels, and token repositories, each followed for the panel while it draws them. */
+export const WORKSPACE_FOLLOWS = liveFollows({
+  WORKSPACE_MEMBERS_FOLLOW: liveFollow({
+    slice: LIVE_READ.WORKSPACE_MEMBERS,
+    hold: HOLD.WINDOW,
+    key: workspacePeopleFollowSchema,
+    refusal: "Could not follow that workspace's members on this system.",
+    panelOnly: true,
+    retry: {
+      name: "WORKSPACE_MEMBERS_RETRY",
+      refusal: "Could not read that workspace's members again on this system.",
+    },
+  }),
+  WORKSPACE_INTEGRATIONS_FOLLOW: liveFollow({
+    slice: LIVE_READ.WORKSPACE_INTEGRATIONS,
+    hold: HOLD.WINDOW,
+    key: tasksWorkspaceParamsSchema,
+    refusal: "Could not follow that workspace's integrations on this system.",
+    panelOnly: true,
+    retry: {
+      name: "WORKSPACE_INTEGRATIONS_RETRY",
+      refusal: "Could not read that workspace's integrations again on this system.",
+    },
+  }),
+  WORKSPACE_SLACK_CHANNELS_FOLLOW: liveFollow({
+    slice: LIVE_READ.SLACK_CHANNELS,
+    hold: HOLD.WINDOW,
+    key: tasksWorkspaceParamsSchema,
+    refusal: "Could not read that workspace's Slack channels on this system.",
+    panelOnly: true,
+    retry: {
+      name: "WORKSPACE_SLACK_CHANNELS_RETRY",
+      refusal: "Could not read that workspace's Slack channels again on this system.",
+    },
+  }),
+  WORKSPACE_INVITATIONS_FOLLOW: liveFollow({
+    slice: LIVE_READ.WORKSPACE_INVITATIONS,
+    hold: HOLD.WINDOW,
+    key: workspacePeopleFollowSchema,
+    refusal: "Could not follow that workspace's invitations on this system.",
+    panelOnly: true,
+    retry: {
+      name: "WORKSPACE_INVITATIONS_RETRY",
+      refusal: "Could not read that workspace's invitations again on this system.",
+    },
+  }),
+  WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: liveFollow({
+    slice: LIVE_READ.TOKEN_REPOSITORIES,
+    hold: HOLD.WINDOW,
+    key: tasksWorkspaceTokenRepositoriesParamsSchema,
+    refusal: "Could not follow that workspace's repositories on this system.",
+    panelOnly: true,
+    retry: {
+      name: "WORKSPACE_TOKEN_REPOSITORIES_RETRY",
+      refusal: "Could not read that workspace's repositories again on this system.",
+    },
+  }),
+});
+
 export const workspaceActsContract = {
   ...contractOf(WORKSPACE_ACTS),
-  // Note that the hold's stream carries nothing: the held people reach the panel on app state, and the stream is the window's hold on them.
-  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW]: actProcedure(
-    "Could not follow that workspace's members on this system.",
-  )
-    .input(exactInput(workspacePeopleFollowSchema))
-    .output(eventIterator(type<never>())),
-  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY]: actProcedure(
-    "Could not read that workspace's members again on this system.",
-  )
-    .input(exactInput(workspacePeopleFollowSchema))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held integrations reach the panel on app state, and the stream is the window's hold on them.
-  [WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW]: actProcedure(
-    "Could not follow that workspace's integrations on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(eventIterator(type<never>())),
-  [WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_RETRY]: actProcedure(
-    "Could not read that workspace's integrations again on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held channels reach the panel on app state, and the stream is the window's hold on them.
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW]: actProcedure(
-    "Could not read that workspace's Slack channels on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(eventIterator(type<never>())),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_RETRY]: actProcedure(
-    "Could not read that workspace's Slack channels again on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing, as the people's does.
-  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW]: actProcedure(
-    "Could not follow that workspace's invitations on this system.",
-  )
-    .input(exactInput(workspacePeopleFollowSchema))
-    .output(eventIterator(type<never>())),
-  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_RETRY]: actProcedure(
-    "Could not read that workspace's invitations again on this system.",
-  )
-    .input(exactInput(workspacePeopleFollowSchema))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held repositories reach the panel on app state, and the stream is the window's hold on them.
-  [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW]: actProcedure(
-    "Could not follow that workspace's repositories on this system.",
-  )
-    .input(exactInput(tasksWorkspaceTokenRepositoriesParamsSchema))
-    .output(eventIterator(type<never>())),
-  [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY]: actProcedure(
-    "Could not read that workspace's repositories again on this system.",
-  )
-    .input(exactInput(tasksWorkspaceTokenRepositoriesParamsSchema))
-    .output(EffectSchema.Void),
+  ...followsContractOf(WORKSPACE_FOLLOWS),
 };

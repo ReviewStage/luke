@@ -147,6 +147,14 @@ export const AGENT_INBOX_ACTS = declaredActs({
     door: ACT.READ,
     unanswered: UNANSWERED,
   }),
+  // The account's inbox items, which the host holds for the session, asked again at once, as Try again asks.
+  AGENTS_INBOX_ITEMS_RETRY: hostAct({
+    input: EffectSchema.Undefined,
+    output: EffectSchema.Void,
+    refusal: "Could not read the inbox again on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+  }),
 });
 
 export const agentInboxActsContract = {
@@ -161,10 +169,5 @@ export const agentInboxActsContract = {
     "Could not read the inbox again on this system.",
   )
     .input(exactInput(agentInboxScopeSchema))
-    .output(EffectSchema.Void),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEMS_RETRY]: actProcedure(
-    "Could not read the inbox again on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),
 };

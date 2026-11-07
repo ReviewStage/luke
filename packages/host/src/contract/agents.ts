@@ -351,6 +351,14 @@ export const AGENT_ACTS = declaredActs({
     door: ACT.REMOTE_WORK,
     unanswered: AGENT_UNANSWERED,
   }),
+  // The account's preferences, which the host holds for the session, asked again at once, as Try again asks.
+  AGENTS_PREFERENCES_RETRY: hostAct({
+    input: EffectSchema.Undefined,
+    output: EffectSchema.Void,
+    refusal: "Could not read your preferences again on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+  }),
 });
 
 /** The agents' live reads the host follows for the windows: the account's hosts, and the run that started an agent. */
@@ -383,11 +391,6 @@ export const agentActsContract = {
     .output(eventIterator(type<never>())),
   [AGENT_ACT_KIND.AGENTS_MODELS_RETRY]: actProcedure(
     "Could not read the models again on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.Void),
-  [AGENT_ACT_KIND.AGENTS_PREFERENCES_RETRY]: actProcedure(
-    "Could not read your preferences again on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),

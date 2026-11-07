@@ -1,19 +1,13 @@
 import type { HostedInstalledSkillClient } from "@repo/features/installed-skill-client";
 import { INSTALLED_SKILLS_READ } from "@repo/features/installed-skill-live";
-import {
-  INSTALLED_SKILL_CALL_FAILURE,
-  installedSkillFollowParamsSchema,
-} from "@repo/features/installed-skill-view";
-import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
+import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
 import { declaredWrite, type EntityPool } from "@repo/sync";
-import { Effect, FiberMap, type Scope } from "effect";
+import { Effect, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import type { AppInstalledSkills } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import type { INSTALLED_SKILL_ACTS } from "./contract/index.js";
-import type { HostMethodTable } from "./gateway-door.js";
-import type { HostActTable } from "./host-acts.js";
+import { type INSTALLED_SKILL_ACTS, INSTALLED_SKILL_FOLLOWS } from "./contract/index.js";
+import { type HostActTable, liveTold } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   heldInstalledSkills,
@@ -32,7 +26,7 @@ import type { RunMode } from "./run-mode.js";
  * read for the account signed in as it started, into the sync engine's pool
  * (`installed-skills-follow.ts`), from the first window's hold, and keeps
  * them among the few let go latest after the last lets go, laid on their
- * app-state slice and told as `INSTALLED_SKILLS_CHANGED`. A sign-out lets
+ * app-state slice and told on it (`liveTold`). A sign-out lets
  * every follow go and lays none, and the account gate opening follows the
  * holds anew (`open`).
  *
@@ -61,8 +55,9 @@ export interface InstalledSkillsDependencies {
 }
 
 export interface InstalledSkillsComposer extends Composer {
-  /** The installed skills' plain asks, answered directly as the panel's port asks them. */
-  readonly acts: HostActTable<typeof INSTALLED_SKILL_ACTS>;
+  /** The installed skills' plain asks and live follow, answered directly as the panel's port asks them. */
+  readonly acts: HostActTable<typeof INSTALLED_SKILL_ACTS> &
+    HostActTable<typeof INSTALLED_SKILL_FOLLOWS>;
   /** Every held workspace's skills followed anew, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
   /** Every follow let go and no read laid, as a sign-out lets them go; the windows' holds stand. */
@@ -94,18 +89,10 @@ export function composeInstalledSkills(
       accountId: dependencies.accountId,
       gate,
       pool: dependencies.pool,
-      tell: (held: AppInstalledSkills) =>
-        kernel.emit(GATEWAY_EVENT.INSTALLED_SKILLS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, INSTALLED_SKILL_FOLLOWS.INSTALLED_SKILLS_FOLLOW),
     });
-    const holds = yield* FiberMap.make<string>();
-    return composed(dependencies, gate, http, { skills, holds });
+    return composed(dependencies, gate, http, skills);
   });
-}
-
-/** What the composer holds for the windows: every held workspace's skills, and the windows' hold on each, one fiber standing until let go. */
-interface Held {
-  readonly skills: HeldSlice<string>;
-  readonly holds: FiberMap.FiberMap<string>;
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything but what a window holds. */
@@ -113,7 +100,7 @@ function composed(
   dependencies: InstalledSkillsDependencies,
   gate: () => boolean,
   http: HttpClient.HttpClient,
-  { skills, holds }: Held,
+  skills: HeldSlice<string>,
 ): InstalledSkillsComposer {
   const { client, pool } = dependencies;
 
@@ -123,8 +110,8 @@ function composed(
   ): Effect.Effect<Answer | typeof UNANSWERED> =>
     gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
 
-  /** The installed skills' plain asks, answered as the panel's port asks them (`INSTALLED_SKILL_ACTS`). */
-  const acts: HostActTable<typeof INSTALLED_SKILL_ACTS> = {
+  /** The installed skills' plain asks and live follow, answered as the panel's port asks them (`INSTALLED_SKILL_ACTS`, `INSTALLED_SKILL_FOLLOWS`). */
+  const acts: InstalledSkillsComposer["acts"] = {
     INSTALLED_SKILLS_READ: ({ skillId }) => asked(client.read(skillId)),
     INSTALLED_SKILLS_PREVIEW: ({ workspaceId, text }) => asked(client.preview(workspaceId, text)),
     // An install's skills are drawn on every held read whose scope they are in the moment it answers, each standing until those reads carry its transaction.
@@ -144,47 +131,13 @@ function composed(
       pool,
       skillRemoved((removal) => asked(client.remove(removal.skillId))),
     ),
-  };
-
-  const methods: HostMethodTable = {
-    // Note that the windows' hold on a workspace is one fiber standing until let go, so a window holding it again holds nothing anew.
-    [GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          installedSkillFollowParamsSchema,
-          params,
-          "following skills names a workspace",
-        );
-        yield* FiberMap.run(
-          holds,
-          workspaceId,
-          Effect.scoped(Effect.andThen(skills.hold(workspaceId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      }),
-    [GATEWAY_METHOD.INSTALLED_SKILLS_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          installedSkillFollowParamsSchema,
-          params,
-          "letting skills go names a workspace",
-        );
-        yield* FiberMap.remove(holds, workspaceId);
-        return {};
-      }),
-    [GATEWAY_METHOD.INSTALLED_SKILLS_RETRY]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId } = yield* readParams(
-          installedSkillFollowParamsSchema,
-          params,
-          "reading skills again names a workspace",
-        );
-        yield* skills.retry(workspaceId);
-        return {};
-      }),
+    // A workspace's skills are held for the windows while Settings › Skills shows them.
+    INSTALLED_SKILLS_FOLLOW: {
+      hold: ({ workspaceId }) => skills.hold(workspaceId),
+      retry: ({ workspaceId }) => skills.retry(workspaceId),
+    },
   };
 
   // Note that the windows' holds stand through a sign-out, so a session signing in follows them anew (`open`).
-  return { methods, acts, lifetime: Effect.void, open: skills.open, reset: skills.end };
+  return { methods: {}, acts, lifetime: Effect.void, open: skills.open, reset: skills.end };
 }

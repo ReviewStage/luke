@@ -56,9 +56,6 @@ import {
   type TasksWorkspaceSlugSetParams,
   type TasksWorkspaceTokenRepositoriesAnswer,
   type TasksWorkspaceTokenRepositorySetParams,
-  tasksWorkspaceParamsSchema,
-  tasksWorkspaceTokenRepositoriesParamsSchema,
-  workspacePeopleFollowSchema,
 } from "@repo/features/tasks-view";
 import { WORKSPACE_INTEGRATIONS_READ } from "@repo/features/workspace-integrations-live";
 import {
@@ -71,14 +68,7 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@repo/features/workspace-wire";
-import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethod,
-  type GatewayMethodHandler,
-  readParams,
-} from "@repo/gateway";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD } from "@repo/gateway";
 import {
   EXPERIMENT_COUNTED_AS,
   EXPERIMENT_SCOPE_COUNTED_AS,
@@ -86,7 +76,6 @@ import {
   isExperiment,
 } from "@repo/settings";
 import { declaredWrite, type EntityPool } from "@repo/sync";
-import type { WireRecord } from "@repo/wire";
 import {
   Clock,
   Duration,
@@ -95,7 +84,6 @@ import {
   FiberHandle,
   FiberMap,
   Option,
-  type Schema,
   Scope,
   Stream,
 } from "effect";
@@ -110,11 +98,11 @@ import {
 import { type AppTokenRepositories, type AppWorkspacePhotos, NO_KEYS_HELD } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import type { TASKS_ACTS, WORKSPACE_ACTS } from "./contract/index.js";
+import { type TASKS_ACTS, type WORKSPACE_ACTS, WORKSPACE_FOLLOWS } from "./contract/index.js";
 import { type EntityStore, KEPT_READ } from "./entity-store.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { heldFetch } from "./held-fetch.js";
-import { ActRefused, type HostActTable } from "./host-acts.js";
+import { ActRefused, type HostActTable, liveTold } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import type { KeptContent } from "./kept-content.js";
 import { FOLLOW_BACKOFF, LIVE_GONE, LiveBroken } from "./live-follow.js";
@@ -264,6 +252,7 @@ export interface WorkspacesDependencies {
 export interface WorkspacesComposer extends Composer {
   /** The workspaces' plain acts, and GitHub's connection's and the admin dashboard's, answered directly as the panel's port asks them. */
   readonly acts: HostActTable<typeof WORKSPACE_ACTS> &
+    HostActTable<typeof WORKSPACE_FOLLOWS> &
     Pick<HostActTable<typeof TASKS_ACTS>, WorkspacesTasksAct>;
   /** Follows the workspaces, and every read a window holds anew, as the account gate opening asks; GitHub's connection is read beside them where the last read is stale. */
   open: Effect.Effect<void>;
@@ -628,7 +617,7 @@ function workspacePeople(reach: WorkspacesReach) {
             poll ? { after } : undefined,
           ),
         ),
-      tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, WORKSPACE_FOLLOWS.WORKSPACE_MEMBERS_FOLLOW),
       pool: dependencies.pool,
       entities: dependencies.entities,
     });
@@ -642,7 +631,7 @@ function workspacePeople(reach: WorkspacesReach) {
             poll ? { after } : undefined,
           ),
         ),
-      tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, WORKSPACE_FOLLOWS.WORKSPACE_INVITATIONS_FOLLOW),
       pool: dependencies.pool,
       entities: dependencies.entities,
     });
@@ -662,11 +651,12 @@ function workspaceTokenRepositories({ dependencies, served, gate }: WorkspacesRe
     const { kernel, client, tasks } = dependencies;
     /** The token repositories as the fetch last told them, which every addition or removal standing is drawn over as they are told. */
     let tokenRepositoriesFetched: AppTokenRepositories = NO_KEYS_HELD;
+    const toldTokenRepositories = liveTold(
+      kernel.emit,
+      WORKSPACE_FOLLOWS.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW,
+    );
     const tellTokenRepositories = (): void =>
-      kernel.emit(
-        GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED,
-        carried(tokenRepositoryWritten.drawn(tokenRepositoriesFetched)),
-      );
+      toldTokenRepositories(tokenRepositoryWritten.drawn(tokenRepositoriesFetched));
     const tokenRepositories = yield* heldFetch<typeof LIVE_READ.TOKEN_REPOSITORIES, string>({
       empty: NO_KEYS_HELD,
       path: (workspaceId) => [workspaceId],
@@ -766,7 +756,7 @@ function workspaceIntegrations({ dependencies, served, gate }: WorkspacesReach) 
               );
             })
           : Effect.succeed(Option.none()),
-      tell: (held) => kernel.emit(GATEWAY_EVENT.SLACK_CHANNELS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, WORKSPACE_FOLLOWS.WORKSPACE_SLACK_CHANNELS_FOLLOW),
     });
     const integrations = yield* heldWorkspaceIntegrations({
       seal: (workspaceId, userId, poll, after) =>
@@ -794,7 +784,7 @@ function workspaceIntegrations({ dependencies, served, gate }: WorkspacesReach) 
       gate,
       pool: dependencies.pool,
       slackMoved: (workspaceId) => slackChannels.wake((held) => held === workspaceId),
-      tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_INTEGRATIONS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, WORKSPACE_FOLLOWS.WORKSPACE_INTEGRATIONS_FOLLOW),
     });
     return { slackChannels, integrations };
   });
@@ -1382,148 +1372,42 @@ function workspaceEnvironmentActs(
   };
 }
 
-/** One per-workspace read the windows hold: its three methods, the schema each reads the workspace by, its words for each, and what holding and asking again do. */
-interface HeldWorkspaceRead {
-  readonly methods: {
-    readonly follow: GatewayMethod;
-    readonly unfollow: GatewayMethod;
-    readonly retry: GatewayMethod;
-  };
-  readonly schema: Schema.Codec<{ readonly workspaceId: string }, unknown>;
-  readonly words: { readonly hold: string; readonly letGo: string; readonly retry: string };
-  readonly hold: (workspaceId: string) => Effect.Effect<void, never, Scope.Scope>;
-  readonly retry: (workspaceId: string) => Effect.Effect<void>;
-}
-
-/**
- * A per-workspace read held for the windows while they draw it, and told
- * only on the app state. Note that the windows' hold is one fiber standing
- * until let go, so a window holding it again holds nothing anew.
- */
-function heldReadMethods(read: HeldWorkspaceRead) {
-  return Effect.map(FiberMap.make<string>(), (holds): HostMethodTable => {
-    const workspaceOf = (params: WireRecord, words: string) =>
-      Effect.map(readParams(read.schema, params, words), ({ workspaceId }) => workspaceId);
-    const follow: GatewayMethodHandler = (params) =>
-      Effect.gen(function* () {
-        const workspaceId = yield* workspaceOf(params, read.words.hold);
-        yield* FiberMap.run(
-          holds,
-          workspaceId,
-          Effect.scoped(Effect.andThen(read.hold(workspaceId), Effect.never)),
-          { onlyIfMissing: true },
-        );
-        return {};
-      });
-    const unfollow: GatewayMethodHandler = (params) =>
-      Effect.gen(function* () {
-        yield* FiberMap.remove(holds, yield* workspaceOf(params, read.words.letGo));
-        return {};
-      });
-    const retry: GatewayMethodHandler = (params) =>
-      Effect.gen(function* () {
-        yield* read.retry(yield* workspaceOf(params, read.words.retry));
-        return {};
-      });
-    return {
-      [read.methods.follow]: follow,
-      [read.methods.unfollow]: unfollow,
-      [read.methods.retry]: retry,
-    };
-  });
-}
-
-/** The per-workspace reads the windows hold, each by its own three methods. */
-function heldWorkspaceReads({ people, tokens, integrated }: WorkspaceParts): HeldWorkspaceRead[] {
+/** The per-workspace reads the windows hold (`WORKSPACE_FOLLOWS`), each by the workspace its key names. */
+function workspaceFollowActs({
+  people,
+  tokens,
+  integrated,
+}: WorkspaceParts): HostActTable<typeof WORKSPACE_FOLLOWS> {
   const { membersReads, invitationsReads } = people;
   const { integrations, slackChannels } = integrated;
   const { tokenRepositories } = tokens;
-  return [
-    // A workspace's own integrations (`WORKSPACE_INTEGRATIONS_CHANGED`).
-    {
-      methods: {
-        follow: GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW,
-        unfollow: GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_UNFOLLOW,
-        retry: GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_RETRY,
-      },
-      schema: tasksWorkspaceParamsSchema,
-      words: {
-        hold: "holding a workspace's integrations names the workspace",
-        letGo: "letting a workspace's integrations go names the workspace",
-        retry: "reading a workspace's integrations again names the workspace",
-      },
-      hold: integrations.hold,
-      retry: integrations.retry,
+  return {
+    // A workspace's people.
+    WORKSPACE_MEMBERS_FOLLOW: {
+      hold: ({ workspaceId }) => membersReads.held.hold(workspaceId),
+      retry: ({ workspaceId }) => membersReads.held.retry(workspaceId),
     },
-    // A workspace's Slack channels, held for an owner's or an admin's windows
-    // while they list them (`SLACK_CHANNELS_CHANGED`), on the terms its
-    // integrations are held.
-    {
-      methods: {
-        follow: GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_FOLLOW,
-        unfollow: GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_UNFOLLOW,
-        retry: GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_RETRY,
-      },
-      schema: tasksWorkspaceParamsSchema,
-      words: {
-        hold: "holding a workspace's Slack channels names the workspace",
-        letGo: "letting a workspace's Slack channels go names the workspace",
-        retry: "asking a workspace's Slack channels again names the workspace",
-      },
-      hold: slackChannels.hold,
-      retry: slackChannels.retry,
+    // A workspace's invitations, held for an owner's or an admin's window while it draws them, as its people are.
+    WORKSPACE_INVITATIONS_FOLLOW: {
+      hold: ({ workspaceId }) => invitationsReads.held.hold(workspaceId),
+      retry: ({ workspaceId }) => invitationsReads.held.retry(workspaceId),
     },
-    // A workspace's people (`WORKSPACE_MEMBERS_CHANGED`).
-    {
-      methods: {
-        follow: GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW,
-        unfollow: GATEWAY_METHOD.WORKSPACES_MEMBERS_UNFOLLOW,
-        retry: GATEWAY_METHOD.WORKSPACES_MEMBERS_RETRY,
-      },
-      schema: workspacePeopleFollowSchema,
-      words: {
-        hold: "holding a workspace's people names the workspace",
-        letGo: "letting a workspace's people go names the workspace",
-        retry: "reading a workspace's people again names the workspace",
-      },
-      hold: membersReads.held.hold,
-      retry: membersReads.held.retry,
+    // A workspace's own integrations.
+    WORKSPACE_INTEGRATIONS_FOLLOW: {
+      hold: ({ workspaceId }) => integrations.hold(workspaceId),
+      retry: ({ workspaceId }) => integrations.retry(workspaceId),
     },
-    // A workspace's invitations, held for an owner's or an admin's window
-    // while it draws them (`WORKSPACE_INVITATIONS_CHANGED`), as its people are.
-    {
-      methods: {
-        follow: GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW,
-        unfollow: GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW,
-        retry: GATEWAY_METHOD.WORKSPACES_INVITATIONS_RETRY,
-      },
-      schema: workspacePeopleFollowSchema,
-      words: {
-        hold: "holding a workspace's invitations names the workspace",
-        letGo: "letting a workspace's invitations go names the workspace",
-        retry: "reading a workspace's invitations again names the workspace",
-      },
-      hold: invitationsReads.held.hold,
-      retry: invitationsReads.held.retry,
+    // A workspace's Slack channels, held for an owner's or an admin's windows while they list them, on the terms its integrations are held.
+    WORKSPACE_SLACK_CHANNELS_FOLLOW: {
+      hold: ({ workspaceId }) => slackChannels.hold(workspaceId),
+      retry: ({ workspaceId }) => slackChannels.retry(workspaceId),
     },
-    // A workspace's token repositories (`TOKEN_REPOSITORIES_CHANGED`); each
-    // change's own answer is laid there too.
-    {
-      methods: {
-        follow: GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW,
-        unfollow: GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW,
-        retry: GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_RETRY,
-      },
-      schema: tasksWorkspaceTokenRepositoriesParamsSchema,
-      words: {
-        hold: "holding a workspace's token repositories names the workspace",
-        letGo: "letting a workspace's token repositories go names the workspace",
-        retry: "reading a workspace's token repositories again names the workspace",
-      },
-      hold: tokenRepositories.hold,
-      retry: tokenRepositories.retry,
+    // A workspace's token repositories; each change's own answer is laid there too.
+    WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: {
+      hold: ({ workspaceId }) => tokenRepositories.hold(workspaceId),
+      retry: ({ workspaceId }) => tokenRepositories.retry(workspaceId),
     },
-  ];
+  };
 }
 
 /**
@@ -1550,24 +1434,20 @@ export const composeWorkspaces = /* @__PURE__ */ Effect.fn("host/composeWorkspac
   const integrated = yield* workspaceIntegrations(reach);
   const github = yield* githubStanding(reach);
   const parts: WorkspaceParts = { list, people, tokens, integrated };
-  const held = yield* Effect.forEach(heldWorkspaceReads(parts), heldReadMethods);
 
-  const methods: HostMethodTable = Object.assign(
-    {
-      // The panel coming forward, which may follow GitHub connected in the
-      // browser, reads the connection no oftener than the bound allows; the
-      // workspaces are followed and need no read. It is also the host's one
-      // word that a window came forward, which every read asked again on
-      // focus hears (`window-focus.ts`).
-      [GATEWAY_METHOD.WORKSPACES_REFRESH]: () =>
-        Effect.gen(function* () {
-          yield* dependencies.focus.raise;
-          if (gate()) yield* github.readGithubWhenStale;
-          return {};
-        }),
-    },
-    ...held,
-  );
+  const methods: HostMethodTable = {
+    // The panel coming forward, which may follow GitHub connected in the
+    // browser, reads the connection no oftener than the bound allows; the
+    // workspaces are followed and need no read. It is also the host's one
+    // word that a window came forward, which every read asked again on
+    // focus hears (`window-focus.ts`).
+    [GATEWAY_METHOD.WORKSPACES_REFRESH]: () =>
+      Effect.gen(function* () {
+        yield* dependencies.focus.raise;
+        if (gate()) yield* github.readGithubWhenStale;
+        return {};
+      }),
+  };
 
   return {
     acts: {
@@ -1578,6 +1458,7 @@ export const composeWorkspaces = /* @__PURE__ */ Effect.fn("host/composeWorkspac
       ...workspaceEnvironmentActs(reach),
       ...github.acts,
       ...adminActs(reach),
+      ...workspaceFollowActs(parts),
     },
     methods,
     // The gate opening follows the account's workspaces, so they load after

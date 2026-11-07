@@ -105,67 +105,6 @@ export const GATEWAY_METHOD = {
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
   /**
-   * One workspace's own integrations, its Sentry installations and its Slack
-   * bot, held followed for a window from now until it is let go, over Neon
-   * Realtime, and a while after among those let go lately. What they hold is
-   * heard as `WORKSPACE_INTEGRATIONS_CHANGED` events, on the app state every
-   * window draws, never answered.
-   */
-  WORKSPACES_INTEGRATIONS_FOLLOW: "workspaces.integrationsFollow",
-  /** One workspace's integrations let go by the window that held them: they stay among those let go lately until later ones push them out. */
-  WORKSPACES_INTEGRATIONS_UNFOLLOW: "workspaces.integrationsUnfollow",
-  /** One workspace's held integrations read again at once, as Try again asks; never answered. */
-  WORKSPACES_INTEGRATIONS_RETRY: "workspaces.integrationsRetry",
-  /**
-   * The channels of one workspace's Slack team, as Slack lists them, held
-   * for an owner's or an admin's window from now until it is let go: asked
-   * as it is held, as a window comes forward, as the workspace's bot is
-   * connected or disconnected, and as Try again asks. What they hold is heard
-   * as `SLACK_CHANNELS_CHANGED` events, on the app state, never answered.
-   */
-  WORKSPACES_SLACK_CHANNELS_FOLLOW: "workspaces.slackChannelsFollow",
-  /** One workspace's Slack channels let go by the window that held them. */
-  WORKSPACES_SLACK_CHANNELS_UNFOLLOW: "workspaces.slackChannelsUnfollow",
-  /** One workspace's held Slack channels asked again at once, as Try again asks; answered once the ask has landed. */
-  WORKSPACES_SLACK_CHANNELS_RETRY: "workspaces.slackChannelsRetry",
-  /**
-   * One workspace's people, its members and who its work names but left,
-   * held followed for a window from now until it is let go, over Neon
-   * Realtime, and a while after among those let go lately. What they hold is
-   * heard as `WORKSPACE_MEMBERS_CHANGED` events, on the app state every
-   * window draws, never answered.
-   */
-  WORKSPACES_MEMBERS_FOLLOW: "workspaces.membersFollow",
-  /** One workspace's people let go by the window that held them: they stay among those let go lately until later ones push them out. */
-  WORKSPACES_MEMBERS_UNFOLLOW: "workspaces.membersUnfollow",
-  /** One workspace's held people read again at once, as Try again asks; never answered. */
-  WORKSPACES_MEMBERS_RETRY: "workspaces.membersRetry",
-  /**
-   * One workspace's pending invitations, held followed for an owner's or an
-   * admin's window from now until it is let go, over Neon Realtime, and a
-   * while after among those let go lately. What they hold is heard as
-   * `WORKSPACE_INVITATIONS_CHANGED` events, on the app state every window
-   * draws, never answered.
-   */
-  WORKSPACES_INVITATIONS_FOLLOW: "workspaces.invitationsFollow",
-  /** One workspace's invitations let go by the window that held them: they stay among those let go lately until later ones push them out. */
-  WORKSPACES_INVITATIONS_UNFOLLOW: "workspaces.invitationsUnfollow",
-  /** One workspace's held invitations read again at once, as Try again asks; never answered. */
-  WORKSPACES_INVITATIONS_RETRY: "workspaces.invitationsRetry",
-  /**
-   * The repositories members added to one workspace on their own GitHub
-   * tokens, held for a window from now until it is let go, asked of the
-   * service at once and again as a window comes forward, and a while after
-   * among the reads let go lately. What it holds is heard as
-   * `TOKEN_REPOSITORIES_CHANGED` events, on the app state every window
-   * draws, never answered.
-   */
-  WORKSPACES_TOKEN_REPOSITORIES_FOLLOW: "workspaces.tokenRepositoriesFollow",
-  /** One workspace's token repositories let go by the window that held them. */
-  WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW: "workspaces.tokenRepositoriesUnfollow",
-  /** One workspace's held token repositories asked again at once, as Try again asks; answered once the ask has landed. */
-  WORKSPACES_TOKEN_REPOSITORIES_RETRY: "workspaces.tokenRepositoriesRetry",
-  /**
    * The models a coding agent may run on as the account is offered them, and
    * its devices, held for a window from now until it is let go, asked of the
    * service at once, again as a window comes forward, as the account's
@@ -204,30 +143,6 @@ export const GATEWAY_METHOD = {
   /** One held transcript read again at once, as Try again asks; never answered. */
   AGENTS_TRANSCRIPT_RETRY: "agents.transcriptRetry",
   /**
-   * A workspace's automations, a workspace's runs, or an automation's runs
-   * held followed for the windows from now until let go, and a while after
-   * among those let go lately, on the service's live read. What they hold
-   * is heard as `AUTOMATIONS_CHANGED`, never answered; holding again holds
-   * nothing anew.
-   */
-  AUTOMATIONS_FOLLOW: "automations.follow",
-  /** A held list or history let go, kept followed a while among those let go lately. */
-  AUTOMATIONS_UNFOLLOW: "automations.unfollow",
-  /** A held list or history read again at once, as Try again asks. */
-  AUTOMATIONS_RETRY: "automations.retry",
-  /**
-   * The skills the account sees in one workspace, the workspace's and its
-   * own, held for a window from now until it is let go, followed on the
-   * service's live read, and a while after among the reads let go lately.
-   * What it holds is heard as `INSTALLED_SKILLS_CHANGED` events, on the app
-   * state every window draws, never answered.
-   */
-  INSTALLED_SKILLS_FOLLOW: "installedSkills.follow",
-  /** One workspace's skills let go by the window that held them. */
-  INSTALLED_SKILLS_UNFOLLOW: "installedSkills.unfollow",
-  /** One workspace's held skills read again at once, as Try again asks; answered once the ask has landed. */
-  INSTALLED_SKILLS_RETRY: "installedSkills.retry",
-  /**
    * One part of one agent's pull request as its Pull request tab draws it,
    * by the part, the agent, and the pull request's number, or no number for
    * the agent's own: the pull request itself, its checks, its conversation,
@@ -256,32 +171,6 @@ export const GATEWAY_METHOD = {
   /** One agent's held tools asked again at once, as Try again asks; answered once the ask has landed. */
   AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
   /**
-   * The account's own provider keys an agent runs on, as hints and statuses
-   * and never a key, held for a window from now until it is let go, asked
-   * of the service at once and again as a window comes forward, and laid from
-   * each save's, remove's, and plan default's own answer. What it holds is
-   * heard as `PROVIDER_KEYS_CHANGED` events, on the app state every window
-   * draws, never answered.
-   */
-  PROVIDER_KEYS_FOLLOW: "providerKeys.follow",
-  /** The account's provider keys let go by the window that held them. */
-  PROVIDER_KEYS_UNFOLLOW: "providerKeys.unfollow",
-  /** The account's held provider keys asked again at once, as Try again asks; answered once the ask has landed. */
-  PROVIDER_KEYS_RETRY: "providerKeys.retry",
-  /**
-   * The member's own GitHub token as its login, hint, and status, never the
-   * token, held for a window from now until it is let go, asked of the
-   * service at once and again as a window comes forward, and a while after
-   * among the reads let go lately. What it holds is heard as
-   * `GITHUB_TOKEN_CHANGED` events, on the app state every window draws,
-   * never answered.
-   */
-  GITHUB_TOKEN_FOLLOW: "githubToken.follow",
-  /** The member's GitHub token let go by the window that held it. */
-  GITHUB_TOKEN_UNFOLLOW: "githubToken.unfollow",
-  /** The member's held GitHub token asked again at once, as Try again asks; answered once the ask has landed. */
-  GITHUB_TOKEN_RETRY: "githubToken.retry",
-  /**
    * One plan's inbox, or one agent's, held followed for a window from now
    * until it is let go, over Neon Realtime, and a while after among the
    * holders let go lately. What it holds is heard as `HOLDER_INBOXES_CHANGED`
@@ -293,42 +182,6 @@ export const GATEWAY_METHOD = {
   /** One plan's or agent's held inbox read again at once, as Try again asks; never answered. */
   AGENTS_INBOX_RETRY: "agents.inboxRetry",
   /**
-   * Where every one of the account's integrations stands, held for a window
-   * from now until it is let go, followed on the service's live read with
-   * GitHub's standing asked beside it, and a while after among the reads let
-   * go lately; while a sign-in stands pending, the host settles it on its
-   * own. What it holds is heard as `INTEGRATIONS_CHANGED` events, on the app
-   * state every window draws, never answered.
-   */
-  INTEGRATIONS_FOLLOW: "integrations.follow",
-  /** The account's integrations let go by the window that held them. */
-  INTEGRATIONS_UNFOLLOW: "integrations.unfollow",
-  /** The account's held integrations read again at once, as Try again asks. */
-  INTEGRATIONS_RETRY: "integrations.retry",
-  /**
-   * The tools one account's server offers the account's agents, held for a
-   * window from now until it is let go, asked of the service at once and
-   * again as a window comes forward, and a while after among the reads let go
-   * lately. What it holds is heard as `INTEGRATION_TOOLS_CHANGED` events, on
-   * the app state every window draws, never answered.
-   */
-  INTEGRATIONS_TOOLS_FOLLOW: "integrations.toolsFollow",
-  /** One server's tools let go by the window that held them. */
-  INTEGRATIONS_TOOLS_UNFOLLOW: "integrations.toolsUnfollow",
-  /** One server's held tools asked again at once, as Try again asks; answered once the ask has landed. */
-  INTEGRATIONS_TOOLS_RETRY: "integrations.toolsRetry",
-  /**
-   * The outside MCP clients the account allowed, held for the windows from
-   * now until let go, under the account signed in: read from the service as
-   * held, and again whenever a window comes forward. What it holds is heard
-   * as `MCP_CLIENTS_CHANGED` events, on the state channel, never answered.
-   */
-  MCP_CLIENTS_FOLLOW: "mcpClients.follow",
-  /** The outside MCP clients let go: no more asks for them until they are followed again. */
-  MCP_CLIENTS_UNFOLLOW: "mcpClients.unfollow",
-  /** The outside MCP clients the windows hold read again now, as Try again asks; answered once the read has landed. */
-  MCP_CLIENTS_RETRY: "mcpClients.retry",
-  /**
    * What waits on the developer across the account, followed from now until
    * it is let go or the account signs out: every open inbox item, heard as
    * `ACCOUNT_INBOX_CHANGED` events, never answered; following again starts
@@ -337,10 +190,6 @@ export const GATEWAY_METHOD = {
   AGENTS_ACCOUNT_INBOX_FOLLOW: "agents.accountInboxFollow",
   /** The account inbox let go: no more `ACCOUNT_INBOX_CHANGED` events until it is followed again. */
   AGENTS_ACCOUNT_INBOX_UNFOLLOW: "agents.accountInboxUnfollow",
-  /** Every inbox item the account reaches, which the host holds for the session, read again at once, as Try again asks; never answered. */
-  AGENTS_INBOX_ITEMS_RETRY: "agents.inboxItemsRetry",
-  /** The account's preferences row, which the host holds for the session, read again at once, as Try again asks; never answered. */
-  AGENTS_PREFERENCES_RETRY: "agents.preferencesRetry",
   /**
    * A coding agent's terminals (`@repo/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the
@@ -486,18 +335,8 @@ export const GATEWAY_EVENT = {
   DESCRIPTION_DOCUMENTS_CHANGED: "descriptionDocuments.changed",
   /** Every task's description history the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HISTORIES_CHANGED: "histories.changed",
-  /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
-  AUTOMATIONS_CHANGED: "automations.changed",
-  /** Every workspace's people the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  WORKSPACE_MEMBERS_CHANGED: "workspaceMembers.changed",
-  /** Every workspace's own integrations the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  WORKSPACE_INTEGRATIONS_CHANGED: "workspaceIntegrations.changed",
-  /** Every workspace's Slack channels the host holds for the windows, whole, as its asks of them stand, each time any of them moves. */
-  SLACK_CHANNELS_CHANGED: "slackChannels.changed",
   /** Every listed workspace's photo the host holds, whole, each time one is fetched or let go. */
   WORKSPACE_PHOTOS_CHANGED: "workspacePhotos.changed",
-  /** Every workspace's pending invitations the host holds for the windows, whole, as its reads of them stand, each time any of them moves or expires. */
-  WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
   /**
    * One live follow's slice (`@repo/host/contract`'s live follows), whole,
    * named by its read (`LIVE_READ`), as the host's reads of it stand, each
@@ -520,32 +359,18 @@ export const GATEWAY_EVENT = {
   ACCOUNT_PREFERENCES_CHANGED: "accountPreferences.changed",
   /** Every task's or agent's cloud Browser tabs the host holds for the windows, whole, as its reads of them stand, each time one moves or a takeover lapses. */
   BROWSER_TABS_CHANGED: "browserTabs.changed",
-  /** The skills of every workspace the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  INSTALLED_SKILLS_CHANGED: "installedSkills.changed",
-  /** The account's integrations the host holds for the windows, whole, as its read of them stands, each time it moves. */
-  INTEGRATIONS_CHANGED: "integrations.changed",
   /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
   /** Which machine This Mac is and the device its host's record names, under the account signed in, whole, as the host reads it at its start and every few seconds after, each time it moves. */
   THIS_MAC_HOST_CHANGED: "thisMacHost.changed",
   /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
-  /** The outside MCP clients the host holds for the windows, whole, as its read of them stands, each time it moves. */
-  MCP_CLIENTS_CHANGED: "mcpClients.changed",
   /** The one agent whose cloud ports are forwarded to this Mac and how its forwarding stands, or none, each time it moves. */
   PORT_FORWARDS_CHANGED: "portForwards.changed",
   /** How many changes made offline the service refused as they were sent again, since the windows last cleared the count, each time it moves. */
   OFFLINE_REFUSED_CHANGED: "offlineRefused.changed",
-  /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  INTEGRATION_TOOLS_CHANGED: "integrationTools.changed",
-  /** The account's provider keys the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  PROVIDER_KEYS_CHANGED: "providerKeys.changed",
   /** The models the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   MODELS_CHANGED: "models.changed",
-  /** The member's GitHub token the host holds for the windows, whole, as its reads of it stand, each time it moves. */
-  GITHUB_TOKEN_CHANGED: "githubToken.changed",
-  /** Every workspace's token repositories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
-  TOKEN_REPOSITORIES_CHANGED: "tokenRepositories.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
   /** Every workspace's repositories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

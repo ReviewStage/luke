@@ -4,8 +4,9 @@
  * Nothing is held here but the reads the host fetches for the windows that
  * hold them (`held-fetch.ts`): the account's provider keys, its GitHub
  * token, and when its devices last beat, asked every `MAC_PRESENCE.POLL_MS`
- * while held, each told as its own event to the app state every window
- * draws; and the live follows of each workspace's memories Settings › Memory
+ * while held, the keys and the token told on their slices (`liveTold`) and
+ * the beats as their own event, to the app state every window draws; and the
+ * live follows of each workspace's memories Settings › Memory
  * holds and of the account's hosts Settings › Hosts holds, followed into the
  * sync engine's pool (`memory-follow.ts`, `hosts-follow.ts`) and told on
  * their slices (`liveTold`), a forget or a removal drawn gone over them the
@@ -39,9 +40,7 @@ import {
   type AppDevicePresence,
   type AppDevicePresences,
   type AppGitHubToken,
-  type AppGitHubTokens,
   type AppProviderKeyList,
-  type AppProviderKeys,
   NO_KEYS_HELD,
 } from "./app-state.js";
 import type { Composer } from "./composer.js";
@@ -265,8 +264,7 @@ function fetchedReads(
               return Effect.as(moved ? dependencies.modelsMoved : Effect.void, Option.some(list));
             })
           : Effect.succeed(Option.none()),
-      tell: (held: AppProviderKeys) =>
-        kernel.emit(GATEWAY_EVENT.PROVIDER_KEYS_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, ACCOUNT_ASK_FOLLOWS.PROVIDER_KEYS_FOLLOW),
     });
     const token = yield* heldFetch<typeof LIVE_READ.GITHUB_TOKEN, string>({
       empty: NO_KEYS_HELD,
@@ -279,8 +277,7 @@ function fetchedReads(
               "failure" in answer ? Option.none() : Option.some({ token: answer.token }),
             )
           : Effect.succeed(Option.none()),
-      tell: (held: AppGitHubTokens) =>
-        kernel.emit(GATEWAY_EVENT.GITHUB_TOKEN_CHANGED, carried(held)),
+      tell: liveTold(kernel.emit, ACCOUNT_ASK_FOLLOWS.GITHUB_TOKEN_FOLLOW),
     });
     return {
       presence,
@@ -339,6 +336,17 @@ function writesAnswered(
   };
 }
 
+/** `read` asked again for the account signed in now, as Try again asks; nothing while nobody is. */
+function retriedFor(
+  accountId: () => string | undefined,
+  read: Pick<HeldFetch<string, unknown>, "retry">,
+): Effect.Effect<void> {
+  return Effect.suspend(() => {
+    const userId = accountId();
+    return userId === undefined ? Effect.void : read.retry(userId);
+  });
+}
+
 /** The account's own asks (`ACCOUNT_ASK_ACTS`), the hosts' (`AGENT_ACTS`), and the live follows of the memories and the hosts, answered as the panel's port asks them. */
 function actsOf(
   dependencies: AccountAsksDependencies,
@@ -386,11 +394,17 @@ function actsOf(
     // The hosts are held for the windows while Settings › Hosts draws them, under the account signed in; a removal is drawn gone over them the moment it is asked.
     HOSTS_FOLLOW: {
       hold: () => hostsHold.hold,
-      retry: () =>
-        Effect.suspend(() => {
-          const userId = dependencies.accountId();
-          return userId === undefined ? Effect.void : hosts.retry(userId);
-        }),
+      retry: () => retriedFor(dependencies.accountId, hosts),
+    },
+    // The keys are held for the windows while any draws them, under the account signed in; each write's own answer is laid there too.
+    PROVIDER_KEYS_FOLLOW: {
+      hold: () => fetched.keysHold.hold,
+      retry: () => retriedFor(dependencies.accountId, fetched.keys),
+    },
+    // The token is held for the windows while any draws it, under the account signed in; a save's and a removal's own answer is laid there too.
+    GITHUB_TOKEN_FOLLOW: {
+      hold: () => fetched.tokenHold.hold,
+      retry: () => retriedFor(dependencies.accountId, fetched.token),
     },
     // A workspace's memories are held for the windows while Settings › Memory shows them; a forget is drawn gone over them the moment it is asked.
     MEMORIES_FOLLOW: {
@@ -400,17 +414,8 @@ function actsOf(
   };
 }
 
-/** The holds of the beats, the keys, and the token, each told only on the app state. */
-function methodsOf(
-  accountId: () => string | undefined,
-  { presence, presenceHold, keys, keysHold, token, tokenHold }: FetchedReads,
-): HostMethodTable {
-  /** `read` asked again for the account signed in now, as Try again asks; nothing while nobody is. */
-  const retried = (read: Pick<HeldFetch<string, unknown>, "retry">) =>
-    Effect.suspend(() => {
-      const userId = accountId();
-      return Effect.as(userId === undefined ? Effect.void : read.retry(userId), {});
-    });
+/** The holds of the beats, told only on the app state. */
+function methodsOf({ presence, presenceHold }: FetchedReads): HostMethodTable {
   return {
     // The beats are held for the windows while any draws a device's standing, under the account signed in, and told only on the app state (`DEVICE_PRESENCE_CHANGED`).
     [GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW]: () => Effect.as(presenceHold.follow, {}),
@@ -421,14 +426,6 @@ function methodsOf(
         yield* presence.wake(() => true);
         return {};
       }),
-    // The keys are held for the windows while any draws them, under the account signed in, and told only on the app state (`PROVIDER_KEYS_CHANGED`); each write's own answer is laid there too.
-    [GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW]: () => Effect.as(keysHold.follow, {}),
-    [GATEWAY_METHOD.PROVIDER_KEYS_UNFOLLOW]: () => Effect.as(keysHold.unfollow, {}),
-    [GATEWAY_METHOD.PROVIDER_KEYS_RETRY]: () => retried(keys),
-    // The token is held for the windows while any draws it, under the account signed in, and told only on the app state (`GITHUB_TOKEN_CHANGED`); a save's and a removal's own answer is laid there too.
-    [GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW]: () => Effect.as(tokenHold.follow, {}),
-    [GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW]: () => Effect.as(tokenHold.unfollow, {}),
-    [GATEWAY_METHOD.GITHUB_TOKEN_RETRY]: () => retried(token),
   };
 }
 
@@ -442,7 +439,7 @@ export function composeAccountAsks(
     const { memories, hosts, hostsHold } = follows;
     const { presence, presenceHold, keys, keysHold, token, tokenHold } = fetched;
     return {
-      methods: methodsOf(dependencies.accountId, fetched),
+      methods: methodsOf(fetched),
       acts: actsOf(dependencies, asked, follows, fetched),
       lifetime: Effect.void,
       // Note that the beats, the hosts, the keys, and the token are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.

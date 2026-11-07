@@ -49,6 +49,8 @@ export interface LiveReadFollow<Part extends string, Row extends object, Answer,
   readonly endsFollow: (failure: string) => boolean;
   /** What the slice holds of the rows as the pool draws them, beside what the first answer carried. */
   readonly draw: (rows: readonly Row[], first: Answer) => Drawn;
+  /** Whether a row another follow's write made is one this read holds; none where the read adopts none. */
+  readonly adopts?: (row: Row) => boolean;
 }
 
 /** Follows `read` until let go, each change told through `answers`. */
@@ -83,6 +85,7 @@ export function followLiveRead<
           const handed = wait;
           return handed === undefined ? undefined : (txid) => confirmWrite(handed, txid);
         },
+        ...(read.adopts === undefined ? {} : { adopts: read.adopts }),
       });
       const gone = yield* followTakingRows(
         {

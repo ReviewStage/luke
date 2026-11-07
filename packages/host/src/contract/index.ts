@@ -9,12 +9,16 @@ import { ACCOUNT_ACTS, accountActsContract } from "./account.js";
 import { ACCOUNT_ASK_ACTS, ACCOUNT_ASK_FOLLOWS, accountAskActsContract } from "./account-asks.js";
 import { AGENT_INBOX_ACTS, agentInboxActsContract } from "./agent-inbox.js";
 import { AGENT_ACTS, AGENT_FOLLOWS, agentActsContract } from "./agents.js";
-import { AUTOMATION_ACTS, automationActsContract } from "./automations.js";
+import { AUTOMATION_ACTS, AUTOMATION_FOLLOWS, automationActsContract } from "./automations.js";
 import { browserLiveActsContract } from "./browser-live.js";
 import { CHAPTERS_ACTS, CHAPTERS_FOLLOWS, chaptersActsContract } from "./chapters.js";
 import { cliActsContract } from "./cli.js";
-import { INSTALLED_SKILL_ACTS, installedSkillActsContract } from "./installed-skills.js";
-import { INTEGRATION_ACTS, integrationActsContract } from "./integrations.js";
+import {
+  INSTALLED_SKILL_ACTS,
+  INSTALLED_SKILL_FOLLOWS,
+  installedSkillActsContract,
+} from "./installed-skills.js";
+import { INTEGRATION_ACTS, INTEGRATION_FOLLOWS, integrationActsContract } from "./integrations.js";
 import type { PortActKind } from "./kinds.js";
 import { MAC_COMMAND_ACTS, macCommandActsContract } from "./mac-commands.js";
 import { macShellActsContract } from "./mac-shells.js";
@@ -26,7 +30,7 @@ import { TASKS_ACTS, tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
 import { updateActsContract } from "./updates.js";
 import { windowSurfaceActsContract } from "./window-surface.js";
-import { WORKSPACE_ACTS, workspaceActsContract } from "./workspaces.js";
+import { WORKSPACE_ACTS, WORKSPACE_FOLLOWS, workspaceActsContract } from "./workspaces.js";
 
 /**
  * index.ts -- the oRPC contract of the acts a window's act port answers, keyed by act kind.
@@ -47,7 +51,7 @@ export { ACCOUNT_ACTS } from "./account.js";
 export { ACCOUNT_ASK_ACTS, ACCOUNT_ASK_FOLLOWS } from "./account-asks.js";
 export { AGENT_INBOX_ACTS } from "./agent-inbox.js";
 export { AGENT_ACTS, AGENT_FOLLOWS } from "./agents.js";
-export { AUTOMATION_ACTS } from "./automations.js";
+export { AUTOMATION_ACTS, AUTOMATION_FOLLOWS } from "./automations.js";
 export { ACT_ERROR } from "./base.js";
 export { CHAPTERS_ACTS, CHAPTERS_FOLLOWS } from "./chapters.js";
 export { CLI_INSTALL_OUTCOME, type CliInstallAnswer } from "./cli.js";
@@ -60,8 +64,8 @@ export {
   hostAct,
   panelOnlyOf,
 } from "./declared-act.js";
-export { INSTALLED_SKILL_ACTS } from "./installed-skills.js";
-export { INTEGRATION_ACTS } from "./integrations.js";
+export { INSTALLED_SKILL_ACTS, INSTALLED_SKILL_FOLLOWS } from "./installed-skills.js";
+export { INTEGRATION_ACTS, INTEGRATION_FOLLOWS } from "./integrations.js";
 export {
   ACCOUNT_ACT_KIND,
   ACCOUNT_ASK_ACT_KIND,
@@ -107,7 +111,7 @@ export {
 export { SETTINGS_ACTS, type SettingUpdatePayload } from "./settings.js";
 export { TASKS_ACTS } from "./tasks.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
-export { WORKSPACE_ACTS } from "./workspaces.js";
+export { WORKSPACE_ACTS, WORKSPACE_FOLLOWS } from "./workspaces.js";
 
 /** Every act declared once, plain (`declared-act.ts`) or a live follow (`live-follow.ts`), one domain's spread each, in alphabetical order: what the host's composers answer directly. */
 export const HOST_ACTS = {
@@ -118,15 +122,19 @@ export const HOST_ACTS = {
   ...AGENT_ACTS,
   ...AGENT_FOLLOWS,
   ...AUTOMATION_ACTS,
+  ...AUTOMATION_FOLLOWS,
   ...CHAPTERS_ACTS,
   ...CHAPTERS_FOLLOWS,
   ...INSTALLED_SKILL_ACTS,
+  ...INSTALLED_SKILL_FOLLOWS,
   ...INTEGRATION_ACTS,
+  ...INTEGRATION_FOLLOWS,
   ...MAC_COMMAND_ACTS,
   ...PORT_FORWARD_ACTS,
   ...SETTINGS_ACTS,
   ...TASKS_ACTS,
   ...WORKSPACE_ACTS,
+  ...WORKSPACE_FOLLOWS,
 };
 
 /** Every domain's procedures, one spread each, in alphabetical order. */

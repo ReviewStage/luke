@@ -9,30 +9,14 @@ import {
   type PlatformPortActKind,
 } from "../contract/index.js";
 import type { HostActTable } from "../host-acts.js";
-import {
-  type AccountAskProceduresDependencies,
-  accountAskProcedures,
-} from "./account-ask-procedures.js";
 import { type AccountProceduresDependencies, accountProcedures } from "./account-procedures.js";
 import {
   type AgentInboxProceduresDependencies,
   agentInboxProcedures,
 } from "./agent-inbox-procedures.js";
 import { type AgentProceduresDependencies, agentProcedures } from "./agents-procedures.js";
-import {
-  type AutomationProceduresDependencies,
-  automationProcedures,
-} from "./automation-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
 import { declaredActProcedures } from "./declared-acts.js";
-import {
-  type InstalledSkillProceduresDependencies,
-  installedSkillProcedures,
-} from "./installed-skill-procedures.js";
-import {
-  type IntegrationProceduresDependencies,
-  integrationProcedures,
-} from "./integration-procedures.js";
 import { liveFollowProcedures } from "./live-follows.js";
 import { pushProcedures, type WindowPushes } from "./push-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
@@ -52,11 +36,9 @@ import {
 
 export type { AccountProceduresDependencies } from "./account-procedures.js";
 export type { AgentProceduresDependencies } from "./agents-procedures.js";
-export type { AutomationProceduresDependencies } from "./automation-procedures.js";
 export { type ActPortContext, type ActSender, actPortFor } from "./base.js";
 export { browserLiveProcedures } from "./browser-live-procedures.js";
 export { declaredActProcedures, declaredAnswer } from "./declared-acts.js";
-export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
 export { type MacShell, macShellProcedures } from "./mac-shell-procedures.js";
 export { pushProcedures, WindowPushes } from "./push-procedures.js";
 export type {
@@ -104,15 +86,11 @@ export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sende
 /** What the act port's procedures are handed, by the domain that uses it, in alphabetical order. */
 export interface ActPortDependencies {
   readonly account: AccountProceduresDependencies;
-  readonly accountAsks: AccountAskProceduresDependencies;
   /** Every declared act's handler, which the port answers directly (`HostAssembly`'s). */
   readonly acts: HostActTable;
   readonly agentInbox: AgentInboxProceduresDependencies;
   /** The agents' holds and notices; the acts they note are answered from `acts`. */
   readonly agents: Omit<AgentProceduresDependencies, "acts">;
-  readonly automations: AutomationProceduresDependencies;
-  readonly installedSkills: InstalledSkillProceduresDependencies;
-  readonly integrations: IntegrationProceduresDependencies;
   /** What main pushes each window, which the push stream reads. */
   readonly pushes: WindowPushes;
   readonly settings: SettingsProceduresDependencies;
@@ -141,14 +119,10 @@ export function createActPortHandler<Sender>(
   const router = {
     ...platformProcedures,
     ...accountProcedures(dependencies.account),
-    ...accountAskProcedures(dependencies.accountAsks),
     ...declaredActProcedures(HOST_ACTS, dependencies.acts),
     ...liveFollowProcedures(HOST_ACTS, dependencies.acts),
     ...agentInboxProcedures(dependencies.agentInbox),
     ...agentProcedures({ ...dependencies.agents, acts: dependencies.acts }),
-    ...automationProcedures(dependencies.automations),
-    ...installedSkillProcedures(dependencies.installedSkills),
-    ...integrationProcedures(dependencies.integrations),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
     ...workspaceProcedures(dependencies.workspaces, dependencies.acts),

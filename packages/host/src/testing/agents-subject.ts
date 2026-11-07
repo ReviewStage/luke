@@ -62,7 +62,7 @@ import {
   type GatewayMethod,
 } from "@repo/gateway";
 import { type EntityPool, entityPool } from "@repo/sync";
-import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
+import type { WireRecord, WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
@@ -72,6 +72,7 @@ import { type AgentClient, composeAgents } from "../compose-agents.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "../kept-content.js";
 import { windowFocus } from "../window-focus.js";
 import { type PolledLive, polledLive } from "./polled-live.js";
+import { toldLive as toldOf } from "./told-live.js";
 
 export const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 export const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -1067,14 +1068,7 @@ export function subject(
     // Each event with how many reads the service had been asked as it was told.
     const events: { kind: GatewayEventKind; payload: WireValue; asked: number }[] = [];
     /** Every telling of a live follow's slice (`LIVE_READ_CHANGED`) named `read`, whole, in order. */
-    const toldLive = (read: LiveRead) =>
-      events.flatMap((event) =>
-        event.kind === GATEWAY_EVENT.LIVE_READ_CHANGED &&
-        isRecord(event.payload) &&
-        event.payload.read === read
-          ? [event.payload.held]
-          : [],
-      );
+    const toldLive = (read: LiveRead) => toldOf(events, read);
     const kernel = {
       runMode: { sendsNetwork: options.sendsNetwork ?? true },
       emit: (kind: GatewayEventKind, payload: WireValue) =>
@@ -1194,17 +1188,11 @@ export function subject(
           event.kind === GATEWAY_EVENT.ACCOUNT_PREFERENCES_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the provider keys the host holds for the windows, whole, in order. */
-      providerKeys: () =>
-        events.flatMap((event) =>
-          event.kind === GATEWAY_EVENT.PROVIDER_KEYS_CHANGED ? [event.payload] : [],
-        ),
+      providerKeys: () => toldLive(LIVE_READ.PROVIDER_KEYS),
       /** Every telling of the hosts the host holds for the windows, whole, in order. */
       hosts: () => toldLive(LIVE_READ.HOSTS),
       /** Every telling of the GitHub token the host holds for the windows, whole, in order. */
-      githubToken: () =>
-        events.flatMap((event) =>
-          event.kind === GATEWAY_EVENT.GITHUB_TOKEN_CHANGED ? [event.payload] : [],
-        ),
+      githubToken: () => toldLive(LIVE_READ.GITHUB_TOKEN),
       /** Every telling of the memories the host holds for the windows, whole, in order. */
       memories: () => toldLive(LIVE_READ.MEMORIES),
       /** Every telling of the beats the host holds for the windows, whole, in order. */

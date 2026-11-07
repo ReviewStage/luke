@@ -1,4 +1,3 @@
-import { eventIterator, type } from "@orpc/contract";
 import {
   AUTOMATION_CALL_FAILURE,
   automationChangeParamsSchema,
@@ -10,22 +9,19 @@ import {
   automationRunViewSchema,
   automationViewSchema,
 } from "@repo/features/automation-view";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT } from "@repo/sync";
-import { Schema as EffectSchema } from "effect";
-import { actProcedure, exactInput } from "./base.js";
 import { contractOf, declaredActs, hostAct } from "./declared-act.js";
-import { AUTOMATION_ACT_KIND } from "./kinds.js";
+import { followsContractOf, HOLD, liveFollow, liveFollows } from "./live-follow.js";
 
 /**
- * automations.ts -- the Automations pages' asks of the host about the account's automations: each plain ask declared, and the procedures of the hold and its Try again beside them.
+ * automations.ts -- the Automations pages' asks of the host about the account's automations: each plain ask declared, and the live follow beside them.
  *
  * Only a panel draws the Automations pages, so every ask is the panel's
  * alone. A refusal or a defect of the host's is drawn as the automation
  * calls' unanswered failure, as every one was before it was declared. A
- * hold's stream carries nothing: what it holds reaches the panel on app
- * state, and the stream is the window's hold on it. The hold and its Try
- * again stay procedures of their own (`act-port/automation-procedures.ts`):
- * a live read, not a plain act.
+ * workspace's automations and the runs are one live follow, declared once
+ * (`live-follow.ts`), told on the slice of what its key names.
  */
 
 /** What the window draws for an automation ask the host could not answer. */
@@ -75,16 +71,23 @@ export const AUTOMATION_ACTS = declaredActs({
   }),
 });
 
+/** A workspace's automations, its runs, or one automation's runs, by what the key names, followed for the Automations pages while they hold them. */
+export const AUTOMATION_FOLLOWS = liveFollows({
+  AUTOMATIONS_FOLLOW: liveFollow({
+    slice: LIVE_READ.AUTOMATIONS,
+    alsoTold: [LIVE_READ.AUTOMATION_RUNS, LIVE_READ.AUTOMATION_WORKSPACE_RUNS],
+    hold: HOLD.WINDOW,
+    key: automationFollowSchema,
+    refusal: "Could not follow the automations on this system.",
+    panelOnly: true,
+    retry: {
+      name: "AUTOMATIONS_RETRY",
+      refusal: "Could not read the automations again on this system.",
+    },
+  }),
+});
+
 export const automationActsContract = {
   ...contractOf(AUTOMATION_ACTS),
-  [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: actProcedure(
-    "Could not follow the automations on this system.",
-  )
-    .input(exactInput(automationFollowSchema))
-    .output(eventIterator(type<never>())),
-  [AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY]: actProcedure(
-    "Could not read the automations again on this system.",
-  )
-    .input(exactInput(automationFollowSchema))
-    .output(EffectSchema.Void),
+  ...followsContractOf(AUTOMATION_FOLLOWS),
 };

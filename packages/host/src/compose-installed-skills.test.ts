@@ -7,22 +7,17 @@ import {
 } from "@repo/features/installed-skill-route-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
-import type { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import {
-  GATEWAY_CLIENT_ROLE,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayEventKind,
-  type GatewayMethod,
-} from "@repo/gateway";
+import { LIVE_READ, type LIVE_SIGNED_OUT } from "@repo/features/live-wire";
+import type { GatewayEventKind } from "@repo/gateway";
 import { entityPool } from "@repo/sync";
-import type { WireRecord, WireValue } from "@repo/wire";
+import type { WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import type { AppInstalledSkills } from "./app-state.js";
 import { composeInstalledSkills, type InstalledSkillsClient } from "./compose-installed-skills.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
+import { toldLive } from "./testing/told-live.js";
 
 /**
  * Settings › Skills' asks through the host as a window makes them, over a
@@ -41,8 +36,6 @@ const WORKSPACE_ID = "workspace-stage";
 const OTHER_WORKSPACE_ID = "workspace-globex";
 const ACCOUNT_ID = "user-dean";
 const SKILL_ID = "5d3c2b1a-0f9e-4d8c-b7a6-123456789abc";
-
-const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 const settled = Effect.repeat(Effect.yieldNow, { times: 100 });
 
@@ -166,23 +159,19 @@ function subject(
       client: service.client,
       pool: yield* entityPool(),
     }).pipe(Effect.provide(noNetwork));
-    const call = (method: GatewayMethod, params: WireRecord = {}) => {
-      const handler = composer.methods[method];
-      assert.ok(handler, `no handler for ${method}`);
-      return handler(params, context);
-    };
     /** Each skill a workspace's slice last showed, by its id; none where it showed no rows. */
     const shown = (workspaceId: string) => {
-      const told = emitted.filter((each) => each.kind === GATEWAY_EVENT.INSTALLED_SKILLS_CHANGED);
-      // SAFETY: the host tells the skills slice whole on this event.
-      const held = told.at(-1)?.payload as AppInstalledSkills | undefined;
+      // SAFETY: the host tells the skills slice whole, as built.
+      const held = toldLive(emitted, LIVE_READ.INSTALLED_SKILLS).at(-1) as
+        | AppInstalledSkills
+        | undefined;
       return held?.[workspaceId]?.rows?.map(({ id }) => id);
     };
     /** Holds each workspace's skills, its read answering `rows` woken by a write, so it hands a wait for the next. */
     const holding = (rows: Readonly<Record<string, readonly InstalledSkillSummary[]>>) =>
       Effect.gen(function* () {
         for (const workspaceId of Object.keys(rows)) {
-          yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW, { workspaceId });
+          yield* composer.acts.INSTALLED_SKILLS_FOLLOW.hold({ workspaceId });
         }
         yield* settled;
         for (const [workspaceId, skills] of Object.entries(rows)) {
@@ -191,7 +180,6 @@ function subject(
         yield* nextPoll;
       });
     return {
-      call,
       /** The composer's declared acts, each handed its input as the port reads it. */
       acts: composer.acts,
       asked: service.asked,
@@ -242,11 +230,8 @@ it.effect("a refused install says why, naming the skill", () =>
 it.effect("behind a closed account gate, or on a run that sends nothing, nothing is asked", () =>
   Effect.gen(function* () {
     for (const options of [{ signedIn: false }, { sendsNetwork: false }]) {
-      const { call, acts, asked, shown } = yield* subject(options);
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW, { workspaceId: WORKSPACE_ID }),
-        {},
-      );
+      const { acts, asked, shown } = yield* subject(options);
+      yield* acts.INSTALLED_SKILLS_FOLLOW.hold({ workspaceId: WORKSPACE_ID });
       yield* settled;
       assert.deepEqual(
         yield* acts.INSTALLED_SKILLS_PREVIEW({

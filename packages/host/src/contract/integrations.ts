@@ -1,4 +1,3 @@
-import { eventIterator, type } from "@orpc/contract";
 import {
   INTEGRATION_CALL_FAILURE,
   integrationAccountViewSchema,
@@ -7,28 +6,25 @@ import {
   integrationRenameParamsSchema,
   integrationStatusViewSchema,
 } from "@repo/features/integration-view";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   MCP_CLIENTS_CALL_FAILURE,
   mcpClientRevokeParamsSchema,
   mcpClientsViewSchema,
 } from "@repo/features/mcp-client-view";
 import { ACT } from "@repo/sync";
-import { Schema as EffectSchema } from "effect";
-import { actProcedure, exactInput } from "./base.js";
 import { contractOf, declaredActs, hostAct } from "./declared-act.js";
-import { INTEGRATION_ACT_KIND } from "./kinds.js";
+import { followsContractOf, HOLD, liveFollow, liveFollows } from "./live-follow.js";
 
 /**
- * integrations.ts -- Settings' integration rows: the panel's asks of the host about the account's integrations, each plain ask declared, and the procedures of the holds and their Try again beside them.
+ * integrations.ts -- Settings' integration rows: the panel's asks of the host about the account's integrations, each plain ask and live follow declared.
  *
  * Only a panel draws Settings, so every ask is the panel's alone. A refusal
  * or a defect of the host's is drawn as the integration calls' unanswered
  * failure, or the outside MCP clients' for a revoke, as every one was
- * before it was declared. The holds and their Try again stay procedures of
- * their own (`act-port/integration-procedures.ts`): live reads, not plain
- * acts. The hold on where the integrations stand, the clients' hold, and
- * each Try again of theirs carry nothing, so their input is `undefined`
- * alone and a window calls each with no payload.
+ * before it was declared. Where the integrations stand, each server's
+ * tools, and the outside MCP clients are live follows, each declared once
+ * (`live-follow.ts`).
  */
 
 /** What the window draws for an integration ask the host could not answer. */
@@ -78,39 +74,42 @@ export const INTEGRATION_ACTS = declaredActs({
   }),
 });
 
+/** Where the account's integrations stand and the outside MCP clients it allowed, each held once for the account signed in, and each server's tools, by the server, followed while Settings draws them. */
+export const INTEGRATION_FOLLOWS = liveFollows({
+  INTEGRATIONS_FOLLOW: liveFollow({
+    slice: LIVE_READ.INTEGRATIONS,
+    hold: HOLD.ACCOUNT,
+    refusal: "Could not follow your integrations on this system.",
+    panelOnly: true,
+    retry: {
+      name: "INTEGRATIONS_RETRY",
+      refusal: "Could not read your integrations again on this system.",
+    },
+  }),
+  INTEGRATIONS_TOOLS_FOLLOW: liveFollow({
+    slice: LIVE_READ.INTEGRATION_TOOLS,
+    hold: HOLD.WINDOW,
+    key: integrationProviderParamsSchema,
+    refusal: "Could not follow that integration's tools on this system.",
+    panelOnly: true,
+    retry: {
+      name: "INTEGRATIONS_TOOLS_RETRY",
+      refusal: "Could not read that integration's tools again on this system.",
+    },
+  }),
+  MCP_CLIENTS_FOLLOW: liveFollow({
+    slice: LIVE_READ.MCP_CLIENTS,
+    hold: HOLD.ACCOUNT,
+    refusal: "Could not read the apps that can use your account on this system.",
+    panelOnly: true,
+    retry: {
+      name: "MCP_CLIENTS_RETRY",
+      refusal: "Could not read the apps that can use your account again on this system.",
+    },
+  }),
+});
+
 export const integrationActsContract = {
   ...contractOf(INTEGRATION_ACTS),
-  // Note that the hold's stream carries nothing: the held integrations reach the panel on app state, and the stream is the window's hold on them.
-  [INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW]: actProcedure(
-    "Could not follow your integrations on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(eventIterator(type<never>())),
-  [INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]: actProcedure(
-    "Could not read your integrations again on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held tools reach the panel on app state, and the stream is the window's hold on them.
-  [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW]: actProcedure(
-    "Could not follow that integration's tools on this system.",
-  )
-    .input(exactInput(integrationProviderParamsSchema))
-    .output(eventIterator(type<never>())),
-  [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_RETRY]: actProcedure(
-    "Could not read that integration's tools again on this system.",
-  )
-    .input(exactInput(integrationProviderParamsSchema))
-    .output(EffectSchema.Void),
-  // Note that the hold's stream carries nothing: the held clients reach the panel on app state, and the stream is the window's hold on them.
-  [INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW]: actProcedure(
-    "Could not read the apps that can use your account on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(eventIterator(type<never>())),
-  [INTEGRATION_ACT_KIND.MCP_CLIENTS_RETRY]: actProcedure(
-    "Could not read the apps that can use your account again on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.Void),
+  ...followsContractOf(INTEGRATION_FOLLOWS),
 };

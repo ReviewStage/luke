@@ -184,8 +184,6 @@ function connectPort(answers: {
 }) {
   const opened: string[] = [];
   const dependencies: WorkspaceProceduresDependencies = {
-    // SAFETY: a connection's procedure reads no follow of the host's, so none is handed.
-    host: {} as WorkspaceProceduresDependencies["host"],
     openExternal: async (url) => {
       opened.push(url);
     },

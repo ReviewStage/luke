@@ -37,9 +37,15 @@ type ReadActName = {
 type FollowedSlice = LiveRead & HostReadSlice;
 
 /** What every live follow says, whatever it is held by. */
-interface LiveFollowSpecBase<Slice extends FollowedSlice, Retry extends ReadActName> {
+interface LiveFollowSpecBase<
+  Slice extends FollowedSlice,
+  Retry extends ReadActName,
+  Also extends FollowedSlice,
+> {
   /** The app-state slice the read is told on (`LIVE_READ`). */
   readonly slice: Slice;
+  /** The other slices it is told on, where one hold reads several, by what its key names; none besides `slice` where it is not given. */
+  readonly alsoTold?: readonly Also[];
   /** The sentence the window draws when its hold is refused. */
   readonly refusal: string;
   /** Whether only a panel may hold it, every other window refused. */
@@ -49,15 +55,23 @@ interface LiveFollowSpecBase<Slice extends FollowedSlice, Retry extends ReadActN
 }
 
 /** A read held once for the account signed in, by every window that holds it. */
-interface AccountFollowSpec<Slice extends FollowedSlice, Retry extends ReadActName>
-  extends LiveFollowSpecBase<Slice, Retry> {
+interface AccountFollowSpec<
+  Slice extends FollowedSlice,
+  Retry extends ReadActName,
+  Also extends FollowedSlice,
+> extends LiveFollowSpecBase<Slice, Retry, Also> {
   readonly hold: typeof HOLD.ACCOUNT;
   readonly key?: never;
 }
 
 /** A read each window holds by a key it names, read whole. */
-interface WindowFollowSpec<Slice extends FollowedSlice, Retry extends ReadActName, Key, KeyEncoded>
-  extends LiveFollowSpecBase<Slice, Retry> {
+interface WindowFollowSpec<
+  Slice extends FollowedSlice,
+  Retry extends ReadActName,
+  Key,
+  KeyEncoded,
+  Also extends FollowedSlice,
+> extends LiveFollowSpecBase<Slice, Retry, Also> {
   readonly hold: typeof HOLD.WINDOW;
   readonly key: EffectSchema.Codec<Key, KeyEncoded>;
 }
@@ -93,8 +107,11 @@ export interface LiveFollowDeclaration<
   Key,
   KeyEncoded,
   Retry extends ReadActName,
+  Also extends FollowedSlice = never,
 > {
   readonly slice: Slice;
+  /** Every slice the read is told on, `slice` first. */
+  readonly told: readonly (Slice | Also)[];
   readonly hold: Held;
   readonly key: EffectSchema.Codec<Key, KeyEncoded>;
   readonly panelOnly: boolean;
@@ -106,6 +123,7 @@ export interface LiveFollowDeclaration<
 /** Any live follow's declaration, whatever it is keyed by: the bound every table and relay is written over. */
 export interface AnyLiveFollowDeclaration {
   readonly slice: FollowedSlice;
+  readonly told: readonly FollowedSlice[];
   readonly hold: Hold;
   readonly key: EffectSchema.Top;
   readonly panelOnly: boolean;
@@ -153,20 +171,34 @@ export function liveFollow<
   const Retry extends ReadActName,
   Key,
   KeyEncoded,
+  const Also extends FollowedSlice = never,
 >(
-  spec: WindowFollowSpec<Slice, Retry, Key, KeyEncoded>,
-): LiveFollowDeclaration<Slice, typeof HOLD.WINDOW, Key, KeyEncoded, Retry>;
-export function liveFollow<const Slice extends FollowedSlice, const Retry extends ReadActName>(
-  spec: AccountFollowSpec<Slice, Retry>,
-): LiveFollowDeclaration<Slice, typeof HOLD.ACCOUNT, undefined, undefined, Retry>;
-export function liveFollow<Slice extends FollowedSlice, Retry extends ReadActName, Key, KeyEncoded>(
-  spec: WindowFollowSpec<Slice, Retry, Key, KeyEncoded> | AccountFollowSpec<Slice, Retry>,
-): LiveFollowDeclaration<Slice, Hold, Key | undefined, KeyEncoded | undefined, Retry> {
+  spec: WindowFollowSpec<Slice, Retry, Key, KeyEncoded, Also>,
+): LiveFollowDeclaration<Slice, typeof HOLD.WINDOW, Key, KeyEncoded, Retry, Also>;
+export function liveFollow<
+  const Slice extends FollowedSlice,
+  const Retry extends ReadActName,
+  const Also extends FollowedSlice = never,
+>(
+  spec: AccountFollowSpec<Slice, Retry, Also>,
+): LiveFollowDeclaration<Slice, typeof HOLD.ACCOUNT, undefined, undefined, Retry, Also>;
+export function liveFollow<
+  Slice extends FollowedSlice,
+  Retry extends ReadActName,
+  Key,
+  KeyEncoded,
+  Also extends FollowedSlice,
+>(
+  spec:
+    | WindowFollowSpec<Slice, Retry, Key, KeyEncoded, Also>
+    | AccountFollowSpec<Slice, Retry, Also>,
+): LiveFollowDeclaration<Slice, Hold, Key | undefined, KeyEncoded | undefined, Retry, Also> {
   // Note that a read the account holds is held by no key of a window's, so its hold takes none.
   const key: EffectSchema.Codec<Key | undefined, KeyEncoded | undefined> =
     spec.hold === HOLD.WINDOW ? spec.key : EffectSchema.Undefined;
   return {
     slice: spec.slice,
+    told: [spec.slice, ...(spec.alsoTold ?? [])],
     hold: spec.hold,
     key,
     panelOnly: spec.panelOnly,

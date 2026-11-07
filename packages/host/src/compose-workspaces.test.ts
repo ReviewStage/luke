@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { WORKSPACE_CALL_FAILURE } from "@repo/features";
+import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
 import { TASK_CALL_FAILURE, TASKS_READ } from "@repo/features/tasks-view";
 import type { WorkspaceIntegrations } from "@repo/features/workspace-integrations-live";
@@ -41,6 +42,7 @@ import {
   workspacesLiveRows,
 } from "./testing/tasks-subject.js";
 import { testCipher } from "./testing/test-cipher.js";
+import { toldLive } from "./testing/told-live.js";
 
 it.effect(
   "the first refresh follows the account's workspaces with their GitHub organizations, and a sign-out clears them",
@@ -575,11 +577,20 @@ const ALAN: WorkspaceMember = {
 
 const LEE = { userId: "user-lee", name: "Lee Park" };
 
+/** Every telling of the live follow's slice `read` the host told the windows, whole, the latest last. */
+function toldOn(
+  pushed: readonly (readonly [GatewayEventKind, WireValue])[],
+  read: LiveRead,
+): WireValue[] {
+  return toldLive(
+    pushed.map(([kind, payload]) => ({ kind, payload })),
+    read,
+  );
+}
+
 /** Each workspace's people the host told the windows, the latest last. */
 function heldMembers(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
-  return pushed.flatMap(([kind, payload]) =>
-    kind === GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED ? [payload] : [],
-  );
+  return toldOn(pushed, LIVE_READ.WORKSPACE_MEMBERS);
 }
 
 it.effect(
@@ -595,9 +606,9 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.members[ACME.id] = [];
-      const { call, pushed, settled } = yield* subject(service, { entities: yield* opened });
+      const { workspaces, pushed, settled } = yield* subject(service, { entities: yield* opened });
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
 
       assert.deepEqual(heldMembers(pushed).at(-1), { [ACME.id]: { rows: { members: [DANA] } } });
@@ -611,13 +622,13 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
       service.members[ACME.id] = [DANA, GRACE, ALAN];
-      const { act, call, pushed, settled } = yield* subject(service);
+      const { workspaces, act, pushed, settled } = yield* subject(service);
       const people = service.live.people;
       const shown = () => heldMembers(pushed).at(-1);
       const standing = (members: readonly WorkspaceMember[], former?: readonly unknown[]) => ({
         [ACME.id]: { rows: { members, ...(former === undefined ? undefined : { former }) } },
       });
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       people.set({ members: [DANA, GRACE, ALAN].map((each) => memberRow(each)), former: [] });
       yield* settled;
@@ -689,12 +700,12 @@ it.effect("a role change draws before the service answers, and one it refuses is
     const service = fakeService([]);
     service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
     service.members[ACME.id] = [DANA, GRACE];
-    const { act, call, pushed, settled } = yield* subject(service);
+    const { workspaces, act, pushed, settled } = yield* subject(service);
     const shown = () => heldMembers(pushed).at(-1);
     const standing = (members: readonly WorkspaceMember[]) => ({
       [ACME.id]: { rows: { members } },
     });
-    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+    yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id });
     yield* settled;
     service.live.people.set({ members: [memberRow(DANA), memberRow(GRACE)], former: [] });
     yield* settled;
@@ -726,9 +737,9 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.members[ACME.id] = [DANA, GRACE];
-      const { act, call, pushed, settled } = yield* subject(service);
+      const { workspaces, act, pushed, settled } = yield* subject(service);
       const people = service.live.people;
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       people.set({ members: [memberRow(DANA), memberRow(GRACE)], former: [] });
       yield* settled;
@@ -764,9 +775,9 @@ function integrationsShown(
   pushed: readonly (readonly [GatewayEventKind, WireValue])[],
   workspaceId: string,
 ): WorkspaceIntegrations | undefined {
-  const told = pushed.findLast(([kind]) => kind === GATEWAY_EVENT.WORKSPACE_INTEGRATIONS_CHANGED);
-  const read = isRecord(told?.[1]) ? told[1][workspaceId] : undefined;
-  // SAFETY: the host tells its held integrations whole as this event's payload, each workspace's read under its id.
+  const told = toldOn(pushed, LIVE_READ.WORKSPACE_INTEGRATIONS).at(-1);
+  const read = isRecord(told) ? told[workspaceId] : undefined;
+  // SAFETY: the host tells its held integrations whole on its slice, each workspace's read under its id.
   return (isRecord(read) ? read.rows : undefined) as WorkspaceIntegrations | undefined;
 }
 
@@ -775,9 +786,9 @@ function channelsShown(
   pushed: readonly (readonly [GatewayEventKind, WireValue])[],
   workspaceId: string,
 ): readonly SlackListedChannel[] | undefined {
-  const told = pushed.findLast(([kind]) => kind === GATEWAY_EVENT.SLACK_CHANNELS_CHANGED);
-  const read = isRecord(told?.[1]) ? told[1][workspaceId] : undefined;
-  // SAFETY: the host tells its held channels whole as this event's payload, each workspace's list under its id.
+  const told = toldOn(pushed, LIVE_READ.SLACK_CHANNELS).at(-1);
+  const read = isRecord(told) ? told[workspaceId] : undefined;
+  // SAFETY: the host tells its held channels whole on its slice, each workspace's list under its id.
   return (isRecord(read) ? read.rows : undefined) as readonly SlackListedChannel[] | undefined;
 }
 
@@ -787,12 +798,12 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
-      const { act, call, pushed, settled } = yield* subject(service);
+      const { workspaces, act, pushed, settled } = yield* subject(service);
       const integrations = service.live.integrations;
       const installations = () =>
         integrationsShown(pushed, ACME.id)?.sentry.installations.map((one) => one.installationId);
       const team = () => integrationsShown(pushed, ACME.id)?.slack.team?.name;
-      yield* call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_INTEGRATIONS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       // The read is woken by a write once, so it hands a wait for the next.
       integrations.set(
@@ -854,7 +865,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
-      const { act, call, pushed, settled } = yield* subject(service);
+      const { workspaces, act, pushed, settled } = yield* subject(service);
       const integrations = service.live.integrations;
       const channelAsks = () =>
         service.reads.filter((read) => read === `slack-bot:${ACME.id}`).length;
@@ -865,7 +876,7 @@ it.effect(
       };
       service.slackBotAnswer = { ok: true, answer: { configured: true } };
       // A member's window holds the workspace's integrations and never its channels.
-      yield* call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_INTEGRATIONS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       integrations.set({
         sentryInstallations: [],
@@ -879,7 +890,7 @@ it.effect(
       assert.equal(channelAsks(), 0, "no window holds the channels");
 
       // An owner's window holds them, and they are asked as it does.
-      yield* call(GATEWAY_METHOD.WORKSPACES_SLACK_CHANNELS_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_SLACK_CHANNELS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       assert.equal(channelAsks(), 1);
       assert.deepEqual(channelsShown(pushed, ACME.id), [ENG_CHANNEL]);
@@ -952,9 +963,7 @@ it.effect(
 
 /** Each workspace's pending invitations the host told the windows, the latest last. */
 function heldInvitations(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
-  return pushed.flatMap(([kind, payload]) =>
-    kind === GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED ? [payload] : [],
-  );
+  return toldOn(pushed, LIVE_READ.WORKSPACE_INVITATIONS);
 }
 
 /** A pending invitation's row as the invitations' live read carries it: the plugin's role text, and when it expires in epoch milliseconds. */
@@ -982,7 +991,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { act, call, pushed, settled } = yield* subject(service);
+      const { workspaces, act, pushed, settled } = yield* subject(service);
       const invitations = service.live.invitations;
       const shown = () => heldInvitations(pushed).at(-1);
       const standing = (rows: readonly WorkspaceInvitation[]) => ({ [ACME.id]: { rows } });
@@ -990,7 +999,7 @@ it.effect(
       const leeRow = invitationRow("lee", 2 * HOUR);
       const grace = pendingInvitation("grace", HOUR);
       const lee = pendingInvitation("lee", 2 * HOUR);
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_INVITATIONS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       invitations.set({ invitations: [graceRow] });
       yield* settled;
@@ -1072,8 +1081,8 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { act, call, pushed, settled } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
+      const { workspaces, act, pushed, settled } = yield* subject(service);
+      yield* workspaces.acts.WORKSPACE_INVITATIONS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       service.live.invitations.set({ invitations: [] });
       yield* settled;
@@ -1371,7 +1380,7 @@ it.effect(
 it.effect("behind a closed account gate no workspace call reaches the service", () =>
   Effect.gen(function* () {
     const service = fakeService([]);
-    const { act, call } = yield* subject(service, { signedIn: false });
+    const { workspaces, act } = yield* subject(service, { signedIn: false });
     /** The act refused in its own sentence, as the window hears an act the host could not answer. */
     const unanswered = (name: keyof typeof WORKSPACE_ACTS) => ({
       refused: WORKSPACE_ACTS[name].refusal,
@@ -1397,7 +1406,7 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
       yield* act("WORKSPACE_GITHUB_DISCONNECT", { workspaceId: ACME.id }),
       unanswered("WORKSPACE_GITHUB_DISCONNECT"),
     );
-    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+    yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id });
     assert.deepEqual(
       yield* act("WORKSPACE_MEMBER_REMOVE", {
         workspaceId: ACME.id,
@@ -1420,9 +1429,9 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.members[ACME.id] = [ADA];
-      const { call, pushed, settled, reset } = yield* subject(service);
+      const { workspaces, pushed, settled, reset } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       service.live.people.set({ members: [memberRow(GRACE), memberRow(ADA)], former: [] });
       yield* settled;
@@ -1445,9 +1454,7 @@ it.effect(
 function heldTokenRepositories(
   pushed: readonly (readonly [GatewayEventKind, WireValue])[],
 ): WireValue[] {
-  return pushed.flatMap(([kind, payload]) =>
-    kind === GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED ? [payload] : [],
-  );
+  return toldOn(pushed, LIVE_READ.TOKEN_REPOSITORIES);
 }
 
 it.effect(
@@ -1469,9 +1476,9 @@ it.effect(
           Effect.as(Deferred.await(answering), { ok: true as const, answer: before }),
         setTokenRepository: () => Effect.succeed({ ok: true as const, answer: after }),
       });
-      const { act, call, pushed, settled } = yield* subject(service);
+      const { workspaces, act, pushed, settled } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       yield* act("WORKSPACE_TOKEN_REPOSITORY_SET", {
         workspaceId: ACME.id,
@@ -1490,17 +1497,22 @@ it.effect("two holds and a remount read one workspace's people once", () =>
     const service = fakeService([]);
     service.memberships = [PERSONAL, ACME];
     service.members[ACME.id] = [ADA];
-    const { call, pushed, settled } = yield* subject(service);
+    const { workspaces, pushed, settled } = yield* subject(service);
 
-    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
-    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+    const surfaces = yield* Scope.make();
+    yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id }).pipe(
+      Scope.provide(surfaces),
+    );
+    yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id }).pipe(
+      Scope.provide(surfaces),
+    );
     yield* settled;
     service.live.people.set({ members: [memberRow(ADA)], former: [] });
     yield* nextPoll(settled);
     // Let go, the people stay followed among those let go lately, so a surface drawn again reads nothing anew.
-    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_UNFOLLOW, { workspaceId: ACME.id });
+    yield* Scope.close(surfaces, Exit.void);
     yield* settled;
-    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+    yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id });
     yield* settled;
 
     assert.deepEqual(service.reads, [`people-live:${ACME.id}`]);
@@ -1516,10 +1528,10 @@ it.effect(
       const service = fakeService([]);
       service.members[ACME.id] = [ADA];
       service.workspacesFail = true;
-      const { call, pushed, settled } = yield* subject(service);
+      const { workspaces, pushed, settled } = yield* subject(service);
       const seals = () => service.reads.filter((read) => read === `people-live:${ACME.id}`).length;
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       assert.deepEqual(heldMembers(pushed).at(-1), { [ACME.id]: { failed: true } });
       yield* TestClock.adjust(Duration.seconds(5));
@@ -1527,7 +1539,7 @@ it.effect(
       assert.equal(seals(), 2, "the read is asked again");
 
       service.workspacesFail = false;
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_RETRY, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.retry({ workspaceId: ACME.id });
       yield* settled;
       assert.equal(seals(), 3, "Try again reads at once");
       assert.deepEqual(heldMembers(pushed).at(-1), { [ACME.id]: {} });
@@ -1540,9 +1552,9 @@ it.effect(
 it.effect("a workspace the account is not in is told failed once, and not asked again", () =>
   Effect.gen(function* () {
     const service = fakeService([]);
-    const { call, pushed, settled } = yield* subject(service);
+    const { workspaces, pushed, settled } = yield* subject(service);
 
-    yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
+    yield* workspaces.acts.WORKSPACE_MEMBERS_FOLLOW.hold({ workspaceId: ACME.id });
     yield* settled;
     yield* TestClock.adjust(Duration.minutes(1));
     yield* settled;
@@ -1557,15 +1569,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      const { call, pushed, settled } = yield* subject(service);
+      const { workspaces, pushed, settled } = yield* subject(service);
 
       service.notPermitted = true;
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: RELAY.id });
+      yield* workspaces.acts.WORKSPACE_INVITATIONS_FOLLOW.hold({ workspaceId: RELAY.id });
       yield* settled;
       yield* TestClock.adjust(Duration.minutes(1));
       yield* settled;
       service.notPermitted = false;
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* workspaces.acts.WORKSPACE_INVITATIONS_FOLLOW.hold({ workspaceId: ACME.id });
       yield* settled;
       service.live.invitations.set({
         invitations: [
@@ -1595,8 +1607,8 @@ it.effect(
 it.effect("an invitation leaves the held list at its expiry with no row moving", () =>
   Effect.gen(function* () {
     const service = fakeService([]);
-    const { call, pushed, settled } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
+    const { workspaces, pushed, settled } = yield* subject(service);
+    yield* workspaces.acts.WORKSPACE_INVITATIONS_FOLLOW.hold({ workspaceId: ACME.id });
     yield* settled;
     service.live.invitations.set({
       invitations: [invitationRow("soon", HOUR), invitationRow("late", 2 * HOUR)],

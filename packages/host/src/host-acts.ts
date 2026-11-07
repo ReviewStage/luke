@@ -90,6 +90,16 @@ export type HostActTable<
 export function liveTold<Follow extends AnyLiveFollowDeclaration>(
   emit: HostKernel["emit"],
   follow: Follow,
-): (held: AppState[Follow["slice"]]) => void {
-  return (held) => emit(GATEWAY_EVENT.LIVE_READ_CHANGED, carried({ read: follow.slice, held }));
+): (held: AppState[Follow["slice"]]) => void;
+/** How a composer tells one of the other slices `follow` is told on (`alsoTold`), as `liveTold` tells its own. */
+export function liveTold<
+  Follow extends AnyLiveFollowDeclaration,
+  Slice extends Follow["told"][number],
+>(emit: HostKernel["emit"], follow: Follow, slice: Slice): (held: AppState[Slice]) => void;
+export function liveTold(
+  emit: HostKernel["emit"],
+  follow: AnyLiveFollowDeclaration,
+  slice: AnyLiveFollowDeclaration["slice"] = follow.slice,
+): (held: unknown) => void {
+  return (held) => emit(GATEWAY_EVENT.LIVE_READ_CHANGED, carried({ read: slice, held }));
 }

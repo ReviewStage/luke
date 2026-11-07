@@ -39,7 +39,7 @@ export interface OperatorClient {
 
 /** Every slice a live follow is told on (`contract/live-follow.ts`), which the host writes into the document whatever read it is. */
 const FOLLOWED_SLICES: ReadonlySet<string> = new Set(
-  Object.values(HOST_ACTS).flatMap((act) => (isLiveFollow(act) ? [act.slice] : [])),
+  Object.values(HOST_ACTS).flatMap((act) => (isLiveFollow(act) ? act.told : [])),
 );
 
 export interface OperatorClientDependencies {
@@ -113,15 +113,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onHolderInboxesChanged((held) => {
         state.update({ [LIVE_READ.HOLDER_INBOX]: held });
       }),
-      gateway.host.onInstalledSkillsChanged((held) => {
-        state.update({ [LIVE_READ.INSTALLED_SKILLS]: held });
-      }),
-      gateway.host.onIntegrationsChanged((held) => {
-        state.update({ [LIVE_READ.INTEGRATIONS]: held });
-      }),
-      gateway.host.onIntegrationToolsChanged((held) => {
-        state.update({ [LIVE_READ.INTEGRATION_TOOLS]: held });
-      }),
       gateway.host.onLinkStandingsChanged((held) => {
         state.update({ [LIVE_READ.LINK_STANDINGS]: held });
       }),
@@ -131,14 +122,8 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onPagesChanged((held) => {
         state.update({ [LIVE_READ.PAGES]: held });
       }),
-      gateway.host.onProviderKeysChanged((held) => {
-        state.update({ [LIVE_READ.PROVIDER_KEYS]: held });
-      }),
       gateway.host.onRepositoryListsChanged((held) => {
         state.update({ [LIVE_READ.REPOSITORY_LISTS]: held });
-      }),
-      gateway.host.onGitHubTokenChanged((held) => {
-        state.update({ [LIVE_READ.GITHUB_TOKEN]: held });
       }),
       gateway.host.onBrowserTabsChanged((held) => {
         state.update({ [LIVE_READ.BROWSER_TABS]: held });
@@ -149,38 +134,17 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onDevicePresenceChanged((held) => {
         state.update({ [LIVE_READ.DEVICE_PRESENCE]: held });
       }),
-      gateway.host.onWorkspaceInvitationsChanged((held) => {
-        state.update({ [LIVE_READ.WORKSPACE_INVITATIONS]: held });
-      }),
       gateway.host.onThisMacHostChanged((held) => {
         state.update({ [LIVE_READ.THIS_MAC_HOST]: held });
       }),
       gateway.host.onTranscriptsChanged((held) => {
         state.update({ [LIVE_READ.TRANSCRIPT]: held });
       }),
-      gateway.host.onWorkspaceMembersChanged((held) => {
-        state.update({ [LIVE_READ.WORKSPACE_MEMBERS]: held });
-      }),
-      gateway.host.onWorkspaceIntegrationsChanged((held) => {
-        state.update({ [LIVE_READ.WORKSPACE_INTEGRATIONS]: held });
-      }),
-      gateway.host.onSlackChannelsChanged((held) => {
-        state.update({ [LIVE_READ.SLACK_CHANNELS]: held });
-      }),
-      gateway.host.onTokenRepositoriesChanged((held) => {
-        state.update({ [LIVE_READ.TOKEN_REPOSITORIES]: held });
-      }),
       gateway.host.onWorkspacePhotosChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_PHOTOS]: held });
       }),
       gateway.host.onWorkspaceToolsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_TOOLS]: held });
-      }),
-      gateway.host.onMcpClientsChanged((held) => {
-        state.update({ [LIVE_READ.MCP_CLIENTS]: held });
-      }),
-      gateway.host.onAutomationsChanged((held) => {
-        state.update(held);
       }),
       gateway.host.onDescriptionCommentsChanged((held) => {
         state.update({ [LIVE_READ.DESCRIPTION_COMMENTS]: held });
