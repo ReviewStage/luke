@@ -29,8 +29,9 @@
  * only before it lapses; lapsed rows come only from starts, so each start
  * clears a bounded batch of them in its own transaction, with the hosts
  * they approved whose boxes never collected their secret and the accounts'
- * guess windows that ended. Note that such a host stays listed until a
- * start clears it, or its account removes it.
+ * guess windows that ended. Note that such a host is listed no longer from
+ * the instant its pairing lapses (`./host-store.ts`'s `listed`), though its
+ * row stands until a start clears it.
  */
 
 import {

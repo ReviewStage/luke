@@ -23,7 +23,11 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
  * beside it, which no statement carries since it comes from the request.
  * Each row says only what the section draws: its name, its platform, which
  * machine it is and its model where its host said, and where its update
- * stands. A platform or an update this build does not know is read as none,
+ * stands, and, for a host a pairing's approve made whose box has yet to
+ * collect its secret, when that pairing lapses. Such a host is drawn until
+ * that instant and gone from it, at the reader's own instant
+ * (`hostsOfLiveRows`), since the statement cannot bound it by the clock and
+ * only a later pairing's start deletes it. A platform or an update this build does not know is read as none,
  * as the hosts read is read leniently, so one host of a newer kind hides none
  * of the others.
  */
@@ -43,6 +47,8 @@ export const HOSTS_READ = liveRead({
         machineId: Schema.NullOr(Schema.String),
         model: Schema.NullOr(Schema.String),
         update: Schema.NullOr(Schema.String),
+        /** When the pairing that made the host lapses, in epoch milliseconds, while its box has yet to collect its secret; null once it has, or for a host no pairing made. Absent from a service that answers none. */
+        pairingLapsesAt: Schema.optionalKey(Schema.NullOr(Schema.Number)),
       }),
       key: "id",
       order: [
@@ -65,18 +71,40 @@ export type HostLine = Pick<Host, "id" | "name" | "platform" | "machineId" | "mo
 const readPlatform = Schema.decodeUnknownOption(Schema.Literals(Object.values(DEVICE_PLATFORM)));
 const readUpdate = Schema.decodeUnknownOption(Schema.Literals(Object.values(HOST_UPDATE)));
 
-/** The account's hosts as the held read answers them, by name and then id, each field this build does not know left out. */
-export function hostsOfLiveRows(rows: readonly HostLiveRow[]): readonly HostLine[] {
-  return orderedLiveRows(HOSTS_READ.parts.hosts, rows).map((row) => {
+/** When the pairing that made a host lapses while its box has yet to collect its secret; none for any other host. */
+function lapseOf(row: HostLiveRow): number | undefined {
+  return row.pairingLapsesAt ?? undefined;
+}
+
+/** The account's hosts as the held read answers them at `now`, by name and then id, those whose pairing lapsed uncollected left out, each field this build does not know left out. */
+export function hostsOfLiveRows(rows: readonly HostLiveRow[], now: number): readonly HostLine[] {
+  return orderedLiveRows(HOSTS_READ.parts.hosts, rows).flatMap((row) => {
+    const lapse = lapseOf(row);
+    if (lapse !== undefined && lapse <= now) return [];
     const platform = readPlatform(row.platform);
     const update = readUpdate(row.update);
-    return {
-      id: row.id,
-      name: row.name,
-      ...(platform._tag === "Some" ? { platform: platform.value } : undefined),
-      ...(row.machineId === null ? undefined : { machineId: row.machineId }),
-      ...(row.model === null ? undefined : { model: row.model }),
-      ...(update._tag === "Some" ? { update: update.value } : undefined),
-    };
+    return [
+      {
+        id: row.id,
+        name: row.name,
+        ...(platform._tag === "Some" ? { platform: platform.value } : undefined),
+        ...(row.machineId === null ? undefined : { machineId: row.machineId }),
+        ...(row.model === null ? undefined : { model: row.model }),
+        ...(update._tag === "Some" ? { update: update.value } : undefined),
+      },
+    ];
   });
+}
+
+/**
+ * The instant after `now` the soonest uncollected host's pairing lapses, where
+ * one does, which is when the hosts built from `rows` next leave one out
+ * with no row moving; none where none will.
+ */
+export function nextHostLapse(rows: readonly HostLiveRow[], now: number): number | undefined {
+  const lapsing = rows.flatMap((row) => {
+    const lapse = lapseOf(row);
+    return lapse !== undefined && lapse > now ? [lapse] : [];
+  });
+  return lapsing.length === 0 ? undefined : Math.min(...lapsing);
 }

@@ -4,6 +4,7 @@ import {
   type HostLiveRow,
   type HostsLiveAnswer,
   hostsOfLiveRows,
+  nextHostLapse,
 } from "@repo/features/host-live";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import {
@@ -28,7 +29,8 @@ import { followLiveRead } from "./live-read-follow.js";
  * row of the pool (`@repo/sync`), by its id, and the page draws them as the
  * held read answers them (`@repo/features/host-live`), beside the install
  * script's address the service answered with them, followed as every pool
- * read is (`followLiveRead`). A removal is a write the pool draws over its
+ * read is (`followLiveRead`), and drawn again at the instant an uncollected
+ * host's pairing lapses, so it leaves the page with no row moving. A removal is a write the pool draws over its
  * host at once (`hostRemove`), standing until the read carries its
  * transaction, so no answer from before it puts the host back, and taken
  * back where the service refused it. A read the service did not answer is
@@ -86,10 +88,12 @@ export function heldHosts(
           kind: HOST,
           // Note that no refusal ends the follow but another account's session, which every follow ends on.
           endsFollow: () => false,
-          draw: (rows, first) => ({
-            hosts: hostsOfLiveRows(rows),
+          draw: (rows, first, now) => ({
+            hosts: hostsOfLiveRows(rows, now),
             installScriptUrl: first.installScriptUrl,
           }),
+          // Note that a host whose pairing lapses uncollected leaves at that instant with no row moving.
+          edge: nextHostLapse,
         },
         answers,
       ),

@@ -1,7 +1,7 @@
 import { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import type { EntityKind, EntityPool, FieldChange, HeldRows } from "@repo/sync";
 import { Effect, type Schema } from "effect";
-import type { HeldAnswers } from "./live-collection.js";
+import { drawnAtEdges, type HeldAnswers } from "./live-collection.js";
 import {
   confirmWrite,
   followTakingRows,
@@ -19,8 +19,10 @@ import {
  * shows at once and stands until the read carries its transaction, and no
  * answer from before it puts the row back. What the slice holds is drawn
  * from the rows as the pool shows them, beside what the first answer
- * carried that no row does. Nothing is told before the read first answers,
- * since a write drawn on no rows shows nothing.
+ * carried that no row does, at the host's own instant, and again at the
+ * instant the read says the clock alone next moves what it drew (`edge`,
+ * `drawnAtEdges`). Nothing is told before the read first answers, since a
+ * write drawn on no rows shows nothing.
  *
  * A read the service did not answer is told unanswered and asked for again
  * after `LIVE_RESTART`, as a follow that stops is. One refused for good
@@ -47,8 +49,10 @@ export interface LiveReadFollow<Part extends string, Row extends object, Answer,
   readonly kind: EntityKind<Row, FieldChange<Row>>;
   /** Whether a refusal ends the follow for good, told unanswered; a signed-out one always ends it, unsaid. */
   readonly endsFollow: (failure: string) => boolean;
-  /** What the slice holds of the rows as the pool draws them, beside what the first answer carried. */
-  readonly draw: (rows: readonly Row[], first: Answer) => Drawn;
+  /** What the slice holds of the rows as the pool draws them at `now`, beside what the first answer carried. */
+  readonly draw: (rows: readonly Row[], first: Answer, now: number) => Drawn;
+  /** The instant after `now` the clock alone next moves what `draw` drew of the rows, where it does; none where only a write does. */
+  readonly edge?: (rows: readonly Row[], now: number) => number | undefined;
   /** Whether a row another follow's write made is one this read holds; none where the read adopts none. */
   readonly adopts?: (row: Row) => boolean;
 }
@@ -76,8 +80,11 @@ export function followLiveRead<
       let answered = false;
       /** Why a poll ended the follow for good, the first such failure kept, so one the account no longer reaches is told unanswered. */
       let endedBy: string | undefined;
-      const drawn: Effect.Effect<void> = Effect.sync(() => {
-        if (answered) answers.answered(read.draw(held.rows(), first));
+      const drawn: Effect.Effect<void> = yield* drawnAtEdges((now) => {
+        if (!answered) return undefined;
+        const rows = held.rows();
+        answers.answered(read.draw(rows, first, now));
+        return read.edge?.(rows, now);
       });
       const held: HeldRows<Row> = yield* read.pool.stand(read.kind, {
         redraw: () => drawn,

@@ -14,8 +14,8 @@
  * place by its signed-in session (`enrollOwnDevice`), or created by it where
  * the account never registered the id, are read, listed, refused below the
  * floor, and removed alike. A host a pairing's approve made is listed and
- * removed as one from its approve, before its box collects its secret
- * (`listed`).
+ * removed as one from its approve, before its box collects its secret,
+ * until its pairing lapses (`listed`).
  *
  * One Mac stands as one host. A Mac that joins again, after a reinstall,
  * a lost record, or a second sign-in's enroll, folds the account's other
@@ -37,7 +37,7 @@ import {
   deviceSetupSchema,
   hostUpdateSchema,
 } from "@repo/features/device-agent-wire";
-import { and, asc, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, exists, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
@@ -87,10 +87,13 @@ const KeptSchema = Schema.Struct({ id: Schema.String });
 
 /**
  * Whether a device row is one of the account's hosts as Settings lists and
- * removes them: enrolled, or made by a pairing's approve and not removed
- * while its box has yet to collect its secret (`./host-pairing-store.ts`).
+ * removes them at `now`: enrolled, or made by a pairing's approve and not
+ * removed while its box has yet to collect its secret and its pairing has
+ * not lapsed (`./host-pairing-store.ts`). Note that a lapsed pairing is
+ * judged here rather than waited on, because only a later start deletes it
+ * and the host it made.
  */
-function listed() {
+function listed(now: Date) {
   return and(
     isNull(device.removedAt),
     or(
@@ -99,7 +102,7 @@ function listed() {
         queryBuilder
           .select({ id: hostPairing.id })
           .from(hostPairing)
-          .where(eq(hostPairing.deviceId, device.id)),
+          .where(and(eq(hostPairing.deviceId, device.id), gt(hostPairing.expiresAt, now))),
       ),
     ),
   );
@@ -221,9 +224,9 @@ const writeVersion = SqlSchema.void({
 });
 
 const findHosts = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String }),
+  Request: Schema.Struct({ userId: Schema.String, now: Schema.Date }),
   Result: HostRowSchema,
-  execute: ({ userId }) =>
+  execute: ({ userId, now }) =>
     Database.use((db) =>
       db
         .select({
@@ -241,7 +244,7 @@ const findHosts = SqlSchema.findAll({
           updateFailure: device.updateFailure,
         })
         .from(device)
-        .where(and(eq(device.userId, userId), listed()))
+        .where(and(eq(device.userId, userId), listed(now)))
         .orderBy(asc(device.name), asc(device.id)),
     ),
 });
@@ -259,7 +262,7 @@ const stampRemoved = SqlSchema.findAll({
       db
         .update(device)
         .set({ removedAt: now, secretHash: null })
-        .where(and(eq(device.id, id), eq(device.userId, userId), listed()))
+        .where(and(eq(device.id, id), eq(device.userId, userId), listed(now)))
         .returning({ txid: sql<string>`pg_current_xact_id()::text` }),
     ),
 });
@@ -318,7 +321,7 @@ const stampFolded = SqlSchema.findAll({
             eq(device.machineId, machineId),
             eq(device.platform, DEVICE_PLATFORM.DARWIN),
             ne(device.id, id),
-            listed(),
+            listed(now),
           ),
         )
         .returning({ id: device.id }),
@@ -509,9 +512,9 @@ export function recordHostVersion(id: string, version: string): HostEffect<void>
   return writeVersion({ id, version });
 }
 
-/** The account's enrolled machines, of every platform, and the hosts its approves made whose boxes have yet to collect their secret, by name. */
+/** The account's enrolled machines, of every platform, and the hosts its approves made whose boxes have yet to collect their secret before their pairing lapses, by name. */
 export function hostsOf(userId: string): HostEffect<readonly HostRow[]> {
-  return findHosts({ userId });
+  return Effect.flatMap(DateTime.nowAsDate, (now) => findHosts({ userId, now }));
 }
 
 /** Removes the account's enrolled machine, or a host its approve made, and refuses its secret from now on, answering the transaction it was removed in; none where the account lists no such machine. */

@@ -6,6 +6,7 @@ import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { createAgent } from "@repo/database/models/agent-store";
 import { startDescriptionCommentThread } from "@repo/database/models/description-comments";
+import { approveHostPairing, openHostPairing } from "@repo/database/models/host-pairing-store";
 import { enrollOwnDevice, removeHost } from "@repo/database/models/host-store";
 import {
   type InstalledSkillOwner,
@@ -1571,7 +1572,7 @@ it.layer(getTestDB())("a workspace's memories' live read", (it) => {
 
 it.layer(getTestDB())("the account's hosts' live read", (it) => {
   it.effect(
-    "the account is answered its own hosts polled, with the install script's address, never a teammate's, and a host it removed no more",
+    "the account is answered its own hosts polled, with the install script's address, never a teammate's, a host it removed no more, and one whose box never collected its secret until its pairing lapses",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
@@ -1596,6 +1597,17 @@ it.layer(getTestDB())("the account's hosts' live read", (it) => {
         const removed = yield* enrolled(owner, "ams-01");
         yield* enrolled(teammate, "teammate-box");
         yield* removeHost(owner, removed);
+        const userCode = randomUUID();
+        yield* openHostPairing({
+          pollSecretHash: `poll-${randomUUID()}`,
+          userCode,
+          name: "lis-02",
+          platform: DEVICE_PLATFORM.LINUX,
+          arch: DEVICE_ARCH.X64,
+          version: "0.5.0",
+          ip: null,
+        });
+        yield* approveHostPairing(owner, userCode, randomUUID());
 
         const polled = yield* ask({ bearer: owner, path: "/api/live/hosts" });
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
@@ -1606,9 +1618,18 @@ it.layer(getTestDB())("the account's hosts' live read", (it) => {
 
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.equal(answer.installScriptUrl, "https://app.test/install.sh");
+        // Note that a pairing started at the test clock's zero lapses ten minutes on.
+        const lapse = 10 * 60_000;
         assert.deepEqual(
-          hostsOfLiveRows(hosts).map((host) => [host.name, host.platform]),
-          [["fra-03", DEVICE_PLATFORM.LINUX]],
+          hostsOfLiveRows(hosts, lapse - 1).map((host) => [host.name, host.platform]),
+          [
+            ["fra-03", DEVICE_PLATFORM.LINUX],
+            ["lis-02", DEVICE_PLATFORM.LINUX],
+          ],
+        );
+        assert.deepEqual(
+          hostsOfLiveRows(hosts, lapse).map((host) => host.name),
+          ["fra-03"],
         );
       }),
   );
