@@ -53,7 +53,9 @@ import {
 } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import {
+  LIVE_READ,
   LIVE_SIGNED_OUT,
+  type LiveRead,
   type SealedLiveQueryWire,
   type TranscriptNowAnswer,
 } from "@repo/features/live-wire";
@@ -86,7 +88,7 @@ import {
 import { type EntityPool, entityPool } from "@repo/sync";
 import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Deferred, Duration, Effect, Fiber, SubscriptionRef } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Scope, SubscriptionRef } from "effect";
 import { TestClock } from "effect/testing";
 import {
   type AppAccountPreferences,
@@ -1108,6 +1110,15 @@ function subject(
     const service = fakeService();
     // Each event with how many reads the service had been asked as it was told.
     const events: { kind: GatewayEventKind; payload: WireValue; asked: number }[] = [];
+    /** Every telling of a live follow's slice (`LIVE_READ_CHANGED`) named `read`, whole, in order. */
+    const toldLive = (read: LiveRead) =>
+      events.flatMap((event) =>
+        event.kind === GATEWAY_EVENT.LIVE_READ_CHANGED &&
+        isRecord(event.payload) &&
+        event.payload.read === read
+          ? [event.payload.held]
+          : [],
+      );
     const composer = yield* composeAgents({
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
@@ -1215,20 +1226,14 @@ function subject(
           event.kind === GATEWAY_EVENT.PROVIDER_KEYS_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the hosts the host holds for the windows, whole, in order. */
-      hosts: () =>
-        events.flatMap((event) =>
-          event.kind === GATEWAY_EVENT.HOSTS_CHANGED ? [event.payload] : [],
-        ),
+      hosts: () => toldLive(LIVE_READ.HOSTS),
       /** Every telling of the GitHub token the host holds for the windows, whole, in order. */
       githubToken: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.GITHUB_TOKEN_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the memories the host holds for the windows, whole, in order. */
-      memories: () =>
-        events.flatMap((event) =>
-          event.kind === GATEWAY_EVENT.MEMORIES_CHANGED ? [event.payload] : [],
-        ),
+      memories: () => toldLive(LIVE_READ.MEMORIES),
       /** Every telling of the beats the host holds for the windows, whole, in order. */
       beats: () =>
         events.flatMap((event) =>
@@ -1240,10 +1245,7 @@ function subject(
           event.kind === GATEWAY_EVENT.HOLDER_INBOXES_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the agents' origins the host holds for the windows, whole, in order. */
-      origins: () =>
-        events.flatMap((event) =>
-          event.kind === GATEWAY_EVENT.AGENT_ORIGINS_CHANGED ? [event.payload] : [],
-        ),
+      origins: () => toldLive(LIVE_READ.AGENT_ORIGINS),
       open: composer.open,
       reset: composer.reset,
     };
@@ -2836,8 +2838,10 @@ it.effect(
   "an agent's origin is read once however many holds stand on it, held again after a let go reads nothing, and a sign-out tells none held",
   () =>
     Effect.gen(function* () {
-      const { call, asked, live, origins, reset } = yield* subject();
+      const { acts, asked, live, origins, reset } = yield* subject();
       const agent = { agentId: AGENT_ID };
+      const first = yield* Scope.make();
+      const second = yield* Scope.make();
       live.origin.set({
         origin: [
           {
@@ -2846,16 +2850,17 @@ it.effect(
           },
         ],
       });
-      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, agent);
-      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, agent);
+      yield* acts.AGENTS_ORIGIN_FOLLOW.hold(agent).pipe(Scope.provide(first));
+      yield* acts.AGENTS_ORIGIN_FOLLOW.hold(agent).pipe(Scope.provide(second));
       yield* settled;
       assert.deepEqual(origins().at(-1), {
         [AGENT_ID]: { rows: { prompt: "Triage it.", body: "{}" } },
       });
 
-      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_UNFOLLOW, agent);
+      yield* Scope.close(first, Exit.void);
+      yield* Scope.close(second, Exit.void);
       yield* settled;
-      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, agent);
+      yield* acts.AGENTS_ORIGIN_FOLLOW.hold(agent);
       yield* settled;
       assert.deepEqual(asked, [`agent-origin-live:${AGENT_ID}`]);
 
@@ -4033,9 +4038,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, acts, live, answerForgets } = harness;
+      const { acts, live, answerForgets } = harness;
       const shown = () => memoryIdsOf(harness.memories().at(-1));
-      yield* call(GATEWAY_METHOD.MEMORIES_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* acts.MEMORIES_FOLLOW.hold({ workspaceId: WORKSPACE_ID });
       yield* settled;
       // The read is woken by a write once, so it hands a wait for the next.
       live.memories.set({ memories: [memoryRow(OTHER_MEMORY), memoryRow(MEMORY)] }, ["9100"]);
@@ -4099,10 +4104,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, acts, live, answerRemoves } = harness;
+      const { acts, live, answerRemoves } = harness;
       const shown = () => hostIdsOf(harness.hosts().at(-1));
       const both = { hosts: [hostRow(KEPT_HOST, "ams-01"), hostRow(GONE_HOST, "fra-03")] };
-      yield* call(GATEWAY_METHOD.HOSTS_FOLLOW);
+      yield* acts.HOSTS_FOLLOW.hold(undefined);
       yield* settled;
       // The read is woken by a write once, so it hands a wait for the next.
       live.hosts.set(both, ["9300"]);
@@ -4138,24 +4143,18 @@ it.effect(
     }),
 );
 
-it.effect(
-  "a hold naming no workspace is refused before the service is asked, and a closed gate answers a forget unanswered",
-  () =>
-    Effect.gen(function* () {
-      const { call, asked } = yield* subject();
-      const signedOut = yield* subject({ signedIn: false });
+it.effect("a closed gate answers a forget unanswered before the service is asked", () =>
+  Effect.gen(function* () {
+    const signedOut = yield* subject({ signedIn: false });
 
-      const refused = yield* Effect.flip(call(GATEWAY_METHOD.MEMORIES_FOLLOW, {}));
-      const unanswered = yield* signedOut.acts.MEMORIES_FORGET({
-        workspaceId: WORKSPACE_ID,
-        id: MEMORY.id,
-      });
+    const unanswered = yield* signedOut.acts.MEMORIES_FORGET({
+      workspaceId: WORKSPACE_ID,
+      id: MEMORY.id,
+    });
 
-      assert.equal(refused._tag, "InvalidParamsRefusal");
-      assert.deepEqual(unanswered, GATE_CLOSED_SIGNED_OUT);
-      assert.deepEqual(asked, []);
-      assert.deepEqual(signedOut.asked, []);
-    }),
+    assert.deepEqual(unanswered, GATE_CLOSED_SIGNED_OUT);
+    assert.deepEqual(signedOut.asked, []);
+  }),
 );
 
 it.effect(

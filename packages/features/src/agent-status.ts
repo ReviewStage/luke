@@ -28,10 +28,15 @@ import { AGENT_STATUS, type AgentStatus } from "./agent-wire.js";
  * since the developer stopped that work too; a line written after it still
  * opens a turn of its own, and reads running.
  *
+ * A turn still queued or running whose lease ran out is read as ended at
+ * that instant, failed as its runner lost, or canceled where a Stop was
+ * asked of it: its runner stopped posting (`@repo/database`'s
+ * `turn-lease.ts`), and the next touch of the agent settles the row so.
+ *
  * The rule is pure and takes the instant it reads at, because the two
- * graces are the parts of it the rows alone do not say: a reader following
- * the rows live reads the status again at `statusClockEdge`, the next
- * instant the clock alone moves it.
+ * graces and the lease are the parts of it the rows alone do not say: a
+ * reader following the rows live reads the status again at
+ * `statusClockEdge`, the next instant the clock alone moves it.
  */
 
 /**
@@ -80,6 +85,8 @@ export interface StatusTurn {
   readonly settledAt: number | null;
   /** Whether it failed because its session ended for good. */
   readonly sessionEnded: boolean;
+  /** Until when its runner is held to be at work while it is queued or runs; none for a row from before the lease, or where the reader was not told. */
+  readonly leaseUntil?: number | undefined;
 }
 
 /** When the agent was started and the instant it is read at, in epoch milliseconds, and when the newest line of the developer's still awaiting its turn was written, where one stands. */
@@ -109,6 +116,23 @@ interface LineReading {
 /** Whether a turn row still runs, or is queued to: what takes a line at its next step, however long the step it is on runs. */
 function turnRuns(turn: StatusTurn): boolean {
   return isTurnStatusWord(turn.status) && STATUS_OF_TURN[turn.status] === AGENT_STATUS.RUNNING;
+}
+
+/** Whether the turn still runs, or is queued to, past the instant its lease ran out: its runner is lost. */
+export function runnerLostAt(turn: StatusTurn | undefined, now: number): boolean {
+  return (
+    turn !== undefined && turnRuns(turn) && turn.leaseUntil !== undefined && now > turn.leaseUntil
+  );
+}
+
+/** The turn as it stands at `now`: one whose runner is lost reads as ended when its lease ran out, failed, or canceled where a Stop was asked of it. */
+function turnAt(turn: StatusTurn | undefined, now: number): StatusTurn | undefined {
+  if (turn === undefined || !runnerLostAt(turn, now) || turn.leaseUntil === undefined) return turn;
+  return {
+    ...turn,
+    status: turn.cancelRequested ? TURN_STATUS.CANCELED : TURN_STATUS.FAILED,
+    settledAt: turn.leaseUntil,
+  };
 }
 
 /**
@@ -147,7 +171,7 @@ export function lineAwaitsTurn(
   turn: StatusTurn | undefined,
   standing: Pick<StatusStanding, "now" | "awaitingLineAt">,
 ): boolean {
-  return lineOf(turn, standing).standing === LINE_STANDING.AWAITS;
+  return lineOf(turnAt(turn, standing.now), standing).standing === LINE_STANDING.AWAITS;
 }
 
 /**
@@ -167,7 +191,11 @@ export function turnStoppable(turn: StatusTurn | undefined): boolean {
  * with no turn yet has done all it was asked, which is nothing, so it reads
  * as completed, however long ago it started: no first turn is on its way.
  */
-export function agentStatusAt(turn: StatusTurn | undefined, standing: StatusStanding): AgentStatus {
+export function agentStatusAt(
+  newest: StatusTurn | undefined,
+  standing: StatusStanding,
+): AgentStatus {
+  const turn = turnAt(newest, standing.now);
   const line = lineOf(turn, standing).standing;
   if (line === LINE_STANDING.AWAITS) return AGENT_STATUS.RUNNING;
   if (line === LINE_STANDING.UNANSWERED) return AGENT_STATUS.FAILED;
@@ -185,19 +213,27 @@ export function agentStatusAt(turn: StatusTurn | undefined, standing: StatusStan
 
 /**
  * The next instant past which the clock alone moves the agent's status, in
- * epoch milliseconds: a line's grace running out, from running to failed,
- * or, with no turn and no line, the starting grace running out, from
- * starting to failed. None where nothing but a row changing can move it: a
- * turn runs, a line counts for nothing, or the grace is already past.
+ * epoch milliseconds: a running turn's lease running out, from running to
+ * failed, a line's grace running out, likewise, or, with no turn and no
+ * line, the starting grace running out, from starting to failed. None where
+ * nothing but a row changing can move it: a turn runs on no lease, a line
+ * counts for nothing, or the grace is already past.
  */
 export function statusClockEdge(
-  turn: StatusTurn | undefined,
+  newest: StatusTurn | undefined,
   standing: StatusStanding,
 ): number | undefined {
+  const turn = turnAt(newest, standing.now);
+  const lapses =
+    turn !== undefined && turnRuns(turn) && turn.leaseUntil !== undefined
+      ? turn.leaseUntil + 1
+      : undefined;
   const line = lineOf(turn, standing);
   if (line.standing === LINE_STANDING.AWAITS) {
-    return line.since === undefined ? undefined : line.since + LINE_GRACE_MILLIS + 1;
+    // A line a running turn takes awaits for as long as the turn runs, so its turn's lease is its edge.
+    return line.since === undefined ? lapses : line.since + LINE_GRACE_MILLIS + 1;
   }
+  if (lapses !== undefined) return lapses;
   if (line.standing === LINE_STANDING.UNANSWERED || turn !== undefined) return undefined;
   if (standing.blank === true) return undefined;
   const edge = standing.createdAt + STARTING_GRACE_MILLIS;

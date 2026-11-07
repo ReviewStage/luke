@@ -436,6 +436,23 @@ test("Escape from the home fades the popover out, inert and ending, then takes i
   assert.equal(field().value, "", "opened again it holds no search from before");
 });
 
+test("a popover opened again while it fades out hands its field the focus, so the keys still reach it", async () => {
+  holdPanelExits();
+  const { container, key, field } = await opened();
+  const button = () =>
+    container.querySelector<HTMLButtonElement>('.agent-servers button[aria-haspopup="dialog"]') ??
+    assert.fail("no button");
+
+  key("Escape");
+  act(() => button().click());
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+
+  // Note that the elements are compared as one boolean, because a failed equality prints both whole.
+  assert.equal(document.activeElement === field(), true, "the field holds the focus");
+});
+
 test("Escape from the home takes the popover away at once where motion is held", async () => {
   holdPanelExits();
   holdMotion();

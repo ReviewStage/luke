@@ -73,7 +73,9 @@ export const holdingRunner = <A, E, R>(
 ) =>
   Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
-      const holder = yield* claimRunnerLease(agentId, wait, restore);
+      const holder = yield* claimRunnerLease(agentId, wait, restore).pipe(
+        Effect.withSpan("web/claimRunnerLease"),
+      );
       return yield* restore(body).pipe(Effect.ensuring(released(agentId, holder)));
     }),
   );

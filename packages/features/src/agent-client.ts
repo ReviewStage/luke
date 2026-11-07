@@ -18,6 +18,7 @@ import {
   AGENT_CHOOSE_RENAMES,
   AGENT_DELETE_RENAMES,
   AGENT_INBOX_WRITE_RENAMES,
+  AGENT_NOT_FOUND_RENAMES,
   AGENT_RENAMES,
   AGENT_START_RENAMES,
   type AgentAgentAnswer,
@@ -99,13 +100,8 @@ import {
   chaptersModelOn,
   chaptersProviderOf,
 } from "./chapters-model-choice.js";
-import { type AgentChangeRequest, agentsContract } from "./contract/agents.js";
-import {
-  credentialMissingDataSchema,
-  extraRepositoryRefusedDataSchema,
-  localAgentRefusedDataSchema,
-  planLimitReachedDataSchema,
-} from "./contract/errors.js";
+import { agentsContract } from "./contract/agents.js";
+import { HOSTED_REFUSAL_DATA, refusalCarriesData } from "./contract/errors.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
 import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
@@ -118,11 +114,9 @@ import {
 import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
 import { spelledFailure } from "./hosted-failure.js";
 import {
-  askHosted,
   HOSTED_DEADLINE,
   type HostedClient,
   type HostedDeadline,
-  type HostedFailure,
   HostedUnanswered,
   hostedClient,
   hostedFailureFacts,
@@ -157,14 +151,14 @@ import {
   providerKeySaveRequestSchema,
 } from "./provider-key-wire.js";
 import {
-  PULL_REQUEST_CHAPTERS_CALL_FAILURE,
+  PULL_REQUEST_CHAPTERS_RENAMES,
   type PullRequestChaptersAnswerView,
 } from "./pull-request-chapters-view.js";
 import {
   type PullRequestActionRequest,
   pullRequestActionRequestSchema,
 } from "./pull-request-write-wire.js";
-import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
+import type { RepositoryUnreached } from "./repository-reach-wire.js";
 import { agentGitHubImagePath, agentPicturePath, inboxAttachmentPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -212,112 +206,44 @@ type Failed = {
   readonly refusedRepository?: string;
 };
 
-/** The refusals a call may answer with, by the service's own word for each. */
-type NamedRefusals = Readonly<Partial<Record<HostedApiError, AgentCallFailure>>>;
-
-/** The refusals a call that names one row can answer with. */
-const ROW_REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
-} satisfies NamedRefusals;
-
-/** The refusals writing the default can answer with: a choice the catalog does not offer. */
-const DEFAULT_REFUSALS = {
-  [HOSTED_API_ERROR.INVALID_REQUEST]: AGENT_CALL_FAILURE.INVALID_CHOICE,
-} satisfies NamedRefusals;
-
-/** The chapters failures a refusal may stand for, by the service's own word for each. */
-type ChaptersRefusals = Readonly<
-  Partial<
-    Record<
-      HostedApiError,
-      (typeof PULL_REQUEST_CHAPTERS_CALL_FAILURE)[keyof typeof PULL_REQUEST_CHAPTERS_CALL_FAILURE]
-    >
-  >
->;
-
-/** The refusals a read or a Generate of a pull request's chapters can answer with. */
-const CHAPTERS_REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]:
-    PULL_REQUEST_CHAPTERS_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.GITHUB_UNANSWERED,
-  [HOSTED_API_ERROR.UNAVAILABLE]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE,
-} satisfies ChaptersRefusals;
-
-/** A chapters procedure's answer, or the refusal it failed with where it is one the tab acts on; unanswered for everything else. */
-function chaptersAnswer(
-  asked: Effect.Effect<PullRequestChaptersAnswerView, HostedFailure, HttpClient.HttpClient>,
-  named: ChaptersRefusals = CHAPTERS_REFUSALS,
-): Effect.Effect<PullRequestChaptersAnswerView, never, HttpClient.HttpClient> {
-  return Effect.catch(asked, (failed) =>
-    Effect.succeed({
-      failure:
-        (failed._tag === "HostedRefused" ? named[failed.refusal] : undefined) ??
-        PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
-    }),
-  );
-}
-
-/**
- * The refusal a refused answer carries, where it is one the caller names;
- * unanswered otherwise. A repository out of reach carries why where the
- * service said and the reason is one this build reads, and none otherwise.
- */
-function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
+/** A served file's refusal: not found where the service said so; unanswered for anything else. */
+function servedRefusal(payload: UnparsedWireValue): Failed {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
-  const failure = refusal === undefined ? undefined : named[refusal];
-  if (failure === undefined) return UNANSWERED;
-  if (failure === AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED) {
-    const limit = Result.getOrUndefined(readServiceAnswer(planLimitReachedDataSchema)(payload));
-    return limit?.resetsAt === undefined ? { failure } : { failure, resetsAt: limit.resetsAt };
-  }
-  if (failure === AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
-    const missing = Result.getOrUndefined(readServiceAnswer(credentialMissingDataSchema)(payload));
-    return missing?.provider === undefined ? { failure } : { failure, provider: missing.provider };
-  }
-  if (failure === AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
-    const refused = Result.getOrUndefined(readServiceAnswer(localAgentRefusedDataSchema)(payload));
-    if (refused?.localAgentRefusal === undefined) return { failure };
-    return {
-      failure,
-      localAgentRefusal: refused.localAgentRefusal,
-      ...(refused.refusedDevice === undefined
-        ? undefined
-        : { refusedDevice: refused.refusedDevice }),
-    };
-  }
-  if (failure === AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED) {
-    const refused = Result.getOrUndefined(
-      readServiceAnswer(extraRepositoryRefusedDataSchema)(payload),
-    );
-    if (refused?.extraRepositoryRefusal === undefined) return { failure };
-    return {
-      failure,
-      extraRepositoryRefusal: refused.extraRepositoryRefusal,
-      ...(refused.refusedRepository === undefined
-        ? undefined
-        : { refusedRepository: refused.refusedRepository }),
-    };
-  }
-  if (failure !== AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
-  const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
-  return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
+  return refusal === HOSTED_API_ERROR.NOT_FOUND
+    ? { failure: AGENT_CALL_FAILURE.NOT_FOUND }
+    : UNANSWERED;
 }
 
-/** The refusals a Start reads as its own failures, as its contract declares them and a Start spells them (`AGENT_START_RENAMES`). */
-const START_NAMED: NamedRefusals = Object.fromEntries(
-  Object.keys(agentsContract.start["~orpc"].errorMap).flatMap((declared) => {
-    // SAFETY: every hosted procedure declares its refusals from the one map, keyed by `HostedApiError`.
-    const refusal = declared as HostedApiError;
-    const failure = spelledFailure(refusal, { as: AGENT_START_RENAMES });
-    // SAFETY: a Start's refusals spelled as it spells them are among the agent rows' failures (`AGENT_ROW_CALLS`).
-    return failure === undefined ? [] : [[refusal, failure as AgentCallFailure] as const];
-  }),
+/** The refusals a Start's contract declares, which are the ones a refusal beside a task it made may be read as. */
+const START_DECLARED: ReadonlySet<string> = new Set(
+  Object.keys(agentsContract.start["~orpc"].errorMap),
 );
 
-/** A Start's refusal the service answered beside a task it made all the same (`task-wire.ts`'s `taskStartAnswerSchema`), read as a refused Start is. */
+/** The field without which the others a refusal carries say nothing: why a device or a repository refused, before which device or repository. */
+const LEADING_FIELD: Readonly<Partial<Record<HostedApiError, string>>> = {
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: "localAgentRefusal",
+  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: "extraRepositoryRefusal",
+};
+
+/**
+ * A Start's refusal the service answered beside a task it made all the same
+ * (`task-wire.ts`'s `taskStartAnswerSchema`), read as a refused Start is:
+ * its failure as a Start spells it (`AGENT_START_RENAMES`), with the fields
+ * it carries where the service said and this build reads them; unanswered
+ * for a refusal a Start does not name.
+ */
 export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
-  return refusedAs(unparsedWire(refusal), START_NAMED);
+  const payload = unparsedWire(refusal);
+  const slug = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
+  if (slug === undefined || !START_DECLARED.has(slug)) return UNANSWERED;
+  // SAFETY: a Start's refusals spelled as it spells them are among the agent rows' failures (`AGENT_ROW_CALLS`).
+  const failure = spelledFailure(slug, { as: AGENT_START_RENAMES }) as AgentCallFailure | undefined;
+  if (failure === undefined) return UNANSWERED;
+  if (failure === AGENT_CALL_FAILURE.UNANSWERED || !refusalCarriesData(slug)) return { failure };
+  const data = Result.getOrUndefined(readServiceAnswer(HOSTED_REFUSAL_DATA[slug])(payload));
+  const leading = LEADING_FIELD[slug];
+  if (data === undefined || (leading !== undefined && !(leading in data))) return { failure };
+  return { failure, ...data };
 }
 
 /**
@@ -337,7 +263,7 @@ function unansweredBare<Answer extends object>(answer: Answer): Answer {
 /**
  * A Start's or a repository added's failure without why the repositories
  * named beside the agent's own were refused, which these calls have never
- * handed the window (`hostedFailedAs` reads no such field), so it draws
+ * handed the window (the table they read before read no such field), so it draws
  * that they were refused and not why.
  */
 function extraRepositoryWhyLeftOut(answer: AgentAgentAnswer): AgentAgentAnswer {
@@ -360,9 +286,14 @@ function unansweredCall(answer: Exclude<CallAnswer, { readonly response: Respons
   return { ...UNANSWERED, cause: hostedFailureFacts(unanswered) };
 }
 
+/** The idempotency key a write taken once under it is asked under, where one is given. */
+function keyed(key: string | undefined) {
+  return key === undefined ? undefined : { idempotencyKey: key };
+}
+
 /** How a member's write on the inbox taken once under its idempotency key is asked: under `deadline`, and the key given where one is. */
 function inboxWrite(deadline: HostedDeadline, key: string | undefined) {
-  return { deadline, ...(key === undefined ? undefined : { idempotencyKey: key }) };
+  return { deadline, ...keyed(key) };
 }
 
 /** A keyed write the service took already under its key, as the host reads it: no answer, its cause that refusal (`keyed-write.ts`). */
@@ -390,6 +321,23 @@ function writtenAlreadyKept<Answer extends object>(
   return answer as Exclude<Answer, { readonly failure: typeof HOSTED_API_ERROR.ALREADY_WRITTEN }>;
 }
 
+/**
+ * A write to an agent's row as the window always heard it: a key already
+ * written under no answer whose cause is that refusal, which tells the host
+ * the write landed (`writtenAlreadyKept`), and every other refusal but the
+ * agent gone no answer, bare.
+ */
+function rowWritten<Answer extends object>(answer: Answer) {
+  return unansweredBare(writtenAlreadyKept(answer));
+}
+
+/** A Generate's failure without why its repository is out of reach, which the tab has never been handed, so it draws that it is and not why. */
+function reachUnsaid(answer: PullRequestChaptersAnswerView): PullRequestChaptersAnswerView {
+  if (!("failure" in answer)) return answer;
+  const { unreached: _why, ...failed } = answer;
+  return failed;
+}
+
 /** The types an inbox item's attachment is served under: a block's picture's or recording's, or any a file an answer carried traveled as. */
 const inboxFileTypeSchema = Schema.Literals(Object.values(INBOX_FILE_TYPE));
 
@@ -398,24 +346,12 @@ function readInboxFile(response: Response): Effect.Effect<AgentInboxAttachmentVi
   return Effect.map(imageBodyOf(response, inboxFileTypeSchema), (file) => file ?? UNANSWERED);
 }
 
-/**
- * A procedure's answer, or the refusal it failed with where it is one the
- * caller names, with the fields that refusal carries; unanswered for
- * everything else.
- */
 /** A transcript page read at once, or unanswered where the service said nothing of whether it would hold, as one too old to read at once does. */
 function readNow(
   answer: (AgentMessagesAnswerView & { readonly holds?: boolean }) | Failed,
 ): TranscriptNowAnswer | Failed {
   if ("failure" in answer) return answer;
   return answer.holds === undefined ? UNANSWERED : { ...answer, holds: answer.holds };
-}
-
-function hostedAnswer<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-  named: NamedRefusals,
-): Effect.Effect<Answer | Failed, never, HttpClient.HttpClient> {
-  return Effect.catch(asked, (failed) => Effect.succeed(hostedFailedAs(failed, named)));
 }
 
 /**
@@ -436,32 +372,6 @@ function wireRequestOf<Request, Encoded>(
 /** The agent and, where the tab names one, the pull request of its repository a read is about, the number as its query spells it. */
 function pullRequestRead(agentId: string, number: number | undefined) {
   return number === undefined ? { id: agentId } : { id: agentId, number: String(number) };
-}
-
-/**
- * The refusal a hosted failure is, where it is one the caller names, with
- * the fields that refusal carries; unanswered for everything else, with the
- * failure beneath it and the trace its call traveled under, which the
- * window reports and never draws.
- */
-function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
-  const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
-  if (failed._tag !== "HostedRefused" || failure === undefined) {
-    return { ...UNANSWERED, cause: hostedFailureFacts(failed) };
-  }
-  const unreached = failed.data?.unreached;
-  const resetsAt = failed.data?.resetsAt;
-  const provider = failed.data?.provider;
-  const localAgentRefusal = failed.data?.localAgentRefusal;
-  const refusedDevice = failed.data?.refusedDevice;
-  return {
-    failure,
-    ...(unreached === undefined ? undefined : { unreached }),
-    ...(resetsAt === undefined ? undefined : { resetsAt }),
-    ...(provider === undefined ? undefined : { provider }),
-    ...(localAgentRefusal === undefined ? undefined : { localAgentRefusal }),
-    ...(refusedDevice === undefined ? undefined : { refusedDevice }),
-  };
 }
 
 /**
@@ -580,11 +490,10 @@ export class HostedAgentClient {
     provider: ModelProvider,
   ): Effect.Effect<ChaptersProviderAnswer, never, HttpClient.HttpClient> {
     return Effect.map(
-      hostedAnswer(
-        askHosted(this.#hosted.account.writePreferences, {
-          chaptersModel: chaptersModelOn(provider, CHAPTERS_MODEL.HAIKU),
-        }),
-        DEFAULT_REFUSALS,
+      hostedCall(
+        this.#hosted.account.writePreferences,
+        { chaptersModel: chaptersModelOn(provider, CHAPTERS_MODEL.HAIKU) },
+        { as: AGENT_RENAMES },
       ),
       chaptersProviderAnswer,
     );
@@ -937,7 +846,14 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(agentRenameRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#change(agentId, admitted, ROW_REFUSALS, key);
+    return Effect.map(
+      hostedCall(
+        this.#hosted.agents.change,
+        { params: { id: agentId }, body: admitted },
+        { as: AGENT_NOT_FOUND_RENAMES, ...keyed(key) },
+      ),
+      rowWritten,
+    );
   }
 
   /** Switches one agent's MCP servers for its next turn on, the whole list of those off, answering it as it then stands; a list past the bound is refused here without traveling. */
@@ -947,7 +863,14 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(agentServersRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#change(agentId, admitted, ROW_REFUSALS);
+    return Effect.map(
+      hostedCall(
+        this.#hosted.agents.change,
+        { params: { id: agentId }, body: admitted },
+        { as: AGENT_NOT_FOUND_RENAMES },
+      ),
+      rowWritten,
+    );
   }
 
   /** Adds a repository to one agent beside the ones it works in, answering it as it then stands; a repository refused by shape is refused here without traveling. */
@@ -988,13 +911,17 @@ export class HostedAgentClient {
     request: AgentPinRequest,
     key?: string,
   ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
-    return this.#change(
-      agentId,
+    const body =
       request.position === undefined
         ? { pinned: request.pinned }
-        : { pinned: request.pinned, position: request.position },
-      ROW_REFUSALS,
-      key,
+        : { pinned: request.pinned, position: request.position };
+    return Effect.map(
+      hostedCall(
+        this.#hosted.agents.change,
+        { params: { id: agentId }, body },
+        { as: AGENT_NOT_FOUND_RENAMES, ...keyed(key) },
+      ),
+      rowWritten,
     );
   }
 
@@ -1004,24 +931,13 @@ export class HostedAgentClient {
     request: AgentReadRequest,
     key?: string,
   ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
-    return this.#change(agentId, { readMark: request.readMark }, ROW_REFUSALS, key);
-  }
-
-  /** One change of an agent, under the idempotency key given where one is, answering it as it then stands. */
-  #change(
-    agentId: string,
-    body: AgentChangeRequest,
-    named: NamedRefusals,
-    key?: string,
-  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(
+    return Effect.map(
+      hostedCall(
         this.#hosted.agents.change,
-        { params: { id: agentId }, body },
-        HOSTED_DEADLINE.USUAL,
-        key,
+        { params: { id: agentId }, body: { readMark: request.readMark } },
+        { as: AGENT_NOT_FOUND_RENAMES, ...keyed(key) },
       ),
-      named,
+      rowWritten,
     );
   }
 
@@ -1035,7 +951,10 @@ export class HostedAgentClient {
 
   /** Stops one agent, answering it as it then stands. */
   stop(agentId: string): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.agents.stop, { id: agentId }), ROW_REFUSALS);
+    return Effect.map(
+      hostedCall(this.#hosted.agents.stop, { id: agentId }, { as: AGENT_NOT_FOUND_RENAMES }),
+      unansweredBare,
+    );
   }
 
   /** Takes one agent back to just before one of the developer's lines, stopping it first where it still works, answering it as it then stands. */
@@ -1043,19 +962,16 @@ export class HostedAgentClient {
     agentId: string,
     messageId: string,
   ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(
-        this.#hosted.agents.rewind,
-        { params: { id: agentId }, body: { messageId } },
-        HOSTED_DEADLINE.STEER,
-      ),
-      ROW_REFUSALS,
+    return hostedCall(
+      this.#hosted.agents.rewind,
+      { params: { id: agentId }, body: { messageId } },
+      { as: AGENT_NOT_FOUND_RENAMES, deadline: HOSTED_DEADLINE.STEER },
     );
   }
 
   /** One agent read whole as its own page by its id, on a task or with none. */
   agent(agentId: string): Effect.Effect<AgentPageAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.agents.read, { id: agentId }), ROW_REFUSALS);
+    return hostedCall(this.#hosted.agents.read, { id: agentId });
   }
 
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
@@ -1063,9 +979,11 @@ export class HostedAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<AgentPullRequestAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.agentPullRequests.pullRequest, pullRequestRead(agentId, number)),
-      ROW_REFUSALS,
+    return Effect.map(
+      hostedCall(this.#hosted.agentPullRequests.pullRequest, pullRequestRead(agentId, number), {
+        as: AGENT_NOT_FOUND_RENAMES,
+      }),
+      unansweredBare,
     );
   }
 
@@ -1074,12 +992,13 @@ export class HostedAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<AgentChangesAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.agents.changes, {
-        id: agentId,
-        ...(number === undefined ? undefined : { number: String(number) }),
-      }),
-      ROW_REFUSALS,
+    return Effect.map(
+      hostedCall(
+        this.#hosted.agents.changes,
+        { id: agentId, ...(number === undefined ? undefined : { number: String(number) }) },
+        { as: AGENT_NOT_FOUND_RENAMES },
+      ),
+      unansweredBare,
     );
   }
 
@@ -1088,12 +1007,13 @@ export class HostedAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<AgentOverviewPullRequestAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(
+    return Effect.map(
+      hostedCall(
         this.#hosted.agentPullRequests.overviewPullRequest,
         pullRequestRead(agentId, number),
+        { as: AGENT_NOT_FOUND_RENAMES },
       ),
-      ROW_REFUSALS,
+      unansweredBare,
     );
   }
 
@@ -1101,19 +1021,20 @@ export class HostedAgentClient {
   workspaceTools(
     agentId: string,
   ): Effect.Effect<AgentWorkspaceToolsAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.agents.workspaceTools, { id: agentId }),
-      ROW_REFUSALS,
-    );
+    return hostedCall(this.#hosted.agents.workspaceTools, { id: agentId });
   }
 
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams as GitHub holds them now. */
   reviewOptions(
     agentId: string,
   ): Effect.Effect<AgentReviewOptionsAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.agents.reviewOptions, { id: agentId }),
-      ROW_REFUSALS,
+    return Effect.map(
+      hostedCall(
+        this.#hosted.agents.reviewOptions,
+        { id: agentId },
+        { as: AGENT_NOT_FOUND_RENAMES },
+      ),
+      unansweredBare,
     );
   }
 
@@ -1122,15 +1043,16 @@ export class HostedAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<PullRequestChaptersAnswerView, never, HttpClient.HttpClient> {
-    return chaptersAnswer(
-      askHosted(
+    return Effect.map(
+      hostedCall(
         this.#hosted.pullRequestChapters.generate,
         {
           params: { id: agentId },
           ...(number === undefined ? undefined : { query: { number: String(number) } }),
         },
-        HOSTED_DEADLINE.CHAPTERS,
+        { as: PULL_REQUEST_CHAPTERS_RENAMES, deadline: HOSTED_DEADLINE.CHAPTERS },
       ),
+      reachUnsaid,
     );
   }
 
@@ -1139,9 +1061,11 @@ export class HostedAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<AgentOverviewChecksAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.agentPullRequests.overviewChecks, pullRequestRead(agentId, number)),
-      ROW_REFUSALS,
+    return Effect.map(
+      hostedCall(this.#hosted.agentPullRequests.overviewChecks, pullRequestRead(agentId, number), {
+        as: AGENT_NOT_FOUND_RENAMES,
+      }),
+      unansweredBare,
     );
   }
 
@@ -1150,12 +1074,13 @@ export class HostedAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<AgentOverviewConversationAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(
+    return Effect.map(
+      hostedCall(
         this.#hosted.agentPullRequests.overviewConversation,
         pullRequestRead(agentId, number),
+        { as: AGENT_NOT_FOUND_RENAMES },
       ),
-      ROW_REFUSALS,
+      unansweredBare,
     );
   }
 
@@ -1180,9 +1105,7 @@ export class HostedAgentClient {
       (answer): Effect.Effect<AgentInboxAttachmentView> => {
         if (!callAnswered(answer)) return Effect.succeed(unansweredCall(answer));
         if (!answer.response.ok) {
-          return Effect.map(jsonOf(answer.response), (body) =>
-            refusedAs(unparsedWire(body), ROW_REFUSALS),
-          );
+          return Effect.map(jsonOf(answer.response), (body) => servedRefusal(unparsedWire(body)));
         }
         return readInboxFile(answer.response);
       },
@@ -1202,13 +1125,17 @@ export class HostedAgentClient {
     const admitted = Result.getOrUndefined(readEither(pullRequestActionRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     const read = pullRequestRead(agentId, number);
-    return hostedAnswer(
-      askHosted(this.#hosted.agentPullRequests.action, {
-        params: { id: read.id },
-        ...(read.number === undefined ? undefined : { query: { number: read.number } }),
-        body: admitted,
-      }),
-      ROW_REFUSALS,
+    return Effect.map(
+      hostedCall(
+        this.#hosted.agentPullRequests.action,
+        {
+          params: { id: read.id },
+          ...(read.number === undefined ? undefined : { query: { number: read.number } }),
+          body: admitted,
+        },
+        { as: AGENT_NOT_FOUND_RENAMES },
+      ),
+      unansweredBare,
     );
   }
 
@@ -1217,9 +1144,11 @@ export class HostedAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<AgentPullRequestViewedAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(
-      askHosted(this.#hosted.agentPullRequests.viewed, pullRequestRead(agentId, number)),
-      ROW_REFUSALS,
+    return Effect.map(
+      hostedCall(this.#hosted.agentPullRequests.viewed, pullRequestRead(agentId, number), {
+        as: AGENT_NOT_FOUND_RENAMES,
+      }),
+      unansweredBare,
     );
   }
 
@@ -1238,9 +1167,7 @@ export class HostedAgentClient {
       (answer): Effect.Effect<AgentGitHubImageView> => {
         if (!callAnswered(answer)) return Effect.succeed(unansweredCall(answer));
         if (!answer.response.ok) {
-          return Effect.map(jsonOf(answer.response), (body) =>
-            refusedAs(unparsedWire(body), ROW_REFUSALS),
-          );
+          return Effect.map(jsonOf(answer.response), (body) => servedRefusal(unparsedWire(body)));
         }
         return Effect.map(
           imageBodyOf(answer.response, githubImageTypeSchema),
@@ -1267,9 +1194,7 @@ export class HostedAgentClient {
       (answer): Effect.Effect<AgentInboxAttachmentView> => {
         if (!callAnswered(answer)) return Effect.succeed(unansweredCall(answer));
         if (!answer.response.ok) {
-          return Effect.map(jsonOf(answer.response), (body) =>
-            refusedAs(unparsedWire(body), ROW_REFUSALS),
-          );
+          return Effect.map(jsonOf(answer.response), (body) => servedRefusal(unparsedWire(body)));
         }
         return readInboxFile(answer.response);
       },

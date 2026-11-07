@@ -7,6 +7,7 @@ import {
   hasWordsOrFiles,
   QUEUE_CHANGE,
 } from "@repo/features/agent-wire";
+import { SENTRY_SEND_SPAN } from "@repo/features/sentry-tracing";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { ACT_KIND } from "@repo/host/acts";
 import { STATUS_TONE } from "@repo/ui";
@@ -15,7 +16,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { actMutation } from "../act-mutations.js";
+import { sendMutation } from "../act-mutations.js";
 import { keepPictureRead, pictureNow, pictureQuery } from "../picture-query.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import type { AgentPictureDoor } from "./agent-pictures.js";
@@ -116,7 +117,14 @@ export interface AgentQueueControl {
 }
 
 export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): AgentQueueControl {
-  const { mutateAsync: sendQueue } = useMutation(actMutation(ACT_KIND.AGENTS_QUEUE));
+  // Note that a message queued, or one sent on from the queue, is traced as a send; reordering and editing are not.
+  const { mutateAsync: sendQueue } = useMutation(
+    sendMutation(ACT_KIND.AGENTS_QUEUE, ({ change }) =>
+      change.change === QUEUE_CHANGE.ADD || change.change === QUEUE_CHANGE.STEER
+        ? SENTRY_SEND_SPAN.AGENT_QUEUE
+        : undefined,
+    ),
+  );
   const queryClient = useQueryClient();
   const toast = useToast();
   const messages = queue?.messages ?? NO_MESSAGES;

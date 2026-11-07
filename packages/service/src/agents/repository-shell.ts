@@ -4,7 +4,7 @@ import {
   checkoutIdentityEnv,
 } from "@repo/features/checkout-identity";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { Data, Duration, Effect, type Redacted } from "effect";
+import { Data, Duration, Effect, Option, type Redacted, Tracer } from "effect";
 import type { GitHubTokenAccess } from "../github/github-app.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 import type { FirewallSources } from "./sandbox-firewall.js";
@@ -188,12 +188,14 @@ export interface CommandResult {
 }
 
 /**
- * The sandbox as the shell reaches it: one command run, and, where the
+ * The sandbox as the shell reaches it: one command run, under the span of
+ * the call that ran it where it has one, so a provider that runs it on a
+ * runtime of its own keeps it in that call's trace; and, where the
  * provider has a firewall, that firewall; a sandbox with none cannot carry
  * the checkout's credential and checks nothing out.
  */
 export interface RepositorySandbox {
-  readonly run: (options: SandboxRunOptions) => PromiseLike<CommandResult>;
+  readonly run: (options: SandboxRunOptions, parent?: Tracer.AnySpan) => PromiseLike<CommandResult>;
   readonly firewall?: RepositoryFirewall;
 }
 
@@ -233,20 +235,22 @@ function gitRefusal(failed: CommandResult): RepositoryRefusal {
   });
 }
 
-/** One run in the sandbox as an effect; a run that threw is the sandbox gone, which is the refusal given, with what it threw. */
+/** One run in the sandbox as an effect, under the caller's span; a run that threw is the sandbox gone, which is the refusal given, with what it threw. */
 export function runInSandbox(
   sandbox: RepositorySandbox,
   options: SandboxRunOptions,
   refusal: string,
 ) {
-  return Effect.tryPromise({
-    try: () => sandbox.run(options),
-    catch: (thrown) =>
-      new RepositoryRefusal({
-        reason: refusal,
-        ...(thrown instanceof Error ? { detail: thrown.message } : undefined),
-      }),
-  });
+  return Effect.flatMap(Effect.serviceOption(Tracer.ParentSpan), (parent) =>
+    Effect.tryPromise({
+      try: () => sandbox.run(options, Option.getOrUndefined(parent)),
+      catch: (thrown) =>
+        new RepositoryRefusal({
+          reason: refusal,
+          ...(thrown instanceof Error ? { detail: thrown.message } : undefined),
+        }),
+    }),
+  );
 }
 
 /**

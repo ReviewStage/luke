@@ -19,15 +19,16 @@
  * read and the Generate split as the agent's do, and answer alike.
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   pullRequestChaptersAnswerSchema,
   pullRequestChaptersReadRequestSchema,
   pullRequestChaptersRequestSchema,
 } from "../pull-request-chapters-wire.js";
-import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
+import { bodyCap, declaredProcedure, exactInput, hostedProcedure, refuses } from "./base.js";
 import { numberedQuerySchema } from "./github.js";
 
 /** A Generate reads no body; it may send an empty one, and nothing larger. */
@@ -71,6 +72,21 @@ const repositoryGenerateInput = exactInput(
   }),
 );
 
+/**
+ * What a Generate refuses beyond what any procedure may: the agent, the
+ * workspace, or the pull request not one the account reaches, the
+ * repository out of the App's reach, and a pull request GitHub named no
+ * base for (`pull-request-chapters-procedures.ts`). The service holding no
+ * key for the model, or its store down, is unavailable.
+ */
+const generateProcedure = declaredProcedure.errors(
+  refuses(
+    HOSTED_API_ERROR.NOT_FOUND,
+    HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+    HOSTED_API_ERROR.GITHUB_UNANSWERED,
+  ),
+);
+
 export const pullRequestChaptersContract = {
   /** The workspace's newest chapters for the pull request the number names. */
   read: hostedProcedure
@@ -78,7 +94,7 @@ export const pullRequestChaptersContract = {
     .input(pullRequestChaptersReadRequestSchema)
     .output(EffectSchema.flip(pullRequestChaptersAnswerSchema)),
   /** The pull request's chapters generated for its head now, or the generation already under way, answered as the read answers. */
-  generate: hostedProcedure
+  generate: generateProcedure
     .meta(bodyCap(GENERATE_BODY_BYTES))
     .meta(
       openapi({
@@ -95,7 +111,7 @@ export const pullRequestChaptersContract = {
     .input(numberedQuerySchema)
     .output(EffectSchema.flip(pullRequestChaptersAnswerSchema)),
   /** That pull request's chapters generated for its head now, or the generation already under way, answered as the read answers. */
-  repositoryGenerate: hostedProcedure
+  repositoryGenerate: generateProcedure
     .meta(bodyCap(GENERATE_BODY_BYTES))
     .meta(
       openapi({

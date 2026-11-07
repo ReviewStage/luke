@@ -53,9 +53,8 @@
  * an away Mac at once too, as a Start on it is refused
  * (`LOCAL_AGENT_REFUSAL.MAC_AWAY`), and a host its account removed by name,
  * rather than queue a line no one may take for hours: a message, a Stop, or
- * a retire to it fails in words, and its open run is taken from it once its
- * lease lapses
- * (`../../maintenance/device-lease-sweep.ts`).
+ * a retire to it fails in words, and its open run is taken from it at the
+ * agent's next touch once its lease lapses (`../coder-host/lapsed-runner.ts`).
  */
 
 import { randomUUID } from "node:crypto";

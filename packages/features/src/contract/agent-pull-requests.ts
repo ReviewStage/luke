@@ -11,8 +11,8 @@
  * alone, its keys counted as the old endpoint counted them.
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   agentOverviewChecksAnswerSchema,
@@ -26,7 +26,8 @@ import {
   pullRequestViewedAnswerSchema,
   pullRequestWriteAnswerSchema,
 } from "../pull-request-write-wire.js";
-import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
+import { bodyCap, declaredProcedure, exactInput, refuses } from "./base.js";
 
 /**
  * A change to a pull request names the change and its few fields, a
@@ -72,9 +73,20 @@ const actionInput = exactInput(
   }),
 );
 
+/**
+ * What every procedure here refuses beyond what any may: the agent not one
+ * the account reaches, or one whose pull request is gone, and its
+ * repository out of the App's reach (`asked-pull-request.ts`'s
+ * `githubReadRefusal`, `pull-request-write.ts`). GitHub failing otherwise
+ * is unavailable, and GitHub refusing a change is the change's answer.
+ */
+const pullRequestProcedure = declaredProcedure.errors(
+  refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
+);
+
 /** A GET of one of the tab's reads. */
 const read = (path: `/${string}`) =>
-  hostedProcedure.meta(openapi({ method: HTTP_METHOD.GET, path })).input(readInput);
+  pullRequestProcedure.meta(openapi({ method: HTTP_METHOD.GET, path })).input(readInput);
 
 export const agentPullRequestsContract = {
   /** What the agent published: the branch it pushed and the pull request from it, as GitHub holds them. */
@@ -82,7 +94,7 @@ export const agentPullRequestsContract = {
     EffectSchema.flip(agentPullRequestAnswerSchema),
   ),
   /** One change to the pull request, made on GitHub as the asking member. */
-  action: hostedProcedure
+  action: pullRequestProcedure
     .meta(bodyCap(PULL_REQUEST_ACTION_BODY_BYTES))
     .meta(
       openapi({

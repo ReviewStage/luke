@@ -60,27 +60,12 @@ import type { HostedApiError } from "@repo/features";
 import { AGENT_QUEUE_BOUNDS, QUEUE_PAUSE, type QueuePause } from "@repo/features/agent-queue-wire";
 import { LINE_GRACE_MILLIS } from "@repo/features/agent-status";
 import type { AgentAttachment } from "@repo/features/agent-wire";
-import { TURN_STATUS } from "@repo/wire";
-import {
-  and,
-  asc,
-  count,
-  eq,
-  exists,
-  inArray,
-  isNotNull,
-  isNull,
-  lte,
-  max,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, count, eq, exists, isNotNull, isNull, lte, max, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
 import { agentQueue, queuedMessage } from "../schemas/agent-queue.js";
-import { turns } from "../schemas/storage.js";
 import { agentReachableBy } from "./workspace-store.js";
 
 type AgentQueueEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
@@ -943,58 +928,6 @@ export function claimedAt(message: QueuedMessageRow, now: Date): boolean {
     message.claimedAt !== undefined &&
     message.claimedAt.getTime() > now.getTime() - LINE_GRACE_MILLIS
   );
-}
-
-const findUnpausedQueues = SqlSchema.findAll({
-  Request: Schema.Struct({ limit: Schema.Number }),
-  Result: Schema.Struct({ agentId: Schema.String, userId: Schema.String }),
-  execute: ({ limit }) =>
-    Database.use((db) =>
-      db
-        .selectDistinct({ agentId: queuedMessage.agentId, userId: agentTable.userId })
-        .from(queuedMessage)
-        .innerJoin(agentTable, eq(agentTable.id, queuedMessage.agentId))
-        .where(
-          and(
-            sql`not ${exists(
-              db
-                .select({ agentId: agentQueue.agentId })
-                .from(agentQueue)
-                .where(
-                  and(
-                    eq(agentQueue.agentId, queuedMessage.agentId),
-                    isNotNull(agentQueue.pausedBecause),
-                  ),
-                ),
-            )}`,
-            // Note that an agent at work is left out before the bound, so busy queues never crowd out an idle one.
-            sql`not ${exists(
-              db
-                .select({ id: turns.id })
-                .from(turns)
-                .where(
-                  and(
-                    eq(turns.conversationId, agentTable.conversationId),
-                    inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
-                  ),
-                ),
-            )}`,
-          ),
-        )
-        .limit(limit),
-    ),
-});
-
-/**
- * The agents whose queue holds messages and stands unpaused, by each agent
- * and its starter, at most `limit`: the queues a sweep hands on where their
- * agent idles, such as one whose only message an edit held past its turn's
- * end until the hold lapsed.
- */
-export function unpausedQueues(
-  limit: number,
-): AgentQueueEffect<readonly { readonly agentId: string; readonly userId: string }[]> {
-  return findUnpausedQueues({ limit });
 }
 
 /** A claimed message sent, taken out of the agent's queue under the claim it was sent under (CLAIMED -> gone), the pause going with the last; nothing where that claim stands no longer. */

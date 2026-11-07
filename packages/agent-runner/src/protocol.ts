@@ -158,6 +158,25 @@ export const RUNNER_HARNESS = {
 } as const;
 export type RunnerHarness = (typeof RUNNER_HARNESS)[keyof typeof RUNNER_HARNESS];
 
+/**
+ * How a message reached its runner, as the launch's trace names it: a place
+ * created from its source agent's snapshot, its repository's base snapshot,
+ * or the agents' image; one resumed from its own snapshot; the runner
+ * launched again in a place still up; a place made anew where the one found
+ * was gone; or a runner already up. The last four are spelled as the
+ * service's hand-off event spells them (`SERVER_HANDOFF_PATH`).
+ */
+export const LAUNCH_PATH = {
+  SOURCE_SNAPSHOT: "source_snapshot",
+  BASE_SNAPSHOT: "base_snapshot",
+  IMAGE: "image",
+  RESUMED: "resumed",
+  RELAUNCHED: "relaunched",
+  FRESH: "fresh",
+  WARM: "warm",
+} as const;
+export type LaunchPath = (typeof LAUNCH_PATH)[keyof typeof LAUNCH_PATH];
+
 /** The reasoning efforts the pinned SDK takes, as its `EffortLevel` spells them. */
 export const EFFORT = {
   LOW: "low",
@@ -342,6 +361,25 @@ const SequenceSchema = Schema.Number.check(
 );
 
 /**
+ * What a launch in the cloud's sandbox is handed to trace its startup in the
+ * launch's own Sentry trace (`trace.ts`): the service's DSN, environment and
+ * release, the launch span's `sentry-trace` and `baggage`, and the launch's
+ * path as `LAUNCH_PATH` spells it. A host's launch is handed none, and its
+ * runner sends Sentry nothing. A DSN is the project's public address for
+ * sending to it, no secret. The path is read as any word, so a path the
+ * service names later never fails an older runner's config.
+ */
+const RunnerTraceSchema = Schema.Struct({
+  dsn: Schema.String,
+  environment: Schema.String,
+  release: Schema.optionalKey(Schema.String),
+  sentryTrace: Schema.String,
+  baggage: Schema.optionalKey(Schema.String),
+  path: Schema.optionalKey(Schema.String),
+});
+export type RunnerTrace = typeof RunnerTraceSchema.Type;
+
+/**
  * The first stdin line of a Claude Code launch: everything one launch of the CLI is started with.
  * `executable` is the `claude` binary the image carries, because the bundled
  * SDK cannot find its own platform package. `firstSequence` is where this
@@ -388,6 +426,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
     Schema.String,
   ) /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */,
   warm: Schema.optionalKey(Schema.Boolean),
+  /** Where the launch's startup is traced in Sentry (`RunnerTrace`); none where it is not, as on a host, and in a config written before it. */
+  trace: Schema.optionalKey(RunnerTraceSchema),
 });
 export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
 
@@ -447,6 +487,8 @@ export const CodexConfigSchema = Schema.Struct({
   installedSkills: Schema.optionalKey(Schema.String),
   /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */
   warm: Schema.optionalKey(Schema.Boolean),
+  /** Where the launch's startup is traced in Sentry (`RunnerTrace`); none where it is not, as on a host, and in a config written before it. */
+  trace: Schema.optionalKey(RunnerTraceSchema),
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;
 

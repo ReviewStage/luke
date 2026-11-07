@@ -255,13 +255,12 @@ const PANEL_SHELL = {
 } as const;
 
 /**
- * The names the panel side panel's block of the theme adds (the plan's
- * summary, the side panel's widths, a note's share of the toolbar, the
- * summary card's motion), by the group tailwind-merge reads each in.
+ * The names the panel side panel's block of the theme adds (the side
+ * panel's widths, a note's share of the toolbar), by the group
+ * tailwind-merge reads each in.
  */
 const PANEL_SIDE = {
-  spacing: ["half-container", "side-panel", "summary", "summary-card-inset", "summary-rail"],
-  animate: ["card-grow-in", "card-leave"],
+  spacing: ["half-container", "side-panel"],
 } as const;
 
 /**
@@ -604,7 +603,6 @@ const merge = extendTailwindMerge({
         "menu-in",
         "tooltip-in",
         "tooltip-leave",
-        ...PANEL_SIDE.animate,
         ...PANEL_WINDOW.animate,
         ...PANEL_WORK_COLUMN.animate,
       ],

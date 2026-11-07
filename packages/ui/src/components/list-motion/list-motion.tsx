@@ -191,7 +191,10 @@ interface Place extends Point {
 
 /** Where every mover under the root stood before a change, each keyed one by its key, and which lists stood. */
 interface Snapshot {
+  /** Where each mover stood, measured only where a motion could play (`moves`); empty otherwise. */
   readonly places: Map<Element, Place>;
+  /** Whether `places` was measured, so a commit whose snapshot was not plays no motion from it. */
+  readonly measured: boolean;
   readonly keyed: Map<string, Element>;
   readonly lists: Set<Element>;
 }
@@ -419,7 +422,22 @@ function placesOf(root: HTMLElement, elements: readonly Element[]): Map<Element,
   return places;
 }
 
-/** Where every mover under `root` stands now, by element and by key, and the lists that stand. */
+/**
+ * Whether a motion can play over `root`: a DOM with an animation engine,
+ * and tokens that leave its exits or its glides a duration, as reduced
+ * motion and a capture run do not. Note that it is asked before anything is
+ * measured, because measuring every row reads the layout, which a commit
+ * that plays nothing never uses.
+ */
+function moves(root: HTMLElement): boolean {
+  return (
+    animates(root) &&
+    (tokenTiming(root, MOTION_TOKEN.DURATION_EXIT, MOTION_TOKEN.EASE_EXIT) !== undefined ||
+      tokenTiming(root, MOTION_TOKEN.DURATION_SHAPE, MOTION_TOKEN.SPRING) !== undefined)
+  );
+}
+
+/** Where every mover under `root` stands now, by element and by key, and the lists that stand; their places only where a motion can play. */
 function snapshotOf(root: HTMLElement): Snapshot {
   // Note that a row already on its way out stood nowhere, so one listed again arrives.
   const movers = moversOf(root).filter((mover) => !exits.has(mover));
@@ -430,7 +448,8 @@ function snapshotOf(root: HTMLElement): Snapshot {
   }
   const lists = new Set<Element>(root.querySelectorAll(`[${ROWS_ATTRIBUTE}]`));
   if (root.hasAttribute(ROWS_ATTRIBUTE)) lists.add(root);
-  return { places: placesOf(root, movers), keyed, lists };
+  const measured = moves(root);
+  return { places: measured ? placesOf(root, movers) : new Map(), measured, keyed, lists };
 }
 
 /** The mover that carries `element` as it glides, the group it stands in, or the root where none does. */
@@ -746,8 +765,8 @@ class ListMotionPlayer extends Component<
     if (leaving.length > 0) this.holdHeight(root);
     // Note that a root holding no mover and losing none has nothing to play, as a message box's row of files does while it holds none, so its tokens are never read on every keystroke.
     if (leaving.length === 0 && moversOf(root).length === 0) return;
-    // Note that a DOM with no animation engine, a test's, marks what leaves and lets it go at once.
-    const engine = animates(root);
+    // Note that a DOM with no animation engine, a test's, or a commit whose start was not measured, marks what leaves and lets it go at once.
+    const engine = animates(root) && before.measured;
     const exit = engine
       ? tokenTiming(root, MOTION_TOKEN.DURATION_EXIT, MOTION_TOKEN.EASE_EXIT)
       : undefined;

@@ -58,6 +58,7 @@ import {
   Random,
   Result,
   Schema,
+  Tracer,
 } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -76,7 +77,12 @@ import { HOSTED_REFUSAL_DATA, refusalCarriesData } from "./contract/errors.js";
 import { hostedContract } from "./contract/index.js";
 import { outputWireSchema, refusalDeclared } from "./contract/output-schema.js";
 import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
-import { SENTRY_TRACES_SAMPLE_RATE } from "./sentry-tracing.js";
+import {
+  SENTRY_TRACES_SAMPLE_RATE,
+  type SendTrace,
+  SentSendTrace,
+  sendTraceHeaders,
+} from "./sentry-tracing.js";
 import {
   type HostedApiError,
   hostedErrorSchema,
@@ -140,11 +146,24 @@ const NANOS_PER_MILLI = 1_000_000;
 /** The content type the link names a JSON body with, which the account call writes itself. */
 const CONTENT_TYPE_HEADER = "content-type";
 
-/** What one ask hands the link: the caller's own services to run the call on, its deadline, and the idempotency key it is sent under, where it has one. */
+/** What one ask hands the link: the caller's own services to run the call on, its deadline, the idempotency key it is sent under, where it has one, and the send's trace, where a press began it. */
 interface HostedLinkContext {
   readonly services: Context.Context<HttpClient.HttpClient>;
   readonly deadline: HostedDeadline;
   readonly idempotencyKey?: string;
+  readonly trace?: SendTrace;
+}
+
+/** Sentry's `sentry-trace`: the trace's id, the span's, and the sampling decision, which a send's span always made. */
+const SENTRY_TRACE_PATTERN = /^([0-9a-f]{32})-([0-9a-f]{16})-([01])$/;
+
+/** The span a send's trace names, as the parent its ask continues; none where it does not parse. */
+function sendParent(trace: SendTrace): Tracer.ExternalSpan | undefined {
+  const named = SENTRY_TRACE_PATTERN.exec(trace.sentryTrace.trim());
+  if (named === null) return undefined;
+  const [, traceId, spanId, sampled] = named;
+  if (traceId === undefined || spanId === undefined) return undefined;
+  return Tracer.externalSpan({ traceId, spanId, sampled: sampled === "1" });
 }
 
 /** The refusals that carry fields beside their slug. */
@@ -425,11 +444,20 @@ async function sent(
   });
   const send = options.inSession === true ? sendInSession(call, options.credential) : call.send;
   const request = callRequest(url, init);
-  const { idempotencyKey } = context;
+  const { idempotencyKey, trace } = context;
   const keyed: CallRequest =
-    idempotencyKey === undefined
+    idempotencyKey === undefined && trace === undefined
       ? request
-      : { ...request, headers: { ...request.headers, [IDEMPOTENCY_KEY.HEADER]: idempotencyKey } };
+      : {
+          ...request,
+          headers: {
+            ...request.headers,
+            ...(idempotencyKey === undefined
+              ? undefined
+              : { [IDEMPOTENCY_KEY.HEADER]: idempotencyKey }),
+            ...(trace === undefined ? undefined : sendTraceHeaders(trace)),
+          },
+        };
   const exit = await Effect.runPromiseExitWith(context.services)(
     readWhole(send, keyed, call.requestTimeoutMs),
     init.signal ? { signal: init.signal } : undefined,
@@ -529,6 +557,12 @@ function traced(failed: HostedFailure, traceId: string): HostedFailure {
  * service's traces are, so the flag it sends says whether to trace it. A
  * write sent under an idempotency key carries it on every attempt, the
  * renewed one after a 401 among them (`IDEMPOTENCY_KEY`).
+ *
+ * A send the developer pressed is asked under its press's trace
+ * (`SentSendTrace`): the ask is a span of that trace, sampled as the press
+ * was rather than by a coin of its own, and every attempt carries the trace
+ * as Sentry's `sentry-trace` and `baggage`, which the service continues
+ * before `traceparent`, so its spans sit under the press's span.
  */
 export function askHosted<Input, Output>(
   procedure: HostedProcedure<Input, Output>,
@@ -537,7 +571,10 @@ export function askHosted<Input, Output>(
   idempotencyKey?: string,
 ): Effect.Effect<Output, HostedFailure, HttpClient.HttpClient> {
   return Effect.gen(function* () {
-    const sampled = (yield* Random.next) < SENTRY_TRACES_SAMPLE_RATE;
+    const sent = yield* SentSendTrace;
+    const parent = sent === undefined ? undefined : sendParent(sent);
+    const trace = parent === undefined ? undefined : sent;
+    const sampled = parent?.sampled ?? (yield* Random.next) < SENTRY_TRACES_SAMPLE_RATE;
     const asked = Effect.gen(function* () {
       const span = yield* Effect.orDie(Effect.currentSpan);
       const services = yield* Effect.context<HttpClient.HttpClient>();
@@ -547,12 +584,17 @@ export function askHosted<Input, Output>(
             services,
             deadline,
             ...(idempotencyKey === undefined ? undefined : { idempotencyKey }),
+            ...(trace === undefined ? undefined : { trace }),
           },
         }),
         (error) => traced(hostedFailureOf(error), span.traceId),
       );
     });
-    return yield* Effect.withSpan(asked, HOSTED_ASK_SPAN, { kind: "client", sampled });
+    return yield* Effect.withSpan(asked, HOSTED_ASK_SPAN, {
+      kind: "client",
+      sampled,
+      ...(parent === undefined ? undefined : { parent }),
+    });
   });
 }
 

@@ -80,7 +80,6 @@
   "src/desktop/task-list-view.test.ts": 31070,
   "src/desktop/task-open.test.ts": 914,
   "src/desktop/task-pane-switcher.test.ts": 7286,
-  "src/desktop/task-summary.test.ts": 1599,
   "src/desktop/tasks-board.test.ts": 9289,
   "src/desktop/tasks-held-order.test.ts": 6240,
   "src/desktop/tasks-list-select.test.ts": 7371,
