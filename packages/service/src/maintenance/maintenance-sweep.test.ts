@@ -37,7 +37,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     request: sweepRequest(),
     cronSecret: CRON_SECRET,
     monitor: { run: (sweep) => sweep },
-      }),
     sweepNativeWakeups: (now) =>
       Effect.sync(() => {
         recorded.wakeups.push(now);
@@ -106,7 +105,7 @@ it.effect(
       assert.equal(answer.status, 200);
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.equal(answer.body.syncLog, 5);
-      const [instant] = recorded.deviceWarmRunners;
+      const [instant] = recorded.wakeups;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
         wakeups: [instant],
@@ -116,13 +115,13 @@ it.effect(
 );
 
 it.effect(
-  "a sweep that fails, or dies, answers failed in its place, the sweeps after it still run, the sync log's last among them, and the run's cron check-in fails",
+  "a sweep that fails, or dies, answers failed in its place, the sweeps after it still run, the sync log among them, and the run's cron check-in fails",
   () =>
     Effect.gen(function* () {
       const checkIns: string[] = [];
       const { options, recorded } = sweepOptions({
-        sweepDeviceWarmRunners: () => Effect.fail(new Error("a runner's row could not be read")),
-        sweepNativeWakeups: () => Effect.die(new Error("a wakeup's row could not be read")),
+        sweepNativeWakeups: () => Effect.fail(new Error("a wakeup's row could not be read")),
+        sweepPortShares: () => Effect.die(new Error("a port share's row could not be read")),
         // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
         monitor: {
           run: (run) =>
@@ -137,8 +136,8 @@ it.effect(
 
       assert.equal(answer.status, 500);
       assert.deepEqual(checkIns, ["error"]);
-      assert.deepEqual(answer.body.deviceWarmRunners, SWEEP_FAILED);
       assert.deepEqual(answer.body.nativeWakeups, SWEEP_FAILED);
+      assert.deepEqual(answer.body.portShares, SWEEP_FAILED);
       assert.equal(recorded.syncLog.length, 1);
     }),
 );
