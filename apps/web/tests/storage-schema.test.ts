@@ -106,7 +106,6 @@ const DECLARED_TABLES = [
   "sandbox_firewall",
   "sandbox_terminal_lease",
   "session",
-  "session_sandbox_cleanup",
   "slack_agent_thread",
   "slack_channel_repository",
   "slack_installation",
