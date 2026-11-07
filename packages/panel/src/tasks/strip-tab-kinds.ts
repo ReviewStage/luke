@@ -31,7 +31,7 @@ import {
 import type { ShellTab } from "./use-terminal-session.js";
 
 /**
- * strip-tab-kinds.ts -- what each kind of strip tab answers wherever the panel asks of it: what it is called, how it looks, which product surface it shows, the link that names it, and how it lives: closed, reopened, idle, pinned, kept, previewed, and found in.
+ * strip-tab-kinds.ts -- what each kind of strip tab answers wherever the panel asks of it: what it is called, how it looks, which product surface it shows, the link that names it, and how it lives: closed, reopened, idle, pinned, kept, and found in.
  *
  * A tab of either strip is of one kind (`STRIP_TAB_KIND`), and every place
  * that asks what a tab is called, wears, shows, or links to reads that kind's
@@ -150,8 +150,7 @@ interface TabSurface {
  * stack (`reopens`); whether its close ends the session it stands for
  * (`endsSession`); whether it closes itself once idle (`closesIdle`); how it
  * is pinned (`pin`); whether each strip keeps it across a launch (`kept`);
- * whether a link opens it as a preview (`previews`); whether the window's
- * find reaches its body (`takesFind`); and whether it never closes nor
+ * whether the window's find reaches its body (`takesFind`); and whether it never closes nor
  * moves (`stays`).
  */
 interface StripTabKindDeclaration<K extends StripTabKind> {
@@ -166,7 +165,6 @@ interface StripTabKindDeclaration<K extends StripTabKind> {
   readonly closesIdle: boolean;
   readonly pin: (tab: KindTab<K>) => TabPin;
   readonly kept: KeptIn;
-  readonly previews: boolean;
   readonly takesFind: boolean;
   readonly stays: (tab: KindTab<K>) => boolean;
 }
@@ -224,7 +222,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: false,
     pin: (tab) => (SIDE_PANEL_TABS.some((kind) => kind === tab) ? TAB_PIN.SIDEBAR : TAB_PIN.NONE),
     kept: { column: true, sidePanel: true },
-    previews: false,
     takesFind: true,
     stays: isOverviewTab,
   },
@@ -245,7 +242,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: true,
     pin: () => TAB_PIN.ACCOUNT,
     kept: { column: true, sidePanel: false },
-    previews: true,
     takesFind: true,
     stays: NEVER,
   },
@@ -261,7 +257,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: true,
     pin: UNPINNED,
     kept: KEPT_NOWHERE,
-    previews: true,
     takesFind: true,
     stays: NEVER,
   },
@@ -278,7 +273,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: false,
     pin: UNPINNED,
     kept: KEPT_NOWHERE,
-    previews: true,
     takesFind: true,
     stays: NEVER,
   },
@@ -305,7 +299,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: true,
     pin: UNPINNED,
     kept: KEPT_NOWHERE,
-    previews: true,
     takesFind: true,
     stays: NEVER,
   },
@@ -321,7 +314,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: true,
     pin: PINNED_TO_SIDEBAR,
     kept: KEPT_NOWHERE,
-    previews: true,
     takesFind: true,
     stays: NEVER,
   },
@@ -339,7 +331,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: true,
     pin: PINNED_TO_SIDEBAR,
     kept: { column: false, sidePanel: true },
-    previews: true,
     takesFind: true,
     stays: NEVER,
   },
@@ -356,7 +347,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: false,
     pin: UNPINNED,
     kept: KEPT_NOWHERE,
-    previews: true,
     takesFind: true,
     stays: NEVER,
   },
@@ -373,7 +363,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: false,
     pin: UNPINNED,
     kept: KEPT_NOWHERE,
-    previews: true,
     takesFind: true,
     stays: NEVER,
   },
@@ -393,7 +382,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: true,
     pin: UNPINNED,
     kept: KEPT_NOWHERE,
-    previews: true,
     // A page draws in a frame of its own, which no find of the window reaches.
     takesFind: false,
     stays: NEVER,
@@ -411,7 +399,6 @@ const STRIP_TAB_KINDS = {
     closesIdle: false,
     pin: UNPINNED,
     kept: KEPT_NOWHERE,
-    previews: true,
     // Its page is drawn on a canvas, which no find of the window reaches.
     takesFind: false,
     stays: NEVER,
@@ -498,11 +485,6 @@ export function stripTabPin(tab: StripTab): TabPin {
 /** Whether each strip that holds a tab keeps it across a launch. */
 export function stripTabKept(tab: StripTab): KeptIn {
   return declarationOf(tab).kept;
-}
-
-/** Whether a link opens a tab as a preview, as against the side panel's fixed kinds, which stand as the task's own and are only ever chosen. */
-export function stripTabPreviews(tab: StripTab): boolean {
-  return declarationOf(tab).previews;
 }
 
 /** Whether the window's find reaches a tab's body. */

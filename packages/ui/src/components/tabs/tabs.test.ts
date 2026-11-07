@@ -16,8 +16,7 @@ import { Tab, TabCard, Tabs, type TabsControls } from "./tabs.js";
  * its place in the row says; the arrow keys, Home, and End move the focus
  * along, Delete closes the focused tab and hands focus to the one in its
  * place, an anchored tab stands out of every move, a tab's × names its close in a hint, with ⌘W on the chosen tab alone,
- * and an owner's step moves the focused tab and says so; a preview
- * tab is kept by a double-click; and a switcher's card is picked on the
+ * and an owner's step moves the focused tab and says so; and a switcher's card is picked on the
  * press, or on the click or Return from a Tab stop of its own, as asked. jsdom lays nothing out, so a test that
  * scrolls lays the strip's boxes out itself. Synthetic throughout.
  */
@@ -300,33 +299,6 @@ test("an anchored tab stands out of every move: it has no place, the tabs after 
   assert.deepEqual(moves, [], "nothing moves before the anchored tab");
   act(() => controls.current?.step(1));
   assert.deepEqual(moves, [[0, 1]]);
-});
-
-test("a preview tab wears its preview, and a double-click keeps it, while a tab of its own takes no keep", async () => {
-  const kept: string[] = [];
-  const container = await render(
-    createElement(Tabs, {
-      label: "Tabs",
-      onMove: ignore,
-      children: ["Preview", "Kept"].map((label) =>
-        createElement(Tab, {
-          key: label,
-          icon: createElement("svg"),
-          label,
-          selected: label === "Preview",
-          preview: label === "Preview",
-          onSelect: ignore,
-          onKeep: () => kept.push(label),
-        }),
-      ),
-    }),
-  );
-  for (const label of ["Preview", "Kept"]) {
-    act(() => {
-      tabOf(container, label).dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
-    });
-  }
-  assert.deepEqual(kept, ["Preview"]);
 });
 
 test("a card picked on the press is picked as the press lands, and one picked on the click is not picked by a press alone but is a Tab stop Return picks", async () => {

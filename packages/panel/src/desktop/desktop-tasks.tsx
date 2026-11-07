@@ -574,8 +574,8 @@ function DescriptionDocument({
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
   const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
     lines === undefined
-      ? tasks.sidePanel.onPreviewFile({ path })
-      : tasks.sidePanel.onPreviewFile(
+      ? tasks.sidePanel.onOpenFile({ path })
+      : tasks.sidePanel.onOpenFile(
           { path, startLine: lines.startLine, endLine: lines.endLine },
           lines.commit,
         );
@@ -663,7 +663,7 @@ function DescriptionDocument({
         );
       }
       case TOOL_TARGET.PAGE:
-        return sidePanel.onPreview(pageTab(target.page));
+        return sidePanel.onOpen(pageTab(target.page));
       case TOOL_TARGET.TASK:
         // A call that named this very task opens its plan in the column, as one on its own plan does.
         if (target.agent === undefined && target.task === taskId) return openOverview();
@@ -674,7 +674,7 @@ function DescriptionDocument({
   // panel, where every subagent stands; where the worker stands seeds its glyph.
   const openDelegation = (agent: string, callId: string, task: string, status: AgentStatus) => {
     views.onWorkerStatus(callId, status);
-    sidePanel.onPreview(subagentTab(callId, { agent, task }));
+    sidePanel.onOpen(subagentTab(callId, { agent, task }));
   };
   // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
   // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
@@ -729,7 +729,7 @@ function DescriptionDocument({
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
   // A page of another task, a subtask's among them, opens beside this one, read on its own task, so the reader stays here.
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
-    sidePanel.onPreview(pageTab(page), place),
+    sidePanel.onOpen(pageTab(page), place),
   );
   const openAgent = useSteadyDoor(openAgentColumn);
   const openAgentTab = useSteadyDoor(openColumnTab);
