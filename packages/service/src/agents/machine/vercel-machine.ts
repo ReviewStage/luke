@@ -85,14 +85,7 @@ import {
   readAgentRunnerRecord,
   writeAgentRunnerRecord,
 } from "@repo/database/models/agent-runner-record";
-import {
-  type Agent,
-  hasRepository,
-  readAgent,
-  type WithRepository,
-} from "@repo/database/models/agent-store";
-import type { FirewallOwner } from "@repo/database/models/provider-key-seal";
-import { recordedRuntimeSession } from "@repo/database/models/recorded-session";
+import { type Agent, hasRepository, type WithRepository } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
@@ -126,11 +119,9 @@ import {
   agentFirewallSources,
   agentRepositoryRead,
   CheckoutRefused,
-  type CheckoutServices,
   cloneAgentExtras,
   cloneAgentRepository,
   finishCheckoutWith,
-  firewallSourcesOfAgent,
   openWorkingFolder,
   refreshAgentCheckout,
 } from "../coder-host/checkout.js";
@@ -148,8 +139,6 @@ import {
   type LaunchSwapKind,
   newPlaceholder,
   placeholderSwap,
-  renewedSwap,
-  type SandboxFirewall,
   sandboxFirewall,
 } from "../sandbox-firewall.js";
 import {
@@ -185,9 +174,6 @@ import {
   type RunnerHandle,
   type RunnerMark,
   type RunnerRecord,
-  SWAP_RENEWAL,
-  type SwapRenewal,
-  type SwapRenewalAsk,
 } from "./agent-machine.js";
 
 /**
@@ -603,82 +589,6 @@ function readFileCommand(path: string, maxBytes: number) {
 }
 
 /**
- * The firewall session a kept launch runs in, its sandbox found by name the
- * way an agent's sandbox is found: the agent the launch named, the session
- * its conversation records, the sandboxes tagged with it, and among them the
- * one still running the owner's session. None where any of them no longer
- * stands, as for a row its session outlived, or one kept before launches
- * named their agent.
- */
-const launchSession = (api: VercelSandboxApi, owner: FirewallOwner, agentId: string | undefined) =>
-  Effect.gen(function* () {
-    if (agentId === undefined) return undefined;
-    const agent = yield* readAgent(owner.userId, agentId);
-    if (Option.isNone(agent)) return undefined;
-    const runtime = yield* recordedRuntimeSession({
-      userId: owner.userId,
-      conversationId: agent.value.conversationId,
-    });
-    if (runtime === undefined) return undefined;
-    const sandboxes = yield* api.listTagged(runtime);
-    const sandbox = sandboxes.find((each) => each.currentSessionId === owner.sandboxSessionId);
-    if (sandbox === undefined) return undefined;
-    return { ...owner, name: sandbox.name } satisfies FirewallSession;
-  });
-
-/** What a renewal writes once it gathered it: the session found running, the swap renewed, and the sources sent beside it. */
-interface SwapWrite {
-  readonly session: FirewallSession;
-  readonly entry: FirewallEntry;
-  readonly sources: FirewallSources;
-}
-
-/**
- * A standing launch's swap renewed at its sandbox session's firewall
- * (`MachineFirewall`'s `renew`): the fresh value asked only where the launch
- * kept for the session holds the slot, set behind the same placeholder where
- * the swap stands on the target's host alone and sets another value, and the
- * session's whole policy sent with the agent's repository credential minted
- * afresh beside it (`firewallSourcesOfAgent`). A launch whose sandbox no
- * longer runs its session is left (`launchSession`), for the sweep's drop.
- */
-const swapRenewed = <E extends { readonly _tag: string }, R>(
-  api: VercelSandboxApi,
-  firewall: SandboxFirewall,
-  owner: FirewallOwner,
-  { credential, fresh }: SwapRenewalAsk<E, R>,
-): Effect.Effect<SwapRenewal, SandboxUnavailable, R | CheckoutServices> =>
-  Effect.gen(function* () {
-    const launch = yield* firewall.launchOf(owner);
-    const standing = launch?.swaps.get(credential.slot);
-    if (launch === undefined || standing === undefined) return { outcome: SWAP_RENEWAL.LEFT };
-    const next: SwapRenewal | SwapWrite = yield* Effect.gen(function* () {
-      const value = yield* fresh;
-      if (value === undefined) return { outcome: SWAP_RENEWAL.UNANSWERED } as const;
-      const hosts = Redacted.value(standing.rules).map(([host]) => host);
-      if (!hosts.every((host) => host === credential.target.domain)) {
-        return { outcome: SWAP_RENEWAL.ELSEWHERE } as const;
-      }
-      const entry = renewedSwap(
-        standing,
-        Redacted.make(`${credential.scheme}${Redacted.value(value)}`),
-      );
-      if (entry === undefined) return { outcome: SWAP_RENEWAL.LEFT } as const;
-      const session = yield* launchSession(api, owner, launch.agentId);
-      if (session === undefined) return { outcome: SWAP_RENEWAL.LEFT } as const;
-      const sources = yield* firewallSourcesOfAgent(owner.userId, launch.agentId);
-      return { session, entry, sources };
-    }).pipe(
-      Effect.catch((failure) =>
-        Effect.succeed({ outcome: SWAP_RENEWAL.FAILED, failure: failure._tag } as const),
-      ),
-    );
-    if ("outcome" in next) return next;
-    yield* firewall.renew(next.session, launch, credential.slot, next.entry, next.sources);
-    return { outcome: SWAP_RENEWAL.RENEWED };
-  });
-
-/**
  * What the machine does to a place it already opened, over the API given:
  * everything but opening one and launching a runner in it, so a caller with
  * no edge's runner to hand the checkout, as a launch's end, still reaches it.
@@ -712,8 +622,6 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
       write: (place, userId, sources) => firewall.write(firewallSessionOf(place, userId), sources),
       keepLaunch: (place, userId, launch) =>
         firewall.keepLaunch(firewallSessionOf(place, userId), launch),
-      clear: (place) => firewall.clear(sessionOfPlace(place)),
-      renew: (owner, ask) => swapRenewed(api, firewall, owner, ask),
     },
 
     stop: (place) =>

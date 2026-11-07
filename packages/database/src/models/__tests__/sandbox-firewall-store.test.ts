@@ -8,20 +8,15 @@ import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, openTaskAgent, openWorkspace } from "../../testing/index.js";
 import {
-  clearStandingFirewall,
-  countStandingFirewalls,
   dropStaleFirewalls,
   keepFirewallLaunch,
-  listStandingFirewalls,
   readFirewallLaunch,
-  renewFirewallLaunch,
 } from "../sandbox-firewall-store.js";
 
 /**
  * The swaps a runner's launch keeps for its sandbox session, over a real
- * dialect: a launch replaces the one kept before it, a renewal writes over
- * the row as it stands and never makes one, one account's session row is
- * neither read nor renewed through another's, a clear and the sweep's drop delete rows by session and by
+ * dialect: a launch replaces the one kept before it, one account's session
+ * row is never read through another's, the sweep's drop deletes rows by
  * age, and a row goes with its agent. The sealed column is
  * opaque text here, as the store holds it. Synthetic accounts, sessions,
  * agents, and seals throughout.
@@ -48,32 +43,21 @@ const launchOf = (agentId: string, sealedEntries: string) => ({
 });
 
 it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) => {
-  it.effect(
-    "a launch replaces the one kept before it, a renewal writes over the row as it stands, and a cleared row no renewal brings back",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openOwner;
+  it.effect("a launch replaces the one kept before it", () =>
+    Effect.gen(function* () {
+      const owner = yield* openOwner;
 
-        yield* keepFirewallLaunch(owner, launchOf(owner.agentId, "sealed-first"), AT);
-        yield* keepFirewallLaunch(owner, launchOf(owner.agentId, "sealed-relaunch"), LATER);
-        assert.deepEqual(yield* readFirewallLaunch(owner), {
-          agentId: owner.agentId,
-          sealedEntries: "sealed-relaunch",
-        });
-        yield* renewFirewallLaunch(owner, "sealed-renewed", LATER);
-        assert.deepEqual(yield* readFirewallLaunch(owner), {
-          agentId: owner.agentId,
-          sealedEntries: "sealed-renewed",
-        });
-
-        yield* clearStandingFirewall(owner.sandboxSessionId);
-        yield* renewFirewallLaunch(owner, "sealed-late", LATER);
-        assert.equal(yield* readFirewallLaunch(owner), undefined);
-      }),
+      yield* keepFirewallLaunch(owner, launchOf(owner.agentId, "sealed-first"), AT);
+      yield* keepFirewallLaunch(owner, launchOf(owner.agentId, "sealed-relaunch"), LATER);
+      assert.deepEqual(yield* readFirewallLaunch(owner), {
+        agentId: owner.agentId,
+        sealedEntries: "sealed-relaunch",
+      });
+    }),
   );
 
   it.effect(
-    "one account's session row is neither read nor renewed through another's, whose launch keeps to a row of its own",
+    "one account's session row is never read through another's, whose launch keeps to a row of its own",
     () =>
       Effect.gen(function* () {
         const owner = yield* openOwner;
@@ -82,7 +66,6 @@ it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) =>
         yield* keepFirewallLaunch(owner, launchOf(owner.agentId, "sealed-owner"), AT);
 
         assert.equal(yield* readFirewallLaunch(theirs), undefined);
-        yield* renewFirewallLaunch(theirs, "sealed-other", LATER);
         yield* keepFirewallLaunch(theirs, launchOf(other.agentId, "sealed-other-own"), LATER);
 
         assert.equal((yield* readFirewallLaunch(owner))?.sealedEntries, "sealed-owner");
@@ -90,33 +73,20 @@ it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) =>
       }),
   );
 
-  it.effect(
-    "a clear deletes the session's row, the sweep drops only the rows last written before its bound, and the sweep's list names the sessions whose row stands",
-    () =>
-      Effect.gen(function* () {
-        const cleared = yield* openOwner;
-        const stale = yield* openOwner;
-        const fresh = yield* openOwner;
-        yield* keepFirewallLaunch(cleared, launchOf(cleared.agentId, "sealed-cleared"), LATER);
-        yield* keepFirewallLaunch(stale, launchOf(stale.agentId, "sealed-stale"), AT);
-        const kept = launchOf(fresh.agentId, "sealed-fresh");
-        yield* keepFirewallLaunch(fresh, kept, LATER);
+  it.effect("the sweep drops only the rows last written before its bound", () =>
+    Effect.gen(function* () {
+      const stale = yield* openOwner;
+      const fresh = yield* openOwner;
+      yield* keepFirewallLaunch(stale, launchOf(stale.agentId, "sealed-stale"), AT);
+      const kept = launchOf(fresh.agentId, "sealed-fresh");
+      yield* keepFirewallLaunch(fresh, kept, LATER);
 
-        yield* clearStandingFirewall(cleared.sandboxSessionId);
-        const dropped = yield* dropStaleFirewalls(new Date(AT.getTime() + 1));
+      const dropped = yield* dropStaleFirewalls(new Date(AT.getTime() + 1));
 
-        assert.equal(yield* readFirewallLaunch(cleared), undefined);
-        assert.equal(yield* readFirewallLaunch(stale), undefined);
-        assert.ok(dropped >= 1);
-        assert.equal((yield* readFirewallLaunch(fresh))?.sealedEntries, kept.sealedEntries);
-        const standing = yield* countStandingFirewalls();
-        const listed = (yield* listStandingFirewalls(0, standing)).map(
-          (each) => each.sandboxSessionId,
-        );
-        assert.equal(listed.length, standing);
-        assert.ok(listed.includes(fresh.sandboxSessionId));
-        assert.ok(!listed.includes(cleared.sandboxSessionId));
-      }),
+      assert.equal(yield* readFirewallLaunch(stale), undefined);
+      assert.ok(dropped >= 1);
+      assert.equal((yield* readFirewallLaunch(fresh))?.sealedEntries, kept.sealedEntries);
+    }),
   );
 
   it.effect("deleting the agent deletes its rows", () =>
