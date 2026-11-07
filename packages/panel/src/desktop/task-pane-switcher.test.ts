@@ -192,6 +192,10 @@ function mount(
                     told.push(
                       `choose ${typeof chosen === "string" ? chosen : JSON.stringify(chosen)}`,
                     ),
+                  onOpen: (opened) =>
+                    told.push(
+                      `open ${typeof opened === "string" ? opened : JSON.stringify(opened)}`,
+                    ),
                   onToggle: () => told.push("toggle"),
                   onClose: (closed) => told.push(`close ${String(closed)}`),
                 },
@@ -285,7 +289,7 @@ test("on a phone an agent's screen goes back to its task's plan, named for the t
 
   page.choose("Show browser");
   assert.ok(
-    page.told.some((each) => each.startsWith("choose ") && each.includes("cloudBrowser")),
+    page.told.some((each) => each.startsWith("open ") && each.includes("cloudBrowser")),
     "a tab of the agent's browser opens in the panel",
   );
   page.back();
