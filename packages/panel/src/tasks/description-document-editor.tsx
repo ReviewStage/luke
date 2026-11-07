@@ -1,4 +1,3 @@
-import { useAtom, useAtomValue } from "@effect/atom-react";
 import { DOCUMENT_EDITOR_STATE, type DocumentEditor } from "@repo/features/description-edit-model";
 import { DESCRIPTION_ACTOR, TASK_BOUNDS, type Task } from "@repo/features/task-wire";
 import {
@@ -18,7 +17,6 @@ import { markdownClass } from "@repo/ui/markdown-class";
 import { useQuery } from "@tanstack/react-query";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { Duration, Effect } from "effect";
-import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
 import {
